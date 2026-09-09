@@ -8,6 +8,13 @@ require_once __DIR__ . '/errors.php';
 function json_boot(): void
 {
     boot_error_handling(json: true);
+
+    // Alles auffangen, was vor der eigentlichen Antwort ausgegeben wird.
+    // Ein einziges Zeichen davor - eine PHP-Meldung, ein Leerzeichen hinter
+    // einem schliessenden Tag - macht die JSON-Antwort fuer den Browser
+    // unlesbar, und das Kind sieht nur "Der Server hat unerwartet geantwortet".
+    ob_start();
+
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
     header('X-Content-Type-Options: nosniff');
@@ -15,6 +22,14 @@ function json_boot(): void
 
 function json_out(array $data, int $status = 200): never
 {
+    // Streuausgabe verwerfen, aber protokollieren - sie weist auf ein
+    // Problem hin, das sonst unbemerkt bliebe.
+    $stray = ob_get_level() > 0 ? (string) ob_get_clean() : '';
+    if (trim($stray) !== '') {
+        error_log('[vokabeltrainer] Unerwartete Ausgabe vor der JSON-Antwort: '
+            . substr(trim($stray), 0, 500));
+    }
+
     http_response_code($status);
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;

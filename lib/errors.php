@@ -87,6 +87,12 @@ function report_fatal(
         error_log(sprintf('[%s] %s', $ref, $trace));
     }
 
+    // Angefangene Ausgabe verwerfen, sonst steht die Fehlermeldung hinter
+    // einer halben Seite - und bei JSON waere die Antwort unbrauchbar.
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
     if (!headers_sent()) {
         http_response_code(500);
         header('Cache-Control: no-store');

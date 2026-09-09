@@ -26,6 +26,11 @@ switch (action()) {
             json_fail('Hoechstens ' . MAX_IMAGES . ' Fotos auf einmal.');
         }
 
+        // Die Bilderkennung dauert regelmaessig laenger als die ueblichen
+        // 30 Sekunden Standardlaufzeit - sonst bricht PHP mitten im Aufruf ab,
+        // nachdem die Anfrage bereits bezahlt wurde.
+        set_time_limit(300);
+
         // Budget- und Ratenpruefung vor dem API-Aufruf, damit ein
         // durchgereichtes iPhone keine offene Rechnung erzeugen kann.
         $blocked = budget_block_reason($uid);
