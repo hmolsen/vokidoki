@@ -1,0 +1,100 @@
+/* Ergaenzungen fuer das Admin-Interface (Desktop-orientiert). */
+
+body.admin { background: var(--bg); }
+
+.adminbar {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 12px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    flex-wrap: wrap;
+}
+.adminbar nav { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
+.adminbar nav a {
+    padding: 8px 13px;
+    border-radius: 9px;
+    color: var(--text-soft);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: .95rem;
+}
+.adminbar nav a:hover { background: var(--surface-2); color: var(--text); }
+.adminbar nav a.on    { background: var(--accent); color: #fff; }
+.adminbar .logout { margin: 0; }
+
+.linkbtn {
+    background: none;
+    border: none;
+    color: var(--text-soft);
+    font: inherit;
+    font-size: .9rem;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 8px 4px;
+}
+
+.adminmain {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 22px 20px 60px;
+}
+.adminmain h1 { margin-bottom: 18px; }
+.adminmain h2 { margin-top: 30px; }
+
+/* Tabellen */
+table.data {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    font-size: .94rem;
+    margin-bottom: 18px;
+}
+table.data th, table.data td {
+    padding: 9px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+}
+table.data th {
+    background: var(--surface-2);
+    font-size: .8rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--text-soft);
+    white-space: nowrap;
+}
+table.data tr:last-child td { border-bottom: none; }
+table.data td.num, table.data th.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.data input[type=text] { margin: 0; min-height: 40px; padding: 7px 10px; font-size: 15px; }
+table.data tr.dim td { color: var(--text-soft); }
+
+/* Kennzahlen */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 8px; }
+.stat  { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 15px 17px; }
+.stat .k { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-soft); }
+.stat .v { font-size: 1.7rem; font-weight: 700; letter-spacing: -.02em; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.stat .n { font-size: .82rem; color: var(--text-soft); }
+
+/* Balkendiagramm */
+.chart { display: flex; align-items: flex-end; gap: 5px; height: 130px; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 8px; }
+.chart .col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 5px; height: 100%; min-width: 0; }
+.chart .col i { display: block; width: 100%; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; }
+.chart .col span { font-size: .65rem; color: var(--text-soft); white-space: nowrap; }
+
+/* Formulare */
+.formgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 0 16px; }
+.inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.inline .btn { width: auto; }
+form.compact { display: inline; }
+
+.swatch { display: inline-block; width: 15px; height: 15px; border-radius: 4px; vertical-align: -2px; margin-right: 6px; border: 1px solid rgba(0,0,0,.15); }
+
+code.token { font-size: .8rem; color: var(--text-soft); }

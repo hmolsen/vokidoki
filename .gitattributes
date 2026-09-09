@@ -1,0 +1,10 @@
+# Das Projekt laeuft auf einem Linux-Server: Zeilenenden im Repository und im
+# Arbeitsverzeichnis bleiben LF. Sonst bekaeme deploy.sh CRLF und die Shell
+# wuerde es nicht ausfuehren.
+* text=auto eol=lf
+
+*.ttf  binary
+*.png  binary
+*.jpg  binary
+
+deploy.sh text eol=lf

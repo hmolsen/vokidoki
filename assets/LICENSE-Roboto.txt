@@ -1,0 +1,4 @@
+Roboto-Bold.ttf - Roboto, Copyright Google Inc., lizenziert unter der
+Apache License 2.0: https://www.apache.org/licenses/LICENSE-2.0
+Quelle: https://github.com/googlefonts/roboto-2
+Verwendung hier: Rendern der Initiale im Homescreen-Icon (icon.php).

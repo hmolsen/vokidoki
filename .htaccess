@@ -1,0 +1,25 @@
+# Vokabeltrainer - Basis-Haertung
+
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  # Verzeichnisse mit Servercode / Daten komplett sperren
+  RewriteRule ^(lib|storage|vendor)/ - [F,L]
+</IfModule>
+
+<FilesMatch "^(config\.php|schema\.sql|composer\.(json|lock)|deploy\.sh|\.gitignore)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Referrer-Policy "same-origin"
+</IfModule>

@@ -1,0 +1,14 @@
+# Zugangsdaten - niemals ins Repository
+/config.php
+
+# Abhaengigkeiten werden auf dem Server per composer install erzeugt.
+# composer.lock wird bewusst mitversioniert, damit dort dieselben Versionen landen.
+/vendor/
+/composer.phar
+
+# Generierte Icons
+/storage/icons/*
+!/storage/icons/.gitkeep
+
+.DS_Store
+Thumbs.db

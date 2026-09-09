@@ -1,0 +1,15 @@
+{
+    "name": "hannesmolsen/vokabeltrainer",
+    "description": "Vokabeltrainer-PWA mit KI-gestuetzter Vokabelerkennung",
+    "type": "project",
+    "require": {
+        "php": ">=8.2",
+        "ext-pdo": "*",
+        "ext-gd": "*",
+        "ext-mbstring": "*",
+        "anthropic-ai/sdk": "*"
+    },
+    "config": {
+        "optimize-autoloader": true
+    }
+}

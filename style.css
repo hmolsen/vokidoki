@@ -1,0 +1,443 @@
+/* Vokabeltrainer - Design-System
+   Mobile-first, grosse Trefferflaechen, ruhige Farben. Die Akzentfarbe kommt
+   pro Kind aus index.php als --accent auf <body>. */
+
+:root {
+    --bg:            #f4f5f8;
+    --surface:       #ffffff;
+    --surface-2:     #eceef3;
+    --text:          #171a21;
+    --text-soft:     #5d6470;
+    --border:        #dde0e8;
+    --accent:        #4f7cff;
+    --accent-text:   #ffffff;
+    --good:          #1c9d5c;
+    --good-bg:       #e3f7ec;
+    --bad:           #d8402f;
+    --bad-bg:        #fdeae7;
+    --radius:        18px;
+    --radius-sm:     12px;
+    --shadow:        0 1px 2px rgba(16, 20, 30, .06), 0 6px 20px rgba(16, 20, 30, .07);
+    --tap:           56px;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg:        #14161c;
+        --surface:   #1e212a;
+        --surface-2: #272b36;
+        --text:      #f2f4f8;
+        --text-soft: #a3abbb;
+        --border:    #333846;
+        --good-bg:   #12281d;
+        --bad-bg:    #2e1815;
+    }
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior-y: contain;
+}
+
+.app {
+    max-width: 640px;
+    margin: 0 auto;
+    padding:
+        calc(env(safe-area-inset-top) + 14px)
+        calc(env(safe-area-inset-right) + 16px)
+        calc(env(safe-area-inset-bottom) + 28px)
+        calc(env(safe-area-inset-left) + 16px);
+    min-height: 100svh;
+}
+
+/* ---------------------------------------------------------------- Typografie */
+
+h1 { font-size: 1.6rem; line-height: 1.2; margin: 0 0 4px; letter-spacing: -.02em; }
+h2 { font-size: 1.2rem; line-height: 1.25; margin: 26px 0 10px; letter-spacing: -.01em; }
+p  { margin: 0 0 12px; }
+
+.sub      { color: var(--text-soft); margin: 0 0 18px; }
+.center   { text-align: center; }
+.muted    { color: var(--text-soft); }
+.tiny     { font-size: .85rem; }
+
+/* ---------------------------------------------------------------- Kopfzeile */
+
+.topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 18px;
+    min-height: 44px;
+}
+.topbar h1 { flex: 1; font-size: 1.3rem; margin: 0; }
+
+.iconbtn {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+.iconbtn:active { transform: scale(.94); }
+
+/* ---------------------------------------------------------------- Flaechen */
+
+.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 18px;
+    margin-bottom: 14px;
+}
+
+/* ---------------------------------------------------------------- Buttons */
+
+.btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    min-height: var(--tap);
+    padding: 14px 18px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    color: var(--accent-text);
+    font: inherit;
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+    transition: transform .08s ease, opacity .15s ease;
+}
+.btn:active   { transform: scale(.98); }
+.btn[disabled] { opacity: .5; cursor: default; transform: none; }
+
+.btn.secondary {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border);
+}
+.btn.ghost {
+    background: transparent;
+    color: var(--text-soft);
+    border-color: transparent;
+    min-height: 44px;
+    font-weight: 500;
+}
+.btn.danger { background: var(--bad); color: #fff; }
+.btn.small  { min-height: 44px; padding: 10px 14px; font-size: .95rem; width: auto; }
+
+.btn-row { display: flex; gap: 10px; }
+.btn-row .btn { flex: 1; }
+
+/* ---------------------------------------------------------------- Formulare */
+
+label {
+    display: block;
+    font-size: .9rem;
+    font-weight: 600;
+    color: var(--text-soft);
+    margin-bottom: 6px;
+}
+
+input[type=text], input[type=password], select {
+    width: 100%;
+    min-height: 52px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    /* 16px+ verhindert das automatische Hineinzoomen von iOS Safari. */
+    font: inherit;
+    font-size: 17px;
+    margin-bottom: 14px;
+}
+input:focus, select:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-color: transparent;
+}
+
+/* ---------------------------------------------------------------- Sprachkacheln */
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+}
+
+.tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    aspect-ratio: 1 / .82;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    color: var(--text);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform .08s ease;
+}
+.tile:active { transform: scale(.97); }
+.tile .flag  { font-size: 3.2rem; line-height: 1; }
+.tile .name  { font-size: 1.05rem; }
+.tile .meta  { font-size: .8rem; color: var(--text-soft); font-weight: 500; }
+
+.tile.add {
+    border-style: dashed;
+    box-shadow: none;
+    background: transparent;
+    color: var(--text-soft);
+}
+.tile.add .flag { font-size: 2.4rem; }
+
+/* ---------------------------------------------------------------- Listen */
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 15px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    margin-bottom: 10px;
+    cursor: pointer;
+}
+.row:active   { transform: scale(.99); }
+.row .lead    { font-size: 1.7rem; flex: none; width: 34px; text-align: center; }
+.row .body    { flex: 1; min-width: 0; }
+.row .title   { font-weight: 600; }
+.row .chev    { color: var(--text-soft); flex: none; }
+
+/* ---------------------------------------------------------------- Fortschritt */
+
+.bar {
+    height: 8px;
+    border-radius: 4px;
+    background: var(--surface-2);
+    overflow: hidden;
+    margin-top: 8px;
+}
+.bar > i {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    border-radius: 4px;
+    transition: width .35s ease;
+}
+.bar.done > i { background: var(--good); }
+
+/* Drei Punkte: wie oft die Vokabel schon hintereinander sass. */
+.dots { display: flex; gap: 5px; }
+.dots i {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+}
+.dots i.on { background: var(--good); border-color: var(--good); }
+
+/* ---------------------------------------------------------------- Quiz */
+
+.quiz-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+}
+
+.prompt {
+    display: grid;
+    place-items: center;
+    text-align: center;
+    min-height: 150px;
+    padding: 24px 18px;
+    margin: 16px 0 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+.prompt .dir  { font-size: .82rem; color: var(--text-soft); margin-bottom: 10px; letter-spacing: .02em; }
+.prompt .word { font-size: 2rem; font-weight: 700; line-height: 1.15; letter-spacing: -.02em; overflow-wrap: anywhere; }
+
+.options { display: grid; gap: 10px; }
+
+.option {
+    min-height: 62px;
+    padding: 14px 18px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 1.05rem;
+    font-weight: 500;
+    text-align: center;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+    transition: transform .08s ease, background .15s ease, border-color .15s ease;
+}
+.option:active                 { transform: scale(.985); }
+.option.correct                { background: var(--good-bg); border-color: var(--good); color: var(--good); font-weight: 700; }
+.option.wrong                  { background: var(--bad-bg);  border-color: var(--bad);  color: var(--bad);  font-weight: 700; }
+.options.locked .option        { cursor: default; }
+.options.locked .option:active { transform: none; }
+
+.verdict {
+    min-height: 26px;
+    margin-top: 14px;
+    text-align: center;
+    font-weight: 600;
+}
+.verdict.good { color: var(--good); }
+.verdict.bad  { color: var(--bad); }
+
+/* ---------------------------------------------------------------- Review-Tabelle */
+
+.pairs { display: grid; gap: 8px; margin-bottom: 14px; }
+
+.pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr 40px;
+    gap: 8px;
+    align-items: start;
+}
+.pair input {
+    margin: 0;
+    min-height: 48px;
+    font-size: 16px;
+    padding: 10px 12px;
+}
+.pair .del {
+    width: 40px;
+    height: 48px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text-soft);
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+.pair .del:active { background: var(--bad-bg); color: var(--bad); }
+
+.pairs-head {
+    display: grid;
+    grid-template-columns: 1fr 1fr 40px;
+    gap: 8px;
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--text-soft);
+    margin-bottom: 6px;
+}
+
+/* ---------------------------------------------------------------- Fotos */
+
+.thumbs { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.thumb {
+    position: relative;
+    width: 84px; height: 84px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+}
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb button {
+    position: absolute;
+    top: 3px; right: 3px;
+    width: 26px; height: 26px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, .62);
+    color: #fff;
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+/* ---------------------------------------------------------------- Zustaende */
+
+.notice {
+    padding: 13px 15px;
+    border-radius: var(--radius-sm);
+    background: var(--bad-bg);
+    color: var(--bad);
+    border: 1px solid currentColor;
+    margin-bottom: 14px;
+    font-size: .95rem;
+}
+.notice.info { background: var(--surface-2); color: var(--text-soft); border-color: var(--border); }
+.notice.good { background: var(--good-bg); color: var(--good); }
+
+.empty {
+    text-align: center;
+    color: var(--text-soft);
+    padding: 34px 16px;
+}
+.empty .big { font-size: 2.6rem; display: block; margin-bottom: 10px; }
+
+.spinner {
+    width: 30px; height: 30px;
+    margin: 0 auto 14px;
+    border: 3px solid var(--surface-2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(1turn); } }
+
+.celebrate { text-align: center; padding: 26px 10px 10px; }
+.celebrate .big { font-size: 4rem; display: block; margin-bottom: 10px; }
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+/* ---------------------------------------------------------------- Install-Hinweis */
+
+.install {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 14px 16px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    margin-top: 22px;
+    font-size: .9rem;
+    color: var(--text-soft);
+}
+.install .big { font-size: 1.4rem; line-height: 1; }
