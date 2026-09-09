@@ -6,9 +6,11 @@
 /vendor/
 /composer.phar
 
-# Generierte Icons
+# Zur Laufzeit erzeugt
 /storage/icons/*
 !/storage/icons/.gitkeep
+/storage/sessions/
+/storage/error.log
 
 .DS_Store
 Thumbs.db

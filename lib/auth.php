@@ -3,6 +3,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
 
+/** Ein Jahr - das Homescreen-Symbol soll dauerhaft angemeldet bleiben. */
+const SESSION_LIFETIME = 60 * 60 * 24 * 365;
+
 /**
  * Startet die Session.
  *
@@ -20,8 +23,25 @@ function session_boot(): void
     $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
 
+    // Eigenes Verzeichnis fuer die Sitzungsdateien. Der Standardpfad des
+    // Servers existiert bei geteiltem Hosting nicht immer - dann scheitert
+    // session_start() und die Anmeldung funktioniert nicht. Ausserdem liegen
+    // die Sitzungen so nicht im selben Topf wie die anderer Anwendungen.
+    $dir = dirname(__DIR__) . '/storage/sessions';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0700, true);
+    }
+    if (is_dir($dir) && is_writable($dir)) {
+        session_save_path($dir);
+        // Passend zur Lebensdauer des Cookies: Das Homescreen-Symbol soll
+        // angemeldet bleiben, ohne dass die Sitzungsdatei vorher weggeraeumt wird.
+        ini_set('session.gc_maxlifetime', (string) SESSION_LIFETIME);
+        ini_set('session.gc_probability', '1');
+        ini_set('session.gc_divisor', '1000');
+    }
+
     session_set_cookie_params([
-        'lifetime' => 60 * 60 * 24 * 365,
+        'lifetime' => SESSION_LIFETIME,
         'path'     => base_path() . '/',
         'httponly' => true,
         'secure'   => $https,

@@ -155,6 +155,11 @@ location ~ ^/(lib|storage|vendor)/           { deny all; }
 location ~ ^/(config\.php|schema\.sql|composer\.(json|lock)|deploy\.sh)$ { deny all; }
 ```
 
+Sitzungsdateien liegen in `storage/sessions` statt im Standardpfad des Servers —
+der existiert bei geteiltem Hosting nicht immer, und ohne ihn scheitert die
+Anmeldung. Unerwartete Fehler landen mit einer Kennung in `storage/error.log`;
+nach außen gibt es eine verständliche Meldung statt einer leeren 500er-Seite.
+
 Weitere eingebaute Schutzmaßnahmen: der Anthropic-Key nur im Keyvault,
 Passwörter und Geräte-Token nur als Hash,
 `HttpOnly`/`Secure`/`SameSite=Lax`-Cookies, CSRF-Schutz über einen eigenen Header

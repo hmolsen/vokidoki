@@ -12,6 +12,9 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/lib/auth.php';
+require_once __DIR__ . '/lib/errors.php';
+
+boot_error_handling();
 
 $appVersion = '1';
 

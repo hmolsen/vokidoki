@@ -56,6 +56,29 @@ check($checks, 'Icon-Cache beschreibbar', static function (): array {
     return [is_dir($dir) && is_writable($dir), $dir];
 });
 
+// Ohne eigenes Sitzungsverzeichnis landen wir beim Standardpfad des Servers -
+// und der existiert bei geteiltem Hosting nicht immer.
+check($checks, 'Sitzungen im eigenen Verzeichnis', static function (): array {
+    $dir  = dirname(__DIR__) . '/storage/sessions';
+    $used = session_save_path();
+    if (!is_dir($dir) || !is_writable($dir)) {
+        return [false, 'storage/sessions fehlt oder ist nicht beschreibbar - '
+                     . 'PHP nutzt stattdessen ' . ($used !== '' ? $used : 'den Standardpfad')];
+    }
+    $same = realpath($used) !== false && realpath($used) === realpath($dir);
+    return [$same, 'benutzt ' . $used];
+});
+
+check($checks, 'Fehlerprotokoll beschreibbar', static function (): array {
+    $path = error_log_path();
+    $dir  = dirname($path);
+    if (!is_dir($dir) || !is_writable($dir)) {
+        return [false, $dir . ' ist nicht beschreibbar'];
+    }
+    $size = is_file($path) ? filesize($path) : 0;
+    return [true, $path . ($size > 0 ? sprintf(' (%d Bytes)', $size) : ' (noch leer)')];
+});
+
 check($checks, 'Datenbankverbindung', static function (): array {
     $v = qv('SELECT VERSION()');
     return [true, 'verbunden mit ' . $v];

@@ -2,13 +2,12 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/errors.php';
 
 /** Fehlerdarstellung an die Umgebung anpassen und JSON-Header setzen. */
 function json_boot(): void
 {
-    $dev = (bool) cfg('dev', false);
-    ini_set('display_errors', $dev ? '1' : '0');
-    error_reporting(E_ALL);
+    boot_error_handling(json: true);
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
     header('X-Content-Type-Options: nosniff');

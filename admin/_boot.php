@@ -5,10 +5,10 @@ require_once __DIR__ . '/../lib/db.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/settings.php';
 require_once __DIR__ . '/../lib/cost.php';
+require_once __DIR__ . '/../lib/errors.php';
+require_once __DIR__ . '/../lib/keyvault.php';
 
-$dev = (bool) cfg('dev', false);
-ini_set('display_errors', $dev ? '1' : '0');
-error_reporting(E_ALL);
+boot_error_handling();
 
 session_boot();
 
