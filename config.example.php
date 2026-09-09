@@ -23,6 +23,10 @@ return [
     'keyvault_token' => '',              // Bearer-Token fuer den Keyvault
     'keyvault_key'   => 'vokabeltrainer', // Name des Eintrags im Keyvault
 
+    // Normalerweise leer lassen. Nur setzen, wenn die Anfragen ueber ein
+    // Gateway statt direkt an api.anthropic.com gehen sollen.
+    'anthropic_base_url' => '',
+
     // Wird beim ersten Admin-Login als Hash in die settings-Tabelle uebernommen.
     // Danach laesst sich das Passwort im Admin aendern; dieser Wert wird dann ignoriert.
     'admin_bootstrap_password' => 'bitte-aendern',

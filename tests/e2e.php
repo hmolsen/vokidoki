@@ -324,6 +324,57 @@ ok('Admin loescht eine Vokabel',
 ok('Lerneinheit steht wieder bei fuenf Vokabeln',
    (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$unitId]) === 5);
 
+section('Bilderkennung ueber die API');
+
+// Laeuft nur gegen den Simulator (tests/fake-anthropic.php). Zeigt
+// anthropic_base_url woanders hin, wird uebersprungen - dieser Test darf
+// niemals die echte, kostenpflichtige API treffen.
+$aiBase = (string) cfg('anthropic_base_url', '');
+$isFake = $aiBase !== '' && preg_match('#^https?://(127\.0\.0\.1|localhost)[:/]#', $aiBase) === 1;
+
+if (!$isFake) {
+    echo "  - uebersprungen (anthropic_base_url zeigt nicht auf den Simulator)
+";
+} else {
+    $im = imagecreatetruecolor(60, 40);
+    imagefilledrectangle($im, 0, 0, 60, 40, imagecolorallocate($im, 250, 250, 250));
+    ob_start();
+    imagejpeg($im, null, 90);
+    $photo = base64_encode((string) ob_get_clean());
+    imagedestroy($im);
+
+    [$data, $status] = apiCall('import', 'analyze', [
+        'language_id' => $languageId,
+        'images'      => [['data' => $photo, 'media_type' => 'image/jpeg']],
+    ]);
+    ok('Foto wird ausgewertet', $status === 200 && ($data['ok'] ?? false), $data['error'] ?? '');
+    ok('Titel kommt aus dem Bild', ($data['title'] ?? '') === 'Unit 4 - In the kitchen');
+    ok('Nur vollstaendige Paare werden zurueckgegeben', count($data['entries'] ?? []) === 3);
+
+    [$saved, $status] = apiCall('import', 'save', [
+        'language_id' => $languageId,
+        'title'       => $data['title'],
+        'entries'     => $data['entries'],
+    ]);
+    ok('Erkannte Vokabeln lassen sich speichern', $status === 200 && ($saved['count'] ?? 0) === 3);
+
+    $newUnit = (int) ($saved['unit_id'] ?? 0);
+    ok('Lerneinheit traegt den erkannten Titel',
+       qv('SELECT title FROM units WHERE id = ?', [$newUnit]) === 'Unit 4 - In the kitchen');
+
+    // Nicht im Quiz-Abschnitt mitzaehlen lassen.
+    q('DELETE FROM units WHERE id = ?', [$newUnit]);
+
+    [$data, $status] = apiCall('import', 'analyze', ['language_id' => $languageId, 'images' => []]);
+    ok('Ohne Foto wird abgelehnt', $status === 400, "Status $status");
+
+    [$data, $status] = apiCall('import', 'analyze', [
+        'language_id' => $languageId,
+        'images'      => [['data' => base64_encode('kein bild'), 'media_type' => 'image/jpeg']],
+    ]);
+    ok('Ungueltiges Bild wird abgelehnt', $status === 400, "Status $status");
+}
+
 // ------------------------------------------------------------------ Fremdzugriff
 
 section('Fremdzugriff');

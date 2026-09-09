@@ -36,7 +36,14 @@ function anthropic_client(): Client
 {
     anthropic_autoload();
 
-    return new Client(apiKey: keyvault_anthropic_key());
+    // anthropic_base_url bleibt im Normalfall leer; gesetzt wird sie nur, wenn
+    // die Anfragen ueber ein Gateway laufen sollen - und von den Tests.
+    $baseUrl = (string) cfg('anthropic_base_url', '');
+
+    return new Client(
+        apiKey: keyvault_anthropic_key(),
+        baseUrl: $baseUrl !== '' ? $baseUrl : null,
+    );
 }
 
 /** JSON-Schema fuer das Extraktionsergebnis. Erzwingt sauberes JSON statt Freitext-Parsing. */

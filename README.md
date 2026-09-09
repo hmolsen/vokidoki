@@ -9,6 +9,11 @@ Jedes Kind hat einen eigenen Account und ein eigenes Symbol auf dem iOS-Home-Bil
 
 ## Einrichtung
 
+> Das Anthropic-SDK spricht über PSR-18 und braucht dafür eine HTTP-Client-
+> Implementierung. Sie steht als `guzzlehttp/guzzle` ausdrücklich in der
+> `composer.json` — sonst installiert `composer install` zwar fehlerfrei, aber
+> die erste Foto-Analyse scheitert mit „No PSR-18 clients found".
+
 ### 1. Dateien auf den Server
 
 ```bash
@@ -202,7 +207,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-67 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Account-Anlage,
+74 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Account-Anlage,
 Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon, Zugriffstrennung
 zwischen den Accounts, die komplette Quiz-Logik samt „dreimal hintereinander",
 Zurücksetzen und Token-Widerruf.
@@ -213,18 +218,40 @@ eigene Testkonten an und räumt sie wieder weg; geänderte Einstellungen setzt e
 auf ihren vorherigen Wert zurück. Ohne Admin-Passwort als zweites Argument wird
 der Admin-Teil übersprungen.
 
-Dazu die Keyvault-Anbindung, gegen einen Simulator statt des echten Vaults:
+Dazu zwei Suiten gegen Simulatoren statt gegen die echten Dienste:
 
 ```bash
 php -S 127.0.0.1:8124 tests/fake-keyvault.php &
-php tests/keyvault.php
+php -S 127.0.0.1:8125 tests/fake-anthropic.php &
+
+php tests/keyvault.php   # 15 Prüfungen
+php tests/ai.php         # 31 Prüfungen
 ```
 
-15 Prüfungen: Abruf und Format, Zeilenumbrüche, leere Antwort, HTML statt Key,
-unbekannter Eintrag, HTTP 401/403/500, das Entfernen von Schlüsselmaterial aus
-Logtexten und dass wirklich nirgends zwischengespeichert wird. Vorausgesetzt wird
-`'keyvault_url' => 'http://127.0.0.1:8124/'` und `'keyvault_token' => 'test-token'`
-in der lokalen `config.php`.
+`tests/keyvault.php` prüft Abruf und Format, Zeilenumbrüche, leere Antwort, HTML
+statt Key, unbekannten Eintrag, HTTP 401/403/500, das Entfernen von Schlüssel-
+material aus Logtexten und dass wirklich nirgends zwischengespeichert wird.
 
-Beide Testläufe rufen **nie** die Anthropic-API auf — sie verursachen also keine Kosten.
-Die Bilderkennung selbst prüfst du am besten einmal von Hand mit einem echten Foto.
+`tests/ai.php` geht den kompletten Bilderkennungs-Pfad durch und prüft am
+aufgezeichneten Request, **was das Modell tatsächlich zu sehen bekäme**: dass der
+Key aus dem Keyvault im `x-api-key`-Header landet, dass die Bildblöcke mit
+`media_type` und Base64 korrekt aufgebaut sind, dass `output_config` das
+JSON-Schema und die Aufwandsstufe trägt — und danach, dass Antwort, Token und
+Kosten richtig ausgewertet und protokolliert werden, Fehlversuche eingeschlossen.
+
+Vorausgesetzt wird in der lokalen `config.php`:
+
+```php
+'keyvault_url'       => 'http://127.0.0.1:8124/',
+'keyvault_token'     => 'test-token',
+'anthropic_base_url' => 'http://127.0.0.1:8125',
+```
+
+Läuft der Anthropic-Simulator, prüft auch `tests/e2e.php` die Bilderkennung über
+die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
+dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
+kostenpflichtige API treffen.
+
+Zusammen 120 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
+Foto einer echten Buchseite — das einmal von Hand ausprobieren.

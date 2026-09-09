@@ -7,9 +7,13 @@
         "ext-pdo": "*",
         "ext-gd": "*",
         "ext-mbstring": "*",
-        "anthropic-ai/sdk": "*"
+        "anthropic-ai/sdk": "*",
+        "guzzlehttp/guzzle": "^7.8"
     },
     "config": {
-        "optimize-autoloader": true
+        "optimize-autoloader": true,
+        "allow-plugins": {
+            "php-http/discovery": false
+        }
     }
 }
