@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/settings.php';
 require_once __DIR__ . '/cost.php';
+require_once __DIR__ . '/keyvault.php';
 
 use Anthropic\Client;
 use Anthropic\Messages\Base64ImageSource;
@@ -27,16 +28,15 @@ function anthropic_autoload(): void
     require_once $autoload;
 }
 
+/**
+ * Erzeugt einen Client mit einem frisch aus dem Keyvault geholten Key.
+ * Der Key wird nicht zwischengespeichert - so kann er jederzeit rotiert werden.
+ */
 function anthropic_client(): Client
 {
     anthropic_autoload();
 
-    $key = (string) cfg('anthropic_api_key', '');
-    if ($key === '') {
-        throw new RuntimeException('Kein Anthropic-API-Key in config.php hinterlegt.');
-    }
-
-    return new Client(apiKey: $key);
+    return new Client(apiKey: keyvault_anthropic_key());
 }
 
 /** JSON-Schema fuer das Extraktionsergebnis. Erzwingt sauberes JSON statt Freitext-Parsing. */
@@ -151,7 +151,7 @@ function analyze_vocab_images(array $images, string $languageName, array $user):
         ai_log($logBase + [
             'duration_ms' => (int) ((microtime(true) - $started) * 1000),
             'status'      => 'error',
-            'error'       => substr($e->getMessage(), 0, 2000),
+            'error'       => substr(scrub_secrets($e->getMessage()), 0, 2000),
         ]);
         throw $e;
     }
@@ -166,7 +166,7 @@ function analyze_vocab_images(array $images, string $languageName, array $user):
             'output_tokens' => $message->usage->outputTokens,
             'duration_ms'   => $durationMs,
             'status'        => 'refusal',
-            'error'         => $message->stopDetails?->explanation,
+            'error'         => scrub_secrets((string) $message->stopDetails?->explanation),
         ]);
         throw new RuntimeException('Die Bilder konnten nicht ausgewertet werden.');
     }

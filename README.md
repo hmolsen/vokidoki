@@ -27,9 +27,11 @@ cp config.example.php config.php
 chmod 600 config.php
 ```
 
-In `config.php` eintragen: MySQL-Zugang, Anthropic-API-Key und ein
+In `config.php` eintragen: MySQL-Zugang, das **Keyvault-Token** und ein
 Start-Passwort für den Admin-Bereich. Liegt die App in einem Unterverzeichnis,
 zusätzlich `base_path` setzen (z. B. `'/vokabeln'`).
+
+Der Anthropic-Key steht **nicht** in dieser Datei — siehe nächster Abschnitt.
 
 Erlaubt der Hoster ein Verzeichnis oberhalb des Webroots, kann die Datei auch
 dort als `vokabeltrainer-config.php` liegen — sie wird automatisch gefunden.
@@ -49,6 +51,42 @@ mysql -u BENUTZER -p DATENBANK < schema.sql
 1. **Selbsttest** öffnen — dort muss alles grün sein.
 2. Unter **Accounts** für jede Tochter einen Account anlegen.
 3. Unter **Einstellungen** ggf. Modell und Monatsbudget anpassen.
+
+---
+
+## Der Anthropic-Key kommt aus dem Keyvault
+
+Der API-Key liegt nirgends in diesem Projekt. Er wird bei **jedem** Bildanalyse-Aufruf
+frisch geholt:
+
+```
+GET https://cqrity.de/keyvault/api.php?key=vokabeltrainer&format=raw
+Authorization: Bearer <token>
+```
+
+In `config.php` steht nur das Bearer-Token:
+
+```php
+'keyvault_url'   => 'https://cqrity.de/keyvault/api.php',
+'keyvault_token' => '...',
+'keyvault_key'   => 'vokabeltrainer',
+```
+
+Bewusst **ohne jede Zwischenspeicherung** (`lib/keyvault.php`) — kein statischer Cache,
+keine Datei, keine Session. Dadurch greift ein rotierter Key sofort beim nächsten
+Foto, ohne dass hier etwas nachgezogen werden muss. Der Preis dafür ist ein
+zusätzlicher HTTPS-Aufruf von rund 100 ms pro Analyse.
+
+Was der Vault zurückgibt, wird geprüft: leere Antwort, HTML-Fehlerseite oder ein
+Wert mit Leerzeichen werden abgelehnt, statt als Key an Anthropic zu gehen.
+Ist der Vault nicht erreichbar, sieht das Kind „Der Schlüsseldienst ist gerade
+nicht erreichbar" (HTTP 503) statt einer Fotofehlermeldung — der Unterschied
+spart bei der Fehlersuche Zeit. Der Versuch landet mit 0 USD im Kostenprotokoll.
+
+Schlüsselmaterial wird vor jedem Protokolleintrag entfernt (`scrub_secrets()`),
+und der **Selbsttest holt den Key wirklich ab** — ein abgelaufenes Token fällt
+dort auf und nicht erst, wenn ein Kind ein Foto hochlädt. Angezeigt werden nur
+Länge und Präfix, nie der Key selbst.
 
 ---
 
@@ -92,7 +130,8 @@ location ~ ^/(lib|storage|vendor)/           { deny all; }
 location ~ ^/(config\.php|schema\.sql|composer\.(json|lock)|deploy\.sh)$ { deny all; }
 ```
 
-Weitere eingebaute Schutzmaßnahmen: Passwörter und Geräte-Token nur als Hash,
+Weitere eingebaute Schutzmaßnahmen: der Anthropic-Key nur im Keyvault,
+Passwörter und Geräte-Token nur als Hash,
 `HttpOnly`/`Secure`/`SameSite=Lax`-Cookies, CSRF-Schutz über einen eigenen Header
 (API) bzw. Token (Admin-Formulare), Eigentümerprüfung bei jedem Datenzugriff und
 die richtige Quizantwort ausschließlich serverseitig.
@@ -127,7 +166,7 @@ views/               login, languages, language, units, unit, import, quiz
 sw.js                Service Worker (nur statische Dateien)
 api/                 auth, languages, units, import, quiz  (JSON)
 admin/               Kosten, Accounts, Vokabeln, Einstellungen, Selbsttest
-lib/                 db, auth, settings, ai, cost, json, config
+lib/                 db, auth, settings, ai, keyvault, cost, json, config
 schema.sql           Datenbankschema
 ```
 
@@ -174,5 +213,18 @@ eigene Testkonten an und räumt sie wieder weg; geänderte Einstellungen setzt e
 auf ihren vorherigen Wert zurück. Ohne Admin-Passwort als zweites Argument wird
 der Admin-Teil übersprungen.
 
-Der Test ruft **nie** die Anthropic-API auf — er verursacht also keine Kosten.
+Dazu die Keyvault-Anbindung, gegen einen Simulator statt des echten Vaults:
+
+```bash
+php -S 127.0.0.1:8124 tests/fake-keyvault.php &
+php tests/keyvault.php
+```
+
+15 Prüfungen: Abruf und Format, Zeilenumbrüche, leere Antwort, HTML statt Key,
+unbekannter Eintrag, HTTP 401/403/500, das Entfernen von Schlüsselmaterial aus
+Logtexten und dass wirklich nirgends zwischengespeichert wird. Vorausgesetzt wird
+`'keyvault_url' => 'http://127.0.0.1:8124/'` und `'keyvault_token' => 'test-token'`
+in der lokalen `config.php`.
+
+Beide Testläufe rufen **nie** die Anthropic-API auf — sie verursachen also keine Kosten.
 Die Bilderkennung selbst prüfst du am besten einmal von Hand mit einem echten Foto.

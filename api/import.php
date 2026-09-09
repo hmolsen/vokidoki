@@ -58,8 +58,17 @@ switch (action()) {
 
         try {
             $result = analyze_vocab_images($images, (string) $lang['name'], $user);
+        } catch (KeyvaultException $e) {
+            // Eigene Meldung, damit im Fehlerfall klar ist, wo es klemmt -
+            // am Keyvault und nicht an den Fotos.
+            error_log('[vokabeltrainer] Keyvault: ' . scrub_secrets($e->getMessage()));
+            json_fail(
+                'Der Schluesseldienst ist gerade nicht erreichbar. '
+                . 'Bitte spaeter noch einmal versuchen.',
+                503,
+            );
         } catch (Throwable $e) {
-            error_log('[vokabeltrainer] Bildanalyse fehlgeschlagen: ' . $e->getMessage());
+            error_log('[vokabeltrainer] Bildanalyse fehlgeschlagen: ' . scrub_secrets($e->getMessage()));
             json_fail(
                 'Die Fotos konnten nicht ausgewertet werden. Bitte noch einmal versuchen.',
                 502,

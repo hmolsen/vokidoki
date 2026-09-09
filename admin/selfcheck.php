@@ -7,6 +7,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/_boot.php';
+require_once __DIR__ . '/../lib/keyvault.php';
 
 admin_require();
 
@@ -18,7 +19,7 @@ function check(array &$checks, string $name, callable $test): void
     try {
         [$ok, $detail] = $test();
     } catch (Throwable $e) {
-        [$ok, $detail] = [false, $e->getMessage()];
+        [$ok, $detail] = [false, scrub_secrets($e->getMessage())];
     }
     $checks[] = ['name' => $name, 'ok' => $ok, 'detail' => $detail];
 }
@@ -82,11 +83,28 @@ check($checks, 'Anthropic-SDK', static function (): array {
     return [class_exists(\Anthropic\Client::class), 'anthropic-ai/sdk geladen'];
 });
 
-check($checks, 'API-Key hinterlegt', static function (): array {
-    $key = (string) cfg('anthropic_api_key', '');
-    return [$key !== '', $key === ''
-        ? 'in config.php eintragen'
-        : 'gesetzt (' . substr($key, 0, 8) . '...)'];
+check($checks, 'Keyvault konfiguriert', static function (): array {
+    $url   = (string) cfg('keyvault_url', '');
+    $token = (string) cfg('keyvault_token', '');
+    if ($url === '' || $token === '') {
+        return [false, 'keyvault_url und keyvault_token in config.php eintragen'];
+    }
+    return [true, $url . ' (Eintrag: ' . cfg('keyvault_key', 'vokabeltrainer') . ')'];
+});
+
+// Holt den Key wirklich ab - so faellt eine abgelaufene Berechtigung hier auf
+// und nicht erst, wenn ein Kind ein Foto hochlaedt. Der Key selbst wird
+// bewusst nicht angezeigt, nur seine Laenge und sein Praefix.
+check($checks, 'Anthropic-Key aus dem Keyvault', static function (): array {
+    $started = microtime(true);
+    $key     = keyvault_anthropic_key();
+    $ms      = (int) ((microtime(true) - $started) * 1000);
+
+    $shape = str_starts_with($key, 'sk-ant-')
+        ? 'sieht aus wie ein Anthropic-Key'
+        : 'ACHTUNG: beginnt nicht mit sk-ant-';
+
+    return [true, sprintf('abgerufen in %d ms, %d Zeichen - %s', $ms, strlen($key), $shape)];
 });
 
 check($checks, 'HTTPS', static function (): array {
@@ -150,7 +168,7 @@ check($checks, 'config.php nicht abrufbar', static function (): array {
     }
     // PHP-Dateien werden ausgefuehrt und geben nichts aus - gefaehrlich waere
     // nur ausgelieferter Quelltext.
-    $leaks = str_contains($body, '<?php') || str_contains($body, 'anthropic_api_key');
+    $leaks = str_contains($body, '<?php') || str_contains($body, 'keyvault_token');
     return [!$leaks, $leaks
         ? "ACHTUNG: Quelltext wird ausgeliefert (HTTP $status)"
         : "HTTP $status, aber kein Quelltext sichtbar - Sperre trotzdem einrichten"];

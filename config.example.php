@@ -16,8 +16,12 @@ return [
         'pass' => '',
     ],
 
-    // API-Key aus der Anthropic Console. Bleibt ausschliesslich serverseitig.
-    'anthropic_api_key' => '',
+    // Der Anthropic-Key steht bewusst NICHT hier, sondern im Keyvault. Er wird
+    // bei jedem KI-Aufruf frisch geholt und nirgends zwischengespeichert -
+    // so laesst er sich jederzeit rotieren, ohne diese Datei anzufassen.
+    'keyvault_url'   => 'https://cqrity.de/keyvault/api.php',
+    'keyvault_token' => '',              // Bearer-Token fuer den Keyvault
+    'keyvault_key'   => 'vokabeltrainer', // Name des Eintrags im Keyvault
 
     // Wird beim ersten Admin-Login als Hash in die settings-Tabelle uebernommen.
     // Danach laesst sich das Passwort im Admin aendern; dieser Wert wird dann ignoriert.
