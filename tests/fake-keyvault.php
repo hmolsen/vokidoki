@@ -12,6 +12,13 @@ declare(strict_types=1);
  * wehren muss. Erwartetes Token: "test-token".
  */
 
+// Wird bewusst per "php -S" ausgeliefert, gehoert aber auf keinen echten
+// Webserver.
+if (PHP_SAPI !== 'cli-server') {
+    http_response_code(404);
+    exit;
+}
+
 const FAKE_TOKEN = 'test-token';
 const FAKE_KEY   = 'sk-ant-api03-FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE';
 

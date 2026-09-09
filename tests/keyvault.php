@@ -13,6 +13,13 @@ declare(strict_types=1);
  * steht. Der echte Keyvault wird nicht angefasst.
  */
 
+// Diese Datei gehoert nicht ins Web - sie laeuft ausschliesslich auf der
+// Kommandozeile.
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit;
+}
+
 require_once __DIR__ . '/../lib/keyvault.php';
 
 $passed = 0;

@@ -196,6 +196,23 @@ check($checks, 'lib/ nicht abrufbar', static function (): array {
     return [!$leaks, $leaks ? "Quelltext sichtbar (HTTP $status)" : "gesperrt (HTTP $status)"];
 });
 
+check($checks, 'tests/ nicht ausfuehrbar', static function (): array {
+    if (!is_dir(dirname(__DIR__) . '/tests')) {
+        return [true, 'nicht auf den Server geladen - ideal'];
+    }
+    $result = probe('/tests/e2e.php');
+    if ($result === null) {
+        return [true, 'nicht messbar im Entwicklungsserver'];
+    }
+    [$status, $body] = $result;
+    // Die Testskripte lehnen Web-Aufrufe selbst mit 404 ab; zusaetzlich
+    // greift die .htaccess. Alles andere waere ein Problem.
+    $ok = in_array($status, [403, 404], true) && trim($body) === '';
+    return [$ok, $ok
+        ? "gesperrt (HTTP $status)"
+        : "ACHTUNG: liefert HTTP $status mit Inhalt - Ordner tests/ loeschen"];
+});
+
 check($checks, 'Accounts angelegt', static function (): array {
     $n = (int) qv('SELECT COUNT(*) FROM users WHERE active = 1');
     return [$n > 0, $n > 0 ? $n . ' aktive(r) Account(s)' : 'noch keiner - unter "Accounts" anlegen'];

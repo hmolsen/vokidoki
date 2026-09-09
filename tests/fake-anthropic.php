@@ -12,6 +12,13 @@ declare(strict_types=1);
  * Kostenprotokoll - pruefen, ohne die echte API zu belasten.
  */
 
+// Wird bewusst per "php -S" ausgeliefert, gehoert aber auf keinen echten
+// Webserver.
+if (PHP_SAPI !== 'cli-server') {
+    http_response_code(404);
+    exit;
+}
+
 const RECORD_FILE = 'vt-fake-anthropic-last.json';
 const EXPECTED_KEY = 'sk-ant-api03-FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE';
 

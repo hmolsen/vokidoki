@@ -5,7 +5,9 @@ Options -Indexes
 <IfModule mod_rewrite.c>
   RewriteEngine On
   # Verzeichnisse mit Servercode / Daten komplett sperren
-  RewriteRule ^(lib|storage|vendor)/ - [F,L]
+  RewriteRule ^(lib|storage|vendor|tests)/ - [F,L]
+  # Falls das Repository versehentlich mit hochgeladen wurde.
+  RewriteRule ^\.git - [F,L]
 </IfModule>
 
 <FilesMatch "^(config\.php|schema\.sql|composer\.(json|lock)|deploy\.sh|\.gitignore)$">

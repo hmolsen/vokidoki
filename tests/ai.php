@@ -18,6 +18,13 @@ declare(strict_types=1);
  * Eintrag im Kostenprotokoll.
  */
 
+// Diese Datei gehoert nicht ins Web - sie laeuft ausschliesslich auf der
+// Kommandozeile.
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit;
+}
+
 require_once __DIR__ . '/../lib/ai.php';
 
 $passed = 0;

@@ -22,8 +22,26 @@ VT_SSH=benutzer@server.de VT_PATH=/var/www/vokabeln ./deploy.sh
 
 Das Skript überträgt alles außer `config.php`, `vendor/` und den generierten
 Icons und führt anschließend `composer install` auf dem Server aus.
-Ohne SSH geht auch FTP — dann `vendor/` lokal mit `composer install` erzeugen
-und mit hochladen.
+
+**Alternativ per FTP.** Den Projektordner hochladen, aber **ohne** diese Einträge:
+
+| nicht hochladen | Grund |
+|---|---|
+| `.git/` | groß und unnötig; enthält die gesamte Historie |
+| `vendor/` | entsteht auf dem Server per `composer install` (tausende Dateien, über FTP zäh) |
+| `composer.phar` | wird auf dem Server nicht gebraucht |
+| `config.php` | Zugangsdaten gehören nur auf den Server |
+| `storage/icons/*.png` | werden bei Bedarf neu erzeugt |
+
+Danach einmal per SSH:
+
+```bash
+cd /pfad/zum/ordner
+composer install --no-dev --optimize-autoloader
+```
+
+`vendor/` lässt sich zwar auch lokal erzeugen und mitschicken, dauert über FTP
+aber deutlich länger als der eine Befehl.
 
 ### 2. Konfiguration
 
@@ -122,8 +140,10 @@ das Symbol landet dann beim nächsten Start wieder im Login.
 
 ## Absicherung
 
-Die mitgelieferte `.htaccess` sperrt `config.php`, `schema.sql`, `lib/`, `storage/`
-und `vendor/`. Der **Selbsttest misst das aktiv nach**, indem er diese Pfade über die
+Die mitgelieferte `.htaccess` sperrt `config.php`, `schema.sql`, `lib/`, `storage/`,
+`vendor/`, `tests/` und ein versehentlich mit hochgeladenes `.git/`.
+Die Testskripte weisen Web-Aufrufe zusätzlich selbst mit 404 ab (`PHP_SAPI`-Prüfung),
+falls `.htaccess` nicht greift. Der **Selbsttest misst das aktiv nach**, indem er diese Pfade über die
 eigene Adresse aufruft — meldet er dort ein Problem, wertet dein Server keine
 `.htaccess` aus (nginx, oder `AllowOverride None`).
 
