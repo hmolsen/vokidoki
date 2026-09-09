@@ -2,17 +2,17 @@
 declare(strict_types=1);
 
 /**
- * Anthropic-Simulator fuer die Tests.
+ * Anthropic-Simulator für die Tests.
  *
  *   php -S 127.0.0.1:8125 tests/fake-anthropic.php
  *
  * Nimmt einen Messages-API-Aufruf entgegen, legt Header und Rumpf zur
- * Auswertung ab und antwortet im Format der echten API. So laesst sich der
+ * Auswertung ab und antwortet im Format der echten API. So lässt sich der
  * gesamte Weg - Keyvault, SDK, Bildblock, Schema, Antwortauswertung,
- * Kostenprotokoll - pruefen, ohne die echte API zu belasten.
+ * Kostenprotokoll - prüfen, ohne die echte API zu belasten.
  */
 
-// Wird bewusst per "php -S" ausgeliefert, gehoert aber auf keinen echten
+// Wird bewusst per "php -S" ausgeliefert, gehört aber auf keinen echten
 // Webserver.
 if (PHP_SAPI !== 'cli-server') {
     http_response_code(404);
@@ -48,8 +48,8 @@ if (($headers['x-api-key'] ?? '') !== EXPECTED_KEY) {
     exit;
 }
 
-// Die Tests loesen einen Serverfehler aus, indem sie als Sprachnamen
-// "Fehlerfall" uebergeben - der steht dann in der Anweisung.
+// Die Tests lösen einen Serverfehler aus, indem sie als Sprachnamen
+// "Fehlerfall" übergeben - der steht dann in der Anweisung.
 $instruction = '';
 foreach ($request['messages'][0]['content'] ?? [] as $block) {
     if (($block['type'] ?? '') === 'text') {
@@ -69,10 +69,10 @@ if (str_contains($instruction, 'Fehlerfall')) {
 $payload = [
     'title'   => 'Unit 4 - In the kitchen',
     'entries' => [
-        ['foreign' => 'the spoon', 'native' => 'der Loeffel', 'note' => null],
+        ['foreign' => 'the spoon', 'native' => 'der Löffel', 'note' => null],
         ['foreign' => 'the plate', 'native' => 'der Teller',  'note' => 'flach'],
         ['foreign' => 'to cook',   'native' => 'kochen',      'note' => null],
-        // Unvollstaendige Zeile: muss von der App verworfen werden.
+        // Unvollständige Zeile: muss von der App verworfen werden.
         ['foreign' => '',          'native' => 'leer',        'note' => null],
     ],
 ];

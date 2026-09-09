@@ -7,16 +7,16 @@ declare(strict_types=1);
  *   php tests/e2e.php http://localhost:8123
  *
  * Der Test legt einen eigenen Testaccount an, spielt Login, Sprache, Import
- * (ohne KI-Aufruf), Quiz und Aufraeumen durch und prueft dabei die Lernregel
+ * (ohne KI-Aufruf), Quiz und Aufräumen durch und prüft dabei die Lernregel
  * "dreimal hintereinander richtig". Er braucht Zugriff auf dieselbe Datenbank
  * wie die App, um die richtige Antwort nachzuschlagen - die App gibt sie
  * bewusst nicht heraus.
  *
  * Nicht gegen eine produktive Instanz laufen lassen: Der Testaccount wird
- * angelegt und am Ende wieder geloescht.
+ * angelegt und am Ende wieder gelöscht.
  */
 
-// Diese Datei gehoert nicht ins Web - sie laeuft ausschliesslich auf der
+// Diese Datei gehört nicht ins Web - sie läuft ausschließlich auf der
 // Kommandozeile.
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
@@ -27,9 +27,9 @@ require_once __DIR__ . '/../lib/db.php';
 require_once __DIR__ . '/../lib/settings.php';
 
 $base     = rtrim($argv[1] ?? 'http://localhost:8123', '/');
-// Zweites Argument: Admin-Passwort. Fehlt es, wird der Admin-Teil uebersprungen -
-// so laesst sich der Test auch gegen eine Installation fahren, deren Passwort
-// bereits geaendert wurde.
+// Zweites Argument: Admin-Passwort. Fehlt es, wird der Admin-Teil übersprungen -
+// so lässt sich der Test auch gegen eine Installation fahren, deren Passwort
+// bereits geändert wurde.
 $adminPass = $argv[2] ?? (string) cfg('admin_bootstrap_password', '');
 $jar     = tempnam(sys_get_temp_dir(), 'vtjar');
 $passed  = 0;
@@ -152,16 +152,16 @@ ok('Falsches Admin-Passwort wird abgelehnt', str_contains($res['body'], 'name="a
 
 $res = adminPost('index.php', ['admin_password' => $adminPass]);
 $adminOk = str_contains($res['body'], 'Diesen Monat');
-ok('Admin-Anmeldung', $adminOk, 'Dashboard nicht erreicht - Passwort als 2. Argument uebergeben');
+ok('Admin-Anmeldung', $adminOk, 'Dashboard nicht erreicht - Passwort als 2. Argument übergeben');
 ok('Passwort liegt als Hash in der Datenbank',
    str_starts_with((string) qv("SELECT v FROM settings WHERE k = 'admin_password_hash'"), '$'));
 
 foreach (['users.php' => 'Neuen Account anlegen',
           'vocab.php' => 'Kind',
-          'settings.php' => 'Modell fuer die Bilderkennung',
-          'selfcheck.php' => 'Pruefung'] as $file => $needle) {
+          'settings.php' => 'Modell für die Bilderkennung',
+          'selfcheck.php' => 'Prüfung'] as $file => $needle) {
     $res = http($base . '/admin/' . $file);
-    ok("Seite $file laedt", $res['status'] === 200 && str_contains($res['body'], $needle),
+    ok("Seite $file lädt", $res['status'] === 200 && str_contains($res['body'], $needle),
        "Status {$res['status']}");
 }
 
@@ -169,7 +169,7 @@ $res = http($base . '/admin/selfcheck.php');
 ok('Selbsttest meldet keine Fehler bei DB und Schema',
    str_contains($res['body'], 'Tabellen vorhanden'));
 
-// Zweites Kind anlegen - damit prueft der Test weiter unten die Trennung der Accounts.
+// Zweites Kind anlegen - damit prüft der Test weiter unten die Trennung der Accounts.
 q("DELETE FROM users WHERE username = 'e2e_other'");
 $res = adminPost('users.php', [
     'create'       => '1',
@@ -183,15 +183,15 @@ ok('Admin legt einen zweiten Account an', $otherId > 0);
 
 $res = adminPost('users.php', ['create' => '1', 'username' => 'UNGUELTIG!',
                                'display_name' => 'X', 'password' => 'geheim123']);
-ok('Ungueltiger Benutzername wird abgelehnt', str_contains($res['body'], 'Benutzername: 3-64'));
+ok('Ungültiger Benutzername wird abgelehnt', str_contains($res['body'], 'Benutzername: 3-64'));
 
-// Fremddaten anlegen, gegen die der Zugriffsschutz gleich geprueft wird.
+// Fremddaten anlegen, gegen die der Zugriffsschutz gleich geprüft wird.
 q('INSERT INTO languages (user_id, name, flag_emoji) VALUES (?, ?, ?)', [$otherId, 'Fremdisch', '']);
 $otherLang = (int) db()->lastInsertId();
 q('INSERT INTO units (user_id, language_id, title) VALUES (?, ?, ?)', [$otherId, $otherLang, 'Fremde Unit']);
 $otherUnitId = (int) db()->lastInsertId();
 
-// Vorherige Einstellung merken, damit der Test nichts dauerhaft veraendert.
+// Vorherige Einstellung merken, damit der Test nichts dauerhaft verändert.
 $prevModel  = (string) qv("SELECT v FROM settings WHERE k = 'vision_model'");
 $prevEffort = (string) qv("SELECT v FROM settings WHERE k = 'vision_effort'");
 $probeModel = $prevModel === 'claude-sonnet-5' ? 'claude-haiku-4-5' : 'claude-sonnet-5';
@@ -201,7 +201,7 @@ adminPost('settings.php', ['save_model' => '1', 'vision_model' => $probeModel,
 ok('Modellwechsel wird gespeichert',
    qv("SELECT v FROM settings WHERE k = 'vision_model'") === $probeModel);
 
-adminPost('settings.php', ['save_model' => '1', 'vision_model' => 'boesartig',
+adminPost('settings.php', ['save_model' => '1', 'vision_model' => 'bösartig',
                            'vision_effort' => 'medium']);
 ok('Unbekanntes Modell wird abgelehnt',
    qv("SELECT v FROM settings WHERE k = 'vision_model'") === $probeModel);
@@ -215,7 +215,7 @@ ok('Vorherige Modelleinstellung wiederhergestellt',
 
 // ------------------------------------------------------------------ Anmeldung
 
-section('Anmeldung und Geraete-Token');
+section('Anmeldung und Geräte-Token');
 
 [$data, $status] = apiCall('auth', 'login', ['username' => $username, 'password' => 'falsch']);
 ok('Falsches Passwort wird abgelehnt', $status === 401, "Status $status");
@@ -228,19 +228,19 @@ ok('App-Name ist Besitzform', ($data['user']['appName'] ?? '') === 'Testkinds Vo
 $redirect = (string) ($data['redirect'] ?? '');
 parse_str((string) parse_url($redirect, PHP_URL_QUERY), $q);
 $token = (string) ($q['t'] ?? '');
-ok('Geraete-Token ausgeliefert', strlen($token) > 30);
+ok('Geräte-Token ausgeliefert', strlen($token) > 30);
 ok('Token ist nur als Hash gespeichert',
    q1('SELECT id FROM device_tokens WHERE token_hash = ?', [hash('sha256', $token)]) !== null);
 
-// ------------------------------------------------------------------ PWA-Huelle
+// ------------------------------------------------------------------ PWA-Hülle
 
-section('PWA-Huelle');
+section('PWA-Hülle');
 
 $res = http($base . '/?t=' . urlencode($token));
-ok('Token-Start leitet weiter (Token verlaesst die URL)', $res['status'] === 302, "Status {$res['status']}");
+ok('Token-Start leitet weiter (Token verlässt die URL)', $res['status'] === 302, "Status {$res['status']}");
 
 $res = http($base . '/');
-ok('Shell enthaelt personalisierten Manifest-Link', str_contains($res['body'], 'manifest.php?t='));
+ok('Shell enthält personalisierten Manifest-Link', str_contains($res['body'], 'manifest.php?t='));
 ok('iOS-Titel ist der Kindername',
    str_contains($res['body'], 'apple-mobile-web-app-title" content="Testkinds Vokabeln"'));
 ok('apple-touch-icon gesetzt', str_contains($res['body'], 'icon.php?u=' . $userId));
@@ -248,14 +248,14 @@ ok('apple-touch-icon gesetzt', str_contains($res['body'], 'icon.php?u=' . $userI
 $res      = http($base . '/manifest.php?t=' . urlencode($token));
 $manifest = json_decode($res['body'], true);
 ok('Manifest-Name', ($manifest['name'] ?? '') === 'Testkinds Vokabeln', $manifest['name'] ?? '(fehlt)');
-ok('Manifest start_url traegt den Token', str_contains((string) ($manifest['start_url'] ?? ''), 't=' . $token));
+ok('Manifest start_url trägt den Token', str_contains((string) ($manifest['start_url'] ?? ''), 't=' . $token));
 ok('Manifest display=standalone', ($manifest['display'] ?? '') === 'standalone');
 
 $res = http($base . '/icon.php?u=' . $userId . '&s=192');
 ok('Icon ist ein PNG', str_starts_with($res['body'], "\x89PNG"), 'Antwort war kein PNG');
 
-$res = http($base . '/manifest.php?t=ungueltig');
-ok('Ungueltiger Token liefert generisches Manifest',
+$res = http($base . '/manifest.php?t=kein-gueltiger-token');
+ok('Ungültiger Token liefert generisches Manifest',
    (json_decode($res['body'], true)['name'] ?? '') === 'Vokabeln');
 
 // ------------------------------------------------------------------ Sprache
@@ -270,7 +270,7 @@ $languageId = (int) ($data['id'] ?? 0);
 ok('Doppelte Sprache wird abgelehnt', $status === 409, "Status $status");
 
 $entries = [];
-foreach ([['one', 'eins'], ['two', 'zwei'], ['three', 'drei'], ['four', 'vier'], ['five', 'fuenf']] as [$f, $n]) {
+foreach ([['one', 'eins'], ['two', 'zwei'], ['three', 'drei'], ['four', 'vier'], ['five', 'fünf']] as [$f, $n]) {
     $entries[] = ['foreign' => $f, 'native' => $n];
 }
 [$data, $status] = apiCall('import', 'save', [
@@ -279,7 +279,7 @@ foreach ([['one', 'eins'], ['two', 'zwei'], ['three', 'drei'], ['four', 'vier'],
     'entries'     => $entries,
 ]);
 ok('Lerneinheit gespeichert', $status === 200 && ($data['ok'] ?? false), $data['error'] ?? '');
-ok('Alle fuenf Vokabeln angelegt', ($data['count'] ?? 0) === 5);
+ok('Alle fünf Vokabeln angelegt', ($data['count'] ?? 0) === 5);
 $unitId = (int) ($data['unit_id'] ?? 0);
 
 section('Vokabelkorrektur im Admin');
@@ -304,41 +304,41 @@ $fixed = q1('SELECT term_foreign, term_native, note FROM vocab WHERE id = ?', [$
 ok('Admin korrigiert eine Vokabel',
    $fixed['term_foreign'] === 'ONE' && $fixed['term_native'] === 'die Eins',
    json_encode($fixed));
-ok('Hinweisfeld wird uebernommen', $fixed['note'] === 'Zahlwort');
+ok('Hinweisfeld wird übernommen', $fixed['note'] === 'Zahlwort');
 ok('Titel der Lerneinheit wird umbenannt',
    qv('SELECT title FROM units WHERE id = ?', [$unitId]) === 'Unit 1 korrigiert');
 
-// Leere Felder duerfen bestehende Daten nicht zerstoeren.
+// Leere Felder dürfen bestehende Daten nicht zerstören.
 $fields['f'][$firstId] = '';
 $fields['n'][$firstId] = '';
 adminPost('vocab.php', $fields, $filter);
-ok('Leere Eingabe loescht keine Vokabel',
+ok('Leere Eingabe löscht keine Vokabel',
    qv('SELECT term_foreign FROM vocab WHERE id = ?', [$firstId]) === 'ONE');
 
 adminPost('vocab.php', ['add_vocab' => $unitId, 'user' => $userId, 'language' => $languageId,
                         'unit' => $unitId, 'new_f' => 'six', 'new_n' => 'sechs'], $filter);
-ok('Admin ergaenzt eine Vokabel',
+ok('Admin ergänzt eine Vokabel',
    (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$unitId]) === 6);
 
 adminPost('vocab.php', ['delete_vocab' => $firstId, 'user' => $userId,
                         'language' => $languageId, 'unit' => $unitId], $filter);
-ok('Admin loescht eine Vokabel',
+ok('Admin löscht eine Vokabel',
    q1('SELECT id FROM vocab WHERE id = ?', [$firstId]) === null);
 
-// Eine ergaenzt, eine geloescht - der Quiz-Abschnitt findet wieder fuenf Vokabeln vor.
-ok('Lerneinheit steht wieder bei fuenf Vokabeln',
+// Eine ergänzt, eine gelöscht - der Quiz-Abschnitt findet wieder fünf Vokabeln vor.
+ok('Lerneinheit steht wieder bei fünf Vokabeln',
    (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$unitId]) === 5);
 
-section('Bilderkennung ueber die API');
+section('Bilderkennung über die API');
 
-// Laeuft nur gegen den Simulator (tests/fake-anthropic.php). Zeigt
-// anthropic_base_url woanders hin, wird uebersprungen - dieser Test darf
+// Läuft nur gegen den Simulator (tests/fake-anthropic.php). Zeigt
+// anthropic_base_url woanders hin, wird übersprungen - dieser Test darf
 // niemals die echte, kostenpflichtige API treffen.
 $aiBase = (string) cfg('anthropic_base_url', '');
 $isFake = $aiBase !== '' && preg_match('#^https?://(127\.0\.0\.1|localhost)[:/]#', $aiBase) === 1;
 
 if (!$isFake) {
-    echo "  - uebersprungen (anthropic_base_url zeigt nicht auf den Simulator)
+    echo "  - übersprungen (anthropic_base_url zeigt nicht auf den Simulator)
 ";
 } else {
     $im = imagecreatetruecolor(60, 40);
@@ -354,7 +354,7 @@ if (!$isFake) {
     ]);
     ok('Foto wird ausgewertet', $status === 200 && ($data['ok'] ?? false), $data['error'] ?? '');
     ok('Titel kommt aus dem Bild', ($data['title'] ?? '') === 'Unit 4 - In the kitchen');
-    ok('Nur vollstaendige Paare werden zurueckgegeben', count($data['entries'] ?? []) === 3);
+    ok('Nur vollständige Paare werden zurückgegeben', count($data['entries'] ?? []) === 3);
 
     [$saved, $status] = apiCall('import', 'save', [
         'language_id' => $languageId,
@@ -364,10 +364,10 @@ if (!$isFake) {
     ok('Erkannte Vokabeln lassen sich speichern', $status === 200 && ($saved['count'] ?? 0) === 3);
 
     $newUnit = (int) ($saved['unit_id'] ?? 0);
-    ok('Lerneinheit traegt den erkannten Titel',
+    ok('Lerneinheit trägt den erkannten Titel',
        qv('SELECT title FROM units WHERE id = ?', [$newUnit]) === 'Unit 4 - In the kitchen');
 
-    // Nicht im Quiz-Abschnitt mitzaehlen lassen.
+    // Nicht im Quiz-Abschnitt mitzählen lassen.
     q('DELETE FROM units WHERE id = ?', [$newUnit]);
 
     [$data, $status] = apiCall('import', 'analyze', ['language_id' => $languageId, 'images' => []]);
@@ -377,7 +377,7 @@ if (!$isFake) {
         'language_id' => $languageId,
         'images'      => [['data' => base64_encode('kein bild'), 'media_type' => 'image/jpeg']],
     ]);
-    ok('Ungueltiges Bild wird abgelehnt', $status === 400, "Status $status");
+    ok('Ungültiges Bild wird abgelehnt', $status === 400, "Status $status");
 }
 
 // ------------------------------------------------------------------ Fremdzugriff
@@ -392,7 +392,7 @@ ok('Fremde Lerneinheit ist nicht lesbar', $status === 404, "Status $status");
 ok('Quiz zu fremder Lerneinheit wird verweigert', $status === 404, "Status $status");
 
 [$data, $status] = apiCall('units', 'delete', ['id' => $otherUnitId]);
-ok('Loeschen einer fremden Lerneinheit wird verweigert', $status === 404, "Status $status");
+ok('Löschen einer fremden Lerneinheit wird verweigert', $status === 404, "Status $status");
 
 [$data, $status] = apiCall('import', 'save', [
     'language_id' => $otherLang,
@@ -400,7 +400,7 @@ ok('Loeschen einer fremden Lerneinheit wird verweigert', $status === 404, "Statu
     'entries'     => [['foreign' => 'a', 'native' => 'b']],
 ]);
 ok('Speichern in fremde Sprache wird verweigert', $status === 404, "Status $status");
-ok('Fremde Lerneinheit existiert unveraendert weiter',
+ok('Fremde Lerneinheit existiert unverändert weiter',
    q1('SELECT id FROM units WHERE id = ?', [$otherUnitId]) !== null);
 
 $res = http($base . "/api/quiz.php?action=next&unit_id=$unitId");
@@ -424,12 +424,12 @@ function correctIndexFor(array $card, int $unitId): int
 
 [$card] = apiCall('quiz', 'next', null, ['unit_id' => $unitId]);
 ok('Erste Frage geliefert', ($card['ok'] ?? false) && !($card['done'] ?? true));
-ok('Genau vier Antwortmoeglichkeiten', count($card['options'] ?? []) === 4);
-ok('Antwortmoeglichkeiten sind verschieden',
+ok('Genau vier Antwortmöglichkeiten', count($card['options'] ?? []) === 4);
+ok('Antwortmöglichkeiten sind verschieden',
    count(array_unique($card['options'] ?? [])) === 4);
 ok('Richtige Antwort wird nicht mitgeschickt',
    !array_key_exists('correct_index', $card) && !array_key_exists('answer', $card));
-ok('Sprachname fuer die Richtungsanzeige dabei', ($card['language'] ?? '') === 'Testisch');
+ok('Sprachname für die Richtungsanzeige dabei', ($card['language'] ?? '') === 'Testisch');
 
 // Dieselbe Frage zweimal beantworten - der Nonce darf nur einmal gelten.
 $index = correctIndexFor($card, $unitId);
@@ -438,18 +438,18 @@ ok('Richtige Antwort wird als richtig gewertet', $r1['correct'] ?? false);
 ok('Serie steht bei 1', ($r1['streak'] ?? -1) === 1);
 
 [$r2, $s2] = apiCall('quiz', 'answer', ['nonce' => $card['nonce'], 'index' => $index]);
-ok('Nonce ist nur einmal gueltig', $s2 === 409, "Status $s2");
+ok('Nonce ist nur einmal gültig', $s2 === 409, "Status $s2");
 
-// Falsche Antwort setzt die Serie zurueck.
+// Falsche Antwort setzt die Serie zurück.
 [$card] = apiCall('quiz', 'next', null, ['unit_id' => $unitId]);
 $right = correctIndexFor($card, $unitId);
 $wrong = ($right + 1) % 4;
 [$r3] = apiCall('quiz', 'answer', ['nonce' => $card['nonce'], 'index' => $wrong]);
 ok('Falsche Antwort wird als falsch gewertet', ($r3['correct'] ?? true) === false);
-ok('Serie faellt auf 0 zurueck', ($r3['streak'] ?? -1) === 0);
-ok('Richtige Loesung wird zurueckgemeldet', ($r3['correct_index'] ?? -1) === $right);
+ok('Serie fällt auf 0 zurück', ($r3['streak'] ?? -1) === 0);
+ok('Richtige Lösung wird zurückgemeldet', ($r3['correct_index'] ?? -1) === $right);
 
-// Ganze Einheit durchspielen - jede Vokabel braucht drei Treffer am Stueck.
+// Ganze Einheit durchspielen - jede Vokabel braucht drei Treffer am Stück.
 $rounds = 0;
 $last   = null;
 while ($rounds < 200) {
@@ -480,17 +480,17 @@ $minStreak = (int) qv(
 );
 ok('Keine Vokabel wurde vor drei Treffern freigegeben', $minStreak >= 3, "kleinste Serie: $minStreak");
 
-// ------------------------------------------------------------------ Zuruecksetzen
+// ------------------------------------------------------------------ Zurücksetzen
 
-section('Zuruecksetzen');
+section('Zurücksetzen');
 
 [$data, $status] = apiCall('units', 'reset', ['id' => $unitId]);
-ok('Fortschritt zurueckgesetzt', $status === 200);
-ok('Lernstand ist geloescht',
+ok('Fortschritt zurückgesetzt', $status === 200);
+ok('Lernstand ist gelöscht',
    (int) qv('SELECT COUNT(*) FROM progress p JOIN vocab v ON v.id = p.vocab_id WHERE v.unit_id = ?', [$unitId]) === 0);
 
 [$card] = apiCall('quiz', 'next', null, ['unit_id' => $unitId]);
-ok('Nach dem Zuruecksetzen kommen wieder Fragen', !($card['done'] ?? true));
+ok('Nach dem Zurücksetzen kommen wieder Fragen', !($card['done'] ?? true));
 
 // ------------------------------------------------------------------ Abmelden
 
@@ -507,7 +507,7 @@ $res = http($base . '/');
 ok('Widerrufener Token meldet niemanden mehr an',
    !str_contains($res['body'], 'Testkinds Vokabeln'));
 
-// ------------------------------------------------------------------ Aufraeumen
+// ------------------------------------------------------------------ Aufräumen
 
 q('DELETE FROM users WHERE id = ?', [$userId]);
 q("DELETE FROM users WHERE username IN ('e2e_other')");

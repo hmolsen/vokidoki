@@ -27,7 +27,7 @@ function db(): PDO
     return $pdo;
 }
 
-/** Prepared statement ausfuehren und Statement zurueckgeben. */
+/** Prepared statement ausführen und Statement zurückgeben. */
 function q(string $sql, array $params = []): PDOStatement
 {
     $st = db()->prepare($sql);

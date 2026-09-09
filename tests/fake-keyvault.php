@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Keyvault-Simulator fuer die Tests.
+ * Keyvault-Simulator für die Tests.
  *
  *   php -S 127.0.0.1:8124 tests/fake-keyvault.php
  *
@@ -12,7 +12,7 @@ declare(strict_types=1);
  * wehren muss. Erwartetes Token: "test-token".
  */
 
-// Wird bewusst per "php -S" ausgeliefert, gehoert aber auf keinen echten
+// Wird bewusst per "php -S" ausgeliefert, gehört aber auf keinen echten
 // Webserver.
 if (PHP_SAPI !== 'cli-server') {
     http_response_code(404);
@@ -50,7 +50,7 @@ switch ($name) {
         echo "\n  " . FAKE_KEY . "  \n";
         break;
 
-    // Erzwingen die Zugriffs-Zweige, die sonst nur ein falsches Token ausloest.
+    // Erzwingen die Zugriffs-Zweige, die sonst nur ein falsches Token auslöst.
     case 'abgelehnt':
         http_response_code(401);
         echo "unauthorized\n";

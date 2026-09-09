@@ -6,7 +6,7 @@ declare(strict_types=1);
  *
  * Bewusst PHP statt statischem HTML: iOS liest das Web-App-Manifest im Moment
  * des Antippens von "Zum Home-Bildschirm" aus dem ausgelieferten HTML. Ein per
- * JavaScript nachgeschobener <link rel="manifest"> ist dafuer unzuverlaessig,
+ * JavaScript nachgeschobener <link rel="manifest"> ist dafür unzuverlässig,
  * deshalb muss der personalisierte Manifest-Link bereits im ersten Response
  * stehen.
  */
@@ -18,7 +18,7 @@ boot_error_handling();
 
 $appVersion = '1';
 
-// Start aus dem Homescreen-Icon: start_url traegt den Geraete-Token. Er wird
+// Start aus dem Homescreen-Icon: start_url trägt den Geräte-Token. Er wird
 // gegen eine Session in *diesem* Container getauscht und danach aus der URL
 // entfernt, damit er nicht in Verlauf oder Screenshots landet.
 $token = isset($_GET['t']) && is_string($_GET['t']) ? $_GET['t'] : '';
@@ -34,8 +34,8 @@ if ($token !== '') {
 
 $user = current_user();
 
-// Der Token fuer den Manifest-Link: der Token dieser Installation, sonst ein
-// frisch erzeugter fuer den naechsten "Zum Home-Bildschirm"-Vorgang.
+// Der Token für den Manifest-Link: der Token dieser Installation, sonst ein
+// frisch erzeugter für den nächsten "Zum Home-Bildschirm"-Vorgang.
 $manifestToken = null;
 if ($user !== null) {
     session_boot();
@@ -45,7 +45,7 @@ if ($user !== null) {
     } else {
         $manifestToken = device_token_create(
             (int) $user['id'],
-            substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? 'Unbekanntes Geraet'), 0, 128),
+            substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? 'Unbekanntes Gerät'), 0, 128),
         );
         $_SESSION['device_token'] = $manifestToken;
     }

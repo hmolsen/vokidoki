@@ -13,12 +13,12 @@ declare(strict_types=1);
  *   'keyvault_token'     => 'test-token'
  *   'anthropic_base_url' => 'http://127.0.0.1:8125'
  *
- * Geprueft wird die ganze Kette: Key aus dem Keyvault, Aufbau des Requests
+ * Geprüft wird die ganze Kette: Key aus dem Keyvault, Aufbau des Requests
  * durch das SDK (Bildblock, Schema, Modell), Auswertung der Antwort und der
  * Eintrag im Kostenprotokoll.
  */
 
-// Diese Datei gehoert nicht ins Web - sie laeuft ausschliesslich auf der
+// Diese Datei gehört nicht ins Web - sie läuft ausschließlich auf der
 // Kommandozeile.
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
@@ -60,7 +60,7 @@ foreach ([0, 1] as $i) {
     imagedestroy($im);
 }
 
-// Testkonto, damit das Kostenprotokoll eine gueltige Zuordnung bekommt.
+// Testkonto, damit das Kostenprotokoll eine gültige Zuordnung bekommt.
 q("DELETE FROM users WHERE username = 'ai_test'");
 q(
     'INSERT INTO users (username, display_name, password_hash, color) VALUES (?, ?, ?, ?)',
@@ -73,13 +73,13 @@ section('Aufruf');
 
 $result = analyze_vocab_images($images, 'Englisch', $user);
 
-ok('Titel wird uebernommen', $result['title'] === 'Unit 4 - In the kitchen', (string) $result['title']);
-ok('Drei vollstaendige Vokabeln', count($result['entries']) === 3, (string) count($result['entries']));
-ok('Unvollstaendige Zeile wird verworfen',
+ok('Titel wird übernommen', $result['title'] === 'Unit 4 - In the kitchen', (string) $result['title']);
+ok('Drei vollständige Vokabeln', count($result['entries']) === 3, (string) count($result['entries']));
+ok('Unvollständige Zeile wird verworfen',
    !in_array('leer', array_column($result['entries'], 'native'), true));
 ok('Vokabelpaar stimmt',
-   $result['entries'][0]['foreign'] === 'the spoon' && $result['entries'][0]['native'] === 'der Loeffel');
-ok('Hinweis wird uebernommen', $result['entries'][1]['note'] === 'flach');
+   $result['entries'][0]['foreign'] === 'the spoon' && $result['entries'][0]['native'] === 'der Löffel');
+ok('Hinweis wird übernommen', $result['entries'][1]['note'] === 'flach');
 ok('Fehlender Hinweis wird zu null', $result['entries'][0]['note'] === null);
 
 section('Was beim Modell ankommt');
@@ -101,7 +101,7 @@ ok('Bilddaten sind base64', ($content[0]['source']['type'] ?? '') === 'base64');
 ok('Anweisung steht nach den Bildern', ($content[2]['type'] ?? '') === 'text');
 ok('Sprachname steht in der Anweisung', str_contains($content[2]['text'] ?? '', 'Englisch'));
 
-ok('output_config traegt das JSON-Schema',
+ok('output_config trägt das JSON-Schema',
    ($body['output_config']['format']['type'] ?? '') === 'json_schema',
    json_encode($body['output_config'] ?? []));
 ok('Schema verlangt foreign, native und note',
@@ -116,7 +116,7 @@ section('Kostenprotokoll');
 $log = q1('SELECT * FROM ai_requests WHERE id > ? ORDER BY id DESC LIMIT 1', [$before]);
 ok('Eintrag wurde geschrieben', $log !== null);
 ok('Status ok', ($log['status'] ?? '') === 'ok');
-ok('Token werden uebernommen',
+ok('Token werden übernommen',
    (int) $log['input_tokens'] === 2400 && (int) $log['output_tokens'] === 180);
 ok('Anzahl Fotos stimmt', (int) $log['image_count'] === 2);
 ok('Anzahl erkannter Vokabeln stimmt', (int) $log['entry_count'] === 3);
@@ -147,7 +147,7 @@ ok('Fehlversuch wird protokolliert',
 ok('Status ist error', ($errLog['status'] ?? '') === 'error', (string) ($errLog['status'] ?? ''));
 ok('Fehlversuch bucht keine Kosten', (float) $errLog['cost_usd'] === 0.0);
 ok('Fehlertext wurde festgehalten', trim((string) $errLog['error']) !== '');
-ok('Kein Schluesselmaterial im Protokoll',
+ok('Kein Schlüsselmaterial im Protokoll',
    !str_contains((string) $errLog['error'], 'sk-ant-api03-FAKE'),
    (string) $errLog['error']);
 

@@ -20,18 +20,18 @@ switch (action()) {
 
         $raw = $b['images'] ?? null;
         if (!is_array($raw) || $raw === []) {
-            json_fail('Bitte mindestens ein Foto auswaehlen.');
+            json_fail('Bitte mindestens ein Foto auswählen.');
         }
         if (count($raw) > MAX_IMAGES) {
-            json_fail('Hoechstens ' . MAX_IMAGES . ' Fotos auf einmal.');
+            json_fail('Höchstens ' . MAX_IMAGES . ' Fotos auf einmal.');
         }
 
-        // Die Bilderkennung dauert regelmaessig laenger als die ueblichen
+        // Die Bilderkennung dauert regelmäßig länger als die üblichen
         // 30 Sekunden Standardlaufzeit - sonst bricht PHP mitten im Aufruf ab,
         // nachdem die Anfrage bereits bezahlt wurde.
         set_time_limit(300);
 
-        // Budget- und Ratenpruefung vor dem API-Aufruf, damit ein
+        // Budget- und Ratenprüfung vor dem API-Aufruf, damit ein
         // durchgereichtes iPhone keine offene Rechnung erzeugen kann.
         $blocked = budget_block_reason($uid);
         if ($blocked !== null) {
@@ -47,15 +47,15 @@ switch (action()) {
             $data  = (string) ($item['data'] ?? '');
 
             if (!in_array($media, ALLOWED_MEDIA, true)) {
-                json_fail('Foto ' . ($i + 1) . ' hat ein nicht unterstuetztes Format.');
+                json_fail('Foto ' . ($i + 1) . ' hat ein nicht unterstütztes Format.');
             }
             if ($data === '' || strlen($data) > MAX_IMAGE_BYTES) {
-                json_fail('Foto ' . ($i + 1) . ' ist zu gross oder leer.');
+                json_fail('Foto ' . ($i + 1) . ' ist zu groß oder leer.');
             }
 
             $bin = base64_decode($data, true);
             if ($bin === false || @getimagesizefromstring($bin) === false) {
-                json_fail('Foto ' . ($i + 1) . ' ist kein gueltiges Bild.');
+                json_fail('Foto ' . ($i + 1) . ' ist kein gültiges Bild.');
             }
 
             $images[] = ['data' => $data, 'media_type' => $media];
@@ -68,8 +68,8 @@ switch (action()) {
             // am Keyvault und nicht an den Fotos.
             error_log('[vokabeltrainer] Keyvault: ' . scrub_secrets($e->getMessage()));
             json_fail(
-                'Der Schluesseldienst ist gerade nicht erreichbar. '
-                . 'Bitte spaeter noch einmal versuchen.',
+                'Der Schlüsseldienst ist gerade nicht erreichbar. '
+                . 'Bitte später noch einmal versuchen.',
                 503,
             );
         } catch (Throwable $e) {
@@ -83,7 +83,7 @@ switch (action()) {
         if ($result['entries'] === []) {
             json_fail(
                 'Auf den Fotos wurden keine Vokabeln gefunden. Vielleicht noch einmal '
-                . 'naeher heran und mit mehr Licht fotografieren?',
+                . 'näher heran und mit mehr Licht fotografieren?',
                 422,
             );
         }
@@ -100,7 +100,7 @@ switch (action()) {
         $lang  = own_language($uid, body_int($b, 'language_id'));
         $title = body_str($b, 'title', 128);
         if ($title === '') {
-            json_fail('Bitte einen Titel fuer die Lerneinheit angeben.');
+            json_fail('Bitte einen Titel für die Lerneinheit angeben.');
         }
 
         $rows = $b['entries'] ?? null;
@@ -108,7 +108,7 @@ switch (action()) {
             json_fail('Es gibt nichts zu speichern.');
         }
         if (count($rows) > 500) {
-            json_fail('Eine Lerneinheit kann hoechstens 500 Vokabeln haben.');
+            json_fail('Eine Lerneinheit kann höchstens 500 Vokabeln haben.');
         }
 
         $clean = [];
@@ -129,7 +129,7 @@ switch (action()) {
             ];
         }
         if ($clean === []) {
-            json_fail('Keine vollstaendigen Vokabelpaare gefunden.');
+            json_fail('Keine vollständigen Vokabelpaare gefunden.');
         }
 
         $pdo = db();

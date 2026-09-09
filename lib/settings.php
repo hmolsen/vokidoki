@@ -13,17 +13,17 @@ const SETTING_DEFAULTS = [
     'admin_password_hash'  => '',
 ];
 
-/** Modelle, die im Admin fuer die Bilderkennung waehlbar sind. */
+/** Modelle, die im Admin für die Bilderkennung wählbar sind. */
 const VISION_MODELS = [
     'claude-opus-5'    => 'Claude Opus 5 - beste Genauigkeit (Standard)',
     'claude-opus-4-8'  => 'Claude Opus 4.8',
-    'claude-sonnet-5'  => 'Claude Sonnet 5 - guenstiger',
-    'claude-haiku-4-5' => 'Claude Haiku 4.5 - am guenstigsten',
+    'claude-sonnet-5'  => 'Claude Sonnet 5 - günstiger',
+    'claude-haiku-4-5' => 'Claude Haiku 4.5 - am günstigsten',
 ];
 
 const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh'];
 
-/** Statischer Cache, ueber settings_reset_cache() invalidierbar. */
+/** Statischer Cache, über settings_reset_cache() invalidierbar. */
 final class SettingsCache
 {
     public static ?array $rows = null;

@@ -58,7 +58,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             flash('Das Admin-Passwort braucht mindestens 8 Zeichen.', 'bad');
         } else {
             setting_set('admin_password_hash', password_hash($new, PASSWORD_DEFAULT));
-            flash('Admin-Passwort geaendert.');
+            flash('Admin-Passwort geändert.');
         }
         redirect('settings.php');
     }
@@ -72,7 +72,7 @@ admin_head('Einstellungen', 'settings.php');
 flash_render();
 ?>
 
-<h2>Modell fuer die Bilderkennung</h2>
+<h2>Modell für die Bilderkennung</h2>
 <form method="post" class="card">
     <?= csrf_field() ?>
     <div class="formgrid">
@@ -98,10 +98,10 @@ flash_render();
         </div>
     </div>
     <p class="tiny muted">
-        Opus 5 liest Handschrift und enge Buchlayouts am zuverlaessigsten.
-        Sonnet 5 kostet rund 60&nbsp;% weniger und reicht fuer sauber gedruckte Listen.
-        Der Aufwand steuert, wie gruendlich das Modell arbeitet - <code>medium</code>
-        ist fuer das Abtippen von Vokabelseiten die passende Stufe.
+        Opus 5 liest Handschrift und enge Buchlayouts am zuverlässigsten.
+        Sonnet 5 kostet rund 60&nbsp;% weniger und reicht für sauber gedruckte Listen.
+        Der Aufwand steuert, wie gründlich das Modell arbeitet - <code>medium</code>
+        ist für das Abtippen von Vokabelseiten die passende Stufe.
     </p>
     <button class="btn small" name="save_model" value="1">Speichern</button>
 </form>
@@ -160,7 +160,7 @@ flash_render();
         <?php endforeach; ?>
     </table>
     <p class="tiny muted">
-        Preise in US-Dollar je eine Million Token. Aendert Anthropic die Preise,
+        Preise in US-Dollar je eine Million Token. Ändert Anthropic die Preise,
         hier nachziehen - bereits protokollierte Anfragen behalten ihren damals
         berechneten Betrag.
     </p>
@@ -173,7 +173,7 @@ flash_render();
     <label for="new_password">Neues Passwort</label>
     <input type="password" id="new_password" name="new_password"
            autocomplete="new-password" minlength="8">
-    <button class="btn small" name="save_password" value="1">Passwort aendern</button>
+    <button class="btn small" name="save_password" value="1">Passwort ändern</button>
 </form>
 
 <?php admin_foot(); ?>

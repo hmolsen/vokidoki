@@ -6,7 +6,7 @@ require_once __DIR__ . '/settings.php';
 /**
  * Kosten eines Requests in USD.
  * Preise stehen in settings.prices_json als USD je 1 Mio. Token und sind
- * im Admin editierbar, damit die Rechnung bei Preisaenderungen stimmt.
+ * im Admin editierbar, damit die Rechnung bei Preisänderungen stimmt.
  */
 function cost_for(string $model, int $in, int $out, int $cacheRead = 0, int $cacheWrite = 0): float
 {
@@ -38,15 +38,15 @@ function cost_this_month(): float
 }
 
 /**
- * Prueft Monatsbudget und Stundenlimit, bevor ein KI-Request abgesetzt wird.
- * Gibt null zurueck, wenn der Aufruf erlaubt ist, sonst eine Klartextmeldung.
+ * Prüft Monatsbudget und Stundenlimit, bevor ein KI-Request abgesetzt wird.
+ * Gibt null zurück, wenn der Aufruf erlaubt ist, sonst eine Klartextmeldung.
  */
 function budget_block_reason(int $userId): ?string
 {
     $cap = (float) setting('monthly_cost_cap_usd', '10.00');
     if ($cap > 0 && cost_this_month() >= $cap) {
-        return 'Das Monatsbudget fuer die Bilderkennung ist aufgebraucht. '
-             . 'Papa kann es im Admin-Bereich erhoehen.';
+        return 'Das Monatsbudget für die Bilderkennung ist aufgebraucht. '
+             . 'Papa kann es im Admin-Bereich erhöhen.';
     }
 
     $perHour = (int) setting('imports_per_hour', '20');
@@ -57,7 +57,7 @@ function budget_block_reason(int $userId): ?string
             [$userId],
         );
         if ($recent >= $perHour) {
-            return 'Zu viele Foto-Analysen in der letzten Stunde. Bitte spaeter erneut versuchen.';
+            return 'Zu viele Foto-Analysen in der letzten Stunde. Bitte später erneut versuchen.';
         }
     }
 

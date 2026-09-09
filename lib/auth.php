@@ -9,10 +9,10 @@ const SESSION_LIFETIME = 60 * 60 * 24 * 365;
 /**
  * Startet die Session.
  *
- * Wichtig fuer iOS: Jede Homescreen-Web-App hat einen eigenen, von Safari
+ * Wichtig für iOS: Jede Homescreen-Web-App hat einen eigenen, von Safari
  * getrennten Cookie-Container. Dieselbe Session-Konfiguration gilt in beiden
- * Welten, die Cookies sind aber voneinander unabhaengig - genau darauf baut
- * der Geraete-Token-Login auf.
+ * Welten, die Cookies sind aber voneinander unabhängig - genau darauf baut
+ * der Geräte-Token-Login auf.
  */
 function session_boot(): void
 {
@@ -23,9 +23,9 @@ function session_boot(): void
     $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
 
-    // Eigenes Verzeichnis fuer die Sitzungsdateien. Der Standardpfad des
+    // Eigenes Verzeichnis für die Sitzungsdateien. Der Standardpfad des
     // Servers existiert bei geteiltem Hosting nicht immer - dann scheitert
-    // session_start() und die Anmeldung funktioniert nicht. Ausserdem liegen
+    // session_start() und die Anmeldung funktioniert nicht. Außerdem liegen
     // die Sitzungen so nicht im selben Topf wie die anderer Anwendungen.
     $dir = dirname(__DIR__) . '/storage/sessions';
     if (!is_dir($dir)) {
@@ -34,7 +34,7 @@ function session_boot(): void
     if (is_dir($dir) && is_writable($dir)) {
         session_save_path($dir);
         // Passend zur Lebensdauer des Cookies: Das Homescreen-Symbol soll
-        // angemeldet bleiben, ohne dass die Sitzungsdatei vorher weggeraeumt wird.
+        // angemeldet bleiben, ohne dass die Sitzungsdatei vorher weggeräumt wird.
         ini_set('session.gc_maxlifetime', (string) SESSION_LIFETIME);
         ini_set('session.gc_probability', '1');
         ini_set('session.gc_divisor', '1000');
@@ -95,11 +95,11 @@ function logout_user(): void
     session_destroy();
 }
 
-// ---------------------------------------------------------------- Geraete-Token
+// ---------------------------------------------------------------- Geräte-Token
 
 /**
- * Erzeugt einen neuen Geraete-Token (ein Homescreen-Icon).
- * Gibt den Klartext zurueck - gespeichert wird ausschliesslich der SHA-256-Hash.
+ * Erzeugt einen neuen Geräte-Token (ein Homescreen-Icon).
+ * Gibt den Klartext zurück - gespeichert wird ausschließlich der SHA-256-Hash.
  */
 function device_token_create(int $userId, string $label = ''): string
 {
@@ -111,7 +111,7 @@ function device_token_create(int $userId, string $label = ''): string
     return $token;
 }
 
-/** Loest einen Token in einen aktiven Nutzer auf; null bei unbekannt/widerrufen/inaktiv. */
+/** Löst einen Token in einen aktiven Nutzer auf; null bei unbekannt/widerrufen/inaktiv. */
 function device_token_user(string $token): ?array
 {
     if ($token === '' || strlen($token) > 128) {
@@ -141,7 +141,7 @@ function possessive(string $name): string
     return in_array($last, ['s', 'x', 'z', 'ß'], true) ? $name . "'" : $name . 's';
 }
 
-/** App-Name fuer Manifest und iOS-Homescreen, z. B. "Lillis Vokabeln". */
+/** App-Name für Manifest und iOS-Homescreen, z. B. "Lillis Vokabeln". */
 function app_name_for(array $user): string
 {
     return possessive($user['display_name']) . ' Vokabeln';

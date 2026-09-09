@@ -44,11 +44,11 @@ export async function loginView() {
 
                 // Bewusst eine echte Seitennavigation statt eines SPA-Wechsels:
                 // Erst dadurch liefert index.php den personalisierten
-                // <link rel="manifest"> aus, den iOS beim Hinzufuegen zum
+                // <link rel="manifest"> aus, den iOS beim Hinzufügen zum
                 // Home-Bildschirm liest.
                 window.location.href = data.redirect;
 
-                // Warten, bis die Navigation greift - sonst blinkt der Button zurueck.
+                // Warten, bis die Navigation greift - sonst blinkt der Button zurück.
                 await new Promise((resolve) => setTimeout(resolve, 4000));
             });
         } catch (err) {

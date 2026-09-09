@@ -9,17 +9,17 @@ require_once __DIR__ . '/config.php';
  * Ohne das hier endet jeder unerwartete Fehler in einer leeren Seite mit
  * HTTP 500 - im Browser nicht von einem Serverausfall zu unterscheiden und
  * ohne jeden Anhaltspunkt. Stattdessen bekommt jeder Fehler eine Kennung,
- * wird protokolliert und als verstaendliche Meldung ausgegeben.
+ * wird protokolliert und als verständliche Meldung ausgegeben.
  */
 
-/** Vollstaendiger Pfad der Protokolldatei. */
+/** Vollständiger Pfad der Protokolldatei. */
 function error_log_path(): string
 {
     return dirname(__DIR__) . '/storage/error.log';
 }
 
 /**
- * @param $json true fuer API-Endpunkte (Antwort als JSON statt HTML).
+ * @param $json true für API-Endpunkte (Antwort als JSON statt HTML).
  */
 function boot_error_handling(bool $json = false): void
 {
@@ -27,13 +27,13 @@ function boot_error_handling(bool $json = false): void
 
     error_reporting(E_ALL);
     // In der API niemals Meldungen ausgeben: Eine Warnung vor dem JSON macht
-    // die Antwort unlesbar. Dort wird ausschliesslich protokolliert; was
+    // die Antwort unlesbar. Dort wird ausschließlich protokolliert; was
     // wirklich schiefging, steht im JSON-Feld "detail".
     ini_set('display_errors', ($dev && !$json) ? '1' : '0');
     ini_set('log_errors', '1');
 
     // Ins Anwendungsverzeichnis protokollieren, damit die Datei auffindbar
-    // ist - bei geteiltem Hosting weiss man selten, wo das Serverlog liegt.
+    // ist - bei geteiltem Hosting weiß man selten, wo das Serverlog liegt.
     $dir = dirname(error_log_path());
     if (!is_dir($dir)) {
         @mkdir($dir, 0775, true);
@@ -53,7 +53,7 @@ function boot_error_handling(bool $json = false): void
         );
     });
 
-    // Faengt auch das ab, was keine Ausnahme ist - etwa erschoepfter Speicher.
+    // Fängt auch das ab, was keine Ausnahme ist - etwa erschöpfter Speicher.
     register_shutdown_function(static function () use ($dev, $json): void {
         $err = error_get_last();
         if ($err === null) {
@@ -77,7 +77,7 @@ function report_fatal(
 ): void {
     $ref = bin2hex(random_bytes(4));
 
-    // Schluesselmaterial nie ins Protokoll - die Meldung kann es enthalten.
+    // Schlüsselmaterial nie ins Protokoll - die Meldung kann es enthalten.
     if (function_exists('scrub_secrets')) {
         $message = scrub_secrets($message);
     }
@@ -88,7 +88,7 @@ function report_fatal(
     }
 
     // Angefangene Ausgabe verwerfen, sonst steht die Fehlermeldung hinter
-    // einer halben Seite - und bei JSON waere die Antwort unbrauchbar.
+    // einer halben Seite - und bei JSON wäre die Antwort unbrauchbar.
     while (ob_get_level() > 0) {
         ob_end_clean();
     }

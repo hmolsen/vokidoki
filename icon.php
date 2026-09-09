@@ -2,11 +2,11 @@
 declare(strict_types=1);
 
 /**
- * Icon-Generator fuer Homescreen und Manifest.
+ * Icon-Generator für Homescreen und Manifest.
  *
  * Zeichnet ein deckendes Quadrat in der Account-Farbe mit der Initiale des
  * Kindes. Deckend und ohne eigene Rundung, weil iOS die Ecken selbst maskiert -
- * ein transparenter Hintergrund wuerde dort schwarz erscheinen.
+ * ein transparenter Hintergrund würde dort schwarz erscheinen.
  * Ergebnisse werden unter storage/icons/ gecacht.
  */
 
@@ -43,7 +43,7 @@ imagealphablending($img, true);
 [$r, $g, $b] = sscanf($color, '#%02x%02x%02x');
 
 // Sanfter Verlauf von der Account-Farbe zu einer abgedunkelten Variante -
-// wirkt auf dem Homescreen weniger flach als eine einzelne Flaeche.
+// wirkt auf dem Homescreen weniger flach als eine einzelne Fläche.
 $dark = static fn (int $c): int => (int) max(0, min(255, $c * 0.68));
 for ($y = 0; $y < $size; $y++) {
     $t    = $y / max(1, $size - 1);
@@ -72,7 +72,7 @@ if (is_file($fontFile) && function_exists('imagettfbbox')) {
         imagettftext($img, $fontSize, 0, $x, $y, $white, $fontFile, $initial);
     }
 } else {
-    // Fallback ohne FreeType: schlichter weisser Balken als Unterscheidungsmerkmal.
+    // Fallback ohne FreeType: schlichter weißer Balken als Unterscheidungsmerkmal.
     $m = (int) ($size * 0.3);
     imagefilledrectangle($img, $m, (int) ($size * 0.46), $size - $m, (int) ($size * 0.54), $white);
 }

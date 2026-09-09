@@ -3,8 +3,8 @@ import {
 } from '../core.js';
 
 const MAX_IMAGES = 6;
-/* Claude skaliert groessere Bilder ohnehin herunter - kleiner hochladen spart
-   Uploadzeit und Token, ohne an Erkennungsqualitaet zu verlieren. */
+/* Claude skaliert größere Bilder ohnehin herunter - kleiner hochladen spart
+   Uploadzeit und Token, ohne an Erkennungsqualität zu verlieren. */
 const MAX_EDGE = 1568;
 const JPEG_QUALITY = 0.82;
 
@@ -22,7 +22,7 @@ export async function importView(languageId) {
 // ------------------------------------------------------------------ Schritt 1: Fotos
 
 /**
- * @param images  bereits gewaehlte Fotos - nach einem Fehlschlag bleiben sie
+ * @param images  bereits gewählte Fotos - nach einem Fehlschlag bleiben sie
  *                erhalten, damit niemand alles neu fotografieren muss.
  */
 function showCapture(languageId, images = []) {
@@ -31,8 +31,8 @@ function showCapture(languageId, images = []) {
         <div id="msg"></div>
 
         <p class="sub">
-            Fotografiere die Vokabelseite aus deinem Buch. Mehrere Fotos gehoeren
-            zu einer Lerneinheit - bis zu ${MAX_IMAGES} Stueck.
+            Fotografiere die Vokabelseite aus deinem Buch. Mehrere Fotos gehören
+            zu einer Lerneinheit - bis zu ${MAX_IMAGES} Stück.
         </p>
 
         <div class="thumbs" id="thumbs"></div>
@@ -74,7 +74,7 @@ function showCapture(languageId, images = []) {
     const handleFiles = async (event) => {
         clearError();
         const files = Array.from(event.target.files || []);
-        event.target.value = '';   // dieselbe Datei soll erneut waehlbar bleiben
+        event.target.value = '';   // dieselbe Datei soll erneut wählbar bleiben
 
         for (const file of files) {
             if (images.length >= MAX_IMAGES) {
@@ -108,7 +108,7 @@ function showCapture(languageId, images = []) {
             saveDraft(languageId, data.title, data.entries);
             showReview(languageId, data.title, data.entries, false);
         } catch (err) {
-            // Fotos bewusst weiterreichen - sie noch einmal zu machen waere aergerlich.
+            // Fotos bewusst weiterreichen - sie noch einmal zu machen wäre ärgerlich.
             showCapture(languageId, images);
             showError(err.message);
         }
@@ -127,7 +127,7 @@ function showWorking() {
     `);
 }
 
-// ------------------------------------------------------------------ Schritt 2: Pruefen
+// ------------------------------------------------------------------ Schritt 2: Prüfen
 
 function showReview(languageId, title, entries, fromDraft) {
     const rows = entries.map((e, i) => pairRow(e, i)).join('');
@@ -139,7 +139,7 @@ function showReview(languageId, title, entries, fromDraft) {
         ${fromDraft ? '<div class="notice info">Deine letzte Eingabe wurde wiederhergestellt.</div>' : ''}
 
         <p class="sub">
-            Schau kurz drueber und verbessere, was nicht stimmt.
+            Schau kurz drüber und verbessere, was nicht stimmt.
             Gespeichert wird erst, wenn du unten tippst.
         </p>
 
@@ -147,7 +147,7 @@ function showReview(languageId, title, entries, fromDraft) {
             <label for="title">Titel der Lerneinheit</label>
             <input type="text" id="title" maxlength="128"
                    placeholder="z. B. Unit 1" value="${esc(title || '')}">
-            ${title ? '' : '<p class="tiny muted" style="margin:-6px 0 0">Auf den Fotos stand keine Ueberschrift - denk dir einen Namen aus.</p>'}
+            ${title ? '' : '<p class="tiny muted" style="margin:-6px 0 0">Auf den Fotos stand keine Überschrift - denk dir einen Namen aus.</p>'}
         </div>
 
         <div class="pairs-head">
@@ -156,7 +156,7 @@ function showReview(languageId, title, entries, fromDraft) {
         <div class="pairs" id="pairs">${rows}</div>
 
         <button class="btn secondary small" id="addRow" style="width:100%;margin-bottom:16px">
-            + Zeile hinzufuegen
+            + Zeile hinzufügen
         </button>
 
         <button class="btn" id="save">Lerneinheit speichern</button>
@@ -168,7 +168,7 @@ function showReview(languageId, title, entries, fromDraft) {
     const pairs  = $('#pairs');
     const persist = () => saveDraft(languageId, $('#title').value, collectAll());
 
-    // Eine Delegation fuer Loeschen und Tippen, statt Listener pro Zeile.
+    // Eine Delegation für Löschen und Tippen, statt Listener pro Zeile.
     pairs.addEventListener('click', (event) => {
         const button = event.target.closest('[data-del]');
         if (!button) return;
@@ -199,7 +199,7 @@ function showReview(languageId, title, entries, fromDraft) {
         }
         const collected = collectComplete();
         if (collected.length === 0) {
-            showError('Es ist keine vollstaendige Vokabel uebrig.');
+            showError('Es ist keine vollständige Vokabel übrig.');
             return;
         }
 
@@ -225,11 +225,11 @@ function pairRow(entry, index) {
                    autocapitalize="none" autocorrect="off" spellcheck="false">
             <input type="text" class="n" value="${esc(entry.native || '')}"
                    placeholder="Deutsch" maxlength="255" autocorrect="off">
-            <button class="del" data-del="${index}" aria-label="Zeile loeschen">&times;</button>
+            <button class="del" data-del="${index}" aria-label="Zeile löschen">&times;</button>
         </div>`;
 }
 
-/** Alle Zeilen inklusive halb ausgefuellter - Grundlage fuer den Entwurf. */
+/** Alle Zeilen inklusive halb ausgefüllter - Grundlage für den Entwurf. */
 function collectAll() {
     return $$('.pair').map((row) => ({
         foreign: row.querySelector('.f').value,
@@ -237,7 +237,7 @@ function collectAll() {
     }));
 }
 
-/** Nur vollstaendige Paare - das wird gespeichert. */
+/** Nur vollständige Paare - das wird gespeichert. */
 function collectComplete() {
     return collectAll()
         .map((e) => ({ foreign: e.foreign.trim(), native: e.native.trim() }))

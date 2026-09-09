@@ -58,7 +58,7 @@ export function esc(value) {
     })[c]);
 }
 
-/** Setzt den Inhalt des Views und liefert den Container zurueck. */
+/** Setzt den Inhalt des Views und liefert den Container zurück. */
 export function render(html) {
     const app = document.getElementById('app');
     app.innerHTML = html;
@@ -75,7 +75,7 @@ export function $$(selector, root = document) {
     return Array.from(root.querySelectorAll(selector));
 }
 
-/** Klick-Handler an alle Treffer haengen. */
+/** Klick-Handler an alle Treffer hängen. */
 export function on(selector, event, handler, root = document) {
     $$(selector, root).forEach((el) => el.addEventListener(event, handler));
 }
@@ -97,13 +97,13 @@ export function go(path, replace = false) {
 export function topbar(title, { backTo = null, action = '' } = {}) {
     return `
         <div class="topbar">
-            ${backTo === null ? '' : `<button class="iconbtn" data-back="${esc(backTo)}" aria-label="Zurueck">&#8249;</button>`}
+            ${backTo === null ? '' : `<button class="iconbtn" data-back="${esc(backTo)}" aria-label="Zurück">&#8249;</button>`}
             <h1>${esc(title)}</h1>
             ${action}
         </div>`;
 }
 
-/** Aktiviert die Zurueck-Buttons aus topbar(). */
+/** Aktiviert die Zurück-Buttons aus topbar(). */
 export function wireBack(root = document) {
     on('[data-back]', 'click', (e) => go(e.currentTarget.dataset.back), root);
 }
@@ -138,7 +138,7 @@ export function clearError(root = document) {
     if (box) box.innerHTML = '';
 }
 
-/** Button waehrend eines Requests sperren und beschriften. */
+/** Button während eines Requests sperren und beschriften. */
 export async function withBusy(button, label, fn) {
     const original = button.innerHTML;
     button.disabled = true;

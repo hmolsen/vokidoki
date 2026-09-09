@@ -2,15 +2,15 @@ import {
     VT, api, render, esc, $, $$, on, go, topbar, loading, showError, clearError, withBusy,
 } from '../core.js';
 
-/* Auswahl haeufiger Schulsprachen. Freie Eingabe bleibt zusaetzlich moeglich. */
+/* Auswahl häufiger Schulsprachen. Freie Eingabe bleibt zusätzlich möglich. */
 const PRESETS = [
     { flag: '\u{1F1EC}\u{1F1E7}', name: 'Englisch' },
-    { flag: '\u{1F1EB}\u{1F1F7}', name: 'Franzoesisch' },
+    { flag: '\u{1F1EB}\u{1F1F7}', name: 'Französisch' },
     { flag: '\u{1F1EA}\u{1F1F8}', name: 'Spanisch' },
     { flag: '\u{1F1EE}\u{1F1F9}', name: 'Italienisch' },
     { flag: '\u{1F3DB}\u{FE0F}',  name: 'Latein' },
-    { flag: '\u{1F1F3}\u{1F1F1}', name: 'Niederlaendisch' },
-    { flag: '\u{1F1F9}\u{1F1F7}', name: 'Tuerkisch' },
+    { flag: '\u{1F1F3}\u{1F1F1}', name: 'Niederländisch' },
+    { flag: '\u{1F1F9}\u{1F1F7}', name: 'Türkisch' },
     { flag: '\u{1F1F7}\u{1F1FA}', name: 'Russisch' },
 ];
 
@@ -67,8 +67,8 @@ function wireLogout() {
 }
 
 /**
- * iOS-Nutzern erklaeren, wie das eigene App-Symbol entsteht. Nur in Safari
- * sinnvoll - in der installierten App waere der Hinweis sinnlos.
+ * iOS-Nutzern erklären, wie das eigene App-Symbol entsteht. Nur in Safari
+ * sinnvoll - in der installierten App wäre der Hinweis sinnlos.
  */
 function installHint() {
     const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -94,7 +94,7 @@ function showAddForm() {
     `).join('');
 
     render(`
-        ${topbar('Sprache hinzufuegen', { backTo: '/' })}
+        ${topbar('Sprache hinzufügen', { backTo: '/' })}
         <div id="msg"></div>
         <p class="sub">Welche Sprache lernst du?</p>
         <div class="grid">${presets}</div>
@@ -122,7 +122,7 @@ function showAddForm() {
 async function create(name, flag, button) {
     clearError();
     if (!name) {
-        showError('Bitte einen Namen fuer die Sprache angeben.');
+        showError('Bitte einen Namen für die Sprache angeben.');
         return;
     }
     try {

@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-/** Laedt config.php einmalig; sucht sie auch eine Ebene oberhalb des Webroots. */
+/** Lädt config.php einmalig; sucht sie auch eine Ebene oberhalb des Webroots. */
 function cfg(?string $key = null, mixed $default = null): mixed
 {
     static $config = null;
@@ -19,7 +19,7 @@ function cfg(?string $key = null, mixed $default = null): mixed
         }
         if (!is_array($config)) {
             http_response_code(500);
-            exit('config.php fehlt. Bitte config.example.php kopieren und ausfuellen.');
+            exit('config.php fehlt. Bitte config.example.php kopieren und ausfüllen.');
         }
     }
 

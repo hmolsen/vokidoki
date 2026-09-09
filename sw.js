@@ -1,6 +1,6 @@
 /* Service Worker.
-   Bewusst zurueckhaltend: Nur statische Dateien werden gecacht. HTML und die
-   API laufen immer ueber das Netz - eine gecachte Shell koennte sonst den
+   Bewusst zurückhaltend: Nur statische Dateien werden gecacht. HTML und die
+   API laufen immer über das Netz - eine gecachte Shell könnte sonst den
    Namen des falschen Kindes anzeigen, weil index.php pro Account rendert. */
 
 const CACHE = 'vokabeltrainer-v1';

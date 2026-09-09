@@ -1,6 +1,6 @@
 /* Router und Einstiegspunkt.
    Hash-Routing, damit die App ohne Rewrite-Regeln in jedem Unterverzeichnis
-   eines Shared-Hostings laeuft. */
+   eines Shared-Hostings läuft. */
 
 import { VT, go, render, notice } from './core.js';
 import { loginView } from './views/login.js';
@@ -46,7 +46,7 @@ async function route() {
             await view(...match.slice(1));
         } catch (err) {
             // Ein Fehler beim Aufbau des Views darf nicht in einer leeren
-            // Seite enden - lieber eine erklaerende Meldung zeigen.
+            // Seite enden - lieber eine erklärende Meldung zeigen.
             console.error(err);
             render(`
                 ${notice(err.message || 'Die Seite konnte nicht geladen werden.')}

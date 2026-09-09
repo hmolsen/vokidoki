@@ -44,7 +44,7 @@ export async function unitView(unitId) {
         </div>
 
         <button class="btn" id="practice">
-            ${done ? 'Noch einmal ueben' : 'Ueben'}
+            ${done ? 'Noch einmal üben' : 'Üben'}
         </button>
 
         <h2>Alle Vokabeln (${vocab.length})</h2>
@@ -53,15 +53,15 @@ export async function unitView(unitId) {
         <h2>Verwalten</h2>
         <div class="btn-row" style="margin-bottom:10px">
             <button class="btn secondary small" id="rename">Umbenennen</button>
-            <button class="btn secondary small" id="reset">Fortschritt zuruecksetzen</button>
+            <button class="btn secondary small" id="reset">Fortschritt zurücksetzen</button>
         </div>
-        <button class="btn ghost" id="delete">Lerneinheit loeschen</button>
+        <button class="btn ghost" id="delete">Lerneinheit löschen</button>
     `);
 
     wireBack();
 
     $('#practice').addEventListener('click', async () => {
-        // "Noch einmal ueben" braucht einen frischen Lernstand, sonst waeren
+        // "Noch einmal üben" braucht einen frischen Lernstand, sonst wären
         // sofort wieder alle Vokabeln als gekonnt markiert.
         if (done) {
             try {
@@ -87,7 +87,7 @@ export async function unitView(unitId) {
     });
 
     $('#reset').addEventListener('click', async () => {
-        if (!confirm('Allen Lernfortschritt dieser Einheit zuruecksetzen?')) return;
+        if (!confirm('Allen Lernfortschritt dieser Einheit zurücksetzen?')) return;
         try {
             await api('units', 'reset', { body: { id: unit.id } });
             go(`/unit/${unit.id}`);
@@ -97,7 +97,7 @@ export async function unitView(unitId) {
     });
 
     $('#delete').addEventListener('click', async () => {
-        if (!confirm(`"${unit.title}" mit allen Vokabeln endgueltig loeschen?`)) return;
+        if (!confirm(`"${unit.title}" mit allen Vokabeln endgültig löschen?`)) return;
         try {
             await api('units', 'delete', { body: { id: unit.id } });
             go(`/lang/${unit.language_id}/units`);
@@ -107,7 +107,7 @@ export async function unitView(unitId) {
     });
 }
 
-/** Drei Punkte zeigen, wie oft die Vokabel schon hintereinander sass. */
+/** Drei Punkte zeigen, wie oft die Vokabel schon hintereinander saß. */
 function dots(streak) {
     const filled = Math.min(3, Math.max(0, streak));
     return `<span class="dots">${

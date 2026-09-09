@@ -30,7 +30,7 @@ $all = q1('SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS c FROM ai_request
 $monthCost = (float) $month['c'];
 $remaining = max(0.0, $cap - $monthCost);
 
-// Letzte 14 Tage - fehlende Tage mit 0 auffuellen, damit die Achse nicht springt.
+// Letzte 14 Tage - fehlende Tage mit 0 auffüllen, damit die Achse nicht springt.
 $daily = [];
 for ($i = 13; $i >= 0; $i--) {
     $daily[date('Y-m-d', strtotime("-$i days"))] = 0.0;
@@ -46,7 +46,7 @@ foreach (qa(
 $maxDaily = max(0.000001, max($daily));
 
 $perUser = qa(
-    "SELECT COALESCE(u.display_name, a.user_label, 'geloescht') AS name,
+    "SELECT COALESCE(u.display_name, a.user_label, 'gelöscht') AS name,
             COUNT(*) AS n, COALESCE(SUM(a.cost_usd), 0) AS c,
             COALESCE(SUM(a.image_count), 0) AS imgs,
             COALESCE(SUM(a.entry_count), 0)  AS entries
@@ -85,7 +85,7 @@ flash_render();
         <div class="n"><?= (int) $month['n'] ?> Anfragen &middot; <?= $usd($monthCost) ?></div>
     </div>
     <div class="stat">
-        <div class="k">Budget uebrig</div>
+        <div class="k">Budget übrig</div>
         <div class="v"><?= $cap > 0 ? $eur($remaining) : '&#8734;' ?></div>
         <div class="n"><?= $cap > 0
             ? 'Limit ' . $eur($cap) . ' pro Monat'
@@ -107,7 +107,7 @@ flash_render();
 <?php if ($cap > 0 && $remaining <= 0): ?>
     <div class="notice">Das Monatsbudget ist aufgebraucht - die Bilderkennung ist gesperrt,
         bis das Limit unter <a href="<?= h(admin_url('settings.php')) ?>">Einstellungen</a>
-        erhoeht wird oder der Monat wechselt.</div>
+        erhöht wird oder der Monat wechselt.</div>
 <?php endif; ?>
 
 <h2>Letzte 14 Tage</h2>
@@ -119,7 +119,7 @@ flash_render();
         </div>
     <?php endforeach; ?>
 </div>
-<p class="tiny muted">Hoechster Tageswert: <?= $eur($maxDaily) ?></p>
+<p class="tiny muted">Höchster Tageswert: <?= $eur($maxDaily) ?></p>
 
 <h2>Nach Kind (dieser Monat)</h2>
 <?php if ($perUser === []): ?>

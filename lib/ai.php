@@ -22,7 +22,7 @@ function anthropic_autoload(): void
     $autoload = dirname(__DIR__) . '/vendor/autoload.php';
     if (!is_file($autoload)) {
         throw new RuntimeException(
-            'Anthropic-SDK fehlt. Auf dem Server ausfuehren: composer install'
+            'Anthropic-SDK fehlt. Auf dem Server ausführen: composer install'
         );
     }
     require_once $autoload;
@@ -37,7 +37,7 @@ function anthropic_client(): Client
     anthropic_autoload();
 
     // anthropic_base_url bleibt im Normalfall leer; gesetzt wird sie nur, wenn
-    // die Anfragen ueber ein Gateway laufen sollen - und von den Tests.
+    // die Anfragen über ein Gateway laufen sollen - und von den Tests.
     $baseUrl = (string) cfg('anthropic_base_url', '');
 
     return new Client(
@@ -46,7 +46,7 @@ function anthropic_client(): Client
     );
 }
 
-/** JSON-Schema fuer das Extraktionsergebnis. Erzwingt sauberes JSON statt Freitext-Parsing. */
+/** JSON-Schema für das Extraktionsergebnis. Erzwingt sauberes JSON statt Freitext-Parsing. */
 function vocab_schema(): array
 {
     return [
@@ -54,7 +54,7 @@ function vocab_schema(): array
         'properties' => [
             'title' => [
                 'type'        => ['string', 'null'],
-                'description' => 'Ueberschrift der Lerneinheit, z. B. "Unit 1" oder '
+                'description' => 'Überschrift der Lerneinheit, z. B. "Unit 1" oder '
                                . '"Lektion 3 - Im Restaurant". null, wenn auf den Bildern keine steht.',
             ],
             'entries' => [
@@ -82,27 +82,27 @@ function vocab_schema(): array
 function vocab_prompt(string $languageName): string
 {
     $lines = [
-        'Du liest Vokabelseiten aus einem Schulbuch fuer ein deutsches Schulkind aus.',
+        'Du liest Vokabelseiten aus einem Schulbuch für ein deutsches Schulkind aus.',
         'Die Fremdsprache ist: ' . $languageName . '. Die Muttersprache ist Deutsch.',
         '',
         'Aufgabe:',
         '- Erfasse jedes Vokabelpaar von allen Bildern in der Reihenfolge, in der es auf den',
-        '  Seiten steht. Mehrere Bilder gehoeren zu einer einzigen Lerneinheit.',
+        '  Seiten steht. Mehrere Bilder gehören zu einer einzigen Lerneinheit.',
         '- Ordne jeden Begriff korrekt zu: "foreign" ist ' . $languageName . ', "native" ist Deutsch.',
-        '  Buchseiten sind oft zweispaltig - lies spaltenweise, nicht zeilenweise quer ueber die Seite.',
-        '- Uebernimm die Schreibweise exakt, inklusive Akzenten und Sonderzeichen.',
+        '  Buchseiten sind oft zweispaltig - lies spaltenweise, nicht zeilenweise quer über die Seite.',
+        '- Übernimm die Schreibweise exakt, inklusive Akzenten und Sonderzeichen.',
         '- Behalte Artikel ("das Haus", "la maison"), Pluralformen und Verbpartikel bei.',
         '- Steht zu einem Eintrag ein Beispielsatz, eine Lautschrift oder ein Hinweis, kommt er',
         '  nach "note", nicht in die Begriffsfelder.',
         '- Trenne mehrere Bedeutungen desselben Begriffs mit Komma innerhalb eines Feldes,',
-        '  statt zwei Eintraege anzulegen.',
-        '- Ignoriere Seitenzahlen, Kopf- und Fusszeilen, Grammatikkaesten, Uebungsaufgaben',
+        '  statt zwei Einträge anzulegen.',
+        '- Ignoriere Seitenzahlen, Kopf- und Fußzeilen, Grammatikkästen, Übungsaufgaben',
         '  und alles, was kein Vokabelpaar ist.',
-        '- Suche eine Ueberschrift der Lerneinheit ("Unit 1", "Lektion 3", "Vocabulary 2A")',
-        '  und gib sie in "title" zurueck. Findest du keine, setze "title" auf null - rate nicht.',
+        '- Suche eine Überschrift der Lerneinheit ("Unit 1", "Lektion 3", "Vocabulary 2A")',
+        '  und gib sie in "title" zurück. Findest du keine, setze "title" auf null - rate nicht.',
         '- Ist ein Wort schwer lesbar, gib deine beste Lesart an, statt den Eintrag wegzulassen.',
         '',
-        'Gib ausschliesslich das geforderte JSON zurueck.',
+        'Gib ausschließlich das geforderte JSON zurück.',
     ];
 
     return implode("\n", $lines);
@@ -165,8 +165,8 @@ function analyze_vocab_images(array $images, string $languageName, array $user):
 
     $durationMs = (int) ((microtime(true) - $started) * 1000);
 
-    // Sicherheitsklassifikatoren koennen einen Request ablehnen - das kommt als
-    // HTTP 200 zurueck, also vor dem Lesen von content immer stopReason pruefen.
+    // Sicherheitsklassifikatoren können einen Request ablehnen - das kommt als
+    // HTTP 200 zurück, also vor dem Lesen von content immer stopReason prüfen.
     if ($message->stopReason === 'refusal') {
         ai_log($logBase + [
             'input_tokens'  => $message->usage->inputTokens,

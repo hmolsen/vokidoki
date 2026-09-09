@@ -37,13 +37,13 @@ function csrf_field(): string
     return '<input type="hidden" name="csrf" value="' . h(csrf_token()) . '">';
 }
 
-/** Prueft das CSRF-Token jedes schreibenden Formulars. */
+/** Prüft das CSRF-Token jedes schreibenden Formulars. */
 function csrf_check(): void
 {
     $sent = $_POST['csrf'] ?? '';
     if (!is_string($sent) || !hash_equals(csrf_token(), $sent)) {
         http_response_code(403);
-        exit('Ungueltiges Formular-Token. Bitte Seite neu laden.');
+        exit('Ungültiges Formular-Token. Bitte Seite neu laden.');
     }
 }
 
@@ -56,7 +56,7 @@ function admin_logged_in(): bool
 
 /**
  * Erzwingt die Admin-Anmeldung. Beim ersten Login wird das Passwort aus
- * config.php uebernommen und als Hash in der Datenbank abgelegt; danach ist
+ * config.php übernommen und als Hash in der Datenbank abgelegt; danach ist
  * der Wert in der Konfiguration wirkungslos.
  */
 function admin_require(): void
@@ -175,7 +175,7 @@ function admin_foot(): void
     echo '</main></body></html>';
 }
 
-/** Meldung fuer die naechste Seite hinterlegen (Redirect-nach-POST). */
+/** Meldung für die nächste Seite hinterlegen (Redirect-nach-POST). */
 function flash(string $message, string $kind = 'good'): void
 {
     $_SESSION['admin_flash'] = ['msg' => $message, 'kind' => $kind];
@@ -190,7 +190,7 @@ function flash_render(): void
     }
 }
 
-/** Nach einem POST immer weiterleiten, damit Neuladen nichts doppelt ausfuehrt. */
+/** Nach einem POST immer weiterleiten, damit Neuladen nichts doppelt ausführt. */
 function redirect(string $file): never
 {
     header('Location: ' . admin_url($file));

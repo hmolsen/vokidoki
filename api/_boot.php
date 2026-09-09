@@ -20,11 +20,11 @@ function action(): string
 function require_api_request(): void
 {
     if (($_SERVER['HTTP_X_VOKABELTRAINER'] ?? '') !== '1') {
-        json_fail('Ungueltiger Aufruf.', 403);
+        json_fail('Ungültiger Aufruf.', 403);
     }
 }
 
-/** Endpunkte, die Daten aendern, akzeptieren nur POST. */
+/** Endpunkte, die Daten ändern, akzeptieren nur POST. */
 function require_post(): void
 {
     if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {

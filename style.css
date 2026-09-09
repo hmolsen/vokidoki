@@ -1,5 +1,5 @@
 /* Vokabeltrainer - Design-System
-   Mobile-first, grosse Trefferflaechen, ruhige Farben. Die Akzentfarbe kommt
+   Mobile-first, große Trefferflächen, ruhige Farben. Die Akzentfarbe kommt
    pro Kind aus index.php als --accent auf <body>. */
 
 :root {
@@ -96,7 +96,7 @@ p  { margin: 0 0 12px; }
 }
 .iconbtn:active { transform: scale(.94); }
 
-/* ---------------------------------------------------------------- Flaechen */
+/* ---------------------------------------------------------------- Flächen */
 
 .card {
     background: var(--surface);
@@ -258,7 +258,7 @@ input:focus, select:focus {
 }
 .bar.done > i { background: var(--good); }
 
-/* Drei Punkte: wie oft die Vokabel schon hintereinander sass. */
+/* Drei Punkte: wie oft die Vokabel schon hintereinander saß. */
 .dots { display: flex; gap: 5px; }
 .dots i {
     width: 9px; height: 9px;
@@ -388,7 +388,7 @@ input:focus, select:focus {
     cursor: pointer;
 }
 
-/* ---------------------------------------------------------------- Zustaende */
+/* ---------------------------------------------------------------- Zustände */
 
 .notice {
     padding: 13px 15px;

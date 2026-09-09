@@ -35,11 +35,11 @@ switch (action()) {
         );
 
         if ($total === 0) {
-            json_fail('Diese Lerneinheit enthaelt noch keine Vokabeln.', 422);
+            json_fail('Diese Lerneinheit enthält noch keine Vokabeln.', 422);
         }
 
         // Noch offene Vokabel ziehen. ORDER BY RAND() ist hier unkritisch -
-        // eine Lerneinheit hat hoechstens ein paar hundert Zeilen.
+        // eine Lerneinheit hat höchstens ein paar hundert Zeilen.
         $card = q1(
             "SELECT v.id, v.term_foreign, v.term_native, COALESCE(p.streak, 0) AS streak
                FROM vocab v
@@ -59,7 +59,7 @@ switch (action()) {
             ]);
         }
 
-        // Richtung zufaellig: mal Fremdsprache -> Deutsch, mal umgekehrt.
+        // Richtung zufällig: mal Fremdsprache -> Deutsch, mal umgekehrt.
         $foreignToNative = random_int(0, 1) === 1;
         $question = $foreignToNative ? $card['term_foreign'] : $card['term_native'];
         $answer   = $foreignToNative ? $card['term_native']  : $card['term_foreign'];
@@ -98,8 +98,8 @@ switch (action()) {
         shuffle($options);
         $correctIndex = (int) array_search($answer, $options, true);
 
-        // Die richtige Antwort verlaesst den Server nicht - sonst waere sie im
-        // Netzwerk-Tab ablesbar und die Auswertung faelschbar.
+        // Die richtige Antwort verlässt den Server nicht - sonst wäre sie im
+        // Netzwerk-Tab ablesbar und die Auswertung fälschbar.
         session_boot();
         $nonce = bin2hex(random_bytes(16));
         if (!isset($_SESSION['quiz']) || !is_array($_SESSION['quiz'])) {
@@ -136,7 +136,7 @@ switch (action()) {
         session_boot();
         $pending = $_SESSION['quiz'][$nonce] ?? null;
         if (!is_array($pending)) {
-            json_fail('Diese Frage ist nicht mehr gueltig. Bitte neu laden.', 409);
+            json_fail('Diese Frage ist nicht mehr gültig. Bitte neu laden.', 409);
         }
         // Einmalig verwendbar - verhindert mehrfaches Einreichen derselben Frage.
         unset($_SESSION['quiz'][$nonce]);
@@ -157,7 +157,7 @@ switch (action()) {
             $streak++;
             $correctN++;
         } else {
-            $streak = 0;   // "dreimal hintereinander" - ein Fehler setzt zurueck
+            $streak = 0;   // "dreimal hintereinander" - ein Fehler setzt zurück
             $wrongN++;
         }
         $nowKnown = $streak >= KNOWN_THRESHOLD;

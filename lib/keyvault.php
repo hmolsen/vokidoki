@@ -38,7 +38,7 @@ function keyvault_anthropic_key(?string $keyName = null): string
         CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_TIMEOUT        => 10,
         CURLOPT_FOLLOWLOCATION => false,
-        // TLS-Pruefung bleibt an - ueber diese Verbindung geht ein Geheimnis.
+        // TLS-Prüfung bleibt an - über diese Verbindung geht ein Geheimnis.
         CURLOPT_SSL_VERIFYPEER => true,
         CURLOPT_SSL_VERIFYHOST => 2,
     ]);
@@ -54,7 +54,7 @@ function keyvault_anthropic_key(?string $keyName = null): string
 
     if ($status === 401 || $status === 403) {
         throw new KeyvaultException(
-            'Keyvault weist den Zugriff ab (HTTP ' . $status . ') - Token in config.php pruefen.'
+            'Keyvault weist den Zugriff ab (HTTP ' . $status . ') - Token in config.php prüfen.'
         );
     }
     if ($status === 404) {
@@ -66,15 +66,15 @@ function keyvault_anthropic_key(?string $keyName = null): string
 
     $key = trim((string) $body);
 
-    // Ein knapper Plausibilitaetscheck faengt den haeufigsten Fall ab: eine
+    // Ein knapper Plausibilitätscheck fängt den häufigsten Fall ab: eine
     // HTML-Fehlerseite oder JSON statt des rohen Keys.
     if ($key === '') {
-        throw new KeyvaultException('Keyvault liefert einen leeren Wert fuer "' . $name . '".');
+        throw new KeyvaultException('Keyvault liefert einen leeren Wert für "' . $name . '".');
     }
     if (strlen($key) > 512 || preg_match('/[\s<>"]/', $key) === 1) {
         throw new KeyvaultException(
-            'Keyvault liefert keinen brauchbaren Key fuer "' . $name . '" - '
-            . 'kommt dort wirklich das rohe Format zurueck?'
+            'Keyvault liefert keinen brauchbaren Key für "' . $name . '" - '
+            . 'kommt dort wirklich das rohe Format zurück?'
         );
     }
 
@@ -82,7 +82,7 @@ function keyvault_anthropic_key(?string $keyName = null): string
 }
 
 /**
- * Entfernt Schluesselmaterial aus Text, der protokolliert wird.
+ * Entfernt Schlüsselmaterial aus Text, der protokolliert wird.
  * Fehlermeldungen von Bibliotheken enthalten gelegentlich den verwendeten Key.
  */
 function scrub_secrets(string $text): string

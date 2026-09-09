@@ -11,7 +11,7 @@ function json_boot(): void
 
     // Alles auffangen, was vor der eigentlichen Antwort ausgegeben wird.
     // Ein einziges Zeichen davor - eine PHP-Meldung, ein Leerzeichen hinter
-    // einem schliessenden Tag - macht die JSON-Antwort fuer den Browser
+    // einem schließenden Tag - macht die JSON-Antwort für den Browser
     // unlesbar, und das Kind sieht nur "Der Server hat unerwartet geantwortet".
     ob_start();
 
@@ -46,7 +46,7 @@ function json_body(): array
     $raw  = file_get_contents('php://input') ?: '';
     $data = json_decode($raw, true);
     if (!is_array($data)) {
-        json_fail('Ungueltiger Request-Body (JSON erwartet).', 400);
+        json_fail('Ungültiger Request-Body (JSON erwartet).', 400);
     }
     return $data;
 }

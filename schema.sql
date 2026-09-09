@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS progress (
   CONSTRAINT fk_progress_vocab FOREIGN KEY (vocab_id) REFERENCES vocab(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Kostenprotokoll. user_id wird beim Loeschen eines Accounts auf NULL gesetzt,
+-- Kostenprotokoll. user_id wird beim Löschen eines Accounts auf NULL gesetzt,
 -- damit die Abrechnungshistorie erhalten bleibt.
 CREATE TABLE IF NOT EXISTS ai_requests (
   id                BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

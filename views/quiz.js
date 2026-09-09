@@ -2,8 +2,8 @@ import {
     api, render, esc, $, $$, go, topbar, loading, wireBack, progressBar, showError,
 } from '../core.js';
 
-const NEXT_DELAY_CORRECT = 700;    // richtig: zuegig weiter
-const NEXT_DELAY_WRONG   = 1900;   // falsch: Zeit, die richtige Loesung zu lesen
+const NEXT_DELAY_CORRECT = 700;    // richtig: zügig weiter
+const NEXT_DELAY_WRONG   = 1900;   // falsch: Zeit, die richtige Lösung zu lesen
 
 export async function quizView(unitId) {
     render(loading('Frage wird vorbereitet...'));
@@ -114,7 +114,7 @@ function showFinished(unitId, data) {
             <h1>Lerneinheit bestanden!</h1>
             <p class="sub">Du kannst jetzt alle ${data.total} Vokabeln.</p>
         </div>
-        <button class="btn" id="again">Noch einmal ueben</button>
+        <button class="btn" id="again">Noch einmal üben</button>
         <button class="btn ghost" data-back="/unit/${unitId}">Zur Übersicht</button>
     `);
 

@@ -33,7 +33,7 @@ switch (action()) {
         $name = body_str($b, 'name', 64);
         $flag = body_str($b, 'flag', 16);
         if ($name === '') {
-            json_fail('Bitte einen Namen fuer die Sprache angeben.');
+            json_fail('Bitte einen Namen für die Sprache angeben.');
         }
 
         $exists = q1(

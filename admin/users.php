@@ -73,7 +73,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
     if (isset($_POST['revoke_token'])) {
         q('UPDATE device_tokens SET revoked_at = NOW() WHERE id = ?', [(int) $_POST['revoke_token']]);
-        flash('Geraet abgemeldet. Das Symbol landet beim naechsten Start im Login.');
+        flash('Gerät abgemeldet. Das Symbol landet beim nächsten Start im Login.');
         redirect('users.php');
     }
 
@@ -81,10 +81,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $id   = (int) $_POST['delete'];
         $user = q1('SELECT display_name FROM users WHERE id = ?', [$id]);
         if ($user !== null) {
-            // Sprachen, Einheiten, Vokabeln und Lernstand haengen per
+            // Sprachen, Einheiten, Vokabeln und Lernstand hängen per
             // ON DELETE CASCADE daran; das Kostenprotokoll bleibt erhalten.
             q('DELETE FROM users WHERE id = ?', [$id]);
-            flash('Account "' . $user['display_name'] . '" mit allen Vokabeln geloescht.');
+            flash('Account "' . $user['display_name'] . '" mit allen Vokabeln gelöscht.');
         }
         redirect('users.php');
     }
@@ -193,10 +193,10 @@ $colorPicker = static function (string $selected, string $name = 'color'): strin
                 Home-Bildschirm-Symbole (<?= count(array_filter($tokens, fn ($t) => $t['revoked_at'] === null)) ?> aktiv)
             </summary>
             <?php if ($tokens === []): ?>
-                <p class="tiny muted">Noch kein Geraet angemeldet.</p>
+                <p class="tiny muted">Noch kein Gerät angemeldet.</p>
             <?php else: ?>
                 <table class="data">
-                    <tr><th>Angelegt</th><th>Zuletzt benutzt</th><th>Geraet</th><th></th></tr>
+                    <tr><th>Angelegt</th><th>Zuletzt benutzt</th><th>Gerät</th><th></th></tr>
                     <?php foreach ($tokens as $t): ?>
                         <tr class="<?= $t['revoked_at'] === null ? '' : 'dim' ?>">
                             <td><?= h(date('d.m.Y H:i', strtotime((string) $t['created_at']))) ?></td>
@@ -207,7 +207,7 @@ $colorPicker = static function (string $selected, string $name = 'color'): strin
                             <td>
                                 <?php if ($t['revoked_at'] === null): ?>
                                     <form method="post" class="compact"
-                                          onsubmit="return confirm('Dieses Geraet abmelden?')">
+                                          onsubmit="return confirm('Dieses Gerät abmelden?')">
                                         <?= csrf_field() ?>
                                         <button class="linkbtn" name="revoke_token" value="<?= (int) $t['id'] ?>">
                                             widerrufen
@@ -224,10 +224,10 @@ $colorPicker = static function (string $selected, string $name = 'color'): strin
         </details>
 
         <form method="post" class="compact"
-              onsubmit="return confirm('<?= h($u['display_name']) ?> wirklich mit allen Sprachen und Vokabeln loeschen?')">
+              onsubmit="return confirm('<?= h($u['display_name']) ?> wirklich mit allen Sprachen und Vokabeln löschen?')">
             <?= csrf_field() ?>
             <button class="linkbtn" name="delete" value="<?= (int) $u['id'] ?>"
-                    style="color:var(--bad)">Account loeschen</button>
+                    style="color:var(--bad)">Account löschen</button>
         </form>
     </div>
 <?php endforeach; ?>

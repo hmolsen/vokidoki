@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Tests fuer den Keyvault-Abruf.
+ * Tests für den Keyvault-Abruf.
  *
  *   php -S 127.0.0.1:8124 tests/fake-keyvault.php &
  *   php tests/keyvault.php
@@ -13,7 +13,7 @@ declare(strict_types=1);
  * steht. Der echte Keyvault wird nicht angefasst.
  */
 
-// Diese Datei gehoert nicht ins Web - sie laeuft ausschliesslich auf der
+// Diese Datei gehört nicht ins Web - sie läuft ausschließlich auf der
 // Kommandozeile.
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
@@ -58,9 +58,9 @@ ok('Key hat das erwartete Format', is_string($key) && str_starts_with($key, 'sk-
 ok('Zweiter Abruf liefert denselben Wert', $key2 === $key);
 
 [$trimmed, $err] = fetch('mit_zeilenumbruch');
-ok('Zeilenumbrueche werden entfernt', $trimmed === $key, var_export($trimmed, true));
+ok('Zeilenumbrüche werden entfernt', $trimmed === $key, var_export($trimmed, true));
 
-echo "\nFehlerfaelle\n";
+echo "\nFehlerfälle\n";
 [$key, $err] = fetch('leer');
 ok('Leerer Wert wird abgelehnt', $key === null && str_contains((string) $err, 'leeren'), (string) $err);
 
@@ -73,7 +73,7 @@ ok('Unbekannter Eintrag meldet sich klar', $key === null && str_contains((string
 [$key, $err] = fetch('kaputt');
 ok('Serverfehler wird gemeldet', $key === null && str_contains((string) $err, 'HTTP 500'), (string) $err);
 
-// Der haeufigste echte Fehlerfall: abgelaufenes oder falsches Token.
+// Der häufigste echte Fehlerfall: abgelaufenes oder falsches Token.
 [$key, $err] = fetch('abgelehnt');
 ok('Abgewiesener Zugriff verweist aufs Token',
    $key === null && str_contains((string) $err, 'Token'), (string) $err);
@@ -91,12 +91,12 @@ ok('Keyvault-Token wird aus Logtext entfernt',
 
 echo "\nKein Zwischenspeichern\n";
 // Der Key darf nirgends liegenbleiben: weder in einer statischen Variable noch
-// in einer Datei. Ein rotierter Key muss beim naechsten Aufruf sofort greifen.
+// in einer Datei. Ein rotierter Key muss beim nächsten Aufruf sofort greifen.
 $source = file_get_contents(__DIR__ . '/../lib/keyvault.php');
 ok('keyvault.php verwendet keine statische Variable', !str_contains($source, 'static $'));
 ok('keyvault.php schreibt nichts in Dateien oder Session',
    !preg_match('/file_put_contents|\\$_SESSION|apcu_store|setcookie/', $source));
-ok('TLS-Pruefung ist nicht abgeschaltet',
+ok('TLS-Prüfung ist nicht abgeschaltet',
    !preg_match('/VERIFYPEER\s*=>\s*false|VERIFYHOST\s*=>\s*(false|0)/', $source));
 
 echo "\n" . str_repeat('-', 52) . "\n";

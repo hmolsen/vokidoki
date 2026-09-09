@@ -28,7 +28,7 @@ switch (action()) {
         $user = q1('SELECT * FROM users WHERE username = ? AND active = 1', [$username]);
 
         // password_verify auch bei unbekanntem Nutzer aufrufen, damit die
-        // Antwortzeit keine Rueckschluesse auf existierende Konten zulaesst.
+        // Antwortzeit keine Rückschlüsse auf existierende Konten zulässt.
         $hash = $user['password_hash'] ?? '$2y$12$' . str_repeat('.', 53);
         if ($user === null || !password_verify($password, $hash)) {
             usleep(random_int(150_000, 400_000));
@@ -37,11 +37,11 @@ switch (action()) {
 
         login_user((int) $user['id']);
 
-        // Frischer Geraete-Token fuer genau diese Installation. index.php
-        // rendert daraus den Manifest-Link fuer "Zum Home-Bildschirm".
+        // Frischer Geräte-Token für genau diese Installation. index.php
+        // rendert daraus den Manifest-Link für "Zum Home-Bildschirm".
         $token = device_token_create(
             (int) $user['id'],
-            substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? 'Unbekanntes Geraet'), 0, 128),
+            substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? 'Unbekanntes Gerät'), 0, 128),
         );
         $_SESSION['device_token'] = $token;
 
