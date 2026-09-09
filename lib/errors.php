@@ -26,7 +26,10 @@ function boot_error_handling(bool $json = false): void
     $dev = (bool) cfg('dev', false);
 
     error_reporting(E_ALL);
-    ini_set('display_errors', $dev ? '1' : '0');
+    // In der API niemals Meldungen ausgeben: Eine Warnung vor dem JSON macht
+    // die Antwort unlesbar. Dort wird ausschliesslich protokolliert; was
+    // wirklich schiefging, steht im JSON-Feld "detail".
+    ini_set('display_errors', ($dev && !$json) ? '1' : '0');
     ini_set('log_errors', '1');
 
     // Ins Anwendungsverzeichnis protokollieren, damit die Datei auffindbar

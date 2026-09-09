@@ -47,7 +47,6 @@ function keyvault_anthropic_key(?string $keyName = null): string
     $errNo  = curl_errno($ch);
     $errStr = curl_error($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
 
     if ($errNo !== 0 || $body === false) {
         throw new KeyvaultException('Keyvault nicht erreichbar: ' . $errStr);

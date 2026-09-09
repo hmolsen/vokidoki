@@ -237,6 +237,17 @@ Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon, Zugriffstrennung
 zwischen den Accounts, die komplette Quiz-Logik samt „dreimal hintereinander",
 Zurücksetzen und Token-Widerruf.
 
+Der Test lässt sich auch gegen die fertige Installation fahren — er ist dafür
+gebaut, nichts zu hinterlassen, und der Abschnitt zur Bilderkennung überspringt
+sich dabei selbst:
+
+```bash
+php tests/e2e.php https://deine-domain/vokabeltrainer DEIN-ADMIN-PASSWORT
+```
+
+Das ist zugleich die einfachste Art, den Code einmal unter der PHP-Version des
+Servers laufen zu lassen — Meldungen wie „Deprecated" fallen dabei sofort auf.
+
 Der Test braucht Zugriff auf dieselbe Datenbank wie die App (er schlägt die
 richtige Antwort nach, weil die API sie bewusst nicht herausgibt), legt nur
 eigene Testkonten an und räumt sie wieder weg; geänderte Einstellungen setzt er

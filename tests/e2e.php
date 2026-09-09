@@ -75,7 +75,6 @@ function http(string $url, ?array $json = null, array $headers = [], bool $follo
     $raw    = (string) curl_exec($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $hlen   = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-    curl_close($ch);
 
     return [
         'status'  => $status,
@@ -139,7 +138,6 @@ function adminPost(string $file, array $fields, string $getQuery = ''): array
     $raw    = (string) curl_exec($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $hlen   = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-    curl_close($ch);
 
     return ['status' => $status, 'body' => substr($raw, $hlen)];
 }
