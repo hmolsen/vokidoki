@@ -2,15 +2,19 @@
 declare(strict_types=1);
 
 /**
- * Worttypen.
+ * Kategorien einer Vokabel.
+ *
+ * Zehn Wortarten, dazu zwei Kategorien für ganze Äußerungen: Vokabellisten
+ * führen Grußformeln und Fragen oft als einen Eintrag ("Bonne nuit!",
+ * "Comment tu t'appelles ?"). Als Wortart liesse sich das nicht einordnen.
+ *
+ * "sonstiges" bleibt der Auffangwert für alles, was auch das nicht trifft -
+ * ohne ihn müsste das Modell raten.
  *
  * Die Schlüssel sind bewusst ASCII: Sie stehen in der Datenbank, im
  * JSON-Schema für das Modell und in CSS-Klassennamen. Nur das Label wird
- * angezeigt und trägt die Umlaute.
- *
- * "sonstiges" ist der Auffangwert. Vokabellisten enthalten regelmäßig
- * Wendungen und ganze Sätze ("Wie geht es dir?"), die in keine der zehn
- * Wortarten passen - ohne Auffangwert müsste das Modell dort raten.
+ * angezeigt und trägt die Umlaute. Nach aussen heisst das Ganze "Kategorie",
+ * intern bleibt es word_type - ein Spaltenname weniger, der wandern muss.
  */
 const WORD_TYPES = [
     'substantiv'   => ['label' => 'Substantiv',   'short' => 'Subst.'],
@@ -23,6 +27,9 @@ const WORD_TYPES = [
     'praeposition' => ['label' => 'Präposition',  'short' => 'Präp.'],
     'konjunktion'  => ['label' => 'Konjunktion',  'short' => 'Konj.'],
     'interjektion' => ['label' => 'Interjektion', 'short' => 'Interj.'],
+    // Ganze Äußerungen, wie sie in Vokabellisten oft als ein Eintrag stehen.
+    'aussage'      => ['label' => 'Aussage',      'short' => 'Aussage'],
+    'frage'        => ['label' => 'Frage',        'short' => 'Frage'],
     'sonstiges'    => ['label' => 'Sonstiges',    'short' => 'Sonst.'],
 ];
 

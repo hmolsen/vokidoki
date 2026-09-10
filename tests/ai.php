@@ -74,16 +74,18 @@ section('Aufruf');
 $result = analyze_vocab_images($images, 'Englisch', $user);
 
 ok('Titel wird übernommen', $result['title'] === 'Unit 4 - In the kitchen', (string) $result['title']);
-ok('Drei vollständige Vokabeln', count($result['entries']) === 3, (string) count($result['entries']));
+ok('Fünf vollständige Vokabeln', count($result['entries']) === 5, (string) count($result['entries']));
 ok('Unvollständige Zeile wird verworfen',
    !in_array('leer', array_column($result['entries'], 'native'), true));
 ok('Vokabelpaar stimmt',
    $result['entries'][0]['foreign'] === 'the spoon' && $result['entries'][0]['native'] === 'der Löffel');
 ok('Hinweis wird übernommen', $result['entries'][1]['note'] === 'flach');
 ok('Fehlender Hinweis wird zu null', $result['entries'][0]['note'] === null);
-ok('Wortart wird übernommen', $result['entries'][0]['word_type'] === 'substantiv',
+ok('Kategorie wird übernommen', $result['entries'][0]['word_type'] === 'substantiv',
    (string) $result['entries'][0]['word_type']);
 ok('Verb wird als Verb erkannt', $result['entries'][2]['word_type'] === 'verb');
+ok('Grußformel wird als Aussage eingeordnet', $result['entries'][3]['word_type'] === 'aussage');
+ok('Frage wird als Frage eingeordnet', $result['entries'][4]['word_type'] === 'frage');
 
 section('Was beim Modell ankommt');
 
@@ -110,7 +112,7 @@ ok('output_config trägt das JSON-Schema',
 ok('Schema verlangt foreign, native, note und word_type',
    ($body['output_config']['format']['schema']['properties']['entries']['items']['required'] ?? [])
    === ['foreign', 'native', 'note', 'word_type']);
-ok('Schema gibt die elf Wortarten als feste Auswahl vor',
+ok('Schema gibt die dreizehn Kategorien als feste Auswahl vor',
    ($body['output_config']['format']['schema']['properties']['entries']['items']
         ['properties']['word_type']['enum'] ?? []) === word_type_keys());
 ok('Aufwandsstufe aus den Einstellungen',
@@ -125,7 +127,7 @@ ok('Status ok', ($log['status'] ?? '') === 'ok');
 ok('Token werden übernommen',
    (int) $log['input_tokens'] === 2400 && (int) $log['output_tokens'] === 180);
 ok('Anzahl Fotos stimmt', (int) $log['image_count'] === 2);
-ok('Anzahl erkannter Vokabeln stimmt', (int) $log['entry_count'] === 3);
+ok('Anzahl erkannter Vokabeln stimmt', (int) $log['entry_count'] === 5);
 ok('Kind ist zugeordnet', (int) $log['user_id'] === (int) $user['id']);
 
 // 2400 Eingabe- und 180 Ausgabe-Token zum hinterlegten Preis.
@@ -135,7 +137,7 @@ ok('Kosten korrekt berechnet',
    sprintf('erwartet %.6f, gespeichert %.6f', $expected, (float) $log['cost_usd']));
 ok('Dauer wurde gemessen', (int) $log['duration_ms'] > 0);
 
-section('Wortarten nachtragen');
+section('Kategorien nachtragen');
 
 // Zwei Vokabeln ohne Wortart anlegen, wie sie vor dieser Funktion entstanden.
 q('INSERT INTO languages (user_id, name, flag_emoji) VALUES (?, ?, ?)',
@@ -144,21 +146,29 @@ $wtLang = (int) db()->lastInsertId();
 q('INSERT INTO units (user_id, language_id, title) VALUES (?, ?, ?)',
   [(int) $user['id'], $wtLang, 'Alt']);
 $wtUnit = (int) db()->lastInsertId();
-foreach ([['to run', 'rennen'], ['the house', 'das Haus']] as $i => [$f, $n]) {
+$altbestand = [
+    ['to run', 'rennen'],
+    ['the house', 'das Haus'],
+    ['Bonne nuit !', 'Gute Nacht!'],
+    ['Comment tu t\'appelles ?', 'Wie heißt du?'],
+];
+foreach ($altbestand as $i => [$f, $n]) {
     q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, ?)',
       [$wtUnit, $f, $n, $i]);
 }
 $alt = qa('SELECT id, term_foreign, term_native FROM vocab WHERE unit_id = ? ORDER BY position',
           [$wtUnit]);
 
-ok('Altbestand hat noch keine Wortart',
-   (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ? AND word_type IS NULL', [$wtUnit]) === 2);
+ok('Altbestand hat noch keine Kategorie',
+   (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ? AND word_type IS NULL', [$wtUnit]) === 4);
 
 $types = classify_word_types($alt, 'Englisch', $user);
 
-ok('Für jede Vokabel kommt eine Wortart zurück', count($types) === 2, (string) count($types));
+ok('Für jede Vokabel kommt eine Kategorie zurück', count($types) === 4, (string) count($types));
 ok('Verb erkannt', ($types[(int) $alt[0]['id']] ?? '') === 'verb');
 ok('Substantiv erkannt', ($types[(int) $alt[1]['id']] ?? '') === 'substantiv');
+ok('Grußformel als Aussage erkannt', ($types[(int) $alt[2]['id']] ?? '') === 'aussage');
+ok('Frage als Frage erkannt', ($types[(int) $alt[3]['id']] ?? '') === 'frage');
 
 // Das Modell darf keine fremden Zeilen anfassen.
 $fremd = (int) qv('SELECT id FROM vocab WHERE unit_id <> ? LIMIT 1', [$wtUnit]);

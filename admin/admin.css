@@ -123,6 +123,8 @@ code.token { font-size: .8rem; color: var(--text-soft); }
 .wt-praeposition { background: #ffdcea; color: #a32463; }
 .wt-konjunktion  { background: #d6ecff; color: #1f5f8c; }
 .wt-interjektion { background: #ffdcd8; color: #a5301f; }
+.wt-aussage      { background: #fff2c9; color: #8a6100; }
+.wt-frage        { background: #dfe0ff; color: #3a3ba0; }
 .wt-sonstiges    { background: #e8e8ea; color: #5d6470; }
 .wt-leer         { background: transparent; color: var(--text-soft); border-color: var(--border); }
 
@@ -137,6 +139,8 @@ code.token { font-size: .8rem; color: var(--text-soft); }
     .wt-praeposition { background: #45182f; color: #f4a3c6; }
     .wt-konjunktion  { background: #12324a; color: #8fc6ee; }
     .wt-interjektion { background: #451c17; color: #f3a297; }
+    .wt-aussage      { background: #40350f; color: #ecc978; }
+    .wt-frage        { background: #23244f; color: #b3b5f7; }
     .wt-sonstiges    { background: #2b2e36; color: #a3abbb; }
 }
 

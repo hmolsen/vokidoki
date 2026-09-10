@@ -104,8 +104,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             try {
                 $types = classify_word_types($rows, $language, $owner);
             } catch (Throwable $e) {
-                error_log('[vokabeltrainer] Wortarten: ' . scrub_secrets($e->getMessage()));
-                $problem = 'Die Wortarten konnten nicht bestimmt werden. Details stehen im Protokoll.';
+                error_log('[vokabeltrainer] Kategorien: ' . scrub_secrets($e->getMessage()));
+                $problem = 'Die Kategorien konnten nicht bestimmt werden. Details stehen im Protokoll.';
                 break;
             }
 
@@ -117,7 +117,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
             // Nichts zugeordnet: ein weiterer Durchlauf brächte dasselbe Ergebnis.
             if ($types === []) {
-                $problem = 'Das Modell hat keine Wortart zurückgeliefert.';
+                $problem = 'Das Modell hat keine Kategorie zurückgeliefert.';
                 break;
             }
         }
@@ -130,7 +130,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             flash('Es gab nichts nachzutragen.');
         } else {
             flash(sprintf(
-                '%d Wortart(en) nachgetragen.%s',
+                '%d Kategorie(n) nachgetragen.%s',
                 $done,
                 $remaining > 0
                     ? sprintf(' Es fehlen noch %d - Knopf noch einmal drücken.', $remaining)
@@ -249,10 +249,10 @@ flash_render();
 
 <?php if ($missingTypes > 0): ?>
 <div class="card">
-    <strong><?= $missingTypes ?> Vokabel(n) ohne Wortart</strong>
+    <strong><?= $missingTypes ?> Vokabel(n) ohne Kategorie</strong>
     <p class="tiny muted" style="margin:6px 0 12px">
         Vokabeln, die vor dieser Funktion eingelesen wurden, haben noch keine
-        Wortart. Der Knopf lässt sie vom Modell bestimmen - in Blöcken zu 100,
+        Kategorie. Der Knopf lässt sie vom Modell bestimmen - in Blöcken zu 100,
         höchstens 500 je Klick. Das kostet wie eine Bilderkennung und zählt
         aufs Monatsbudget.
     </p>
@@ -261,7 +261,7 @@ flash_render();
         <input type="hidden" name="user" value="<?= $userId ?>">
         <input type="hidden" name="language" value="<?= $langId ?>">
         <input type="hidden" name="unit" value="<?= $unitId ?>">
-        <button class="btn small" name="fill_word_types" value="1">Wortarten nachtragen</button>
+        <button class="btn small" name="fill_word_types" value="1">Kategorien nachtragen</button>
     </form>
 </div>
 <?php endif; ?>
@@ -365,7 +365,7 @@ Damit verschwinden <?= (int) $l['units'] ?> Lerneinheit(en) und <?= (int) $l['wo
 
     <table class="data">
         <tr>
-            <th>Fremdsprache</th><th>Deutsch</th><th>Wortart</th><th>Hinweis</th>
+            <th>Fremdsprache</th><th>Deutsch</th><th>Kategorie</th><th>Hinweis</th>
             <th class="num">richtig</th><th class="num">falsch</th><th>Stand</th><th></th>
         </tr>
         <?php foreach ($vocab as $v): ?>
@@ -374,7 +374,7 @@ Damit verschwinden <?= (int) $l['units'] ?> Lerneinheit(en) und <?= (int) $l['wo
                 <td><input type="text" name="n[<?= (int) $v['id'] ?>]" value="<?= h($v['term_native']) ?>" maxlength="255"></td>
                 <td class="wtcell">
                     <?= word_type_badge($v['word_type'] ?? null) ?>
-                    <select name="wt[<?= (int) $v['id'] ?>]" aria-label="Wortart">
+                    <select name="wt[<?= (int) $v['id'] ?>]" aria-label="Kategorie">
                         <option value="">&ndash; keine &ndash;</option>
                         <?php foreach (WORD_TYPES as $key => $meta): ?>
                             <option value="<?= h($key) ?>"<?= ($v['word_type'] ?? null) === $key ? ' selected' : '' ?>>

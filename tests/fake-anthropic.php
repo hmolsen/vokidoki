@@ -74,17 +74,25 @@ if (str_contains($instruction, 'Fehlerfall')) {
 
 // Zweite Betriebsart: Wortarten für bereits gespeicherte Vokabeln nachtragen.
 // Erkennbar am Prompt; die Nummern kommen aus den übergebenen Zeilen zurück.
-if (str_contains($instruction, 'Bestimme zu jeder Vokabel die Wortart')) {
+if (str_contains($instruction, 'Bestimme zu jeder Vokabel die Kategorie')) {
     $types = [];
     foreach (explode("\n", $instruction) as $line) {
         if (preg_match('/^(\d+)\t(.+?)\t/', $line, $m) === 1) {
             $begriff = $m[2];
-            // Grobe Nachbildung: "to ..." ist ein Verb, "the ..." ein Substantiv.
-            $types[] = [
-                'id'        => (int) $m[1],
-                'word_type' => str_starts_with($begriff, 'to ') ? 'verb'
-                             : (str_starts_with($begriff, 'the ') ? 'substantiv' : 'sonstiges'),
-            ];
+            // Grobe Nachbildung des Modells: Satzzeichen entscheiden über
+            // Frage und Aussage, sonst "to ..." Verb und "the ..." Substantiv.
+            if (str_contains($begriff, '?')) {
+                $type = 'frage';
+            } elseif (str_contains($begriff, '!')) {
+                $type = 'aussage';
+            } elseif (str_starts_with($begriff, 'to ')) {
+                $type = 'verb';
+            } elseif (str_starts_with($begriff, 'the ')) {
+                $type = 'substantiv';
+            } else {
+                $type = 'sonstiges';
+            }
+            $types[] = ['id' => (int) $m[1], 'word_type' => $type];
         }
     }
     echo json_encode([
@@ -107,6 +115,8 @@ $payload = [
         ['foreign' => 'the spoon', 'native' => 'der Löffel', 'note' => null,    'word_type' => 'substantiv'],
         ['foreign' => 'the plate', 'native' => 'der Teller', 'note' => 'flach', 'word_type' => 'substantiv'],
         ['foreign' => 'to cook',   'native' => 'kochen',     'note' => null,    'word_type' => 'verb'],
+        ['foreign' => 'Good night!', 'native' => 'Gute Nacht!', 'note' => null, 'word_type' => 'aussage'],
+        ['foreign' => 'How are you?', 'native' => 'Wie geht es dir?', 'note' => null, 'word_type' => 'frage'],
         // Unvollständige Zeile: muss von der App verworfen werden.
         ['foreign' => '',          'native' => 'leer',       'note' => null,    'word_type' => 'sonstiges'],
     ],

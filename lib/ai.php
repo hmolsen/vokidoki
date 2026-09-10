@@ -72,8 +72,9 @@ function vocab_schema(): array
                         'word_type' => [
                             'type'        => 'string',
                             'enum'        => word_type_keys(),
-                            'description' => 'Wortart des fremdsprachigen Begriffs. '
-                                           . '"sonstiges" für Wendungen und ganze Sätze.',
+                            'description' => 'Kategorie des fremdsprachigen Eintrags: eine der '
+                                           . 'zehn Wortarten, oder "frage" bzw. "aussage" für '
+                                           . 'ganze Äußerungen, oder "sonstiges".',
                         ],
                     ],
                     'required'             => ['foreign', 'native', 'note', 'word_type'],
@@ -108,10 +109,15 @@ function vocab_prompt(string $languageName): string
         '- Suche eine Überschrift der Lerneinheit ("Unit 1", "Lektion 3", "Vocabulary 2A")',
         '  und gib sie in "title" zurück. Findest du keine, setze "title" auf null - rate nicht.',
         '- Ist ein Wort schwer lesbar, gib deine beste Lesart an, statt den Eintrag wegzulassen.',
-        '- Bestimme zu jedem Eintrag die Wortart des fremdsprachigen Begriffs in "word_type".',
-        '  Richte dich nach dem Begriff selbst, nicht nach der deutschen Übersetzung.',
-        '  Steht ein Artikel dabei ("la maison", "das Haus"), zählt das Substantiv.',
-        '  Für Wendungen und ganze Sätze nimm "sonstiges".',
+        '- Bestimme zu jedem Eintrag die Kategorie in "word_type".',
+        '  Richte dich nach dem fremdsprachigen Eintrag, nicht nach der Übersetzung.',
+        '  Einzelne Wörter bekommen ihre Wortart. Steht ein Artikel dabei',
+        '  ("la maison", "das Haus"), zählt das Substantiv.',
+        '  Ganze Äußerungen bekommen "frage", wenn sie eine Frage sind',
+        '  ("Comment tu t\'appelles ?", "How are you?"), sonst "aussage"',
+        '  ("Bonne nuit !", "Merci, Madame !", "Ich heiße Lilli.").',
+        '  Das gilt auch ohne Satzzeichen - entscheidend ist, ob gefragt wird.',
+        '  "sonstiges" nur, wenn wirklich nichts davon passt.',
         '',
         'Gib ausschließlich das geforderte JSON zurück.',
     ];
@@ -238,7 +244,7 @@ function analyze_vocab_images(array $images, string $languageName, array $user):
     return ['title' => $title, 'entries' => $entries, 'cost' => $cost, 'model' => $model];
 }
 
-/** JSON-Schema für das Nachtragen der Wortarten. */
+/** JSON-Schema für das Nachtragen der Kategorien. */
 function word_type_schema(): array
 {
     return [
@@ -263,10 +269,10 @@ function word_type_schema(): array
 }
 
 /**
- * Bestimmt die Wortarten einer Liste bereits gespeicherter Vokabeln.
+ * Bestimmt die Kategorien einer Liste bereits gespeicherter Vokabeln.
  *
  * @param array<int,array{id:int,term_foreign:string,term_native:string}> $rows
- * @return array<int,string> Wortart je Vokabel-ID
+ * @return array<int,string> Kategorie je Vokabel-ID
  */
 function classify_word_types(array $rows, string $languageName, array $user): array
 {
@@ -288,12 +294,17 @@ function classify_word_types(array $rows, string $languageName, array $user): ar
     }
 
     $prompt = implode("\n", [
-        'Bestimme zu jeder Vokabel die Wortart des fremdsprachigen Begriffs.',
+        'Bestimme zu jeder Vokabel die Kategorie des fremdsprachigen Eintrags.',
         'Die Fremdsprache ist: ' . $languageName . '. Die Muttersprache ist Deutsch.',
         '',
-        'Richte dich nach dem fremdsprachigen Begriff, nicht nach der Übersetzung.',
-        'Steht ein Artikel dabei ("la maison", "das Haus"), zählt das Substantiv.',
-        'Für Wendungen und ganze Sätze nimm "sonstiges".',
+        'Richte dich nach dem fremdsprachigen Eintrag, nicht nach der Übersetzung.',
+        'Einzelne Wörter bekommen ihre Wortart. Steht ein Artikel dabei',
+        '("la maison", "das Haus"), zählt das Substantiv.',
+        'Ganze Äußerungen bekommen "frage", wenn sie eine Frage sind',
+        '("Comment tu t\'appelles ?", "How are you?"), sonst "aussage"',
+        '("Bonne nuit !", "Merci, Madame !").',
+        'Das gilt auch ohne Satzzeichen - entscheidend ist, ob gefragt wird.',
+        '"sonstiges" nur, wenn wirklich nichts davon passt.',
         '',
         'Gib zu jeder Nummer genau einen Eintrag zurück, für alle ' . count($rows) . ' Zeilen.',
         '',
@@ -332,7 +343,7 @@ function classify_word_types(array $rows, string $languageName, array $user): ar
 
     if ($message->stopReason === 'refusal') {
         ai_log($logBase + ['duration_ms' => $durationMs, 'status' => 'refusal']);
-        throw new RuntimeException('Die Wortarten konnten nicht bestimmt werden.');
+        throw new RuntimeException('Die Kategorien konnten nicht bestimmt werden.');
     }
 
     $json = '';

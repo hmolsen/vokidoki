@@ -25,6 +25,7 @@ if (PHP_SAPI !== 'cli') {
 
 require_once __DIR__ . '/../lib/db.php';
 require_once __DIR__ . '/../lib/settings.php';
+require_once __DIR__ . '/../lib/wordtypes.php';
 
 $base     = rtrim($argv[1] ?? 'http://localhost:8123', '/');
 // Zweites Argument: Admin-Passwort. Fehlt es, wird der Admin-Teil übersprungen -
@@ -354,25 +355,25 @@ if (!$isFake) {
     ]);
     ok('Foto wird ausgewertet', $status === 200 && ($data['ok'] ?? false), $data['error'] ?? '');
     ok('Titel kommt aus dem Bild', ($data['title'] ?? '') === 'Unit 4 - In the kitchen');
-    ok('Nur vollständige Paare werden zurückgegeben', count($data['entries'] ?? []) === 3);
+    ok('Nur vollständige Paare werden zurückgegeben', count($data['entries'] ?? []) === 5);
 
     [$saved, $status] = apiCall('import', 'save', [
         'language_id' => $languageId,
         'title'       => $data['title'],
         'entries'     => $data['entries'],
     ]);
-    ok('Erkannte Vokabeln lassen sich speichern', $status === 200 && ($saved['count'] ?? 0) === 3);
+    ok('Erkannte Vokabeln lassen sich speichern', $status === 200 && ($saved['count'] ?? 0) === 5);
 
     $newUnit = (int) ($saved['unit_id'] ?? 0);
     ok('Lerneinheit trägt den erkannten Titel',
        qv('SELECT title FROM units WHERE id = ?', [$newUnit]) === 'Unit 4 - In the kitchen');
 
-    ok('Wortart wird mitgeliefert, ohne dass das Kind sie prüfen muss',
+    ok('Kategorie wird mitgeliefert, ohne dass das Kind sie prüfen muss',
        ($data['entries'][0]['word_type'] ?? null) === 'substantiv');
-    ok('Wortart landet in der Datenbank',
+    ok('Kategorie landet in der Datenbank',
        qv('SELECT word_type FROM vocab WHERE unit_id = ? ORDER BY position LIMIT 1',
           [$newUnit]) === 'substantiv');
-    ok('Keine Vokabel bleibt ohne Wortart',
+    ok('Keine Vokabel bleibt ohne Kategorie',
        (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ? AND word_type IS NULL',
                 [$newUnit]) === 0);
 
@@ -389,7 +390,7 @@ if (!$isFake) {
     ok('Ungültiges Bild wird abgelehnt', $status === 400, "Status $status");
 }
 
-section('Wortarten im Admin');
+section('Kategorien im Admin');
 
 $vocabRows = qa('SELECT id, term_foreign, term_native FROM vocab WHERE unit_id = ? ORDER BY position',
                 [$unitId]);
@@ -397,12 +398,13 @@ $firstId   = (int) $vocabRows[0]['id'];
 $filter    = http_build_query(['user' => $userId, 'language' => $languageId, 'unit' => $unitId]);
 
 $res = http($base . '/admin/vocab.php?' . $filter);
-ok('Spalte Wortart ist da', str_contains($res['body'], '<th>Wortart</th>'));
+ok('Spalte Kategorie ist da', str_contains($res['body'], '<th>Kategorie</th>'));
 ok('Auswahlfeld je Zeile', str_contains($res['body'], 'name="wt[' . $firstId . ']"'));
-ok('Alle elf Wortarten stehen zur Wahl',
-   substr_count($res['body'], 'value="substantiv"') > 0
-   && str_contains($res['body'], 'value="praeposition"')
-   && str_contains($res['body'], 'value="interjektion"'));
+$fehlend = array_values(array_filter(
+    word_type_keys(),
+    static fn (string $k): bool => !str_contains($res['body'], 'value="' . $k . '"'),
+));
+ok('Alle dreizehn Kategorien stehen zur Wahl', $fehlend === [], implode(', ', $fehlend));
 
 // Manuell setzen - über dasselbe Formular wie die Textkorrekturen.
 $fields = ['save_rows' => '1', 'user' => $userId, 'language' => $languageId,
@@ -416,35 +418,35 @@ foreach ($vocabRows as $row) {
 $fields['wt'][$firstId] = 'adjektiv';
 
 adminPost('vocab.php', $fields, $filter);
-ok('Wortart lässt sich von Hand setzen',
+ok('Kategorie lässt sich von Hand setzen',
    qv('SELECT word_type FROM vocab WHERE id = ?', [$firstId]) === 'adjektiv',
    (string) qv('SELECT word_type FROM vocab WHERE id = ?', [$firstId]));
 
 $fields['wt'][$firstId] = 'gibtsnicht';
 adminPost('vocab.php', $fields, $filter);
-ok('Unbekannte Wortart wird verworfen statt gespeichert',
+ok('Unbekannte Kategorie wird verworfen statt gespeichert',
    qv('SELECT word_type FROM vocab WHERE id = ?', [$firstId]) === null);
 
 $res = http($base . '/admin/vocab.php?' . $filter);
-ok('Fehlende Wortart wird als Strich angezeigt', str_contains($res['body'], 'wt-leer'));
+ok('Fehlende Kategorie wird als Strich angezeigt', str_contains($res['body'], 'wt-leer'));
 
 // Nachtragen: greift auf alles, was noch keine Wortart hat.
 $offen = (int) qv('SELECT COUNT(*) FROM vocab WHERE word_type IS NULL');
 ok('Es gibt etwas nachzutragen', $offen > 0, (string) $offen);
 
 $res = http($base . '/admin/vocab.php?' . $filter);
-ok('Knopf zum Nachtragen erscheint', str_contains($res['body'], 'Wortarten nachtragen'));
+ok('Knopf zum Nachtragen erscheint', str_contains($res['body'], 'Kategorien nachtragen'));
 
 if ($isFake) {
     adminPost('vocab.php', ['fill_word_types' => '1', 'user' => $userId,
                             'language' => $languageId, 'unit' => $unitId], $filter);
-    ok('Nach dem Nachtragen hat jede Vokabel eine Wortart',
+    ok('Nach dem Nachtragen hat jede Vokabel eine Kategorie',
        (int) qv('SELECT COUNT(*) FROM vocab WHERE word_type IS NULL') === 0,
        qv('SELECT COUNT(*) FROM vocab WHERE word_type IS NULL') . ' offen');
 
     $res = http($base . '/admin/vocab.php?' . $filter);
     ok('Knopf verschwindet, wenn nichts mehr offen ist',
-       !str_contains($res['body'], 'Wortarten nachtragen'));
+       !str_contains($res['body'], 'Kategorien nachtragen'));
 } else {
     echo "  - Nachtragen übersprungen (kein Simulator)
 ";

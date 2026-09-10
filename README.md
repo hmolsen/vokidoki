@@ -201,20 +201,31 @@ lib/                 db, auth, settings, ai, keyvault, cost, json, config,
 schema.sql           Datenbankschema
 ```
 
-### Wortarten
+### Kategorien
 
-Beim Einlesen bestimmt das Modell zu jeder Vokabel die Wortart des
-*fremdsprachigen* Begriffs — Substantiv, Artikel, Adjektiv, Verb, Pronomen,
-Numerale, Adverb, Präposition, Konjunktion, Interjektion. Dazu kommt
-`sonstiges` als Auffangwert: Vokabellisten enthalten regelmäßig Wendungen und
-ganze Sätze, die in keine der zehn Wortarten passen.
+Beim Einlesen ordnet das Modell jeden Eintrag ein — maßgeblich ist der
+*fremdsprachige* Eintrag, nicht die Übersetzung. Dreizehn Kategorien:
 
-Das Kind bekommt die Wortart beim Prüfen nicht zu Gesicht — sie reist
+| | |
+|---|---|
+| Wortarten | Substantiv, Artikel, Adjektiv, Verb, Pronomen, Numerale, Adverb, Präposition, Konjunktion, Interjektion |
+| Ganze Äußerungen | **Aussage** („Bonne nuit !", „Merci, Madame !"), **Frage** („Comment tu t'appelles ?") |
+| Auffangwert | Sonstiges |
+
+Vokabellisten führen Grußformeln und Fragen oft als einen Eintrag — als Wortart
+ließe sich das nicht einordnen, deshalb die beiden Äußerungs-Kategorien.
+Entscheidend ist, ob gefragt wird, nicht das Satzzeichen. `sonstiges` bleibt als
+Auffangwert, damit das Modell nie raten muss.
+
+Nach außen heißt das Ganze „Kategorie", intern `word_type` — ein Spaltenname
+weniger, der wandern muss.
+
+Das Kind bekommt die Kategorie beim Prüfen nicht zu Gesicht — sie reist
 unsichtbar durch die Tabelle und wird mitgespeichert. Korrigiert wird sie im
 Admin, wo sie als farbiges Kürzel in der Vokabelliste steht.
 
 Für Vokabeln aus der Zeit davor gibt es unter **Vokabeln** einen Knopf, der die
-Wortarten nachträgt: in Blöcken zu 100, höchstens 500 je Klick, jeweils
+Kategorien nachträgt: in Blöcken zu 100, höchstens 500 je Klick, jeweils
 sprachweise. Das kostet wie eine Bilderkennung und zählt aufs Monatsbudget.
 
 Die Datenbankspalte wird beim ersten Aufruf des Admin-Bereichs automatisch
