@@ -192,12 +192,13 @@ index.php            App-Shell; rendert Manifest-Link und iOS-Meta pro Kind
 manifest.php         dynamisches Manifest (Name, start_url mit Token)
 icon.php             PNG-Icon aus Farbe + Initiale (GD), gecacht
 app.js / core.js     Router und gemeinsame Bausteine
-views/               login, languages, language, units, unit, import, quiz
+views/               login, languages, language, units, unit, import, quiz, cloze
 sw.js                Service Worker (nur statische Dateien)
-api/                 auth, languages, units, import, quiz  (JSON)
+api/                 auth, languages, units, import, quiz, cloze  (JSON)
 admin/               Kosten, Accounts, Sprachen und Vokabeln, Einstellungen, Selbsttest
 lib/                 db, auth, settings, ai, keyvault, cost, json, config,
-                     schema (Spalten nachziehen), wordtypes
+                     schema (Spalten nachziehen), wordtypes,
+                     progress (Lernregel), sentences (Lückensätze)
 schema.sql           Datenbankschema
 ```
 
@@ -233,6 +234,58 @@ ergänzt (`lib/schema.php`) — bei einem FTP-Update gibt es sonst keinen Schrit
 der SQL ausführt. Die Änderung fügt nur hinzu und lässt vorhandene Daten
 unangetastet.
 
+### Übungsarten
+
+Zwei Wege, dieselbe Lernregel. `progress.mode` trennt die Serien, der
+eindeutige Schlüssel `(vocab_id, mode)` sorgt dafür von selbst — wer beim
+Auswählen weit ist, fängt im Lückentext trotzdem bei null an.
+
+**Auswählen** (`mc`): Zufällige Vokabel, zufällige Richtung, vier Antworten.
+
+**Lückentext** (`cloze`): Das Kind sieht den deutschen Satz und denselben Satz
+in der Fremdsprache mit einer Lücke und tippt das Fehlende ein.
+
+```
+        Ich heiße Hannes.
+   ______________ Hannes.        →  Je m'appelle
+```
+
+Die erwartete Antwort ist **nicht** die gespeicherte Vokabel: Aus `s'appeler`
+wird im Satz `Je m'appelle`. Deshalb liefert das Modell sie mit; ableiten
+lässt sie sich nicht.
+
+Die Sätze entstehen **beim ersten Start der Übung**, in *einem* Aufruf für die
+ganze Lerneinheit. Einzeln abgefragt wäre dasselbe rund siebenmal so teuer —
+Anweisung und Wortschatz (~1.400 Token) sind bei jedem Satz identisch und
+würden jedes Mal mitbezahlt. Bei 60 Vokabeln und drei Sätzen: rund 8 ct mit
+Sonnet 5, 21 ct mit Opus 5. Lerneinheiten, die nie so geübt werden, kosten
+nichts.
+
+Als bekannt gelten die Vokabeln der Einheit, bis zu 300 Wörter aus früheren
+Einheiten derselben Sprache und Grundwörter wie Artikel, Zahlwörter und die
+Formen von „sein" und „haben". Für die Kategorien *Aussage*, *Frage* und
+*Interjektion* wird kein Satz erzeugt — für „Bonne nuit !" ergibt ein
+Lückentext keinen Sinn.
+
+Jeder erzeugte Satz wird geprüft, bevor er gespeichert wird: genau eine Lücke
+`{}` im fremdsprachigen Satz, keine im deutschen, nicht leere Lösung, und die
+Lösung darf nicht daneben im Satz stehen. Was durchfällt, wird verworfen.
+
+**Bewertet** wird nachsichtig: Groß-/Kleinschreibung und Leerzeichen zählen
+nicht, fehlende Akzente und Apostrophe gelten als richtig — die App zeigt dann
+die korrekte Schreibweise („Fast! So schreibt man es: Je m'appelle"). Auf einer
+Handytastatur ist ein `è` mühsam, und geübt wird die Vokabel, nicht das Tippen.
+Die Zeichenzuordnung dafür steht ausdrücklich in `lib/sentences.php` und
+benutzt **nicht** `iconv('ASCII//TRANSLIT')` — dessen Ergebnis hängt von der
+Locale des Servers ab.
+
+**Zur Tastatur:** Das Eingabefeld trägt `lang` aus `languages.code` und schaltet
+Autokorrektur, Autovervollständigung und Großschreibung ab. iOS lässt sich das
+Tastaturlayout allerdings **nicht vorschreiben** — dafür gibt es keine
+Web-Schnittstelle. Das Kind tippt einmal auf die Weltkugel, iOS merkt es sich.
+Verhindert wird der größere Ärger: dass die deutsche Autokorrektur
+`Je m'appelle` in etwas Deutsches „verbessert".
+
 ### Lernlogik
 
 Der Trainer zieht eine zufällige noch nicht gekonnte Vokabel der Lerneinheit,
@@ -265,7 +318,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-74 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Account-Anlage,
+124 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Account-Anlage,
 Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon, Zugriffstrennung
 zwischen den Accounts, die komplette Quiz-Logik samt „dreimal hintereinander",
 Zurücksetzen und Token-Widerruf.
@@ -293,13 +346,17 @@ Dazu zwei Suiten gegen Simulatoren statt gegen die echten Dienste:
 php -S 127.0.0.1:8124 tests/fake-keyvault.php &
 php -S 127.0.0.1:8125 tests/fake-anthropic.php &
 
+php tests/sentences.php  # 28 Prüfungen, braucht nichts davon
 php tests/keyvault.php   # 15 Prüfungen
-php tests/ai.php         # 31 Prüfungen
+php tests/ai.php         # 45 Prüfungen
 ```
 
 `tests/keyvault.php` prüft Abruf und Format, Zeilenumbrüche, leere Antwort, HTML
 statt Key, unbekannten Eintrag, HTTP 401/403/500, das Entfernen von Schlüssel-
 material aus Logtexten und dass wirklich nirgends zwischengespeichert wird.
+
+`tests/sentences.php` prüft den Antwortvergleich und die Satzprüfung des
+Lückentexts rein rechnerisch — ohne Datenbank, ohne API.
 
 `tests/ai.php` geht den kompletten Bilderkennungs-Pfad durch und prüft am
 aufgezeichneten Request, **was das Modell tatsächlich zu sehen bekäme**: dass der
@@ -321,6 +378,6 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 120 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 212 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.

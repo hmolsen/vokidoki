@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
+require_once __DIR__ . '/../lib/progress.php';
+require_once __DIR__ . '/../lib/sentences.php';
 
 require_api_request();
 $user = require_user();
@@ -60,11 +62,20 @@ switch (action()) {
             $v['known']   = $v['known_at'] !== null;
             unset($v['known_at']);
         }
+        // Fortschritt je Übungsart. Der Lückentext zählt nur Vokabeln, zu denen
+        // es einen Satz gibt - er wird beim ersten Start erst erzeugt.
+        [$mcKnown, $mcTotal]       = unit_progress((int) $unit['id'], MODE_CHOICE);
+        [$clozeKnown, $clozeTotal] = cloze_progress((int) $unit['id']);
+
         json_out(['ok' => true, 'unit' => [
             'id'          => (int) $unit['id'],
             'title'       => $unit['title'],
             'language_id' => (int) $unit['language_id'],
-        ], 'vocab' => $vocab]);
+        ], 'vocab' => $vocab, 'modes' => [
+            'mc'    => ['known' => $mcKnown, 'total' => $mcTotal],
+            'cloze' => ['known' => $clozeKnown, 'total' => $clozeTotal,
+                        'prepared' => $clozeTotal > 0],
+        ]]);
 
     case 'rename':
         require_post();
@@ -81,12 +92,14 @@ switch (action()) {
         require_post();
         $b    = json_body();
         $unit = own_unit($uid, body_int($b, 'id'));
-        q(
-            'DELETE p FROM progress p
-               JOIN vocab v ON v.id = p.vocab_id
-              WHERE v.unit_id = ? AND p.user_id = ?',
-            [(int) $unit['id'], $uid],
-        );
+
+        // Ohne Angabe wird alles zurückgesetzt; mit 'mode' nur eine Übungsart.
+        $mode = isset($b['mode']) ? body_str($b, 'mode', 16) : '';
+        if ($mode !== '' && !in_array($mode, [MODE_CHOICE, MODE_CLOZE], true)) {
+            json_fail('Unbekannte Übungsart.');
+        }
+
+        reset_unit_progress((int) $unit['id'], $uid, $mode === '' ? null : $mode);
         json_out(['ok' => true]);
 
     case 'delete':

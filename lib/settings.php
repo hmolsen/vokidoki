@@ -6,6 +6,11 @@ require_once __DIR__ . '/db.php';
 const SETTING_DEFAULTS = [
     'vision_model'         => 'claude-opus-5',
     'vision_effort'        => 'medium',
+    // Die Lückensätze schreibt ein eigenes Modell: Einfache Schulsätze aus
+    // vorgegebenen Wörtern sind etwas anderes als das Entziffern von
+    // Handschrift, und hier bestimmt die Ausgabemenge den Preis.
+    'sentence_model'       => 'claude-sonnet-5',
+    'sentences_per_vocab'  => '3',
     'usd_eur'              => '0.92',
     'monthly_cost_cap_usd' => '10.00',
     'imports_per_hour'     => '20',

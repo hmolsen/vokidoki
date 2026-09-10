@@ -263,9 +263,21 @@ ok('Ungültiger Token liefert generisches Manifest',
 
 section('Sprache und Lerneinheit');
 
-[$data, $status] = apiCall('languages', 'create', ['name' => 'Testisch', 'flag' => "\u{1F1EC}\u{1F1E7}"]);
+[$data, $status] = apiCall('languages', 'create',
+    ['name' => 'Testisch', 'flag' => "\u{1F1EC}\u{1F1E7}", 'code' => 'en']);
 ok('Sprache angelegt', $status === 200 && ($data['ok'] ?? false), $data['error'] ?? '');
 $languageId = (int) ($data['id'] ?? 0);
+ok('Sprachkürzel wird gespeichert',
+   qv('SELECT code FROM languages WHERE id = ?', [$languageId]) === 'en');
+
+// Ohne mitgeschicktes Kürzel wird es aus dem Namen abgeleitet.
+[$sp] = apiCall('languages', 'create', ['name' => 'Spanisch', 'flag' => '']);
+ok('Kürzel wird aus dem Namen abgeleitet',
+   qv('SELECT code FROM languages WHERE id = ?', [(int) $sp['id']]) === 'es');
+[$kl] = apiCall('languages', 'create', ['name' => 'Klingonisch', 'flag' => '']);
+ok('Unbekannte Sprache bleibt ohne Kürzel',
+   qv('SELECT code FROM languages WHERE id = ?', [(int) $kl['id']]) === null);
+q('DELETE FROM languages WHERE id IN (?, ?)', [(int) $sp['id'], (int) $kl['id']]);
 
 [$data, $status] = apiCall('languages', 'create', ['name' => 'Testisch', 'flag' => '']);
 ok('Doppelte Sprache wird abgelehnt', $status === 409, "Status $status");
@@ -609,6 +621,111 @@ $res = adminPost('vocab.php', ['delete_language' => $tmpLang, 'user' => $userId]
                  http_build_query(['user' => $userId]));
 ok('Erneutes Löschen meldet sich sauber',
    str_contains($res['body'], 'gibt es nicht mehr'));
+
+section('Lückentext');
+
+if (!$isFake) {
+    echo "  - übersprungen (kein Simulator)
+";
+} else {
+    // Der Multiple-Choice-Stand dieser Einheit ist oben schon aufgebaut worden.
+    // Er muss den ganzen Abschnitt über unberührt bleiben.
+    $mcVorher = (int) qv(
+        "SELECT COUNT(*) FROM progress p JOIN vocab v ON v.id = p.vocab_id
+          WHERE v.unit_id = ? AND p.mode = 'mc'", [$unitId]);
+
+    [$data, $status] = apiCall('cloze', 'next', null, ['unit_id' => $unitId]);
+    ok('Vor dem ersten Mal meldet die App Vorbereitungsbedarf',
+       ($data['needs_preparation'] ?? false) === true, json_encode($data));
+
+    $vorher = (int) qv("SELECT COUNT(*) FROM ai_requests WHERE purpose = 'sentences'");
+    [$data, $status] = apiCall('cloze', 'prepare', ['unit_id' => $unitId]);
+    ok('Sätze werden erzeugt', $status === 200 && ($data['created'] ?? 0) > 0,
+       $data['error'] ?? json_encode($data));
+
+    $anzahl = (int) qv(
+        'SELECT COUNT(*) FROM sentences s JOIN vocab v ON v.id = s.vocab_id WHERE v.unit_id = ?',
+        [$unitId]);
+    ok('Sätze liegen in der Datenbank', $anzahl > 0, (string) $anzahl);
+    ok('Der unbrauchbare Satz des Modells wurde verworfen',
+       (int) qv('SELECT COUNT(*) FROM sentences WHERE foreign_text NOT LIKE ?', ['%{}%']) === 0);
+
+    // Zweiter Aufruf darf nichts kosten.
+    [$data] = apiCall('cloze', 'prepare', ['unit_id' => $unitId]);
+    ok('Zweiter Start erzeugt nichts noch einmal', ($data['created'] ?? -1) === 0);
+    ok('Es gab genau einen KI-Aufruf dafür',
+       (int) qv("SELECT COUNT(*) FROM ai_requests WHERE purpose = 'sentences'") === $vorher + 1);
+
+    // Eine Frage geht durch die Übung.
+    [$card] = apiCall('cloze', 'next', null, ['unit_id' => $unitId]);
+    ok('Aufgabe wird geliefert', ($card['ok'] ?? false) && !($card['done'] ?? true));
+    ok('Deutscher Satz ist dabei', ($card['native'] ?? '') !== '');
+    ok('Fremdsatz trägt die Lücke', str_contains((string) ($card['foreign'] ?? ''), '{}'));
+    ok('Die Lösung wird nicht mitgeschickt', !array_key_exists('answer', $card));
+    ok('Sprachkürzel für die Tastatur ist dabei', ($card['lang'] ?? '') === 'en',
+       (string) ($card['lang'] ?? 'fehlt'));
+
+    // Die richtige Antwort steht in der Datenbank - die API gibt sie nicht heraus.
+    $loesung = (string) qv(
+        'SELECT answer FROM sentences s JOIN vocab v ON v.id = s.vocab_id
+          WHERE v.unit_id = ? AND s.native_text = ? LIMIT 1',
+        [$unitId, $card['native']]);
+
+    [$r] = apiCall('cloze', 'answer', ['nonce' => $card['nonce'], 'text' => $loesung]);
+    ok('Richtige Eingabe zählt als richtig', ($r['correct'] ?? false) === true);
+    ok('Und gilt als exakt geschrieben', ($r['exact'] ?? false) === true);
+    ok('Serie steht bei 1', ($r['streak'] ?? -1) === 1);
+
+    [$r2, $s2] = apiCall('cloze', 'answer', ['nonce' => $card['nonce'], 'text' => $loesung]);
+    ok('Nonce gilt nur einmal', $s2 === 409, "Status $s2");
+
+    // Falsche Eingabe.
+    [$card] = apiCall('cloze', 'next', null, ['unit_id' => $unitId]);
+    [$r] = apiCall('cloze', 'answer', ['nonce' => $card['nonce'], 'text' => 'völliger Unsinn']);
+    ok('Falsche Eingabe zählt als falsch', ($r['correct'] ?? true) === false);
+    ok('Serie fällt zurück', ($r['streak'] ?? -1) === 0);
+    ok('Die Lösung wird nach der Antwort gezeigt', ($r['answer'] ?? '') !== '');
+
+    // Ganze Einheit durchspielen.
+    $runden = 0;
+    while ($runden < 300) {
+        [$card] = apiCall('cloze', 'next', null, ['unit_id' => $unitId]);
+        if ($card['done'] ?? false) {
+            break;
+        }
+        $loesung = (string) qv(
+            'SELECT answer FROM sentences s JOIN vocab v ON v.id = s.vocab_id
+              WHERE v.unit_id = ? AND s.native_text = ? LIMIT 1',
+            [$unitId, $card['native']]);
+        apiCall('cloze', 'answer', ['nonce' => $card['nonce'], 'text' => $loesung]);
+        $runden++;
+    }
+    ok('Lückentext wird bestanden', ($card['done'] ?? false), "nach $runden Runden");
+
+    $minStreak = (int) qv(
+        "SELECT MIN(p.streak) FROM progress p JOIN vocab v ON v.id = p.vocab_id
+          WHERE v.unit_id = ? AND p.mode = 'cloze'", [$unitId]);
+    ok('Auch hier gilt: dreimal hintereinander', $minStreak >= 3, "kleinste Serie: $minStreak");
+
+    // Der eigentliche Beweis, dass progress.mode die Übungsarten trennt.
+    ok('Der Multiple-Choice-Stand blieb unberührt',
+       (int) qv("SELECT COUNT(*) FROM progress p JOIN vocab v ON v.id = p.vocab_id
+                  WHERE v.unit_id = ? AND p.mode = 'mc'", [$unitId]) === $mcVorher);
+
+    [$data, $status] = apiCall('units', 'reset', ['id' => $unitId, 'mode' => 'cloze']);
+    ok('Nur den Lückentext zurücksetzen geht', $status === 200
+       && (int) qv("SELECT COUNT(*) FROM progress p JOIN vocab v ON v.id = p.vocab_id
+                     WHERE v.unit_id = ? AND p.mode = 'cloze'", [$unitId]) === 0);
+    ok('Multiple Choice übersteht auch das',
+       (int) qv("SELECT COUNT(*) FROM progress p JOIN vocab v ON v.id = p.vocab_id
+                  WHERE v.unit_id = ? AND p.mode = 'mc'", [$unitId]) === $mcVorher);
+
+    [$data, $status] = apiCall('units', 'reset', ['id' => $unitId, 'mode' => 'quatsch']);
+    ok('Unbekannte Übungsart wird abgelehnt', $status === 400, "Status $status");
+
+    [$data, $status] = apiCall('cloze', 'next', null, ['unit_id' => $otherUnitId]);
+    ok('Fremde Lerneinheit bleibt gesperrt', $status === 404, "Status $status");
+}
 
 // ------------------------------------------------------------------ Abmelden
 

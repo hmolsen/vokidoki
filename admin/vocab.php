@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/ai.php';
+require_once __DIR__ . '/../lib/sentences.php';
 
 admin_require();
 
@@ -16,6 +17,12 @@ function back_to_filter(int $userId, int $languageId, int $unitId): never
     ]));
     header('Location: ' . admin_url('vocab.php') . ($query !== '' ? '?' . $query : ''));
     exit;
+}
+
+/** Lerneinheit samt Eigentümer - im Admin ohne Beschränkung auf ein Kind. */
+function own_unit_admin(int $unitId): ?array
+{
+    return q1('SELECT * FROM units WHERE id = ?', [$unitId]);
 }
 
 $userId = (int) ($_REQUEST['user'] ?? 0);
@@ -58,6 +65,73 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
 
         flash($changed === 0 ? 'Nichts geändert.' : $changed . ' Vokabel(n) aktualisiert.');
+        back_to_filter($userId, $langId, $unitId);
+    }
+
+    if (isset($_POST['save_sentence_rows'])) {
+        $nat = (array) ($_POST['sn'] ?? []);
+        $frn = (array) ($_POST['sf'] ?? []);
+        $ans = (array) ($_POST['sa'] ?? []);
+        $n   = 0;
+
+        foreach ($nat as $id => $_v) {
+            $id = (int) $id;
+            $row = sentence_clean([
+                'vocab_id' => 1,   // Zugehörigkeit steht schon in der Datenbank
+                'native'   => (string) ($nat[$id] ?? ''),
+                'foreign'  => (string) ($frn[$id] ?? ''),
+                'answer'   => (string) ($ans[$id] ?? ''),
+            ], [1]);
+
+            if ($row === null) {
+                continue;   // unbrauchbar - lieber nichts ändern als kaputt speichern
+            }
+            $n += q(
+                'UPDATE sentences SET native_text = ?, foreign_text = ?, answer = ? WHERE id = ?',
+                [$row['native'], $row['foreign'], $row['answer'], $id],
+            )->rowCount();
+        }
+
+        flash($n === 0 ? 'Nichts geändert.' : $n . ' Satz/Sätze aktualisiert.');
+        back_to_filter($userId, $langId, $unitId);
+    }
+
+    if (isset($_POST['delete_sentence'])) {
+        q('DELETE FROM sentences WHERE id = ?', [(int) $_POST['delete_sentence']]);
+        flash('Satz gelöscht.');
+        back_to_filter($userId, $langId, $unitId);
+    }
+
+    if (isset($_POST['make_sentences'])) {
+        $target = own_unit_admin((int) $_POST['make_sentences']);
+        if ($target === null) {
+            flash('Diese Lerneinheit gibt es nicht mehr.', 'bad');
+            back_to_filter($userId, $langId, $unitId);
+        }
+
+        set_time_limit(300);
+        $owner = q1('SELECT id, display_name FROM users WHERE id = ?', [(int) $target['user_id']]);
+
+        $blocked = budget_block_reason((int) $owner['id']);
+        if ($blocked !== null) {
+            flash($blocked, 'bad');
+            back_to_filter($userId, $langId, $unitId);
+        }
+
+        try {
+            $res = generate_sentences($target, $owner);
+            flash(sprintf(
+                '%d Satz/Sätze erzeugt%s.%s',
+                $res['created'],
+                $res['skipped'] > 0 ? sprintf(' (%d verworfen)', $res['skipped']) : '',
+                $res['without'] > 0
+                    ? sprintf(' %d Vokabel(n) haben noch keinen.', $res['without'])
+                    : '',
+            ));
+        } catch (Throwable $e) {
+            error_log('[vokabeltrainer] Sätze: ' . scrub_secrets($e->getMessage()));
+            flash('Die Sätze konnten nicht erzeugt werden. Details stehen im Protokoll.', 'bad');
+        }
         back_to_filter($userId, $langId, $unitId);
     }
 
@@ -243,6 +317,18 @@ $vocab = $unit !== null
 
 $missingTypes = (int) qv('SELECT COUNT(*) FROM vocab WHERE word_type IS NULL');
 
+$sentences = $unit !== null
+    ? qa(
+        'SELECT s.*, v.term_foreign, v.term_native
+           FROM sentences s
+           JOIN vocab v ON v.id = s.vocab_id
+          WHERE v.unit_id = ?
+          ORDER BY v.position, v.id, s.id',
+        [$unitId],
+      )
+    : [];
+$openSentences = $unit !== null ? vocab_without_sentences($unitId) : 0;
+
 admin_head('Vokabeln', 'vocab.php');
 flash_render();
 ?>
@@ -405,6 +491,70 @@ Damit verschwinden <?= (int) $l['units'] ?> Lerneinheit(en) und <?= (int) $l['wo
 
     <button class="btn small" name="save_rows" value="1">Änderungen speichern</button>
 </form>
+
+<h2>Lückensätze (<?= count($sentences) ?>)</h2>
+
+<div class="card">
+    <?php if ($openSentences > 0): ?>
+        <strong><?= $openSentences ?> Vokabel(n) ohne Satz</strong>
+        <p class="tiny muted" style="margin:6px 0 12px">
+            Erzeugt wird in einem Aufruf für die ganze Lerneinheit. Kategorien,
+            für die ein Lückensatz keinen Sinn ergibt (Aussage, Frage,
+            Interjektion), werden übersprungen.
+        </p>
+    <?php else: ?>
+        <p class="tiny muted" style="margin:0 0 12px">
+            Jede geeignete Vokabel hat mindestens einen Satz.
+        </p>
+    <?php endif; ?>
+    <form method="post">
+        <?= csrf_field() ?>
+        <input type="hidden" name="user" value="<?= $userId ?>">
+        <input type="hidden" name="language" value="<?= $langId ?>">
+        <input type="hidden" name="unit" value="<?= $unitId ?>">
+        <button class="btn small" name="make_sentences" value="<?= (int) $unit['id'] ?>">
+            <?= $openSentences > 0 ? 'Fehlende Sätze erzeugen' : 'Nichts zu erzeugen' ?>
+        </button>
+    </form>
+</div>
+
+<?php if ($sentences !== []): ?>
+<form method="post">
+    <?= csrf_field() ?>
+    <input type="hidden" name="user" value="<?= $userId ?>">
+    <input type="hidden" name="language" value="<?= $langId ?>">
+    <input type="hidden" name="unit" value="<?= $unitId ?>">
+
+    <table class="data">
+        <tr>
+            <th>Vokabel</th><th>Deutscher Satz</th>
+            <th>Fremdsprache (<code>{}</code> = Lücke)</th><th>Lösung</th><th></th>
+        </tr>
+        <?php foreach ($sentences as $s): ?>
+            <tr>
+                <td class="tiny muted"><?= h($s['term_foreign']) ?></td>
+                <td><input type="text" name="sn[<?= (int) $s['id'] ?>]"
+                           value="<?= h($s['native_text']) ?>" maxlength="255"></td>
+                <td><input type="text" name="sf[<?= (int) $s['id'] ?>]"
+                           value="<?= h($s['foreign_text']) ?>" maxlength="255"></td>
+                <td><input type="text" name="sa[<?= (int) $s['id'] ?>]"
+                           value="<?= h($s['answer']) ?>" maxlength="128" style="width:130px"></td>
+                <td>
+                    <button class="linkbtn" name="delete_sentence" value="<?= (int) $s['id'] ?>"
+                            formnovalidate style="color:var(--bad)"
+                            onclick="return confirm('Diesen Satz löschen?')">löschen</button>
+                </td>
+            </tr>
+        <?php endforeach; ?>
+    </table>
+    <p class="tiny muted">
+        Ein Satz wird nur gespeichert, wenn er die Prüfung besteht: genau eine
+        Lücke <code>{}</code> im fremdsprachigen Satz, keine im deutschen, eine
+        nicht leere Lösung, und die Lösung darf nicht daneben im Satz stehen.
+    </p>
+    <button class="btn small" name="save_sentence_rows" value="1">Sätze speichern</button>
+</form>
+<?php endif; ?>
 
 <h2>Vokabel ergänzen</h2>
 <form method="post" class="card inline">

@@ -72,9 +72,15 @@ if (str_contains($instruction, 'Fehlerfall')) {
     exit;
 }
 
-// Zweite Betriebsart: Wortarten für bereits gespeicherte Vokabeln nachtragen.
-// Erkennbar am Prompt; die Nummern kommen aus den übergebenen Zeilen zurück.
-if (str_contains($instruction, 'Bestimme zu jeder Vokabel die Kategorie')) {
+// Welche Betriebsart gefragt ist, entscheidet die Form des angeforderten
+// JSON-Schemas - nicht der Wortlaut des Prompts. Der ändert sich beim
+// Umformulieren, das Schema ist Teil der Schnittstelle.
+$schemaKeys = array_keys(
+    $request['output_config']['format']['schema']['properties'] ?? []
+);
+
+// Betriebsart: Kategorien für bereits gespeicherte Vokabeln nachtragen.
+if ($schemaKeys === ['types']) {
     $types = [];
     foreach (explode("\n", $instruction) as $line) {
         if (preg_match('/^(\d+)\t(.+?)\t/', $line, $m) === 1) {
@@ -104,6 +110,47 @@ if (str_contains($instruction, 'Bestimme zu jeder Vokabel die Kategorie')) {
         'stop_reason'   => 'end_turn',
         'stop_sequence' => null,
         'usage'         => ['input_tokens' => 900, 'output_tokens' => 120],
+    ]);
+    exit;
+}
+
+// Betriebsart: Lückensätze für eine Lerneinheit.
+if ($schemaKeys === ['sentences']) {
+    $per       = 3;
+    $sentences = [];
+    foreach (explode("\n", $instruction) as $line) {
+        if (preg_match('/^(\d+)\t(.+?)\t(.+)$/', $line, $m) !== 1) {
+            continue;
+        }
+        [$_, $id, $fremd, $deutsch] = $m;
+        for ($i = 1; $i <= $per; $i++) {
+            $sentences[] = [
+                'vocab_id' => (int) $id,
+                'native'   => sprintf('Satz %d mit %s.', $i, $deutsch),
+                'foreign'  => sprintf('Sentence %d with {}.', $i),
+                'answer'   => $fremd,
+            ];
+        }
+    }
+    // Ein absichtlich unbrauchbarer Satz: Die App muss ihn verwerfen.
+    if ($sentences !== []) {
+        $sentences[] = [
+            'vocab_id' => $sentences[0]['vocab_id'],
+            'native'   => 'Ohne Luecke',
+            'foreign'  => 'Kein Platzhalter hier',
+            'answer'   => 'egal',
+        ];
+    }
+
+    echo json_encode([
+        'id'            => 'msg_test_sentences',
+        'type'          => 'message',
+        'role'          => 'assistant',
+        'model'         => $request['model'] ?? 'unbekannt',
+        'content'       => [['type' => 'text', 'text' => json_encode(['sentences' => $sentences])]],
+        'stop_reason'   => 'end_turn',
+        'stop_sequence' => null,
+        'usage'         => ['input_tokens' => 1500, 'output_tokens' => 2400],
     ]);
     exit;
 }

@@ -1,5 +1,5 @@
 import {
-    api, render, esc, $, go, topbar, loading, wireBack, progressBar,
+    api, render, esc, $, on, go, topbar, loading, wireBack, progressBar,
     showError, clearError,
 } from '../core.js';
 
@@ -7,7 +7,7 @@ import {
 export async function unitView(unitId) {
     render(loading());
 
-    const { unit, vocab } = await api('units', 'get', { query: { id: unitId } });
+    const { unit, vocab, modes } = await api('units', 'get', { query: { id: unitId } });
 
     const known   = vocab.filter((v) => v.known).length;
     const correct = vocab.reduce((sum, v) => sum + v.correct, 0);
@@ -34,7 +34,7 @@ export async function unitView(unitId) {
 
         <div class="card">
             ${done ? '<div class="notice good">Diese Lerneinheit hast du geschafft!</div>' : ''}
-            <div class="tiny muted">Gelernt</div>
+            <div class="tiny muted">Auswählen &ndash; gelernt</div>
             <strong>${known} von ${vocab.length} Vokabeln</strong>
             ${progressBar(known, vocab.length)}
             ${quota === null ? '' : `
@@ -43,9 +43,14 @@ export async function unitView(unitId) {
                 </p>`}
         </div>
 
-        <button class="btn" id="practice">
-            ${done ? 'Noch einmal üben' : 'Üben'}
-        </button>
+        <h2>Üben</h2>
+        ${exerciseRow('mc', '\u{1F3AF}', 'Auswählen',
+            'Vier Antworten, eine ist richtig', modes.mc)}
+        ${exerciseRow('cloze', '\u{270F}\u{FE0F}', 'Lückentext',
+            modes.cloze.prepared
+                ? 'Das fehlende Wort in den Satz eintippen'
+                : 'Sätze werden beim ersten Start vorbereitet',
+            modes.cloze)}
 
         <h2>Alle Vokabeln (${vocab.length})</h2>
         ${list}
@@ -60,18 +65,22 @@ export async function unitView(unitId) {
 
     wireBack();
 
-    $('#practice').addEventListener('click', async () => {
-        // "Noch einmal üben" braucht einen frischen Lernstand, sonst wären
-        // sofort wieder alle Vokabeln als gekonnt markiert.
-        if (done) {
+    on('[data-mode]', 'click', async (event) => {
+        const mode = event.currentTarget.dataset.mode;
+        const info = modes[mode];
+
+        // Eine bestandene Übung braucht einen frischen Lernstand, sonst wären
+        // sofort wieder alle Vokabeln als gekonnt markiert. Zurückgesetzt wird
+        // nur diese Übungsart - die andere behält ihren Fortschritt.
+        if (info.total > 0 && info.known >= info.total) {
             try {
-                await api('units', 'reset', { body: { id: unit.id } });
+                await api('units', 'reset', { body: { id: unit.id, mode } });
             } catch (err) {
                 showError(err.message);
                 return;
             }
         }
-        go(`/quiz/${unit.id}`);
+        go(`${mode === 'cloze' ? '/cloze' : '/quiz'}/${unit.id}`);
     });
 
     $('#rename').addEventListener('click', async () => {
@@ -105,6 +114,23 @@ export async function unitView(unitId) {
             showError(err.message);
         }
     });
+}
+
+/** Eine Übungsart als Zeile mit eigenem Fortschritt. */
+function exerciseRow(mode, icon, title, hint, info) {
+    const fertig = info.total > 0 && info.known >= info.total;
+    return `
+        <button class="row" data-mode="${mode}">
+            <span class="lead">${fertig ? '\u{2705}' : icon}</span>
+            <span class="body">
+                <span class="title">${esc(title)}</span>
+                <span class="tiny muted">${
+                    info.total > 0 ? `${info.known} von ${info.total} gelernt` : esc(hint)
+                }</span>
+                ${info.total > 0 ? progressBar(info.known, info.total) : ''}
+            </span>
+            <span class="chev">&#8250;</span>
+        </button>`;
 }
 
 /** Drei Punkte zeigen, wie oft die Vokabel schon hintereinander saß. */

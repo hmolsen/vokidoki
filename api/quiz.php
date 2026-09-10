@@ -2,33 +2,19 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
+require_once __DIR__ . '/../lib/progress.php';
 
 require_api_request();
 $user = require_user();
 $uid  = (int) $user['id'];
 
-const QUIZ_MODE       = 'mc';
-const KNOWN_THRESHOLD = 3;   // dreimal hintereinander richtig => gilt als gekonnt
-const OPTION_COUNT    = 4;
-
-/** Fortschritt einer Einheit als [gekonnt, gesamt]. */
-function unit_progress(int $unitId): array
-{
-    $row = q1(
-        "SELECT COUNT(v.id) AS total,
-                SUM(CASE WHEN p.known_at IS NOT NULL THEN 1 ELSE 0 END) AS known
-           FROM vocab v
-           LEFT JOIN progress p ON p.vocab_id = v.id AND p.mode = ?
-          WHERE v.unit_id = ?",
-        [QUIZ_MODE, $unitId],
-    );
-    return [(int) ($row['known'] ?? 0), (int) ($row['total'] ?? 0)];
-}
+const QUIZ_MODE    = MODE_CHOICE;
+const OPTION_COUNT = 4;
 
 switch (action()) {
     case 'next':
         $unit = own_unit($uid, (int) ($_GET['unit_id'] ?? 0));
-        [$known, $total] = unit_progress((int) $unit['id']);
+        [$known, $total] = unit_progress((int) $unit['id'], QUIZ_MODE);
         $langName = (string) qv(
             'SELECT name FROM languages WHERE id = ?',
             [(int) $unit['language_id']],
@@ -145,47 +131,16 @@ switch (action()) {
         $vocabId  = (int) $pending['vocab_id'];
         $isRight  = $index === (int) $pending['correct'];
 
-        $cur = q1(
-            'SELECT streak, correct_count, wrong_count FROM progress WHERE vocab_id = ? AND mode = ?',
-            [$vocabId, QUIZ_MODE],
-        );
-        $streak   = (int) ($cur['streak'] ?? 0);
-        $correctN = (int) ($cur['correct_count'] ?? 0);
-        $wrongN   = (int) ($cur['wrong_count'] ?? 0);
+        $stand = record_answer($uid, $vocabId, QUIZ_MODE, $isRight);
 
-        if ($isRight) {
-            $streak++;
-            $correctN++;
-        } else {
-            $streak = 0;   // "dreimal hintereinander" - ein Fehler setzt zurück
-            $wrongN++;
-        }
-        $nowKnown = $streak >= KNOWN_THRESHOLD;
-
-        $knownInsert = $nowKnown ? 'NOW()' : 'NULL';
-        $knownUpdate = $nowKnown ? 'COALESCE(known_at, NOW())' : 'NULL';
-
-        q(
-            'INSERT INTO progress
-                (user_id, vocab_id, mode, streak, correct_count, wrong_count, known_at, last_seen_at)
-             VALUES (?, ?, ?, ?, ?, ?, ' . $knownInsert . ', NOW())
-             ON DUPLICATE KEY UPDATE
-                streak        = VALUES(streak),
-                correct_count = VALUES(correct_count),
-                wrong_count   = VALUES(wrong_count),
-                known_at      = ' . $knownUpdate . ',
-                last_seen_at  = NOW()',
-            [$uid, $vocabId, QUIZ_MODE, $streak, $correctN, $wrongN],
-        );
-
-        [$known, $total] = unit_progress((int) $unit['id']);
+        [$known, $total] = unit_progress((int) $unit['id'], QUIZ_MODE);
 
         json_out([
             'ok'            => true,
             'correct'       => $isRight,
             'correct_index' => (int) $pending['correct'],
-            'streak'        => $streak,
-            'just_learned'  => $nowKnown,
+            'streak'        => $stand['streak'],
+            'just_learned'  => $stand['just_learned'],
             'known'         => $known,
             'total'         => $total,
             'done'          => $total > 0 && $known >= $total,

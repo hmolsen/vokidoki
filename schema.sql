@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS languages (
   user_id    INT UNSIGNED NOT NULL,
   name       VARCHAR(64)  NOT NULL,
   flag_emoji VARCHAR(16)  NOT NULL DEFAULT '',
+  -- ISO-Kürzel (fr, en, la, da) als Tastaturhinweis im Lückentext; darf fehlen.
+  code       VARCHAR(8)   NULL,
   created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_lang_user_name (user_id, name),
   CONSTRAINT fk_lang_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -64,7 +66,21 @@ CREATE TABLE IF NOT EXISTS vocab (
   CONSTRAINT fk_vocab_unit FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Lernstand pro Vokabel und Trainer-Variante (mode). Start: 'mc' = Multiple Choice.
+-- Lückensätze für den Lückentext-Trainer. foreign_text enthält genau einmal
+-- den Platzhalter {}; answer ist die dort erwartete Form - nicht zwingend die
+-- Vokabel selbst ("s'appeler" wird im Satz zu "Je m'appelle").
+CREATE TABLE IF NOT EXISTS sentences (
+  id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  vocab_id     INT UNSIGNED NOT NULL,
+  native_text  VARCHAR(255) NOT NULL,
+  foreign_text VARCHAR(255) NOT NULL,
+  answer       VARCHAR(128) NOT NULL,
+  created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_sentences_vocab (vocab_id),
+  CONSTRAINT fk_sentences_vocab FOREIGN KEY (vocab_id) REFERENCES vocab(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Lernstand pro Vokabel und Trainer-Variante (mode): 'mc' und 'cloze'.
 CREATE TABLE IF NOT EXISTS progress (
   id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id       INT UNSIGNED NOT NULL,
@@ -114,6 +130,8 @@ CREATE TABLE IF NOT EXISTS settings (
 INSERT INTO settings (k, v) VALUES
   ('vision_model',        'claude-opus-5'),
   ('vision_effort',       'medium'),
+  ('sentence_model',      'claude-sonnet-5'),
+  ('sentences_per_vocab', '3'),
   ('usd_eur',             '0.92'),
   ('monthly_cost_cap_usd','10.00'),
   ('imports_per_hour',    '20'),

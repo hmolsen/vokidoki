@@ -441,3 +441,51 @@ input:focus, select:focus {
     color: var(--text-soft);
 }
 .install .big { font-size: 1.4rem; line-height: 1; }
+
+/* ---------------------------------------------------------------- Lückentext */
+
+.cloze {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 22px 18px;
+    margin: 16px 0 18px;
+    text-align: center;
+}
+
+.cloze-native {
+    font-size: 1.05rem;
+    color: var(--text-soft);
+    margin: 0 0 14px;
+    overflow-wrap: anywhere;
+}
+
+.cloze-foreign {
+    font-size: 1.35rem;
+    font-weight: 600;
+    line-height: 1.6;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+/* Die Lücke im Satz. Feste Breite, damit die Länge der Lösung nichts verrät. */
+.gap {
+    display: inline-block;
+    width: 110px;
+    max-width: 60%;
+    border-bottom: 3px solid var(--accent);
+    vertical-align: -3px;
+    margin: 0 3px;
+}
+
+.cloze-input {
+    text-align: center;
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+.cloze-input.correct { border-color: var(--good); background: var(--good-bg); color: var(--good); }
+.cloze-input.almost  { border-color: var(--good); background: var(--good-bg); color: var(--text); }
+.cloze-input.wrong   { border-color: var(--bad);  background: var(--bad-bg);  color: var(--bad); }
+.cloze-input[readonly] { opacity: 1; }

@@ -3,7 +3,7 @@
    API laufen immer über das Netz - eine gecachte Shell könnte sonst den
    Namen des falschen Kindes anzeigen, weil index.php pro Account rendert. */
 
-const CACHE = 'vokabeltrainer-v1';
+const CACHE = 'vokabeltrainer-v2';
 
 const ASSETS = [
     './style.css',
@@ -16,6 +16,7 @@ const ASSETS = [
     './views/unit.js',
     './views/import.js',
     './views/quiz.js',
+    './views/cloze.js',
     './offline.html',
 ];
 

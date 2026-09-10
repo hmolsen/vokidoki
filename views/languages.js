@@ -5,10 +5,10 @@ import {
 /* Die Sprachen, die hier gebraucht werden. Alles andere lässt sich
    im Formular darunter frei eintragen. */
 const PRESETS = [
-    { flag: '\u{1F1EC}\u{1F1E7}', name: 'Englisch' },
-    { flag: '\u{1F1EB}\u{1F1F7}', name: 'Französisch' },
-    { flag: '\u{1F3DB}\u{FE0F}',  name: 'Latein' },
-    { flag: '\u{1F1E9}\u{1F1F0}', name: 'Dänisch' },
+    { flag: '\u{1F1EC}\u{1F1E7}', name: 'Englisch',    code: 'en' },
+    { flag: '\u{1F1EB}\u{1F1F7}', name: 'Französisch', code: 'fr' },
+    { flag: '\u{1F3DB}\u{FE0F}',  name: 'Latein',      code: 'la' },
+    { flag: '\u{1F1E9}\u{1F1F0}', name: 'Dänisch',     code: 'da' },
 ];
 
 export async function languagesView() {
@@ -109,14 +109,14 @@ function showAddForm() {
     $$('[data-back]').forEach((el) => el.addEventListener('click', () => go('/')));
     on('[data-preset]', 'click', (e) => {
         const p = PRESETS[Number(e.currentTarget.dataset.preset)];
-        create(p.name, p.flag, e.currentTarget);
+        create(p.name, p.flag, e.currentTarget, p.code);
     });
     $('#save').addEventListener('click', (e) => {
         create($('#name').value.trim(), $('#flag').value.trim() || '\u{1F310}', e.currentTarget);
     });
 }
 
-async function create(name, flag, button) {
+async function create(name, flag, button, code = '') {
     clearError();
     if (!name) {
         showError('Bitte einen Namen für die Sprache angeben.');
@@ -124,7 +124,7 @@ async function create(name, flag, button) {
     }
     try {
         await withBusy(button, 'Wird angelegt...', async () => {
-            const data = await api('languages', 'create', { body: { name, flag } });
+            const data = await api('languages', 'create', { body: { name, flag, code } });
             go(`/lang/${data.id}`);
         });
     } catch (err) {

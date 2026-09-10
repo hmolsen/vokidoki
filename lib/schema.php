@@ -26,7 +26,36 @@ function schema_migrations(): array
             static fn (): bool => !column_exists('vocab', 'word_type'),
             'ALTER TABLE vocab ADD COLUMN word_type VARCHAR(16) NULL AFTER note',
         ],
+        // Sprachkürzel (fr, en, la, da) für den Tastaturhinweis im Lückentext.
+        'languages.code' => [
+            static fn (): bool => !column_exists('languages', 'code'),
+            'ALTER TABLE languages ADD COLUMN code VARCHAR(8) NULL AFTER flag_emoji',
+        ],
+        'sentences' => [
+            static fn (): bool => !table_exists('sentences'),
+            'CREATE TABLE sentences (
+               id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+               vocab_id     INT UNSIGNED NOT NULL,
+               native_text  VARCHAR(255) NOT NULL,
+               foreign_text VARCHAR(255) NOT NULL,
+               answer       VARCHAR(128) NOT NULL,
+               created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               KEY idx_sentences_vocab (vocab_id),
+               CONSTRAINT fk_sentences_vocab FOREIGN KEY (vocab_id)
+                   REFERENCES vocab(id) ON DELETE CASCADE
+             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+        ],
     ];
+}
+
+function table_exists(string $table): bool
+{
+    $n = qv(
+        'SELECT COUNT(*) FROM information_schema.TABLES
+          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+        [$table],
+    );
+    return (int) $n > 0;
 }
 
 function column_exists(string $table, string $column): bool

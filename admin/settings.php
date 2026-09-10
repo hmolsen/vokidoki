@@ -25,6 +25,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         redirect('settings.php');
     }
 
+    if (isset($_POST['save_sentences'])) {
+        $model = (string) ($_POST['sentence_model'] ?? '');
+        if (!array_key_exists($model, VISION_MODELS)) {
+            flash('Unbekanntes Modell.', 'bad');
+            redirect('settings.php');
+        }
+        $per = max(1, min(5, (int) ($_POST['per_vocab'] ?? 3)));
+
+        setting_set('sentence_model', $model);
+        setting_set('sentences_per_vocab', (string) $per);
+        flash('Einstellungen für den Lückentext gespeichert.');
+        redirect('settings.php');
+    }
+
     if (isset($_POST['save_budget'])) {
         $cap  = max(0.0, (float) str_replace(',', '.', (string) ($_POST['cap'] ?? '0')));
         $rate = max(0.0, (float) str_replace(',', '.', (string) ($_POST['rate'] ?? '0.92')));
@@ -104,6 +118,42 @@ flash_render();
         ist für das Abtippen von Vokabelseiten die passende Stufe.
     </p>
     <button class="btn small" name="save_model" value="1">Speichern</button>
+</form>
+
+<h2>Lückentext</h2>
+<form method="post" class="card">
+    <?= csrf_field() ?>
+    <div class="formgrid">
+        <div>
+            <label for="sentence_model">Modell für die Sätze</label>
+            <select name="sentence_model" id="sentence_model">
+                <?php foreach (VISION_MODELS as $id => $label): ?>
+                    <option value="<?= h($id) ?>"<?= $id === setting('sentence_model') ? ' selected' : '' ?>>
+                        <?= h($label) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div>
+            <label for="per_vocab">Sätze je Vokabel</label>
+            <select name="per_vocab" id="per_vocab">
+                <?php foreach ([1, 2, 3, 4, 5] as $n): ?>
+                    <option value="<?= $n ?>"<?= (string) $n === setting('sentences_per_vocab') ? ' selected' : '' ?>>
+                        <?= $n ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+    </div>
+    <p class="tiny muted">
+        Die Sätze entstehen beim ersten Start der Übung, in einem Aufruf für die
+        ganze Lerneinheit &ndash; einzeln abgefragt wäre dasselbe rund siebenmal
+        so teuer, weil Anweisung und Wortschatz jedes Mal mitbezahlt würden.
+        Drei Sätze passen zur Lernregel &bdquo;dreimal hintereinander richtig&ldquo;.
+        Bei 60 Vokabeln und drei Sätzen kostet eine Lerneinheit einmalig rund
+        8&nbsp;ct mit Sonnet 5, rund 21&nbsp;ct mit Opus 5.
+    </p>
+    <button class="btn small" name="save_sentences" value="1">Speichern</button>
 </form>
 
 <h2>Budget und Limits</h2>

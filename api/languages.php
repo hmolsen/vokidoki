@@ -3,6 +3,29 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
 
+/**
+ * Sprachkürzel aus dem Namen ableiten, wenn die App keines mitschickt.
+ * Es dient nur als Tastaturhinweis - findet sich nichts, bleibt es leer und
+ * die Tastatur verhält sich wie bisher.
+ */
+const LANGUAGE_CODES = [
+    'englisch' => 'en', 'französisch' => 'fr', 'franzoesisch' => 'fr',
+    'latein' => 'la', 'dänisch' => 'da', 'daenisch' => 'da',
+    'spanisch' => 'es', 'italienisch' => 'it', 'niederländisch' => 'nl',
+    'niederlaendisch' => 'nl', 'schwedisch' => 'sv', 'norwegisch' => 'no',
+    'türkisch' => 'tr', 'tuerkisch' => 'tr', 'russisch' => 'ru',
+    'polnisch' => 'pl', 'portugiesisch' => 'pt', 'griechisch' => 'el',
+];
+
+function language_code(string $sent, string $name): ?string
+{
+    $code = strtolower(trim($sent));
+    if (preg_match('/^[a-z]{2,3}$/', $code) === 1) {
+        return $code;
+    }
+    return LANGUAGE_CODES[mb_strtolower(trim($name))] ?? null;
+}
+
 require_api_request();
 $user = require_user();
 $uid  = (int) $user['id'];
@@ -10,7 +33,7 @@ $uid  = (int) $user['id'];
 switch (action()) {
     case 'list':
         $rows = qa(
-            'SELECT l.id, l.name, l.flag_emoji,
+            'SELECT l.id, l.name, l.flag_emoji, l.code,
                     (SELECT COUNT(*) FROM units u WHERE u.language_id = l.id) AS unit_count,
                     (SELECT COUNT(*) FROM vocab v
                        JOIN units u2 ON u2.id = v.unit_id
@@ -32,6 +55,7 @@ switch (action()) {
         $b    = json_body();
         $name = body_str($b, 'name', 64);
         $flag = body_str($b, 'flag', 16);
+        $code = language_code(body_str($b, 'code', 8), $name);
         if ($name === '') {
             json_fail('Bitte einen Namen für die Sprache angeben.');
         }
@@ -45,8 +69,8 @@ switch (action()) {
         }
 
         q(
-            'INSERT INTO languages (user_id, name, flag_emoji) VALUES (?, ?, ?)',
-            [$uid, $name, $flag],
+            'INSERT INTO languages (user_id, name, flag_emoji, code) VALUES (?, ?, ?, ?)',
+            [$uid, $name, $flag, $code],
         );
         json_out(['ok' => true, 'id' => (int) db()->lastInsertId()]);
 

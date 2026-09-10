@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/keyvault.php';
+require_once __DIR__ . '/../lib/sentences.php';
 
 admin_require();
 
@@ -115,6 +116,19 @@ check($checks, 'Kategorien der Vokabeln', static function (): array {
     return [true, $offen === 0
         ? $alle . ' Vokabeln, alle eingeordnet'
         : sprintf('%d von %d ohne Kategorie - unter "Vokabeln" nachtragen', $offen, $alle)];
+});
+
+check($checks, 'Lückentext', static function (): array {
+    if (!table_exists('sentences')) {
+        return [false, 'Tabelle sentences fehlt'];
+    }
+    $saetze = (int) qv('SELECT COUNT(*) FROM sentences');
+    if ($saetze === 0) {
+        return [true, 'noch keine Sätze - sie entstehen beim ersten Üben'];
+    }
+    $vokabeln = (int) qv('SELECT COUNT(DISTINCT vocab_id) FROM sentences');
+    return [true, sprintf('%d Sätze zu %d Vokabeln (%s)',
+        $saetze, $vokabeln, setting('sentence_model'))];
 });
 
 check($checks, 'Anthropic-SDK', static function (): array {
