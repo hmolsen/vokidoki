@@ -97,6 +97,26 @@ check($checks, 'Schema vollständig', static function (): array {
         : 'fehlt: ' . implode(', ', $missing) . ' - schema.sql einspielen'];
 });
 
+check($checks, 'Schema auf dem Stand des Codes', static function (): array {
+    // ensure_schema() lief beim Aufruf dieser Seite bereits; steht hier noch
+    // etwas offen, ist die Änderung fehlgeschlagen (meist fehlende Rechte).
+    $pending = schema_pending();
+    return [$pending === [], $pending === []
+        ? 'keine offenen Änderungen'
+        : 'fehlt: ' . implode(', ', $pending) . ' - Protokoll prüfen'];
+});
+
+check($checks, 'Wortarten', static function (): array {
+    if (!column_exists('vocab', 'word_type')) {
+        return [false, 'Spalte fehlt'];
+    }
+    $offen = (int) qv('SELECT COUNT(*) FROM vocab WHERE word_type IS NULL');
+    $alle  = (int) qv('SELECT COUNT(*) FROM vocab');
+    return [true, $offen === 0
+        ? $alle . ' Vokabeln, alle mit Wortart'
+        : sprintf('%d von %d ohne Wortart - unter "Vokabeln" nachtragen', $offen, $alle)];
+});
+
 check($checks, 'Anthropic-SDK', static function (): array {
     $autoload = dirname(__DIR__) . '/vendor/autoload.php';
     if (!is_file($autoload)) {

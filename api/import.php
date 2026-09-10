@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/ai.php';
+require_once __DIR__ . '/../lib/wordtypes.php';
 
 require_api_request();
 $user = require_user();
@@ -126,6 +127,9 @@ switch (action()) {
                 mb_substr($f, 0, 255),
                 mb_substr($n, 0, 255),
                 $note === '' ? null : mb_substr($note, 0, 255),
+                // Die Wortart bestimmt das Modell; das Kind bekommt sie nicht
+                // zu Gesicht und muss sie nicht prüfen.
+                word_type_clean($row['word_type'] ?? null),
             ];
         }
         if ($clean === []) {
@@ -142,11 +146,11 @@ switch (action()) {
             $unitId = (int) $pdo->lastInsertId();
 
             $st = $pdo->prepare(
-                'INSERT INTO vocab (unit_id, term_foreign, term_native, note, position)
-                 VALUES (?, ?, ?, ?, ?)'
+                'INSERT INTO vocab (unit_id, term_foreign, term_native, note, word_type, position)
+                 VALUES (?, ?, ?, ?, ?, ?)'
             );
-            foreach ($clean as $i => [$f, $n, $note]) {
-                $st->execute([$unitId, $f, $n, $note, $i]);
+            foreach ($clean as $i => [$f, $n, $note, $type]) {
+                $st->execute([$unitId, $f, $n, $note, $type, $i]);
             }
             $pdo->commit();
         } catch (Throwable $e) {

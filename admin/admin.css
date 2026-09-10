@@ -98,3 +98,55 @@ form.compact { display: inline; }
 .swatch { display: inline-block; width: 15px; height: 15px; border-radius: 4px; vertical-align: -2px; margin-right: 6px; border: 1px solid rgba(0,0,0,.15); }
 
 code.token { font-size: .8rem; color: var(--text-soft); }
+
+/* Wortarten. Farbig hinterlegte Kürzel, damit man beim Überfliegen einer
+   Vokabelliste sofort sieht, was Substantiv und was Verb ist. */
+.wt {
+    display: inline-block;
+    min-width: 54px;
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-size: .74rem;
+    font-weight: 700;
+    text-align: center;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+
+.wt-substantiv   { background: #dbe8ff; color: #1c4c9c; }
+.wt-verb         { background: #d8f3e3; color: #16704a; }
+.wt-adjektiv     { background: #ffe8cc; color: #9a5b09; }
+.wt-adverb       { background: #d3f0f2; color: #146a72; }
+.wt-pronomen     { background: #e9ddfb; color: #5b34a8; }
+.wt-artikel      { background: #e2e6ee; color: #4a5567; }
+.wt-numerale     { background: #f2e6d5; color: #7d5423; }
+.wt-praeposition { background: #ffdcea; color: #a32463; }
+.wt-konjunktion  { background: #d6ecff; color: #1f5f8c; }
+.wt-interjektion { background: #ffdcd8; color: #a5301f; }
+.wt-sonstiges    { background: #e8e8ea; color: #5d6470; }
+.wt-leer         { background: transparent; color: var(--text-soft); border-color: var(--border); }
+
+@media (prefers-color-scheme: dark) {
+    .wt-substantiv   { background: #1b3358; color: #a8c8ff; }
+    .wt-verb         { background: #143a2a; color: #8fdcb4; }
+    .wt-adjektiv     { background: #43300f; color: #f0bf78; }
+    .wt-adverb       { background: #123a3e; color: #86d5dc; }
+    .wt-pronomen     { background: #2e2050; color: #c4a9f5; }
+    .wt-artikel      { background: #2b303b; color: #b0bacb; }
+    .wt-numerale     { background: #3a2d1c; color: #d9b483; }
+    .wt-praeposition { background: #45182f; color: #f4a3c6; }
+    .wt-konjunktion  { background: #12324a; color: #8fc6ee; }
+    .wt-interjektion { background: #451c17; color: #f3a297; }
+    .wt-sonstiges    { background: #2b2e36; color: #a3abbb; }
+}
+
+/* Badge und Auswahlfeld nebeneinander in der Vokabeltabelle. */
+td.wtcell { white-space: nowrap; }
+td.wtcell select {
+    margin: 0 0 0 6px;
+    min-height: 34px;
+    padding: 4px 6px;
+    font-size: 13px;
+    width: auto;
+    max-width: 132px;
+}

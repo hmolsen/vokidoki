@@ -218,8 +218,10 @@ function showReview(languageId, title, entries, fromDraft) {
 }
 
 function pairRow(entry, index) {
+    // Die Wortart kommt vom Modell und wird dem Kind nicht gezeigt - sie reist
+    // unsichtbar am Element mit, damit sie beim Speichern erhalten bleibt.
     return `
-        <div class="pair" data-row="${index}">
+        <div class="pair" data-row="${index}" data-wt="${esc(entry.word_type || '')}">
             <input type="text" class="f" value="${esc(entry.foreign || '')}"
                    placeholder="Fremdsprache" maxlength="255"
                    autocapitalize="none" autocorrect="off" spellcheck="false">
@@ -232,15 +234,20 @@ function pairRow(entry, index) {
 /** Alle Zeilen inklusive halb ausgefüllter - Grundlage für den Entwurf. */
 function collectAll() {
     return $$('.pair').map((row) => ({
-        foreign: row.querySelector('.f').value,
-        native:  row.querySelector('.n').value,
+        foreign:   row.querySelector('.f').value,
+        native:    row.querySelector('.n').value,
+        word_type: row.dataset.wt || null,
     }));
 }
 
 /** Nur vollständige Paare - das wird gespeichert. */
 function collectComplete() {
     return collectAll()
-        .map((e) => ({ foreign: e.foreign.trim(), native: e.native.trim() }))
+        .map((e) => ({
+            foreign:   e.foreign.trim(),
+            native:    e.native.trim(),
+            word_type: e.word_type,
+        }))
         .filter((e) => e.foreign !== '' && e.native !== '');
 }
 

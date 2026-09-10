@@ -7,10 +7,15 @@ require_once __DIR__ . '/../lib/settings.php';
 require_once __DIR__ . '/../lib/cost.php';
 require_once __DIR__ . '/../lib/errors.php';
 require_once __DIR__ . '/../lib/keyvault.php';
+require_once __DIR__ . '/../lib/schema.php';
+require_once __DIR__ . '/../lib/wordtypes.php';
 
 boot_error_handling();
 
 session_boot();
+
+// Bringt das Schema auf den Stand des Codes, falls per FTP aktualisiert wurde.
+ensure_schema();
 
 function h(mixed $value): string
 {

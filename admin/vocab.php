@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
+require_once __DIR__ . '/../lib/ai.php';
 
 admin_require();
 
@@ -28,6 +29,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $foreign = (array) ($_POST['f'] ?? []);
         $native  = (array) ($_POST['n'] ?? []);
         $note    = (array) ($_POST['note'] ?? []);
+        $type    = (array) ($_POST['wt'] ?? []);
         $changed = 0;
 
         foreach ($foreign as $id => $value) {
@@ -39,9 +41,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 continue;   // leere Felder ignorieren statt Daten zu zerstören
             }
             $changed += q(
-                'UPDATE vocab SET term_foreign = ?, term_native = ?, note = ? WHERE id = ?',
+                'UPDATE vocab SET term_foreign = ?, term_native = ?, note = ?, word_type = ?
+                  WHERE id = ?',
                 [mb_substr($f, 0, 255), mb_substr($nv, 0, 255),
-                 $nt === '' ? null : mb_substr($nt, 0, 255), $id],
+                 $nt === '' ? null : mb_substr($nt, 0, 255),
+                 word_type_clean($type[$id] ?? null), $id],
             )->rowCount();
         }
 
@@ -54,6 +58,85 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
 
         flash($changed === 0 ? 'Nichts geändert.' : $changed . ' Vokabel(n) aktualisiert.');
+        back_to_filter($userId, $langId, $unitId);
+    }
+
+    if (isset($_POST['fill_word_types'])) {
+        // In Blöcken arbeiten: Ein Aufruf über hunderte Vokabeln wäre lang,
+        // teuer und ginge bei einem Fehler komplett verloren.
+        $perBatch  = 100;
+        $maxBatch  = 5;
+        $done      = 0;
+        $problem   = null;
+
+        set_time_limit(300);
+
+        for ($i = 0; $i < $maxBatch; $i++) {
+            $rows = qa(
+                "SELECT v.id, v.term_foreign, v.term_native,
+                        l.name AS language, u.id AS user_id, u.display_name
+                   FROM vocab v
+                   JOIN units t   ON t.id = v.unit_id
+                   JOIN languages l ON l.id = t.language_id
+                   JOIN users u   ON u.id = t.user_id
+                  WHERE v.word_type IS NULL
+                  ORDER BY l.id, v.id
+                  LIMIT {$perBatch}",
+            );
+            if ($rows === []) {
+                break;
+            }
+
+            // Ein Block je Sprache - die Wortart hängt von der Sprache ab.
+            $language = (string) $rows[0]['language'];
+            $rows     = array_values(array_filter(
+                $rows,
+                static fn (array $r): bool => $r['language'] === $language,
+            ));
+            $owner = ['id' => $rows[0]['user_id'], 'display_name' => $rows[0]['display_name']];
+
+            $blocked = budget_block_reason((int) $owner['id']);
+            if ($blocked !== null) {
+                $problem = $blocked;
+                break;
+            }
+
+            try {
+                $types = classify_word_types($rows, $language, $owner);
+            } catch (Throwable $e) {
+                error_log('[vokabeltrainer] Wortarten: ' . scrub_secrets($e->getMessage()));
+                $problem = 'Die Wortarten konnten nicht bestimmt werden. Details stehen im Protokoll.';
+                break;
+            }
+
+            $st = db()->prepare('UPDATE vocab SET word_type = ? WHERE id = ?');
+            foreach ($types as $id => $type) {
+                $st->execute([$type, $id]);
+                $done++;
+            }
+
+            // Nichts zugeordnet: ein weiterer Durchlauf brächte dasselbe Ergebnis.
+            if ($types === []) {
+                $problem = 'Das Modell hat keine Wortart zurückgeliefert.';
+                break;
+            }
+        }
+
+        $remaining = (int) qv('SELECT COUNT(*) FROM vocab WHERE word_type IS NULL');
+
+        if ($problem !== null) {
+            flash($problem, 'bad');
+        } elseif ($done === 0) {
+            flash('Es gab nichts nachzutragen.');
+        } else {
+            flash(sprintf(
+                '%d Wortart(en) nachgetragen.%s',
+                $done,
+                $remaining > 0
+                    ? sprintf(' Es fehlen noch %d - Knopf noch einmal drücken.', $remaining)
+                    : ' Jetzt hat jede Vokabel eine.',
+            ));
+        }
         back_to_filter($userId, $langId, $unitId);
     }
 
@@ -158,9 +241,30 @@ $vocab = $unit !== null
       )
     : [];
 
+$missingTypes = (int) qv('SELECT COUNT(*) FROM vocab WHERE word_type IS NULL');
+
 admin_head('Vokabeln', 'vocab.php');
 flash_render();
 ?>
+
+<?php if ($missingTypes > 0): ?>
+<div class="card">
+    <strong><?= $missingTypes ?> Vokabel(n) ohne Wortart</strong>
+    <p class="tiny muted" style="margin:6px 0 12px">
+        Vokabeln, die vor dieser Funktion eingelesen wurden, haben noch keine
+        Wortart. Der Knopf lässt sie vom Modell bestimmen - in Blöcken zu 100,
+        höchstens 500 je Klick. Das kostet wie eine Bilderkennung und zählt
+        aufs Monatsbudget.
+    </p>
+    <form method="post">
+        <?= csrf_field() ?>
+        <input type="hidden" name="user" value="<?= $userId ?>">
+        <input type="hidden" name="language" value="<?= $langId ?>">
+        <input type="hidden" name="unit" value="<?= $unitId ?>">
+        <button class="btn small" name="fill_word_types" value="1">Wortarten nachtragen</button>
+    </form>
+</div>
+<?php endif; ?>
 
 <form method="get" class="card">
     <div class="formgrid">
@@ -261,13 +365,24 @@ Damit verschwinden <?= (int) $l['units'] ?> Lerneinheit(en) und <?= (int) $l['wo
 
     <table class="data">
         <tr>
-            <th>Fremdsprache</th><th>Deutsch</th><th>Hinweis</th>
+            <th>Fremdsprache</th><th>Deutsch</th><th>Wortart</th><th>Hinweis</th>
             <th class="num">richtig</th><th class="num">falsch</th><th>Stand</th><th></th>
         </tr>
         <?php foreach ($vocab as $v): ?>
             <tr>
                 <td><input type="text" name="f[<?= (int) $v['id'] ?>]" value="<?= h($v['term_foreign']) ?>" maxlength="255"></td>
                 <td><input type="text" name="n[<?= (int) $v['id'] ?>]" value="<?= h($v['term_native']) ?>" maxlength="255"></td>
+                <td class="wtcell">
+                    <?= word_type_badge($v['word_type'] ?? null) ?>
+                    <select name="wt[<?= (int) $v['id'] ?>]" aria-label="Wortart">
+                        <option value="">&ndash; keine &ndash;</option>
+                        <?php foreach (WORD_TYPES as $key => $meta): ?>
+                            <option value="<?= h($key) ?>"<?= ($v['word_type'] ?? null) === $key ? ' selected' : '' ?>>
+                                <?= h($meta['label']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </td>
                 <td><input type="text" name="note[<?= (int) $v['id'] ?>]" value="<?= h((string) ($v['note'] ?? '')) ?>" maxlength="255"></td>
                 <td class="num"><?= (int) ($v['correct_count'] ?? 0) ?></td>
                 <td class="num"><?= (int) ($v['wrong_count'] ?? 0) ?></td>
@@ -284,7 +399,7 @@ Damit verschwinden <?= (int) $l['units'] ?> Lerneinheit(en) und <?= (int) $l['wo
             </tr>
         <?php endforeach; ?>
         <?php if ($vocab === []): ?>
-            <tr><td colspan="7" class="muted">Diese Lerneinheit ist leer.</td></tr>
+            <tr><td colspan="8" class="muted">Diese Lerneinheit ist leer.</td></tr>
         <?php endif; ?>
     </table>
 

@@ -196,9 +196,31 @@ views/               login, languages, language, units, unit, import, quiz
 sw.js                Service Worker (nur statische Dateien)
 api/                 auth, languages, units, import, quiz  (JSON)
 admin/               Kosten, Accounts, Sprachen und Vokabeln, Einstellungen, Selbsttest
-lib/                 db, auth, settings, ai, keyvault, cost, json, config
+lib/                 db, auth, settings, ai, keyvault, cost, json, config,
+                     schema (Spalten nachziehen), wordtypes
 schema.sql           Datenbankschema
 ```
+
+### Wortarten
+
+Beim Einlesen bestimmt das Modell zu jeder Vokabel die Wortart des
+*fremdsprachigen* Begriffs — Substantiv, Artikel, Adjektiv, Verb, Pronomen,
+Numerale, Adverb, Präposition, Konjunktion, Interjektion. Dazu kommt
+`sonstiges` als Auffangwert: Vokabellisten enthalten regelmäßig Wendungen und
+ganze Sätze, die in keine der zehn Wortarten passen.
+
+Das Kind bekommt die Wortart beim Prüfen nicht zu Gesicht — sie reist
+unsichtbar durch die Tabelle und wird mitgespeichert. Korrigiert wird sie im
+Admin, wo sie als farbiges Kürzel in der Vokabelliste steht.
+
+Für Vokabeln aus der Zeit davor gibt es unter **Vokabeln** einen Knopf, der die
+Wortarten nachträgt: in Blöcken zu 100, höchstens 500 je Klick, jeweils
+sprachweise. Das kostet wie eine Bilderkennung und zählt aufs Monatsbudget.
+
+Die Datenbankspalte wird beim ersten Aufruf des Admin-Bereichs automatisch
+ergänzt (`lib/schema.php`) — bei einem FTP-Update gibt es sonst keinen Schritt,
+der SQL ausführt. Die Änderung fügt nur hinzu und lässt vorhandene Daten
+unangetastet.
 
 ### Lernlogik
 

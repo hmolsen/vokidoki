@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS vocab (
   term_foreign VARCHAR(255) NOT NULL,
   term_native  VARCHAR(255) NOT NULL,
   note         VARCHAR(255) NULL,
+  -- Wortart, vom Modell beim Einlesen bestimmt; NULL = noch nicht bestimmt.
+  word_type    VARCHAR(16)  NULL,
   position     INT UNSIGNED NOT NULL DEFAULT 0,
   KEY idx_vocab_unit (unit_id, position),
   CONSTRAINT fk_vocab_unit FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE CASCADE

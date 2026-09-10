@@ -5,6 +5,7 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/settings.php';
 require_once __DIR__ . '/cost.php';
 require_once __DIR__ . '/keyvault.php';
+require_once __DIR__ . '/wordtypes.php';
 
 use Anthropic\Client;
 use Anthropic\Messages\Base64ImageSource;
@@ -68,8 +69,14 @@ function vocab_schema(): array
                             'type'        => ['string', 'null'],
                             'description' => 'Optionaler Zusatz wie Beispielsatz oder Hinweis; sonst null.',
                         ],
+                        'word_type' => [
+                            'type'        => 'string',
+                            'enum'        => word_type_keys(),
+                            'description' => 'Wortart des fremdsprachigen Begriffs. '
+                                           . '"sonstiges" für Wendungen und ganze Sätze.',
+                        ],
                     ],
-                    'required'             => ['foreign', 'native', 'note'],
+                    'required'             => ['foreign', 'native', 'note', 'word_type'],
                     'additionalProperties' => false,
                 ],
             ],
@@ -101,6 +108,10 @@ function vocab_prompt(string $languageName): string
         '- Suche eine Überschrift der Lerneinheit ("Unit 1", "Lektion 3", "Vocabulary 2A")',
         '  und gib sie in "title" zurück. Findest du keine, setze "title" auf null - rate nicht.',
         '- Ist ein Wort schwer lesbar, gib deine beste Lesart an, statt den Eintrag wegzulassen.',
+        '- Bestimme zu jedem Eintrag die Wortart des fremdsprachigen Begriffs in "word_type".',
+        '  Richte dich nach dem Begriff selbst, nicht nach der deutschen Übersetzung.',
+        '  Steht ein Artikel dabei ("la maison", "das Haus"), zählt das Substantiv.',
+        '  Für Wendungen und ganze Sätze nimm "sonstiges".',
         '',
         'Gib ausschließlich das geforderte JSON zurück.',
     ];
@@ -200,9 +211,10 @@ function analyze_vocab_images(array $images, string $languageName, array $user):
             }
             $note      = isset($row['note']) && is_string($row['note']) ? trim($row['note']) : '';
             $entries[] = [
-                'foreign' => mb_substr($foreign, 0, 255),
-                'native'  => mb_substr($native, 0, 255),
-                'note'    => $note === '' ? null : mb_substr($note, 0, 255),
+                'foreign'   => mb_substr($foreign, 0, 255),
+                'native'    => mb_substr($native, 0, 255),
+                'note'      => $note === '' ? null : mb_substr($note, 0, 255),
+                'word_type' => word_type_clean($row['word_type'] ?? null),
             ];
         }
     }
@@ -224,4 +236,138 @@ function analyze_vocab_images(array $images, string $languageName, array $user):
     ]);
 
     return ['title' => $title, 'entries' => $entries, 'cost' => $cost, 'model' => $model];
+}
+
+/** JSON-Schema für das Nachtragen der Wortarten. */
+function word_type_schema(): array
+{
+    return [
+        'type'       => 'object',
+        'properties' => [
+            'types' => [
+                'type'  => 'array',
+                'items' => [
+                    'type'       => 'object',
+                    'properties' => [
+                        'id'        => ['type' => 'integer', 'description' => 'Die mitgelieferte Nummer'],
+                        'word_type' => ['type' => 'string', 'enum' => word_type_keys()],
+                    ],
+                    'required'             => ['id', 'word_type'],
+                    'additionalProperties' => false,
+                ],
+            ],
+        ],
+        'required'             => ['types'],
+        'additionalProperties' => false,
+    ];
+}
+
+/**
+ * Bestimmt die Wortarten einer Liste bereits gespeicherter Vokabeln.
+ *
+ * @param array<int,array{id:int,term_foreign:string,term_native:string}> $rows
+ * @return array<int,string> Wortart je Vokabel-ID
+ */
+function classify_word_types(array $rows, string $languageName, array $user): array
+{
+    anthropic_autoload();
+
+    if ($rows === []) {
+        return [];
+    }
+
+    $model  = setting('vision_model', 'claude-opus-5');
+    $effort = setting('vision_effort', 'medium');
+    if (!in_array($effort, EFFORT_LEVELS, true)) {
+        $effort = 'medium';
+    }
+
+    $lines = [];
+    foreach ($rows as $row) {
+        $lines[] = sprintf("%d\t%s\t%s", (int) $row['id'], $row['term_foreign'], $row['term_native']);
+    }
+
+    $prompt = implode("\n", [
+        'Bestimme zu jeder Vokabel die Wortart des fremdsprachigen Begriffs.',
+        'Die Fremdsprache ist: ' . $languageName . '. Die Muttersprache ist Deutsch.',
+        '',
+        'Richte dich nach dem fremdsprachigen Begriff, nicht nach der Übersetzung.',
+        'Steht ein Artikel dabei ("la maison", "das Haus"), zählt das Substantiv.',
+        'Für Wendungen und ganze Sätze nimm "sonstiges".',
+        '',
+        'Gib zu jeder Nummer genau einen Eintrag zurück, für alle ' . count($rows) . ' Zeilen.',
+        '',
+        'Nummer, Fremdsprache und deutsche Bedeutung, durch Tabulator getrennt:',
+        implode("\n", $lines),
+    ]);
+
+    $started = microtime(true);
+    $logBase = [
+        'user_id'    => (int) $user['id'],
+        'user_label' => (string) $user['display_name'],
+        'model'      => $model,
+        'purpose'    => 'word_types',
+    ];
+
+    try {
+        $message = anthropic_client()->messages->create(
+            model: $model,
+            maxTokens: 16000,
+            messages: [['role' => 'user', 'content' => $prompt]],
+            outputConfig: OutputConfig::with(
+                effort: $effort,
+                format: JSONOutputFormat::with(schema: word_type_schema()),
+            ),
+        );
+    } catch (Throwable $e) {
+        ai_log($logBase + [
+            'duration_ms' => (int) ((microtime(true) - $started) * 1000),
+            'status'      => 'error',
+            'error'       => substr(scrub_secrets($e->getMessage()), 0, 2000),
+        ]);
+        throw $e;
+    }
+
+    $durationMs = (int) ((microtime(true) - $started) * 1000);
+
+    if ($message->stopReason === 'refusal') {
+        ai_log($logBase + ['duration_ms' => $durationMs, 'status' => 'refusal']);
+        throw new RuntimeException('Die Wortarten konnten nicht bestimmt werden.');
+    }
+
+    $json = '';
+    foreach ($message->content as $block) {
+        if ($block->type === 'text') {
+            $json = $block->text;
+            break;
+        }
+    }
+
+    // Nur Nummern übernehmen, die auch angefragt wurden - das Modell soll
+    // keine fremden Zeilen verändern können.
+    $wanted = array_column($rows, 'id');
+    $data   = json_decode($json, true);
+    $result = [];
+    foreach ($data['types'] ?? [] as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $id   = (int) ($row['id'] ?? 0);
+        $type = word_type_clean($row['word_type'] ?? null);
+        if ($type !== null && in_array($id, $wanted, true)) {
+            $result[$id] = $type;
+        }
+    }
+
+    ai_log($logBase + [
+        'input_tokens'       => $message->usage->inputTokens,
+        'output_tokens'      => $message->usage->outputTokens,
+        'cache_read_tokens'  => $message->usage->cacheReadInputTokens ?? 0,
+        'cache_write_tokens' => $message->usage->cacheCreationInputTokens ?? 0,
+        'entry_count'        => count($result),
+        'duration_ms'        => $durationMs,
+        'status'             => 'ok',
+    ]);
+
+    return $result;
 }

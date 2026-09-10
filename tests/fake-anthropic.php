@@ -50,10 +50,17 @@ if (($headers['x-api-key'] ?? '') !== EXPECTED_KEY) {
 
 // Die Tests lösen einen Serverfehler aus, indem sie als Sprachnamen
 // "Fehlerfall" übergeben - der steht dann in der Anweisung.
+// Der Inhalt ist mal eine Liste von Blöcken (Bilder + Text), mal schlichter
+// Text - beides kommt in der App vor.
+$content     = $request['messages'][0]['content'] ?? '';
 $instruction = '';
-foreach ($request['messages'][0]['content'] ?? [] as $block) {
-    if (($block['type'] ?? '') === 'text') {
-        $instruction = (string) ($block['text'] ?? '');
+if (is_string($content)) {
+    $instruction = $content;
+} elseif (is_array($content)) {
+    foreach ($content as $block) {
+        if (($block['type'] ?? '') === 'text') {
+            $instruction = (string) ($block['text'] ?? '');
+        }
     }
 }
 if (str_contains($instruction, 'Fehlerfall')) {
@@ -65,15 +72,43 @@ if (str_contains($instruction, 'Fehlerfall')) {
     exit;
 }
 
+// Zweite Betriebsart: Wortarten für bereits gespeicherte Vokabeln nachtragen.
+// Erkennbar am Prompt; die Nummern kommen aus den übergebenen Zeilen zurück.
+if (str_contains($instruction, 'Bestimme zu jeder Vokabel die Wortart')) {
+    $types = [];
+    foreach (explode("\n", $instruction) as $line) {
+        if (preg_match('/^(\d+)\t(.+?)\t/', $line, $m) === 1) {
+            $begriff = $m[2];
+            // Grobe Nachbildung: "to ..." ist ein Verb, "the ..." ein Substantiv.
+            $types[] = [
+                'id'        => (int) $m[1],
+                'word_type' => str_starts_with($begriff, 'to ') ? 'verb'
+                             : (str_starts_with($begriff, 'the ') ? 'substantiv' : 'sonstiges'),
+            ];
+        }
+    }
+    echo json_encode([
+        'id'            => 'msg_test_types',
+        'type'          => 'message',
+        'role'          => 'assistant',
+        'model'         => $request['model'] ?? 'unbekannt',
+        'content'       => [['type' => 'text', 'text' => json_encode(['types' => $types])]],
+        'stop_reason'   => 'end_turn',
+        'stop_sequence' => null,
+        'usage'         => ['input_tokens' => 900, 'output_tokens' => 120],
+    ]);
+    exit;
+}
+
 // Antwort im Format, das das JSON-Schema der App verlangt.
 $payload = [
     'title'   => 'Unit 4 - In the kitchen',
     'entries' => [
-        ['foreign' => 'the spoon', 'native' => 'der Löffel', 'note' => null],
-        ['foreign' => 'the plate', 'native' => 'der Teller',  'note' => 'flach'],
-        ['foreign' => 'to cook',   'native' => 'kochen',      'note' => null],
+        ['foreign' => 'the spoon', 'native' => 'der Löffel', 'note' => null,    'word_type' => 'substantiv'],
+        ['foreign' => 'the plate', 'native' => 'der Teller', 'note' => 'flach', 'word_type' => 'substantiv'],
+        ['foreign' => 'to cook',   'native' => 'kochen',     'note' => null,    'word_type' => 'verb'],
         // Unvollständige Zeile: muss von der App verworfen werden.
-        ['foreign' => '',          'native' => 'leer',        'note' => null],
+        ['foreign' => '',          'native' => 'leer',       'note' => null,    'word_type' => 'sonstiges'],
     ],
 ];
 

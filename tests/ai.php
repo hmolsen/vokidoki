@@ -81,6 +81,9 @@ ok('Vokabelpaar stimmt',
    $result['entries'][0]['foreign'] === 'the spoon' && $result['entries'][0]['native'] === 'der Löffel');
 ok('Hinweis wird übernommen', $result['entries'][1]['note'] === 'flach');
 ok('Fehlender Hinweis wird zu null', $result['entries'][0]['note'] === null);
+ok('Wortart wird übernommen', $result['entries'][0]['word_type'] === 'substantiv',
+   (string) $result['entries'][0]['word_type']);
+ok('Verb wird als Verb erkannt', $result['entries'][2]['word_type'] === 'verb');
 
 section('Was beim Modell ankommt');
 
@@ -104,9 +107,12 @@ ok('Sprachname steht in der Anweisung', str_contains($content[2]['text'] ?? '', 
 ok('output_config trägt das JSON-Schema',
    ($body['output_config']['format']['type'] ?? '') === 'json_schema',
    json_encode($body['output_config'] ?? []));
-ok('Schema verlangt foreign, native und note',
+ok('Schema verlangt foreign, native, note und word_type',
    ($body['output_config']['format']['schema']['properties']['entries']['items']['required'] ?? [])
-   === ['foreign', 'native', 'note']);
+   === ['foreign', 'native', 'note', 'word_type']);
+ok('Schema gibt die elf Wortarten als feste Auswahl vor',
+   ($body['output_config']['format']['schema']['properties']['entries']['items']
+        ['properties']['word_type']['enum'] ?? []) === word_type_keys());
 ok('Aufwandsstufe aus den Einstellungen',
    ($body['output_config']['effort'] ?? '') === setting('vision_effort'));
 ok('max_tokens ist gesetzt', ($body['max_tokens'] ?? 0) >= 4096, (string) ($body['max_tokens'] ?? 0));
@@ -128,6 +134,41 @@ ok('Kosten korrekt berechnet',
    abs((float) $log['cost_usd'] - $expected) < 0.0000005,
    sprintf('erwartet %.6f, gespeichert %.6f', $expected, (float) $log['cost_usd']));
 ok('Dauer wurde gemessen', (int) $log['duration_ms'] > 0);
+
+section('Wortarten nachtragen');
+
+// Zwei Vokabeln ohne Wortart anlegen, wie sie vor dieser Funktion entstanden.
+q('INSERT INTO languages (user_id, name, flag_emoji) VALUES (?, ?, ?)',
+  [(int) $user['id'], 'Testisch-AI', '']);
+$wtLang = (int) db()->lastInsertId();
+q('INSERT INTO units (user_id, language_id, title) VALUES (?, ?, ?)',
+  [(int) $user['id'], $wtLang, 'Alt']);
+$wtUnit = (int) db()->lastInsertId();
+foreach ([['to run', 'rennen'], ['the house', 'das Haus']] as $i => [$f, $n]) {
+    q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, ?)',
+      [$wtUnit, $f, $n, $i]);
+}
+$alt = qa('SELECT id, term_foreign, term_native FROM vocab WHERE unit_id = ? ORDER BY position',
+          [$wtUnit]);
+
+ok('Altbestand hat noch keine Wortart',
+   (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ? AND word_type IS NULL', [$wtUnit]) === 2);
+
+$types = classify_word_types($alt, 'Englisch', $user);
+
+ok('Für jede Vokabel kommt eine Wortart zurück', count($types) === 2, (string) count($types));
+ok('Verb erkannt', ($types[(int) $alt[0]['id']] ?? '') === 'verb');
+ok('Substantiv erkannt', ($types[(int) $alt[1]['id']] ?? '') === 'substantiv');
+
+// Das Modell darf keine fremden Zeilen anfassen.
+$fremd = (int) qv('SELECT id FROM vocab WHERE unit_id <> ? LIMIT 1', [$wtUnit]);
+ok('Nur angefragte Nummern werden übernommen', !array_key_exists($fremd, $types));
+
+$logTypes = q1("SELECT * FROM ai_requests WHERE purpose = 'word_types' ORDER BY id DESC LIMIT 1");
+ok('Eigener Verwendungszweck im Kostenprotokoll', $logTypes !== null);
+ok('Kosten werden auch dafür berechnet', (float) $logTypes['cost_usd'] > 0);
+
+q('DELETE FROM languages WHERE id = ?', [$wtLang]);
 
 section('Fehlerfall: die API antwortet mit einem Fehler');
 
