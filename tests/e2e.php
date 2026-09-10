@@ -492,6 +492,52 @@ ok('Lernstand ist gelöscht',
 [$card] = apiCall('quiz', 'next', null, ['unit_id' => $unitId]);
 ok('Nach dem Zurücksetzen kommen wieder Fragen', !($card['done'] ?? true));
 
+section('Sprache im Admin löschen');
+
+// Wegwerf-Sprache mit Einheit, Vokabeln und Lernstand anlegen.
+[$data] = apiCall('languages', 'create', ['name' => 'Wegwerfisch', 'flag' => '']);
+$tmpLang = (int) $data['id'];
+[$data] = apiCall('import', 'save', [
+    'language_id' => $tmpLang,
+    'title'       => 'Zum Löschen',
+    'entries'     => [['foreign' => 'aa', 'native' => 'bb'], ['foreign' => 'cc', 'native' => 'dd']],
+]);
+$tmpUnit = (int) $data['unit_id'];
+$tmpVocab = (int) qv('SELECT id FROM vocab WHERE unit_id = ? LIMIT 1', [$tmpUnit]);
+q('INSERT INTO progress (user_id, vocab_id, mode, streak) VALUES (?, ?, ?, 1)',
+  [$userId, $tmpVocab, 'mc']);
+
+ok('Wegwerf-Sprache steht mit allem Drum und Dran',
+   $tmpLang > 0 && $tmpUnit > 0
+   && (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$tmpUnit]) === 2
+   && (int) qv('SELECT COUNT(*) FROM progress WHERE vocab_id = ?', [$tmpVocab]) === 1);
+
+$res = adminPost('vocab.php', ['delete_language' => $tmpLang, 'user' => $userId],
+                 http_build_query(['user' => $userId]));
+
+ok('Sprache ist gelöscht',
+   q1('SELECT id FROM languages WHERE id = ?', [$tmpLang]) === null);
+ok('Lerneinheiten verschwinden mit',
+   (int) qv('SELECT COUNT(*) FROM units WHERE language_id = ?', [$tmpLang]) === 0);
+ok('Vokabeln verschwinden mit',
+   (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$tmpUnit]) === 0);
+ok('Lernstand verschwindet mit',
+   (int) qv('SELECT COUNT(*) FROM progress WHERE vocab_id = ?', [$tmpVocab]) === 0);
+ok('Meldung nennt, was entfernt wurde',
+   str_contains($res['body'], 'Wegwerfisch') && str_contains($res['body'], '2 Vokabel'),
+   'Meldung nicht gefunden');
+
+// Die andere Sprache des Kindes darf davon unberührt bleiben.
+ok('Andere Sprache bleibt bestehen',
+   q1('SELECT id FROM languages WHERE id = ?', [$languageId]) !== null);
+ok('Ihre Lerneinheit bleibt bestehen',
+   q1('SELECT id FROM units WHERE id = ?', [$unitId]) !== null);
+
+$res = adminPost('vocab.php', ['delete_language' => $tmpLang, 'user' => $userId],
+                 http_build_query(['user' => $userId]));
+ok('Erneutes Löschen meldet sich sauber',
+   str_contains($res['body'], 'gibt es nicht mehr'));
+
 // ------------------------------------------------------------------ Abmelden
 
 section('Abmelden und Token-Widerruf');

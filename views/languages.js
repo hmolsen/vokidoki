@@ -2,16 +2,13 @@ import {
     VT, api, render, esc, $, $$, on, go, topbar, loading, showError, clearError, withBusy,
 } from '../core.js';
 
-/* Auswahl häufiger Schulsprachen. Freie Eingabe bleibt zusätzlich möglich. */
+/* Die Sprachen, die hier gebraucht werden. Alles andere lässt sich
+   im Formular darunter frei eintragen. */
 const PRESETS = [
     { flag: '\u{1F1EC}\u{1F1E7}', name: 'Englisch' },
     { flag: '\u{1F1EB}\u{1F1F7}', name: 'Französisch' },
-    { flag: '\u{1F1EA}\u{1F1F8}', name: 'Spanisch' },
-    { flag: '\u{1F1EE}\u{1F1F9}', name: 'Italienisch' },
     { flag: '\u{1F3DB}\u{FE0F}',  name: 'Latein' },
-    { flag: '\u{1F1F3}\u{1F1F1}', name: 'Niederländisch' },
-    { flag: '\u{1F1F9}\u{1F1F7}', name: 'Türkisch' },
-    { flag: '\u{1F1F7}\u{1F1FA}', name: 'Russisch' },
+    { flag: '\u{1F1E9}\u{1F1F0}', name: 'Dänisch' },
 ];
 
 export async function languagesView() {

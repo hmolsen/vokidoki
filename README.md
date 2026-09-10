@@ -195,7 +195,7 @@ app.js / core.js     Router und gemeinsame Bausteine
 views/               login, languages, language, units, unit, import, quiz
 sw.js                Service Worker (nur statische Dateien)
 api/                 auth, languages, units, import, quiz  (JSON)
-admin/               Kosten, Accounts, Vokabeln, Einstellungen, Selbsttest
+admin/               Kosten, Accounts, Sprachen und Vokabeln, Einstellungen, Selbsttest
 lib/                 db, auth, settings, ai, keyvault, cost, json, config
 schema.sql           Datenbankschema
 ```

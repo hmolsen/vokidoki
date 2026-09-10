@@ -57,6 +57,44 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         back_to_filter($userId, $langId, $unitId);
     }
 
+    if (isset($_POST['delete_language'])) {
+        $id   = (int) $_POST['delete_language'];
+        $lang = q1(
+            'SELECT l.name, l.flag_emoji, u.display_name
+               FROM languages l JOIN users u ON u.id = l.user_id
+              WHERE l.id = ?',
+            [$id],
+        );
+        if ($lang === null) {
+            flash('Diese Sprache gibt es nicht mehr.', 'bad');
+            back_to_filter($userId, 0, 0);
+        }
+
+        // Vorher zählen, damit die Meldung sagt, was tatsächlich weg ist.
+        $n = q1(
+            'SELECT COUNT(DISTINCT t.id) AS units, COUNT(v.id) AS words
+               FROM units t LEFT JOIN vocab v ON v.unit_id = t.id
+              WHERE t.language_id = ?',
+            [$id],
+        );
+
+        // Lerneinheiten, Vokabeln und Lernstand hängen per ON DELETE CASCADE
+        // daran und verschwinden mit.
+        q('DELETE FROM languages WHERE id = ?', [$id]);
+
+        flash(sprintf(
+            '%s "%s" von %s gelöscht - mit %d Lerneinheit(en) und %d Vokabel(n).',
+            $lang['flag_emoji'] !== '' ? $lang['flag_emoji'] : 'Sprache',
+            $lang['name'],
+            $lang['display_name'],
+            (int) $n['units'],
+            (int) $n['words'],
+        ));
+
+        // Die Auswahl darf nicht auf etwas zeigen, das es nicht mehr gibt.
+        back_to_filter($userId, 0, 0);
+    }
+
     if (isset($_POST['delete_vocab'])) {
         q('DELETE FROM vocab WHERE id = ?', [(int) $_POST['delete_vocab']]);
         flash('Vokabel gelöscht.');
@@ -84,7 +122,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 $users = qa('SELECT id, display_name, color FROM users ORDER BY display_name');
 
 $languages = $userId > 0
-    ? qa('SELECT id, name, flag_emoji FROM languages WHERE user_id = ? ORDER BY name', [$userId])
+    ? qa(
+        'SELECT l.id, l.name, l.flag_emoji,
+                (SELECT COUNT(*) FROM units t WHERE t.language_id = l.id) AS units,
+                (SELECT COUNT(*) FROM vocab v
+                   JOIN units t2 ON t2.id = v.unit_id
+                  WHERE t2.language_id = l.id) AS words
+           FROM languages l
+          WHERE l.user_id = ?
+          ORDER BY l.name',
+        [$userId],
+      )
     : [];
 
 $units = $langId > 0
@@ -156,6 +204,35 @@ flash_render();
     </div>
     <noscript><button class="btn small">Anzeigen</button></noscript>
 </form>
+
+<?php if ($userId > 0 && $languages !== []): ?>
+<h2>Sprachen</h2>
+<table class="data">
+    <tr><th>Sprache</th><th class="num">Lerneinheiten</th><th class="num">Vokabeln</th><th></th></tr>
+    <?php foreach ($languages as $l): ?>
+        <tr>
+            <td><?= h(($l['flag_emoji'] !== '' ? $l['flag_emoji'] . ' ' : '') . $l['name']) ?></td>
+            <td class="num"><?= (int) $l['units'] ?></td>
+            <td class="num"><?= (int) $l['words'] ?></td>
+            <td>
+                <form method="post" class="compact"
+                      onsubmit="return confirm('<?= h($l['name']) ?> endgültig löschen?
+
+Damit verschwinden <?= (int) $l['units'] ?> Lerneinheit(en) und <?= (int) $l['words'] ?> Vokabel(n) samt Lernstand.')">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="user" value="<?= $userId ?>">
+                    <button class="linkbtn" name="delete_language" value="<?= (int) $l['id'] ?>"
+                            style="color:var(--bad)">Sprache löschen</button>
+                </form>
+            </td>
+        </tr>
+    <?php endforeach; ?>
+</table>
+<p class="tiny muted">
+    Löschen entfernt die Sprache mit allen Lerneinheiten, Vokabeln und dem
+    Lernstand des Kindes. Das lässt sich nicht rückgängig machen.
+</p>
+<?php endif; ?>
 
 <?php if ($userId === 0): ?>
     <p class="muted">Wähle oben ein Kind aus.</p>
