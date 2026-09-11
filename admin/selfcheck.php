@@ -118,6 +118,27 @@ check($checks, 'Kategorien der Vokabeln', static function (): array {
         : sprintf('%d von %d ohne Kategorie - unter "Vokabeln" nachtragen', $offen, $alle)];
 });
 
+check($checks, 'Sprachkürzel', static function (): array {
+    if (!column_exists('languages', 'code')) {
+        return [false, 'Spalte languages.code fehlt'];
+    }
+    $gesamt = (int) qv('SELECT COUNT(*) FROM languages');
+    if ($gesamt === 0) {
+        return [true, 'noch keine Sprache angelegt'];
+    }
+
+    $ohne = qa("SELECT name FROM languages WHERE code IS NULL OR code = '' ORDER BY name");
+    if ($ohne === []) {
+        return [true, sprintf('alle %d Sprache(n) haben ein Kürzel', $gesamt)];
+    }
+
+    // Kein Fehler, nur unbequem: Die Übung läuft, aber ohne Tastaturhinweis
+    // und ohne die Reihe der Sonderzeichen über dem Eingabefeld.
+    return [true, sprintf('%d von %d ohne Kürzel (%s) - im Vokabelbereich nachtragbar',
+        count($ohne), $gesamt,
+        implode(', ', array_column($ohne, 'name')))];
+});
+
 check($checks, 'Lückentext', static function (): array {
     if (!table_exists('sentences')) {
         return [false, 'Tabelle sentences fehlt'];

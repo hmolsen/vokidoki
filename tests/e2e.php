@@ -658,6 +658,100 @@ $res = adminPost('vocab.php', ['delete_language' => $tmpLang, 'user' => $userId]
 ok('Erneutes Löschen meldet sich sauber',
    str_contains($res['body'], 'gibt es nicht mehr'));
 
+section('Sprachkürzel');
+
+require_once __DIR__ . '/../lib/schema.php';
+
+// Das Kürzel steuert im Lückentext den Tastaturhinweis und die Reihe der
+// Sonderzeichen. Die Spalte kam erst spaeter dazu und wurde nur beim Anlegen
+// gefuellt - wer seine Sprachen vorher angelegt hatte, sah davon nichts.
+// Genau dieser Zustand wird hier nachgestellt.
+$vorher = qa('SELECT id, code FROM languages');
+
+q('INSERT INTO languages (user_id, name, flag_emoji, code) VALUES (?, ?, ?, NULL)',
+  [$userId, 'Französisch', '']);
+$frId = (int) db()->lastInsertId();
+q('INSERT INTO languages (user_id, name, flag_emoji, code) VALUES (?, ?, ?, NULL)',
+  [$userId, 'daenisch', '']);
+$daId = (int) db()->lastInsertId();
+q('INSERT INTO languages (user_id, name, flag_emoji, code) VALUES (?, ?, ?, NULL)',
+  [$userId, 'Klingonisch', '']);
+$klId = (int) db()->lastInsertId();
+
+q('UPDATE languages SET code = NULL');
+
+// Den Zustand vor dem Nachtrag herstellen - sonst gilt er als erledigt.
+q("DELETE FROM settings WHERE k = 'schema_applied_languages.code.backfill'");
+settings_reset_cache();
+
+ok('Die Schemapflege erkennt, dass Kürzel fehlen',
+   in_array('languages.code.backfill', schema_pending(), true),
+   implode(', ', schema_pending()));
+
+// Ein Aufruf des Admin-Bereichs traegt nach, wie bei jeder Schemaaenderung.
+http($base . '/admin/');
+
+ok('Französisch bekommt sein Kürzel - trotz Umlaut und großem Anfangsbuchstaben',
+   qv('SELECT code FROM languages WHERE id = ?', [$frId]) === 'fr');
+ok('Und die ausgeschriebene Schreibweise "daenisch" ebenso',
+   qv('SELECT code FROM languages WHERE id = ?', [$daId]) === 'da');
+ok('Eine frei benannte Sprache bleibt ohne',
+   qv('SELECT code FROM languages WHERE id = ?', [$klId]) === null);
+
+// Sonst bliebe die Schemapflege wegen des Klingonischen fuer immer offen und
+// wuerde bei jedem Admin-Aufruf dasselbe UPDATE fahren.
+ok('Danach ist nichts mehr offen',
+   !in_array('languages.code.backfill', schema_pending(), true),
+   implode(', ', schema_pending()));
+
+section('Sprache im Admin pflegen');
+
+$seite = http($base . '/admin/vocab.php?' . http_build_query(
+    ['user' => $userId, 'language' => $frId]))['body'];
+
+ok('Die Sprachkarte zeigt ein Feld für das Kürzel',
+   str_contains($seite, 'name="lang_code"'));
+ok('Mit dem aktuellen Wert darin',
+   preg_match('/name="lang_code" value="fr"/', $seite) === 1);
+// Der Knopf zum Löschen wurde bisher nie dargestellt - die Verarbeitung gab
+// es, aber niemand konnte sie auslösen.
+ok('Und einen Knopf zum Löschen der Sprache',
+   str_contains($seite, 'name="delete_language"'));
+
+$res = adminPost('vocab.php',
+    ['save_language' => $frId, 'lang_code' => 'DA', 'user' => $userId, 'language' => $frId],
+    http_build_query(['user' => $userId, 'language' => $frId]));
+ok('Ein Kürzel lässt sich ändern - auch groß eingetippt',
+   qv('SELECT code FROM languages WHERE id = ?', [$frId]) === 'da');
+
+$res = adminPost('vocab.php',
+    ['save_language' => $frId, 'lang_code' => 'Unsinn123', 'user' => $userId, 'language' => $frId],
+    http_build_query(['user' => $userId, 'language' => $frId]));
+ok('Unsinn wird abgewiesen', str_contains($res['body'], 'zwei oder drei Buchstaben'));
+ok('Und der alte Wert bleibt stehen',
+   qv('SELECT code FROM languages WHERE id = ?', [$frId]) === 'da');
+
+$res = adminPost('vocab.php',
+    ['save_language' => $frId, 'lang_code' => '', 'user' => $userId, 'language' => $frId],
+    http_build_query(['user' => $userId, 'language' => $frId]));
+ok('Leeren schaltet den Hinweis wieder ab',
+   qv('SELECT code FROM languages WHERE id = ?', [$frId]) === null,
+   'tatsächlich: ' . var_export(qv('SELECT code FROM languages WHERE id = ?', [$frId]), true));
+
+// Der Nachtrag darf die Handarbeit nicht wieder überschreiben. Genau das tat
+// er anfangs: Er leitete "noch offen" aus den Daten ab, und ein geleertes
+// Kürzel sah für ihn wieder wie ein nachzutragendes aus.
+http($base . '/admin/');
+ok('Und ein Admin-Aufruf trägt es nicht wieder ein',
+   qv('SELECT code FROM languages WHERE id = ?', [$frId]) === null,
+   'tatsächlich: ' . var_export(qv('SELECT code FROM languages WHERE id = ?', [$frId]), true));
+
+// Aufraeumen - die drei Wegwerf-Sprachen und der alte Stand der uebrigen.
+q('DELETE FROM languages WHERE id IN (?, ?, ?)', [$frId, $daId, $klId]);
+foreach ($vorher as $z) {
+    q('UPDATE languages SET code = ? WHERE id = ?', [$z['code'], (int) $z['id']]);
+}
+
 section('Lückentext');
 
 if (!$isFake) {

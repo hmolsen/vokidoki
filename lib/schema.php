@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/languages.php';
+require_once __DIR__ . '/settings.php';
 
 /**
  * Nachträgliche Schemaänderungen.
@@ -14,6 +16,21 @@ require_once __DIR__ . '/db.php';
  * Bewusst nicht in den API-Endpunkten: Dort soll kein Seiteneffekt auf das
  * Schema möglich sein, und es kostet eine Abfrage pro Aufruf.
  */
+
+/**
+ * Wurde diese Änderung schon einmal ausgeführt?
+ *
+ * Die meisten Änderungen prüfen das an der Struktur selbst - eine Spalte ist
+ * da oder nicht. Ein Nachtrag an vorhandenen Daten kann das nicht: Nach ihm
+ * sieht die Datenbank wieder so aus, als stünde er noch aus, sobald jemand
+ * einen der nachgetragenen Werte von Hand leert. Dann liefe er bei jedem
+ * Aufruf erneut und machte die Handarbeit wieder zunichte. Solche Änderungen
+ * fragen deshalb hier nach.
+ */
+function schema_was_applied(string $name): bool
+{
+    return setting('schema_applied_' . $name, '') !== '';
+}
 
 /**
  * Liste der Änderungen: Name => [Prüfung, SQL].
@@ -30,6 +47,16 @@ function schema_migrations(): array
         'languages.code' => [
             static fn (): bool => !column_exists('languages', 'code'),
             'ALTER TABLE languages ADD COLUMN code VARCHAR(8) NULL AFTER flag_emoji',
+        ],
+        // Die Spalte oben entsteht leer. Gefüllt wird sie sonst nur beim
+        // Anlegen einer Sprache - wer seine Sprachen vorher angelegt hatte,
+        // stand ohne Kürzel da, und im Lückentext fehlten dann der
+        // lang-Hinweis und die Reihe der Sonderzeichen.
+        'languages.code.backfill' => [
+            static fn (): bool => column_exists('languages', 'code')
+                && !schema_was_applied('languages.code.backfill')
+                && language_code_backfill_pending(),
+            language_code_backfill_sql(),
         ],
         // Zustand der Satzerzeugung je Lerneinheit. Sie laeuft seit neuestem
         // im Hintergrund, also braucht die Oberflaeche etwas zum Abfragen.
@@ -103,6 +130,7 @@ function ensure_schema(): array
         }
         try {
             db()->exec($sql);
+            setting_set('schema_applied_' . $name, gmdate('c'));
             $applied[] = $name;
             error_log('[vokabeltrainer] Schema ergänzt: ' . $name);
         } catch (Throwable $e) {

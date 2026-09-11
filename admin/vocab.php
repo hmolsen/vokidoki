@@ -220,6 +220,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         back_to_filter($userId, $langId, $unitId);
     }
 
+    if (isset($_POST['save_language'])) {
+        $id   = (int) $_POST['save_language'];
+        $code = strtolower(trim((string) ($_POST['lang_code'] ?? '')));
+
+        if ($code !== '' && preg_match('/^[a-z]{2,3}$/', $code) !== 1) {
+            flash('Das Kürzel besteht aus zwei oder drei Buchstaben, z. B. fr.', 'bad');
+        } else {
+            q('UPDATE languages SET code = ? WHERE id = ?',
+              [$code === '' ? null : $code, $id]);
+            flash($code === ''
+                ? 'Kürzel entfernt - Tastaturhinweis und Sonderzeichen entfallen.'
+                : sprintf('Kürzel auf "%s" gesetzt.', $code));
+        }
+        back_to_filter($userId, $langId, $unitId);
+    }
+
     if (isset($_POST['delete_language'])) {
         $id   = (int) $_POST['delete_language'];
         $lang = q1(
@@ -286,7 +302,7 @@ $users = qa('SELECT id, display_name, color FROM users ORDER BY display_name');
 
 $languages = $userId > 0
     ? qa(
-        'SELECT l.id, l.name, l.flag_emoji,
+        'SELECT l.id, l.name, l.flag_emoji, l.code,
                 (SELECT COUNT(*) FROM units t WHERE t.language_id = l.id) AS units,
                 (SELECT COUNT(*) FROM vocab v
                    JOIN units t2 ON t2.id = v.unit_id
@@ -358,6 +374,16 @@ flash_render();
 </div>
 <?php endif; ?>
 
+<?php
+// Die ausgewählte Sprache für die Karte darunter.
+$lang = null;
+foreach ($languages as $l) {
+    if ((int) $l['id'] === $langId) {
+        $lang = $l;
+    }
+}
+?>
+
 <div class="card filters">
     <?= filter_chips('Kind',
         array_map(static fn (array $u): array =>
@@ -378,6 +404,48 @@ flash_render();
         ], $units),
         $unitId, ['user' => $userId, 'language' => $langId], 'unit') ?>
 </div>
+
+<?php if ($lang !== null): ?>
+<div class="card">
+    <strong><?= h(trim($lang['flag_emoji'] . ' ' . $lang['name'])) ?></strong>
+    <span class="tiny muted">
+        &middot; <?= (int) $lang['units'] ?> Lerneinheit(en),
+        <?= (int) $lang['words'] ?> Vokabel(n)
+    </span>
+
+    <p class="tiny muted" style="margin:8px 0 12px">
+        Das K&uuml;rzel steuert im L&uuml;ckentext den Tastaturhinweis am
+        Eingabefeld und die Reihe der Sonderzeichen dar&uuml;ber
+        (fr, en, la, da &hellip;). Beim Anlegen einer Sprache wird es aus dem
+        Namen abgeleitet; steht hier nichts, entf&auml;llt beides.
+        Leeren schaltet es wieder ab.
+    </p>
+
+    <form method="post" class="inline" style="margin-bottom:10px">
+        <?= csrf_field() ?>
+        <input type="hidden" name="user" value="<?= $userId ?>">
+        <input type="hidden" name="language" value="<?= $langId ?>">
+        <input type="hidden" name="unit" value="<?= $unitId ?>">
+        <span class="lbl">K&uuml;rzel</span>
+        <input type="text" name="lang_code" value="<?= h((string) ($lang['code'] ?? '')) ?>"
+               maxlength="8" placeholder="z. B. fr" style="margin:0;width:90px">
+        <button class="btn secondary small" name="save_language"
+                value="<?= (int) $lang['id'] ?>">Speichern</button>
+    </form>
+
+    <form method="post">
+        <?= csrf_field() ?>
+        <input type="hidden" name="user" value="<?= $userId ?>">
+        <button class="linkbtn" name="delete_language" value="<?= (int) $lang['id'] ?>"
+                formnovalidate style="color:var(--bad)"
+                onclick="return confirm('<?= sprintf(
+                    'Diese Sprache wirklich l&ouml;schen? Damit verschwinden '
+                    . '%d Lerneinheit(en) und %d Vokabel(n) samt Lernstand.',
+                    (int) $lang['units'], (int) $lang['words'],
+                ) ?>')">Diese Sprache l&ouml;schen</button>
+    </form>
+</div>
+<?php endif; ?>
 
 <?php if ($userId === 0): ?>
     <p class="muted">Wähle oben ein Kind aus.</p>

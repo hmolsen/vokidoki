@@ -2,29 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
-
-/**
- * Sprachkürzel aus dem Namen ableiten, wenn die App keines mitschickt.
- * Es dient nur als Tastaturhinweis - findet sich nichts, bleibt es leer und
- * die Tastatur verhält sich wie bisher.
- */
-const LANGUAGE_CODES = [
-    'englisch' => 'en', 'französisch' => 'fr', 'franzoesisch' => 'fr',
-    'latein' => 'la', 'dänisch' => 'da', 'daenisch' => 'da',
-    'spanisch' => 'es', 'italienisch' => 'it', 'niederländisch' => 'nl',
-    'niederlaendisch' => 'nl', 'schwedisch' => 'sv', 'norwegisch' => 'no',
-    'türkisch' => 'tr', 'tuerkisch' => 'tr', 'russisch' => 'ru',
-    'polnisch' => 'pl', 'portugiesisch' => 'pt', 'griechisch' => 'el',
-];
-
-function language_code(string $sent, string $name): ?string
-{
-    $code = strtolower(trim($sent));
-    if (preg_match('/^[a-z]{2,3}$/', $code) === 1) {
-        return $code;
-    }
-    return LANGUAGE_CODES[mb_strtolower(trim($name))] ?? null;
-}
+require_once __DIR__ . '/../lib/languages.php';
 
 require_api_request();
 $user = require_user();
