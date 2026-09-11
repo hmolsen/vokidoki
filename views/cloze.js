@@ -6,6 +6,29 @@ const NEXT_DELAY_CORRECT = 900;
 const NEXT_DELAY_HINT    = 2400;   // Schreibweise lesen können
 const NEXT_DELAY_WRONG   = 2600;
 
+/*
+ * Zeichen, die auf der deutschen Tastatur nur hinter einem langen Druck
+ * liegen. iOS lässt sich das Tastaturlayout nicht vorschreiben - es gibt
+ * dafür keine Web-Schnittstelle. Also legen wir die Zeichen selbst daneben.
+ *
+ * Englisch und Latein stehen bewusst nicht hier: Beide kommen mit der
+ * deutschen Tastatur aus, und eine leere Reihe wäre nur im Weg.
+ *
+ * Der Apostroph steht bei Französisch vorn, weil fast jede zweite Lösung
+ * einen braucht ("Je m'appelle", "l'école") und er auf der deutschen
+ * Tastatur eine Ebene tiefer liegt.
+ */
+const ACCENT_KEYS = {
+    fr: ["'", 'é', 'è', 'ê', 'ë', 'à', 'â', 'ç', 'î', 'ï', 'ô', 'û', 'ù', 'œ'],
+    da: ['æ', 'ø', 'å'],
+    no: ['æ', 'ø', 'å'],
+    sv: ['å', 'ä', 'ö'],
+    es: ['á', 'é', 'í', 'ó', 'ú', 'ñ', 'ü'],
+    it: ['à', 'è', 'é', 'ì', 'ò', 'ù'],
+    nl: ['é', 'ë', 'ï', 'ö'],
+    pt: ['á', 'â', 'ã', 'à', 'é', 'ê', 'í', 'ó', 'ô', 'õ', 'ú', 'ç'],
+};
+
 export async function clozeView(unitId) {
     render(`
         ${topbar('Lückentext', { backTo: `/unit/${unitId}` })}
@@ -64,6 +87,7 @@ async function nextQuestion(unitId) {
         </div>
 
         <form id="form" autocomplete="off">
+            ${accentRow(data.lang)}
             <input type="text" id="answer" class="cloze-input"
                    ${data.lang ? `lang="${esc(data.lang)}"` : ''}
                    placeholder="Was fehlt?"
@@ -137,7 +161,51 @@ async function nextQuestion(unitId) {
         setTimeout(() => nextQuestion(unitId), delay);
     });
 
+    wireAccents(input, () => answered);
     input.focus();
+}
+
+/**
+ * Die Zeichenreihe zum Eingabefeld. Ohne passende Sprache bleibt sie weg -
+ * dann ist dort schlicht nichts.
+ */
+function accentRow(lang) {
+    const keys = ACCENT_KEYS[String(lang || '').toLowerCase()];
+    if (!keys) return '';
+
+    return `
+        <div class="accents" id="accents" role="group" aria-label="Sonderzeichen">
+            ${keys.map((ch) => `
+                <button type="button" class="accent" data-ch="${esc(ch)}"
+                        tabindex="-1">${esc(ch)}</button>`).join('')}
+        </div>`;
+}
+
+/** Setzt ein Zeichen an der Schreibmarke ein, ohne den Fokus zu verlieren. */
+function wireAccents(input, istBeantwortet) {
+    const reihe = $('#accents');
+    if (!reihe) return;
+
+    // Der entscheidende Teil: Ohne das hier nimmt der Knopf dem Feld den Fokus,
+    // die Tastatur klappt bei jedem Zeichen zu und wieder auf.
+    reihe.addEventListener('mousedown', (event) => event.preventDefault());
+
+    reihe.addEventListener('click', (event) => {
+        const taste = event.target.closest('.accent');
+        if (!taste || istBeantwortet() || input.readOnly) return;
+
+        const zeichen = taste.dataset.ch;
+        const von = input.selectionStart ?? input.value.length;
+        const bis = input.selectionEnd ?? von;
+
+        input.value = input.value.slice(0, von) + zeichen + input.value.slice(bis);
+
+        // Schreibmarke hinter das eingefügte Zeichen - sonst tippt das Kind
+        // weiter am Anfang des Feldes.
+        const danach = von + zeichen.length;
+        input.setSelectionRange(danach, danach);
+        input.focus();
+    });
 }
 
 /** Ersetzt den Platzhalter {} durch eine sichtbare Lücke. */

@@ -490,6 +490,47 @@ input:focus, select:focus {
 .cloze-input.wrong   { border-color: var(--bad);  background: var(--bad-bg);  color: var(--bad); }
 .cloze-input[readonly] { opacity: 1; }
 
+/*
+ * Sonderzeichen zum Antippen. iOS gibt keiner Webseite die Möglichkeit, die
+ * Tastatursprache zu bestimmen - diese Reihe ist der Ersatz dafür und
+ * funktioniert unabhängig davon, welche Tastaturen installiert sind.
+ */
+.accents {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.accent {
+    min-width: 40px;
+    height: 42px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 1.1rem;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    /* Der graue Aufblitz beim Antippen steht auf dem Handy nur im Weg. */
+    -webkit-tap-highlight-color: transparent;
+    transition: transform .08s ease, background .12s ease;
+}
+
+.accent:active {
+    background: var(--surface-2);
+    transform: scale(.92);
+}
+
+/* Auf schmalen Geräten lieber eine Reihe mehr als Knöpfe, die man nicht trifft. */
+@media (max-width: 360px) {
+    .accents { gap: 5px; }
+    .accent { min-width: 36px; height: 40px; padding: 0 6px; }
+}
+
 /* Spinner in einer Zeile - zeigt, dass im Hintergrund noch gearbeitet wird. */
 .spinner.inline {
     width: 20px;

@@ -159,6 +159,75 @@ foreach ([
        "\"$foreign\" / \"$answer\"");
 }
 
+section('Sonderzeichen zum Antippen');
+
+// Die Zeichenreihe im Lückentext steht in JavaScript, der Antwortvergleich in
+// PHP. Bietet die eine Seite ein Zeichen an, das die andere nicht kennt, tippt
+// das Kind etwas ein, das anschließend als falsch gilt - und zwar genau dann,
+// wenn es sich Mühe mit der Schreibweise gegeben hat. Deshalb wird hier über
+// die Sprachgrenze hinweg geprüft.
+$js = (string) file_get_contents(__DIR__ . '/../views/cloze.js');
+
+preg_match('/const ACCENT_KEYS = \{(.*?)\n\};/s', $js, $m);
+$block = $m[1] ?? '';
+ok('Die Zeichenreihe steht in views/cloze.js', $block !== '');
+
+preg_match_all('/(\w+):\s*\[(.*?)\]/s', $block, $treffer, PREG_SET_ORDER);
+
+$reihen = [];
+foreach ($treffer as $t) {
+    preg_match_all('/\x27([^\x27]*)\x27|"([^"]*)"/u', $t[2], $z, PREG_SET_ORDER);
+    $reihen[$t[1]] = array_map(static fn (array $e): string => $e[2] ?? '' ?: $e[1], $z);
+}
+
+ok('Französisch bringt eine Reihe mit', count($reihen['fr'] ?? []) > 0);
+ok('Dänisch auch', ($reihen['da'] ?? []) === ['æ', 'ø', 'å'], json_encode($reihen['da'] ?? []));
+ok('Englisch und Latein nicht - die deutsche Tastatur reicht dort',
+   !isset($reihen['en']) && !isset($reihen['la']));
+ok('Der Apostroph steht bei Französisch vorn',
+   ($reihen['fr'][0] ?? '') === "'", json_encode($reihen['fr'][0] ?? null));
+
+foreach ($reihen as $sprache => $zeichen) {
+    ok("Keine Dublette in der Reihe für $sprache",
+       count($zeichen) === count(array_unique($zeichen)), json_encode($zeichen));
+}
+
+// Eine Konstante, die niemand benutzt, würde alles oben klaglos bestehen.
+// Diese drei Punkte sind es, an denen die Reihe still kaputtgehen kann.
+ok('Die Reihe wird ins Formular eingebaut',
+   str_contains($js, '${accentRow(data.lang)}'));
+ok('Und verdrahtet - sonst passiert beim Antippen nichts',
+   preg_match('/wireAccents\(input,/', $js) === 1);
+ok('Die Knöpfe sind type="button" - sonst schicken sie das Formular ab',
+   preg_match('/<button type="button" class="accent"/', $js) === 1);
+ok('mousedown wird abgefangen - sonst klappt die Tastatur bei jedem Zeichen zu',
+   preg_match('/mousedown[^\n]*preventDefault/', $js) === 1);
+ok('Die Schreibmarke wandert hinter das eingefügte Zeichen',
+   str_contains($js, 'setSelectionRange'));
+
+// Der eigentliche Punkt: Jedes angebotene Zeichen muss sich auf schlichte
+// Buchstaben zurückführen lassen, sonst kann der Vergleich es nicht einordnen.
+$unbekannt = [];
+foreach ($reihen as $sprache => $zeichen) {
+    foreach ($zeichen as $ch) {
+        if (preg_match('/^[a-z\x27]+$/', answer_fold($ch)) !== 1) {
+            $unbekannt[] = "$sprache:$ch->" . answer_fold($ch);
+        }
+    }
+}
+ok('Jedes angebotene Zeichen kennt der Antwortvergleich',
+   $unbekannt === [], implode(', ', $unbekannt));
+
+// Der Anlass: "sœur" steht in jeder ersten Französisch-Lektion, und die
+// Ligatur fehlte in der Tabelle.
+ok('Die Ligatur œ wird auf oe zurückgeführt', answer_fold('sœur') === 'soeur',
+   answer_fold('sœur'));
+$r = answer_check('soeur', 'sœur');
+ok('"soeur" zählt als richtig, mit Hinweis auf die Schreibweise',
+   $r['correct'] && !$r['exact'], json_encode($r));
+ok('"sœur" ist genau richtig',
+   answer_check('sœur', 'sœur')['exact'], 'Ligatur schlägt bei exakter Eingabe fehl');
+
 section('Wiederverbindung zur Datenbank');
 
 // Der echte Fehlerfall vom Server: Während des minutenlangen KI-Aufrufs
