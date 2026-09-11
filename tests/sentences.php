@@ -300,8 +300,36 @@ ok('Bei offener Tastatur tritt der Fortschritt zurueck',
 ok('Der Fortschritt steht neben dem Titel, nicht in einer eigenen Zeile',
    str_contains($js, 'class="topbar-progress"')
    && preg_match('/\.topbar-progress\s*\{[^}]*display:\s*flex/s', $css) === 1);
-ok('Der Pruefen-Knopf nimmt nicht die ganze Breite',
-   str_contains($js, 'class="btn small cloze-check"'));
+section('Rueckmeldung am Pruefen-Knopf');
+
+ok('Der Knopf geht ueber die ganze Breite',
+   str_contains($js, 'class="btn cloze-check"')
+   && !str_contains($js, 'class="btn small cloze-check"'));
+
+ok('Bei richtiger Antwort wird er gruen',
+   preg_match('/\.cloze-check\.good\s*\{[^}]*background:\s*var\(--good\)/s', $css) === 1
+   && str_contains($js, "check.classList.add('good')"));
+ok('Bei falscher rot',
+   preg_match('/\.cloze-check\.bad\s*\{[^}]*background:\s*var\(--bad\)/s', $css) === 1
+   && str_contains($js, "check.classList.add('bad')"));
+
+/*
+ * Der eigentliche Punkt: Nach einer falschen Antwort laeuft keine Uhr mehr.
+ * Das Kind soll die richtige Loesung lesen koennen, solange es mag - genau
+ * dort passiert das Lernen. Weitergeschaltet wird erst auf Klick.
+ */
+ok('Nach einer falschen Antwort laeuft keine Uhr',
+   substr_count($js, 'setTimeout(naechste') === 2,
+   substr_count($js, 'setTimeout(naechste') . ' Zeitgeber');
+ok('Stattdessen heisst der Knopf dann "Weiter"',
+   str_contains($js, "check.textContent = 'Weiter'"));
+ok('Und der naechste Klick schaltet weiter',
+   preg_match('/if \(wartet\)\s*\{\s*naechste\(\);/s', $js) === 1);
+
+// Ein Klick waehrend der Wartezeit darf nicht zusaetzlich zum Zeitgeber
+// weiterschalten - sonst ueberspraenge man eine Vokabel.
+ok('Weitergeschaltet wird genau einmal',
+   preg_match('/const naechste = \(\) => \{\s*if \(weiter\) return;/s', $js) === 1);
 
 // Der erste Anlauf reichte nicht: Solange html und body scrollen koennen,
 // schiebt iOS beim Fokus die ganze Seite nach oben - der Container mag so

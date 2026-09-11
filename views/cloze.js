@@ -4,7 +4,8 @@ import {
 
 const NEXT_DELAY_CORRECT = 900;
 const NEXT_DELAY_HINT    = 2400;   // Schreibweise lesen können
-const NEXT_DELAY_WRONG   = 2600;
+// Fuer eine falsche Antwort gibt es keine Wartezeit mehr: Dort entscheidet
+// das Kind selbst, wann es weitergeht.
 
 /*
  * Zeichen, die auf der deutschen Tastatur nur hinter einem langen Druck
@@ -108,7 +109,7 @@ async function nextQuestion(unitId) {
                 </div>
 
                 <div class="screen-bottom">
-                    <button class="btn small cloze-check" type="submit" id="check">Prüfen</button>
+                    <button class="btn cloze-check" type="submit" id="check">Prüfen</button>
                     ${accentRow(data.lang)}
                     <div id="msg"></div>
                 </div>
@@ -120,13 +121,32 @@ async function nextQuestion(unitId) {
 
     const form  = $('#form');
     const input = $('#answer');
+    const check = $('#check');
+
     let answered = false;
+    let wartet   = false;   // Ergebnis steht, der nächste Klick geht weiter
+    let weiter   = false;   // schon unterwegs zur nächsten Vokabel
 
     fitField(input);
     input.addEventListener('input', () => fitField(input));
 
+    /** Genau einmal weiterschalten - egal ob durch Klick oder Zeitablauf. */
+    const naechste = () => {
+        if (weiter) return;
+        weiter = true;
+        nextQuestion(unitId);
+    };
+
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
+
+        // Nach einer falschen Antwort ist der Knopf der Weiter-Knopf. Nach
+        // einer richtigen schaltet er nur vorzeitig weiter, statt die
+        // Rückmeldung abzuwarten.
+        if (wartet) {
+            naechste();
+            return;
+        }
         if (answered) return;
 
         const text = input.value.trim();
@@ -137,7 +157,7 @@ async function nextQuestion(unitId) {
 
         answered = true;
         input.readOnly = true;
-        $('#check').disabled = true;
+        check.disabled = true;
 
         let result;
         try {
@@ -147,35 +167,44 @@ async function nextQuestion(unitId) {
         } catch (err) {
             answered = false;
             input.readOnly = false;
-            $('#check').disabled = false;
+            check.disabled = false;
             showError(err.message);
             return;
         }
 
         const verdict = $('#verdict');
-        let delay;
+        check.disabled = false;
+        wartet = true;
 
         if (result.correct && result.exact) {
             input.classList.add('correct');
+            check.classList.add('good');
+            check.textContent = result.just_learned ? 'Sitzt!' : 'Richtig!';
             verdict.className = 'verdict good';
             verdict.textContent = result.just_learned
-                ? 'Sitzt! Diese Vokabel kannst du jetzt.'
-                : 'Richtig!';
-            delay = NEXT_DELAY_CORRECT;
+                ? 'Diese Vokabel kannst du jetzt.'
+                : 'Weiter so!';
+            setTimeout(naechste, NEXT_DELAY_CORRECT);
         } else if (result.correct) {
             // Zählt als richtig, aber die Schreibweise soll das Kind sehen.
             input.classList.add('almost');
+            check.classList.add('good');
+            check.textContent = 'Fast richtig!';
             verdict.className = 'verdict good';
-            verdict.innerHTML = `Fast! So schreibt man es:<br><strong>${esc(result.answer)}</strong>`;
-            delay = NEXT_DELAY_HINT;
+            verdict.innerHTML = `So schreibt man es:<br><strong>${esc(result.answer)}</strong>`;
+            setTimeout(naechste, NEXT_DELAY_HINT);
         } else {
+            /*
+             * Falsch: kein Zeitablauf. Das Kind soll die richtige Lösung in
+             * Ruhe lesen können und selbst entscheiden, wann es weitergeht -
+             * genau die Stelle, an der Lernen passiert.
+             */
             input.classList.add('wrong');
+            check.classList.add('bad');
+            check.textContent = 'Weiter';
             verdict.className = 'verdict bad';
             verdict.innerHTML = `Nicht ganz. Richtig ist:<br><strong>${esc(result.answer)}</strong>`;
-            delay = NEXT_DELAY_WRONG;
         }
-
-        setTimeout(() => nextQuestion(unitId), delay);
     });
 
     wireAccents(input, () => answered);

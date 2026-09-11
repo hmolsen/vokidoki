@@ -607,10 +607,28 @@ input.cloze-input[readonly] { opacity: 1; }
     margin-top: 18px;
 }
 
-/* Kein Knopf über die ganze Breite: Der Satz ist die Hauptsache. */
+/*
+ * Der Knopf trägt die Rückmeldung mit: grün bei richtig, rot bei falsch.
+ *
+ * Bei einer falschen Antwort bleibt er stehen und heißt "Weiter" - erst ein
+ * Klick schaltet um. So bestimmt das Kind selbst, wie lange es die richtige
+ * Lösung ansieht, statt nach zweieinhalb Sekunden überholt zu werden.
+ */
 .cloze-check {
-    margin: 0 auto;
-    min-width: 140px;
+    margin-top: 4px;
+    transition: background .18s ease, border-color .18s ease, transform .08s ease;
+}
+
+.cloze-check.good {
+    background: var(--good);
+    border-color: var(--good);
+    color: #fff;
+}
+
+.cloze-check.bad {
+    background: var(--bad);
+    border-color: var(--bad);
+    color: #fff;
 }
 
 /*
