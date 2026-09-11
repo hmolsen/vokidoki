@@ -185,9 +185,7 @@ flash_render();
     <p class="muted">Keine Sätze gefunden.</p>
 <?php else: ?>
 
-<p class="tiny muted">
-    <?= $gesamt ?> Satz/Sätze<?= $seiten > 1 ? sprintf(' &middot; Seite %d von %d', $seite, $seiten) : '' ?>
-</p>
+<p class="tiny muted"><?= $gesamt ?> Satz/Sätze</p>
 
 <form method="post">
     <?= csrf_field() ?>
@@ -228,18 +226,18 @@ flash_render();
 
     <div class="inline" style="margin-bottom:14px">
         <button class="btn small" name="save" value="1">Änderungen speichern</button>
-        <?php if ($seiten > 1): ?>
-            <span class="tiny muted">
-                <?php if ($seite > 1): ?>
-                    <a href="<?= h(page_link($filter, $seite - 1)) ?>">&laquo; zurück</a>
-                <?php endif; ?>
-                <?php if ($seite < $seiten): ?>
-                    <a href="<?= h(page_link($filter, $seite + 1)) ?>">weiter &raquo;</a>
-                <?php endif; ?>
-            </span>
-        <?php endif; ?>
     </div>
 </form>
+
+<?php
+/*
+ * Die Blätterleiste steht bewusst ausserhalb des Formulars. Ein Klick darauf
+ * verlaesst die Seite, und alles, was in den Feldern steht und noch nicht
+ * gespeichert wurde, ist dann weg - direkt neben dem Speichern-Knopf war das
+ * eine Falle.
+ */
+echo pager($seite, $seiten, static fn (int $n): string => page_link($filter, $n));
+?>
 
 <p class="tiny muted">
     Gespeichert wird nur, was die Prüfung besteht: genau eine Lücke <code>{}</code>

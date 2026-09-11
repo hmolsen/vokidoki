@@ -1,11 +1,13 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/../lib/html.php';
 require_once __DIR__ . '/../lib/db.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/settings.php';
 require_once __DIR__ . '/../lib/cost.php';
 require_once __DIR__ . '/../lib/colors.php';
+require_once __DIR__ . '/../lib/pager.php';
 require_once __DIR__ . '/../lib/errors.php';
 require_once __DIR__ . '/../lib/keyvault.php';
 require_once __DIR__ . '/../lib/schema.php';
@@ -17,11 +19,6 @@ session_boot();
 
 // Bringt das Schema auf den Stand des Codes, falls per FTP aktualisiert wurde.
 ensure_schema();
-
-function h(mixed $value): string
-{
-    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
-}
 
 function admin_url(string $file = 'index.php'): string
 {

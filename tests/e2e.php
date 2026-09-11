@@ -963,6 +963,81 @@ adminPost('sentences.php', ['delete' => $satzId]);
 ok('Satz lässt sich löschen',
    q1('SELECT id FROM sentences WHERE id = ?', [$satzId]) === null);
 
+section('Seitenblätterung');
+
+require_once __DIR__ . '/../lib/pager.php';
+
+// Die Rechnung zuerst - welche Zahlen stehen in der Leiste?
+$folge = static fn (int $c, int $t): string => implode(' ', array_map(
+    static fn (int $n): string => $n === PAGER_GAP ? '...' : (string) $n,
+    pager_pages($c, $t),
+));
+
+ok('Wenige Seiten stehen vollständig da', $folge(2, 5) === '1 2 3 4 5', $folge(2, 5));
+ok('Erste und letzte Seite sind immer dabei',
+   str_starts_with($folge(10, 20), '1 ') && str_ends_with($folge(10, 20), ' 20'), $folge(10, 20));
+ok('Um die aktuelle Seite herum ein Fenster',
+   $folge(10, 20) === '1 ... 9 10 11 ... 20', $folge(10, 20));
+ok('Am Anfang fällt die vordere Auslassung weg',
+   $folge(1, 20) === '1 2 ... 20', $folge(1, 20));
+ok('Am Ende die hintere', $folge(20, 20) === '1 ... 19 20', $folge(20, 20));
+
+// Drei Punkte für eine einzige ausgelassene Seite sähen albern aus - und
+// wären breiter als die Zahl, die sie verstecken.
+ok('Eine einzelne Lücke wird ausgeschrieben statt gepunktet',
+   $folge(4, 20) === '1 2 3 4 5 ... 20', $folge(4, 20));
+
+$link = static fn (int $n): string => '/x?p=' . $n;
+ok('Bei einer einzigen Seite kommt keine Leiste', pager(1, 1, $link) === '');
+ok('Eine Seitenzahl außerhalb wird eingefangen',
+   str_contains(pager(99, 3, $link), 'aria-current="page">3<'), pager(99, 3, $link));
+
+$leiste = pager(1, 20, $link);
+ok('Die aktuelle Seite ist kein Link',
+   substr_count($leiste, 'aria-current="page"') === 1
+   && !str_contains($leiste, '<a class="pg on"'));
+ok('Der Rückwärtspfeil hat auf Seite 1 kein Ziel',
+   str_contains($leiste, '<span class="pg pg-step off"'));
+ok('Der Vorwärtspfeil schon', str_contains($leiste, 'href="/x?p=2" aria-label'));
+
+// ------------------------------------------------ und dasselbe gerendert
+$fuellVocab = (int) qv('SELECT id FROM vocab WHERE unit_id = ? LIMIT 1', [$unitId]);
+ok('Eine Vokabel zum Anhaengen der Fuellsaetze', $fuellVocab > 0);
+
+$fueller = [];
+for ($i = 0; $i < 60; $i++) {
+    q('INSERT INTO sentences (vocab_id, native_text, foreign_text, answer)
+       VALUES (?, ?, ?, ?)',
+      [$fuellVocab, 'Blätterfüller ' . $i, '{} Nummer ' . $i, 'Fueller' . $i]);
+    $fueller[] = (int) db()->lastInsertId();
+}
+
+$res = http($base . '/admin/sentences.php');
+ok('Mit genug Sätzen erscheint die Leiste',
+   str_contains($res['body'], '<nav class="pager"'), 'keine Leiste im Markup');
+ok('Sie nennt die aktuelle Seite', str_contains($res['body'], 'aria-current="page"'));
+ok('Und sagt, wie viele es sind',
+   preg_match('~<span class="pg-info">Seite 1 von \d+</span>~', $res['body']) === 1);
+
+// Die Leiste gehört nicht ins Bearbeitungsformular: Ein Klick darauf verwirft
+// alles, was in den Feldern steht und noch nicht gespeichert wurde.
+$vorFormular = strpos($res['body'], '</form>');
+$vorLeiste   = strpos($res['body'], '<nav class="pager"');
+ok('Sie steht ausserhalb des Formulars',
+   $vorFormular !== false && $vorLeiste !== false && $vorLeiste > $vorFormular);
+
+$res = http($base . '/admin/sentences.php?p=2');
+ok('Seite 2 lässt sich aufrufen',
+   str_contains($res['body'], '<span class="pg-info">Seite 2 von'));
+ok('Und dort hat der Rückwärtspfeil ein Ziel',
+   preg_match('~<a class="pg pg-step" href="[^"]*p=1"~', $res['body']) === 1);
+
+// Die alten schmucklosen Links sind weg.
+ok('Keine nackten Blätterlinks mehr',
+   !str_contains($res['body'], 'weiter &raquo;') && !str_contains($res['body'], '&laquo; zurück'));
+
+q('DELETE FROM sentences WHERE id IN (' . implode(',', $fueller) . ')');
+
 section('Übersicht der Lerneinheit');
 
 [$u, $code] = apiCall('units', 'get', null, ['id' => $unitId]);

@@ -298,3 +298,70 @@ td.wtcell select {
 /* Eine Farbe aus einer früheren Palette, die nicht im Feld steht. */
 .swatch-pick.extra { grid-column: 1; margin-top: 3px; }
 .swatch-pick.extra span { border-style: dashed; border-color: var(--text-soft); }
+
+/* ------------------------------------------------- Seitenblätterung */
+
+.pager {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    margin: 18px 0 8px;
+}
+
+.pg {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    height: 36px;
+    padding: 0 9px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    text-decoration: none;
+    font-size: .9rem;
+    line-height: 1;
+    /* Gleich breite Ziffern - sonst wackelt die Reihe beim Blättern. */
+    font-variant-numeric: tabular-nums;
+}
+
+.pg:hover { background: var(--surface-2); }
+
+.pg.on {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+}
+
+/* Die Auslassung ist kein Ziel, also sieht sie auch nicht wie eines aus. */
+.pg-gap {
+    min-width: 22px;
+    padding: 0;
+    border-color: transparent;
+    background: none;
+    color: var(--text-soft);
+}
+
+.pg-step { font-size: 1.2rem; }
+
+/* Am Anfang und Ende bleiben die Pfeile stehen, statt zu verschwinden -
+   sonst rutscht die ganze Reihe beim Blättern zur Seite. */
+.pg-step.off {
+    opacity: .3;
+    color: var(--text-soft);
+}
+
+.pg-info {
+    margin-right: 8px;
+    color: var(--text-soft);
+    font-size: .85rem;
+}
+
+@media (max-width: 620px) {
+    .pg-info { width: 100%; margin: 0 0 6px; text-align: center; }
+    .pg { min-width: 34px; height: 34px; padding: 0 7px; }
+}
