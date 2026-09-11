@@ -20,9 +20,6 @@ use Anthropic\Messages\OutputConfig;
 
 const SENTENCE_PLACEHOLDER = '{}';
 
-/** Kategorien, für die ein Lückensatz keinen Sinn ergibt. */
-const SENTENCE_SKIP_TYPES = ['aussage', 'frage', 'interjektion'];
-
 /** So viele Wörter aus früheren Lerneinheiten gehen als bekannt in den Prompt. */
 const KNOWN_VOCAB_LIMIT = 300;
 
@@ -200,7 +197,15 @@ function sentence_schema(): array
     ];
 }
 
-/** Vokabeln einer Lerneinheit, für die ein Lückensatz sinnvoll ist. */
+/**
+ * Vokabeln einer Lerneinheit.
+ *
+ * Frueher waren Aussagen, Fragen und Interjektionen ausgenommen - in der
+ * Annahme, ein Lueckentext ergaebe dafuer keinen Sinn. Das war falsch: Gerade
+ * bei ganzen Aeusserungen ist er die wertvollste Uebung, weil das Kind sie
+ * produzieren muss statt sie wiederzuerkennen. Die Luecke deckt dann einen
+ * kennzeichnenden Teil ab: "Wie heisst du?" / "{} comment ?".
+ */
 function sentence_candidates(int $unitId): array
 {
     $rows = qa(
@@ -209,10 +214,7 @@ function sentence_candidates(int $unitId): array
         [$unitId],
     );
 
-    return array_values(array_filter(
-        $rows,
-        static fn (array $r): bool => !in_array((string) ($r['word_type'] ?? ''), SENTENCE_SKIP_TYPES, true),
-    ));
+    return $rows;
 }
 
 /** Wortschatz derselben Sprache aus anderen Lerneinheiten - gilt als bekannt. */
@@ -254,6 +256,16 @@ function sentence_prompt(string $languageName, int $perVocab, array $rows, array
         '',
         'Regeln:',
         '- Kurz und einfach. Die Sätze sind für ein Schulkind im Anfangsunterricht.',
+        '- Ist der Eintrag selbst schon eine ganze Äußerung - eine Frage, eine',
+        '  Grußformel, eine Wendung -, dann baue keinen Satz darum herum. Der',
+        '  deutsche Satz ist dann die Äußerung auf Deutsch, der fremdsprachige',
+        '  dieselbe Äußerung mit der Lücke an einer kennzeichnenden Stelle:',
+        '    "Wie heißt du?" / "{} comment ?" mit der Lösung "Tu t\'appelles"',
+        '    "Wie heißt du?" / "Tu {} comment ?" mit der Lösung "t\'appelles"',
+        '  Bei sehr kurzen Äußerungen darf die Lücke alles ersetzen:',
+        '    "Gute Nacht!" / "{}" mit der Lösung "Bonne nuit !"',
+        '  Setze die Lücke bei mehreren Sätzen an verschiedene Stellen, damit das',
+        '  Kind die Wendung nach und nach ganz beherrscht.',
         '- Benutze ausser der geübten Vokabel nur Wörter, die das Kind kennt: die',
         '  Vokabeln dieser Lerneinheit, die weiter unten aufgelisteten bekannten',
         '  Wörter, sowie Artikel, Zahlwörter, Personalpronomen, Frageworte und die',
@@ -315,10 +327,7 @@ function generate_sentences(array $unit, array $user): array
           ORDER BY v.position, v.id',
         [$unitId],
     );
-    $rows = array_values(array_filter(
-        $offen,
-        static fn (array $r): bool => !in_array((string) ($r['word_type'] ?? ''), SENTENCE_SKIP_TYPES, true),
-    ));
+    $rows = $offen;
 
     if ($rows === []) {
         return ['created' => 0, 'skipped' => 0, 'without' => 0, 'failed' => null];

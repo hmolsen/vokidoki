@@ -288,9 +288,21 @@ Speichern danach schiefgeht.
 
 Als bekannt gelten die Vokabeln der Einheit, bis zu 300 Wörter aus früheren
 Einheiten derselben Sprache und Grundwörter wie Artikel, Zahlwörter und die
-Formen von „sein" und „haben". Für die Kategorien *Aussage*, *Frage* und
-*Interjektion* wird kein Satz erzeugt — für „Bonne nuit !" ergibt ein
-Lückentext keinen Sinn.
+Formen von „sein" und „haben".
+
+**Auch ganze Äußerungen bekommen einen Lückentext.** Bei einer Frage oder
+Grußformel wird kein Satz darum herum gebaut — die Lücke deckt einen
+kennzeichnenden Teil der Äußerung selbst ab:
+
+```
+Wie heißt du?                    Wie heißt du?              Gute Nacht!
+______________ comment ?         Tu ______ comment ?        ______________
+→ Tu t'appelles                  → t'appelles               → Bonne nuit !
+```
+
+Gerade hier ist der Lückentext die wertvollste Übung, weil das Kind die Wendung
+produzieren muss statt sie wiederzuerkennen. Bei mehreren Sätzen wandert die
+Lücke, damit die Wendung nach und nach ganz sitzt.
 
 Jeder erzeugte Satz wird geprüft, bevor er gespeichert wird: genau eine Lücke
 `{}` im fremdsprachigen Satz, keine im deutschen, nicht leere Lösung, und die
@@ -323,10 +335,10 @@ the teacher         die Lehrerin         🎯 ●●○    ✏️ ✓
 Bonne nuit !        Gute Nacht!          🎯 ○○○    ✏️ –
 ```
 
-Der Strich heißt „hier nicht übbar": Für Grußformeln und Fragen gibt es keinen
-Lückensatz, und ohne diese Unterscheidung sähen sie ewig unerledigt aus.
-Entsprechend zählen die beiden Übungen unterschiedlich viele Vokabeln —
-`Auswählen 1/9, Lückentext 1/6`.
+Der Strich heißt „noch kein Lückensatz" — etwa weil das Modell für diese
+Vokabel keinen brauchbaren erzeugen konnte. Ohne diese Unterscheidung sähe sie
+ewig unerledigt aus. Entsprechend können die beiden Übungen unterschiedlich
+viele Vokabeln zählen.
 
 ### Lernlogik
 

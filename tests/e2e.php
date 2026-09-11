@@ -882,8 +882,8 @@ ok('Mit Serie, Treffern und Stand je Übungsart',
          $erste['modes']['cloze']['correct'], $erste['modes']['cloze']['possible']));
 ok('Auswählen ist immer möglich', $erste['modes']['mc']['possible'] === true);
 
-// Eine Grußformel bekommt keinen Lückensatz - in der Übersicht muss sie
-// deshalb als "hier nicht übbar" erscheinen und nicht als offen.
+// Solange eine Vokabel noch keinen Satz hat, zeigt die Übersicht dafür einen
+// Strich - nicht drei offene Punkte, die nie voll werden könnten.
 q('INSERT INTO vocab (unit_id, term_foreign, term_native, word_type, position)
    VALUES (?, ?, ?, ?, 99)', [$unitId, 'Bonne nuit !', 'Gute Nacht!', 'aussage']);
 $grussId = (int) db()->lastInsertId();
@@ -896,13 +896,25 @@ foreach ($u2['vocab'] as $v) {
     }
 }
 ok('Die Grußformel steht in der Liste', $gruss !== null);
-ok('Im Lückentext ist sie als nicht übbar markiert',
+ok('Ohne Satz zeigt der Lückentext einen Strich',
    $gruss !== null && $gruss['modes']['cloze']['possible'] === false);
-ok('Beim Auswählen dagegen schon',
+ok('Beim Auswählen ist sie sofort übbar',
    $gruss !== null && $gruss['modes']['mc']['possible'] === true);
-ok('Und sie gilt nirgends als gekonnt',
-   $gruss !== null && $gruss['modes']['cloze']['known'] === false
-   && $gruss['modes']['mc']['known'] === false);
+
+// Und sie bekommt jetzt auch Lückensätze - früher war sie davon ausgenommen.
+if ($isFake) {
+    apiCall('cloze', 'prepare', ['unit_id' => $unitId]);
+    ok('Auch eine Grußformel bekommt Lückensätze',
+       (int) qv('SELECT COUNT(*) FROM sentences WHERE vocab_id = ?', [$grussId]) > 0,
+       'keine erzeugt');
+
+    [$u3] = apiCall('units', 'get', null, ['id' => $unitId]);
+    foreach ($u3['vocab'] as $v) {
+        if ((int) $v['id'] === $grussId) {
+            ok('Und gilt danach als übbar', $v['modes']['cloze']['possible'] === true);
+        }
+    }
+}
 
 q('DELETE FROM vocab WHERE id = ?', [$grussId]);
 

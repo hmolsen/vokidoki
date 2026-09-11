@@ -218,12 +218,12 @@ function exerciseRow(mode, icon, title, hint, info) {
 
 /**
  * Der Stand einer Vokabel in einer Übungsart: Haken, drei Punkte oder Strich.
- * Der Strich steht für "hier nicht übbar" - etwa eine Grußformel, für die es
- * keinen Lückensatz gibt.
+ * Der Strich heißt "noch kein Lückensatz" - etwa weil das Modell für diese
+ * Vokabel keinen brauchbaren erzeugen konnte. Im Admin lässt sich nachtragen.
  */
 function mark(exercise, info) {
     if (!info.possible) {
-        return `<span class="mark" title="${esc(exercise.title)}: kein Lückensatz"
+        return `<span class="mark" title="${esc(exercise.title)}: noch kein Lückensatz"
                       >${exercise.icon}<span class="mark-off">&ndash;</span></span>`;
     }
 

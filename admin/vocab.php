@@ -513,9 +513,10 @@ Damit verschwinden <?= (int) $l['units'] ?> Lerneinheit(en) und <?= (int) $l['wo
     <?php if ($openSentences > 0): ?>
         <strong><?= $openSentences ?> Vokabel(n) ohne Satz</strong>
         <p class="tiny muted" style="margin:6px 0 12px">
-            Erzeugt wird in einem Aufruf für die ganze Lerneinheit. Kategorien,
-            für die ein Lückensatz keinen Sinn ergibt (Aussage, Frage,
-            Interjektion), werden übersprungen.
+            Erzeugt wird in Blöcken für die ganze Lerneinheit. Auch ganze
+            Äußerungen wie &bdquo;Tu t'appelles comment&nbsp;?&ldquo; bekommen
+            einen Lückentext &ndash; dort deckt die Lücke einen
+            kennzeichnenden Teil ab.
         </p>
     <?php else: ?>
         <p class="tiny muted" style="margin:0 0 12px">

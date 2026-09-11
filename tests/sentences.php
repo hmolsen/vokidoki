@@ -142,11 +142,22 @@ foreach ([
        "\"$foreign\" / \"$answer\"");
 }
 
-section('Kategorien ohne Lückensatz');
+section('Ganze Äußerungen');
 
-ok('Aussage, Frage und Interjektion werden übersprungen',
-   SENTENCE_SKIP_TYPES === ['aussage', 'frage', 'interjektion'],
-   implode(', ', SENTENCE_SKIP_TYPES));
+// Frueher waren Fragen und Grussformeln von der Satzerzeugung ausgenommen.
+// Fuer sie ist der Lueckentext aber gerade die wertvollste Uebung - die Luecke
+// deckt dann einen kennzeichnenden Teil der Aeusserung ab.
+foreach ([
+    ['Wie heißt du?', '{} comment ?', "Tu t'appelles", 'Lücke am Anfang'],
+    ['Wie heißt du?', 'Tu {} comment ?', "t'appelles", 'Lücke in der Mitte'],
+    ['Gute Nacht!', '{}', 'Bonne nuit !', 'Lücke ersetzt die ganze Äußerung'],
+    ['Danke, gnädige Frau!', 'Merci, {} !', 'Madame', 'Lücke am Ende'],
+] as [$native, $foreign, $answer, $was]) {
+    ok("Angenommen: $was",
+       sentence_clean(['vocab_id' => 7, 'native' => $native,
+                       'foreign' => $foreign, 'answer' => $answer], [7]) !== null,
+       "\"$foreign\" / \"$answer\"");
+}
 
 section('Wiederverbindung zur Datenbank');
 
