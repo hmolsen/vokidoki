@@ -70,36 +70,50 @@ async function nextQuestion(unitId) {
         return;
     }
 
+    // Feste Spalte über die sichtbare Höhe: Kopf und Fuß stehen, der Satz in
+    // der Mitte bekommt, was übrig bleibt. So schiebt die Tastatur nichts
+    // mehr aus dem Bild - es gibt schlicht nichts zu scrollen.
     render(`
-        ${topbar('Lückentext', { backTo: `/unit/${unitId}` })}
+        <div class="screen">
+            <div class="screen-top">
+                ${topbar('Lückentext', { backTo: `/unit/${unitId}` })}
 
-        <div class="quiz-head">
-            <span class="tiny muted">${data.known} von ${data.total} gelernt</span>
-            <span class="dots">${
-                [0, 1, 2].map((i) => `<i class="${i < Math.min(3, data.streak) ? 'on' : ''}"></i>`).join('')
-            }</span>
+                <div class="quiz-head">
+                    <span class="tiny muted">${data.known} von ${data.total} gelernt</span>
+                    <span class="dots">${
+                        [0, 1, 2].map((i) => `<i class="${i < Math.min(3, data.streak) ? 'on' : ''}"></i>`).join('')
+                    }</span>
+                </div>
+                ${progressBar(data.known, data.total)}
+            </div>
+
+            <div class="screen-mid">
+                <div class="cloze">
+                    <p class="cloze-native">${esc(data.native)}</p>
+                    <p class="cloze-foreign">${gapSentence(data.foreign)}</p>
+                </div>
+            </div>
+
+            <div class="screen-bottom">
+                <div class="verdict" id="verdict"></div>
+
+                <form id="form" autocomplete="off">
+                    ${accentRow(data.lang)}
+                    <div class="cloze-entry">
+                        <input type="text" id="answer" class="cloze-input"
+                               ${data.lang ? `lang="${esc(data.lang)}"` : ''}
+                               placeholder="Was fehlt?"
+                               maxlength="128"
+                               autocomplete="off" autocorrect="off"
+                               autocapitalize="off" spellcheck="false"
+                               enterkeyhint="done">
+                        <button class="btn" type="submit" id="check">Prüfen</button>
+                    </div>
+                </form>
+
+                <div id="msg"></div>
+            </div>
         </div>
-        ${progressBar(data.known, data.total)}
-
-        <div class="cloze">
-            <p class="cloze-native">${esc(data.native)}</p>
-            <p class="cloze-foreign">${gapSentence(data.foreign)}</p>
-        </div>
-
-        <form id="form" autocomplete="off">
-            ${accentRow(data.lang)}
-            <input type="text" id="answer" class="cloze-input"
-                   ${data.lang ? `lang="${esc(data.lang)}"` : ''}
-                   placeholder="Was fehlt?"
-                   maxlength="128"
-                   autocomplete="off" autocorrect="off"
-                   autocapitalize="off" spellcheck="false"
-                   enterkeyhint="done">
-            <button class="btn" type="submit" id="check">Prüfen</button>
-        </form>
-
-        <div class="verdict" id="verdict"></div>
-        <div id="msg"></div>
     `);
 
     wireBack();

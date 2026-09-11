@@ -1329,6 +1329,17 @@ $stempel = (int) ($m[1] ?? 0);
 ok('Die Huelle traegt einen Versionsstempel', $stempel > 1000000000, (string) $stempel);
 ok('Er stammt vom Aenderungsdatum der Dateien',
    $stempel >= (int) filemtime(__DIR__ . '/../app.js'), (string) $stempel);
+
+// Eine gepflegte Liste war unvollstaendig: Wer eine dort fehlende Ansicht
+// aenderte, erreichte eine auf dem Homescreen liegende App gar nicht.
+$aeltester = null;
+foreach (glob(__DIR__ . '/../views/*.js') ?: [] as $datei) {
+    if ($stempel < (int) filemtime($datei)) {
+        $aeltester = basename($datei);
+    }
+}
+ok('Und zwar von jeder Ansicht, nicht nur von einer Auswahl',
+   $aeltester === null, 'nicht erfasst: ' . (string) $aeltester);
 ok('Die Huelle selbst wird nicht vorgehalten',
    str_contains(strtolower($res['headers']), 'cache-control: no-store'),
    'kein no-store im Kopf');

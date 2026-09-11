@@ -2,12 +2,11 @@
    Hash-Routing, damit die App ohne Rewrite-Regeln in jedem Unterverzeichnis
    eines Shared-Hostings läuft. */
 
-import { VT, go, render, notice } from './core.js';
+import { VT, go, render, notice, trackViewport } from './core.js';
 import { loginView } from './views/login.js';
 import { languagesView } from './views/languages.js';
 import { languageView } from './views/language.js';
 import { importView } from './views/import.js';
-import { unitsView } from './views/units.js';
 import { unitView } from './views/unit.js';
 import { quizView } from './views/quiz.js';
 import { clozeView } from './views/cloze.js';
@@ -17,7 +16,10 @@ const ROUTES = [
     [/^\/$/,                      languagesView],
     [/^\/lang\/(\d+)$/,           languageView],
     [/^\/lang\/(\d+)\/import$/,   importView],
-    [/^\/lang\/(\d+)\/units$/,    unitsView],
+    // Die Lerneinheiten stehen jetzt auf der Sprachseite. Alte Adressen -
+    // etwa aus einer noch nicht aktualisierten App auf dem Homescreen -
+    // sollen trotzdem irgendwo landen.
+    [/^\/lang\/(\d+)\/units$/,    (id) => go(`/lang/${id}`, true)],
     [/^\/unit\/(\d+)$/,           unitView],
     [/^\/quiz\/(\d+)$/,           quizView],
     [/^\/cloze\/(\d+)$/,          clozeView],
@@ -61,6 +63,9 @@ async function route() {
 
     go(VT.user ? '/' : '/login', true);
 }
+
+// Muss vor dem ersten View laufen: --vvh steht sonst beim Aufbau noch nicht.
+trackViewport();
 
 window.addEventListener('hashchange', route);
 

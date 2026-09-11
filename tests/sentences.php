@@ -216,10 +216,10 @@ ok('Die Spaltenzahl kommt aus dem Code, steht also nicht fest',
    str_contains($js, '--cols:${accentColumns(keys.length)}')
    && preg_match('/grid-template-columns:\s*repeat\(var\(--cols/', $css) === 1);
 ok('Die Tasten sind so groß wie die übrigen Bedienelemente',
-   preg_match('/\.accent\s*\{[^}]*min-height:\s*(\d+)px/s', $css, $m) === 1
+   preg_match('/^\.accent \{[^}]*min-height:\s*(\d+)px/ms', $css, $m) === 1
    && (int) $m[1] >= 44, $m[1] ?? 'keine Höhe');
 ok('Und benutzen die Schrift der App',
-   preg_match('/\.accent\s*\{[^}]*font:\s*inherit/s', $css) === 1);
+   preg_match('/^\.accent \{[^}]*font:\s*inherit/ms', $css) === 1);
 
 // Jede Sprache soll glatt aufgehen - sonst bleibt doch ein Rest stehen.
 $spalten = static function (int $n): int {
@@ -261,6 +261,38 @@ ok('"soeur" zählt als richtig, mit Hinweis auf die Schreibweise',
    $r['correct'] && !$r['exact'], json_encode($r));
 ok('"sœur" ist genau richtig',
    answer_check('sœur', 'sœur')['exact'], 'Ligatur schlägt bei exakter Eingabe fehl');
+
+section('Platz für die Tastatur im Lückentext');
+
+// Die Tastatur verkleinert auf dem iPhone nur den sichtbaren Ausschnitt, die
+// Seite bleibt so hoch wie zuvor. iOS scrollt dann zum Eingabefeld, und der
+// Satz wandert aus dem Bild, waehrend unten graue Flaeche stehen bleibt.
+$core = (string) file_get_contents(__DIR__ . '/../core.js');
+
+ok('Die sichtbare Hoehe wird nachgehalten',
+   str_contains($core, 'visualViewport') && str_contains($core, '--vvh'));
+ok('Und eine offene Tastatur wird erkannt',
+   str_contains($core, 'keyboard-open'));
+ok('Die Huelle bindet sich daran, statt ihre Grundhoehe zu behalten',
+   preg_match('/\.app\.fitted\s*\{[^}]*height:\s*var\(--vvh/s', $css) === 1);
+ok('Nur wenn die Ansicht das auch anbietet',
+   str_contains($core, "':scope > .screen'"));
+
+ok('Der Lückentext ist eine solche Ansicht',
+   preg_match('/<div class="screen">/', $js) === 1);
+ok('Mit festem Kopf, wachsender Mitte und festem Fuß',
+   str_contains($js, 'screen-top') && str_contains($js, 'screen-mid')
+   && str_contains($js, 'screen-bottom'));
+ok('Die Mitte nimmt den uebrigen Platz und scrollt notfalls in sich',
+   preg_match('/\.screen-mid\s*\{[^}]*flex:\s*1/s', $css) === 1
+   && preg_match('/\.screen-mid\s*\{[^}]*overflow-y:\s*auto/s', $css) === 1);
+
+// Was ueber der Tastatur keinen Platz mehr hat, tritt zurueck.
+ok('Bei offener Tastatur tritt der Lernstand zurueck',
+   preg_match('/body\.keyboard-open[^{]*\.quiz-head[^{]*\{[^}]*display:\s*none/s', $css) === 1);
+ok('Eingabefeld und Knopf stehen nebeneinander statt untereinander',
+   str_contains($js, 'class="cloze-entry"')
+   && preg_match('/\.cloze-entry\s*\{[^}]*display:\s*flex/s', $css) === 1);
 
 section('Abstände vor Satzzeichen');
 

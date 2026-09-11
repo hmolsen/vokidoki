@@ -42,7 +42,7 @@ export async function unitView(unitId) {
     `).join('');
 
     render(`
-        ${topbar(unit.title, { backTo: `/lang/${unit.language_id}/units` })}
+        ${topbar(unit.title, { backTo: `/lang/${unit.language_id}` })}
         <div id="msg"></div>
 
         ${komplett ? '<div class="notice good">Diese Lerneinheit hast du in beiden Übungen geschafft!</div>' : ''}

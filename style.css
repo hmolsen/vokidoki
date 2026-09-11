@@ -63,6 +63,14 @@ body {
 
 h1 { font-size: 1.6rem; line-height: 1.2; margin: 0 0 4px; letter-spacing: -.02em; }
 h2 { font-size: 1.2rem; line-height: 1.25; margin: 26px 0 10px; letter-spacing: -.01em; }
+
+/* Überschrift über einer Liste - leiser als eine Seitenüberschrift. */
+h2.section {
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--text-soft);
+    margin: 22px 0 8px;
+}
 p  { margin: 0 0 12px; }
 
 .sub      { color: var(--text-soft); margin: 0 0 18px; }
@@ -322,6 +330,11 @@ input:focus, select:focus {
     text-align: center;
     font-weight: 600;
 }
+
+/* Im Lückentext steht die Rückmeldung über dem Eingabefeld und soll dort
+   keine Zeile auf Vorrat belegen. */
+.screen-bottom .verdict { margin: 0 0 8px; }
+body.keyboard-open .screen-bottom .verdict:empty { min-height: 0; margin: 0; }
 .verdict.good { color: var(--good); }
 .verdict.bad  { color: var(--bad); }
 
@@ -443,6 +456,63 @@ input:focus, select:focus {
 .install .big { font-size: 1.4rem; line-height: 1; }
 
 /* ---------------------------------------------------------------- Lückentext */
+
+/*
+ * Bildschirmfüllende Ansicht mit festem Kopf und Fuß.
+ *
+ * Der Anlass war die Tastatur im Lückentext: Sie verkleinert auf dem iPhone
+ * nur den sichtbaren Ausschnitt, nicht die Seite. iOS scrollt dann zum
+ * Eingabefeld, und der Satz wandert nach oben aus dem Bild, während unten
+ * graue Fläche stehen bleibt. Bindet sich die Ansicht dagegen an --vvh, also
+ * an das, was man wirklich sieht, gibt es nichts zu scrollen - und der Satz
+ * bleibt, wo er ist.
+ */
+.app.fitted {
+    height: var(--vvh, 100svh);
+    min-height: 0;
+    overflow: hidden;
+}
+
+.screen {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.screen-top,
+.screen-bottom { flex: none; }
+
+/* Der Satz bekommt, was übrig bleibt, und rückt in die Mitte. Wird es sehr
+   eng, scrollt er in sich - aber die Ansicht als Ganzes nie. */
+.screen-mid {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+/* Mit offener Tastatur zählt jeder Pixel: Der Lernstand tritt zurück, der
+   Satz und das Eingabefeld bleiben. */
+body.keyboard-open .screen-top .quiz-head,
+body.keyboard-open .screen-top .bar { display: none; }
+
+body.keyboard-open .screen-top .topbar { margin-bottom: 8px; }
+body.keyboard-open .cloze { padding: 14px 16px; margin: 8px 0; }
+body.keyboard-open .accents { margin-bottom: 10px; }
+body.keyboard-open .accent { min-height: 44px; }
+
+/* Eingabefeld und Knopf nebeneinander - untereinander kosteten sie eine
+   ganze Zeile Höhe, die über der Tastatur fehlt. */
+.cloze-entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+.cloze-entry .cloze-input { flex: 1; min-width: 0; margin-bottom: 0; }
+.cloze-entry .btn { width: auto; flex: none; padding: 14px 20px; }
 
 .cloze {
     background: var(--surface);

@@ -19,13 +19,21 @@ boot_error_handling();
 /**
  * Versionsstempel der Oberfläche.
  *
- * Aus dem jüngsten Änderungsdatum der Kerndateien statt von Hand gepflegt -
- * eine feste Zahl vergisst man beim Hochladen, und dann liefern Browser und
- * Service Worker ewig die alte Fassung an die installierte App.
+ * Aus dem jüngsten Änderungsdatum der Oberflächendateien statt von Hand
+ * gepflegt - eine feste Zahl vergisst man beim Hochladen, und dann liefern
+ * Browser und Service Worker ewig die alte Fassung an die installierte App.
+ *
+ * Bewusst über alle views/*.js statt über eine gepflegte Liste: Die Liste war
+ * unvollständig, und eine Ansicht, die nicht darin stand, erreichte eine auf
+ * dem Homescreen liegende App überhaupt nicht.
  */
 $appVersion = (string) max(array_map(
-    static fn (string $f): int => is_file(__DIR__ . '/' . $f) ? (int) filemtime(__DIR__ . '/' . $f) : 0,
-    ['app.js', 'core.js', 'style.css', 'sw.js', 'views/unit.js', 'views/cloze.js', 'views/quiz.js'],
+    static fn (string $f): int => is_file($f) ? (int) filemtime($f) : 0,
+    array_merge(
+        array_map(static fn (string $f): string => __DIR__ . '/' . $f,
+                  ['app.js', 'core.js', 'style.css', 'sw.js']),
+        glob(__DIR__ . '/views/*.js') ?: [],
+    ),
 ));
 
 // Start aus dem Homescreen-Icon: start_url trägt den Geräte-Token. Er wird
