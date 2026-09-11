@@ -925,6 +925,39 @@ ok('Die Stände beider Übungsarten werden getrennt geführt',
    is_int($mcGekonnt) && is_int($clozeGekonnt),
    "Auswählen $mcGekonnt, Lückentext $clozeGekonnt");
 
+// Der Haken ist ein schmales Zeichen, die Punktreihe fuellt ihre Zelle ganz
+// aus. Sitzen beide in verschieden breiten Zellen, springt die Spalte von
+// Zeile zu Zeile. Geprueft wird deshalb die Rechnung selbst, nicht nur, dass
+// die Regeln dastehen.
+$css = (string) file_get_contents(__DIR__ . '/../style.css');
+
+$zahl = static function (string $muster) use ($css): int {
+    return preg_match($muster, $css, $m) === 1 ? (int) $m[1] : 0;
+};
+
+$stateW = $zahl('/\.marks\s*\{[^}]*--state-w:\s*(\d+)px/s');
+$punkt  = $zahl('/\.dots i\s*\{\s*width:\s*(\d+)px/s');
+$luecke = $zahl('/\.dots\s*\{[^}]*gap:\s*(\d+)px/s');
+
+ok('Die Zellenbreite steht als eine Zahl in der Datei', $stateW > 0, (string) $stateW);
+ok('Punkte, Haken und Strich teilen sich dieselbe Breite',
+   preg_match('/\.marks \.dots,\s*\.mark-done,\s*\.mark-off\s*\{[^}]*width:\s*var\(--state-w\)/s', $css) === 1);
+ok('Drei Punkte fuellen die Zelle genau aus',
+   $punkt > 0 && $luecke > 0 && 3 * $punkt + 2 * $luecke === $stateW,
+   "3x{$punkt}px + 2x{$luecke}px = " . (3 * $punkt + 2 * $luecke) . "px, Zelle {$stateW}px");
+ok('Die Punkte verteilen sich ueber die volle Breite',
+   preg_match('/\.marks \.dots\s*\{[^}]*justify-content:\s*space-between/s', $css) === 1);
+ok('Haken und Strich stehen mittig darin - also ueber dem mittleren Punkt',
+   preg_match('/\.mark-done,\s*\.mark-off\s*\{[^}]*text-align:\s*center/s', $css) === 1);
+
+// Auf schmalen Geraeten schrumpfen Zelle und Punkte gemeinsam; sonst waere die
+// Ausrichtung genau dort dahin, wo der Platz am knappsten ist.
+$engW     = $zahl('/@media[^{]*360px[^}]*\.marks\s*\{[^}]*--state-w:\s*(\d+)px/s');
+$engPunkt = $zahl('/\.marks \.dots i\s*\{\s*width:\s*(\d+)px/s');
+ok('Auch auf schmalen Geraeten geht die Rechnung auf',
+   $engW > 0 && $engPunkt > 0 && 3 * $engPunkt + 2 * $luecke === $engW,
+   "3x{$engPunkt}px + 2x{$luecke}px = " . (3 * $engPunkt + 2 * $luecke) . "px, Zelle {$engW}px");
+
 section('Filter im Admin');
 
 // Dropdowns sind zwei Klicks fuer eine Auswahl. Jetzt sind es Links - die

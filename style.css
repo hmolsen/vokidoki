@@ -525,6 +525,10 @@ input:focus, select:focus {
 .row.vocab:active { transform: none; }
 
 .marks {
+    /* Drei Punkte à 9px mit zwei Abständen à 5px - daran richtet sich der
+       Haken aus, damit er nicht schmaler ausfällt und nach rechts rutscht. */
+    --state-w: 37px;
+
     display: flex;
     flex: none;
     gap: 12px;
@@ -553,11 +557,30 @@ input:focus, select:focus {
 }
 
 .mark-state {
-    width: 36px;
+    width: var(--state-w);
     flex: none;
     display: flex;
     align-items: center;
-    justify-content: center;
+}
+
+/*
+ * Alle drei Zustände - Punkte, Haken, Strich - füllen dieselbe Breite. Sonst
+ * spannt die Punktreihe über die ganze Zelle, während der schmale Haken
+ * mittig darin sitzt, und die Spalte wirkt verschoben.
+ */
+.marks .dots,
+.mark-done,
+.mark-off {
+    width: var(--state-w);
+    flex: none;
+}
+
+/* Über die feste Breite verteilt - unabhängig von Rundungen beim Abstand. */
+.marks .dots { justify-content: space-between; }
+
+.mark-done,
+.mark-off {
+    text-align: center;
 }
 
 .mark-done {
@@ -593,6 +616,6 @@ input:focus, select:focus {
 /* Auf sehr schmalen Geräten rücken die beiden Spalten zusammen, statt
    untereinander zu rutschen - so bleiben die Symbole in einer Linie. */
 @media (max-width: 360px) {
-    .marks { gap: 8px; }
-    .mark-state { width: 32px; }
+    .marks { gap: 8px; --state-w: 31px; }
+    .marks .dots i { width: 7px; height: 7px; }
 }
