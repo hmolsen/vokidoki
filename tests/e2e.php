@@ -1344,6 +1344,65 @@ ok('Die Huelle selbst wird nicht vorgehalten',
    str_contains(strtolower($res['headers']), 'cache-control: no-store'),
    'kein no-store im Kopf');
 
+section('Aktualisierung erkennen und anbieten');
+
+// Die installierte App wird selten beendet - sie liegt wochenlang im
+// Hintergrund und merkte von einer Aktualisierung bisher gar nichts.
+[$meta, $code] = apiCall('meta', 'version');
+ok('Der Server nennt seine Fassung', $code === 200 && ($meta['version'] ?? '') !== '',
+   json_encode($meta));
+
+require_once __DIR__ . '/../lib/version.php';
+ok('Und zwar dieselbe, die auch die Hülle ausliefert',
+   ($meta['version'] ?? '') === app_version(), (string) ($meta['version'] ?? ''));
+
+// Auch eine App mit abgelaufener Sitzung soll erfahren, dass es etwas Neues
+// gibt - sonst bliebe gerade die am laengsten auf altem Stand. Der laufende
+// Test ist angemeldet, deshalb wird das an der Quelle geprueft.
+ok('Die Auskunft verlangt keine Anmeldung',
+   preg_match('/^\s*(\$\w+\s*=\s*)?require_user\(/m',
+              (string) file_get_contents(__DIR__ . '/../api/meta.php')) !== 1);
+
+$mitHeader = http($base . '/api/meta.php?action=version', null, ['X-Vokabeltrainer: 1']);
+ok('Und antwortet auf einen schlichten GET',
+   $mitHeader['status'] === 200 && str_contains($mitHeader['body'], '"version"'),
+   $mitHeader['body']);
+
+$fremd = http($base . '/api/meta.php?action=version');
+ok('Aber weiterhin den Sicherheitsheader',
+   str_contains($fremd['body'], 'Ungültiger Aufruf'), $fremd['body']);
+
+// Die Huelle muss die Dateiliste mitgeben, sonst kann "Aktualisieren" nicht
+// gezielt jede einzelne neu holen.
+$shell = http($base . '/')['body'];
+ok('Die Hülle nennt die Dateien der Oberfläche',
+   preg_match('/assets:\s*\[(.*?)\]/s', $shell, $am) === 1, 'keine Liste');
+$liste = $am[1] ?? '';
+foreach (['app.js', 'core.js', 'style.css', 'views/cloze.js'] as $datei) {
+    ok("Darunter $datei", str_contains($liste, '"' . $datei . '"'));
+}
+ok('Und jede Ansicht, nicht nur eine Auswahl',
+   count(array_filter(glob(__DIR__ . '/../views/*.js') ?: [],
+       static fn (string $p): bool => !str_contains($liste, '"views/' . basename($p) . '"'))) === 0);
+
+$appjs = (string) file_get_contents(__DIR__ . '/../app.js');
+ok('Die App fragt in Abständen nach', str_contains($appjs, "api('meta', 'version')"));
+ok('Vor allem, wenn sie in den Vordergrund kommt',
+   str_contains($appjs, 'visibilitychange'));
+ok('Und bietet das Band von oben an',
+   str_contains($appjs, 'update-bar') && str_contains($appjs, 'hardRefresh()'));
+
+$corejs = (string) file_get_contents(__DIR__ . '/../core.js');
+ok('Aktualisieren holt jede Datei ausdrücklich neu',
+   str_contains($corejs, "cache: 'reload'") && str_contains($corejs, 'VT.assets'),
+   'kein gezieltes Neuladen');
+
+// Der Grund, warum die Sonderzeichen nach einem Update noch an der alten
+// Stelle standen: Der Service Worker selbst kam aus dem Zwischenspeicher und
+// erneuerte sich nie.
+ok('Der Service Worker wird nie aus dem Zwischenspeicher geladen',
+   str_contains($appjs, "updateViaCache: 'none'"));
+
 section('Zusammenhalt der Module');
 
 /*

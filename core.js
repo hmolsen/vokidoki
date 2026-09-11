@@ -157,6 +157,8 @@ export function clearError(root = document) {
  */
 export async function hardRefresh() {
     try {
+        // Zuerst abmelden, damit die Abrufe unten am Service Worker vorbei
+        // wirklich ans Netz gehen.
         if ('serviceWorker' in navigator) {
             const regs = await navigator.serviceWorker.getRegistrations();
             await Promise.all(regs.map((r) => r.unregister()));
@@ -165,6 +167,21 @@ export async function hardRefresh() {
             const keys = await caches.keys();
             await Promise.all(keys.map((k) => caches.delete(k)));
         }
+
+        /*
+         * Und jetzt jede Datei ausdrücklich neu holen.
+         *
+         * Nur app.js trägt einen Versionsstempel in der Adresse; core.js und
+         * die Ansichten werden mit blankem Pfad importiert. Ohne diesen
+         * Schritt bliebe es dem Browser überlassen, ob er sie für frisch
+         * genug hält - und genau daran ist das Aktualisieren bisher
+         * gescheitert. cache: 'reload' geht am Zwischenspeicher vorbei und
+         * legt die neue Fassung gleich dort ab.
+         */
+        const dateien = Array.isArray(VT.assets) ? VT.assets : [];
+        await Promise.all(dateien.map(
+            (pfad) => fetch(`${VT.base}/${pfad}`, { cache: 'reload' }).catch(() => {}),
+        ));
     } catch (err) {
         // Auch ohne Leeren ist ein Neustart besser als gar nichts.
         console.warn('Zwischenspeicher nicht vollständig geleert:', err);

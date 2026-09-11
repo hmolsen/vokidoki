@@ -763,3 +763,74 @@ body.keyboard-open .accent { min-height: 44px; }
     .marks { gap: 8px; --state-w: 31px; }
     .marks .dots i { width: 7px; height: 7px; }
 }
+
+/* ---------------------------------------------------------------- Aktualisierung */
+
+/*
+ * Band, das von oben hereinfährt, wenn auf dem Server eine neue Fassung
+ * liegt. Die installierte App wird selten beendet - sie liegt wochenlang im
+ * Hintergrund und merkte von einer Aktualisierung sonst gar nichts.
+ *
+ * Es liegt ausserhalb von #app und überlebt deshalb jeden Ansichtswechsel,
+ * und es steht über allem - auch über den festgesetzten Ansichten des
+ * Lückentexts.
+ */
+.update-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: calc(env(safe-area-inset-top) + 12px)
+             calc(env(safe-area-inset-right) + 14px) 12px
+             calc(env(safe-area-inset-left) + 16px);
+    background: var(--accent);
+    color: var(--accent-text);
+    box-shadow: 0 4px 18px rgba(16, 20, 30, .18);
+
+    /* Fährt herein, statt aufzublitzen. */
+    transform: translateY(-100%);
+    transition: transform .28s ease;
+}
+.update-bar.show { transform: none; }
+
+.update-text {
+    flex: 1;
+    min-width: 0;
+    font-weight: 600;
+    font-size: .95rem;
+}
+
+.update-go {
+    flex: none;
+    min-height: 38px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: var(--accent-text);
+    color: var(--accent);
+    font: inherit;
+    font-weight: 700;
+    font-size: .9rem;
+    cursor: pointer;
+}
+.update-go:active   { transform: scale(.97); }
+.update-go[disabled] { opacity: .6; }
+
+.update-later {
+    flex: none;
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--accent-text);
+    font: inherit;
+    font-size: 1.3rem;
+    line-height: 1;
+    opacity: .75;
+    cursor: pointer;
+}

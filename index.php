@@ -13,28 +13,13 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/lib/auth.php';
 require_once __DIR__ . '/lib/errors.php';
+require_once __DIR__ . '/lib/version.php';
 
 boot_error_handling();
 
-/**
- * Versionsstempel der Oberfläche.
- *
- * Aus dem jüngsten Änderungsdatum der Oberflächendateien statt von Hand
- * gepflegt - eine feste Zahl vergisst man beim Hochladen, und dann liefern
- * Browser und Service Worker ewig die alte Fassung an die installierte App.
- *
- * Bewusst über alle views/*.js statt über eine gepflegte Liste: Die Liste war
- * unvollständig, und eine Ansicht, die nicht darin stand, erreichte eine auf
- * dem Homescreen liegende App überhaupt nicht.
- */
-$appVersion = (string) max(array_map(
-    static fn (string $f): int => is_file($f) ? (int) filemtime($f) : 0,
-    array_merge(
-        array_map(static fn (string $f): string => __DIR__ . '/' . $f,
-                  ['app.js', 'core.js', 'style.css', 'sw.js']),
-        glob(__DIR__ . '/views/*.js') ?: [],
-    ),
-));
+// Versionsstempel und Dateiliste stehen in lib/version.php - api/meta.php
+// braucht beides ebenso, wenn die laufende App nachfragt.
+$appVersion = app_version();
 
 // Start aus dem Homescreen-Icon: start_url trägt den Geräte-Token. Er wird
 // gegen eine Session in *diesem* Container getauscht und danach aus der URL
@@ -112,7 +97,10 @@ window.VT = {
         'appName'  => $appName,
     ], JSON_UNESCAPED_UNICODE) ?>,
     standalone: false,
-    version: <?= json_encode($appVersion) ?>
+    version: <?= json_encode($appVersion) ?>,
+    // Damit "Aktualisieren" jede Datei frisch holen kann, statt zu hoffen,
+    // dass Browser und Service Worker von selbst darauf kommen.
+    assets: <?= json_encode(app_assets(), JSON_UNESCAPED_SLASHES) ?>
 };
 window.VT.standalone = window.navigator.standalone === true
     || window.matchMedia('(display-mode: standalone)').matches;
