@@ -211,3 +211,56 @@ td.wtcell select {
 @media (max-width: 620px) {
     .filterrow > .lbl { width: 100%; }
 }
+
+/* ------------------------------------------------- Farbwahl als 8x8-Feld */
+
+.palette {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 5px;
+    max-width: 336px;
+    margin: 6px 0 14px;
+}
+
+.swatch-pick {
+    position: relative;
+    display: block;
+    cursor: pointer;
+    line-height: 0;
+}
+
+/* Das eigentliche Radiofeld bleibt bedienbar, nur unsichtbar - so lässt sich
+   das Feld weiterhin mit der Tastatur durchlaufen. */
+.swatch-pick input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    cursor: pointer;
+}
+
+.swatch-pick span {
+    display: block;
+    aspect-ratio: 1;
+    border-radius: 7px;
+    background: var(--c);
+    border: 1px solid rgba(0, 0, 0, .12);
+    transition: transform .08s ease;
+}
+.swatch-pick:hover span { transform: scale(1.12); }
+
+/* Gewählt: Ring in der Textfarbe, damit er auf hell wie dunkel auffällt. */
+.swatch-pick input:checked + span {
+    transform: scale(1.12);
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text);
+}
+.swatch-pick input:focus-visible + span {
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+}
+
+/* Eine Farbe aus einer früheren Palette, die nicht im Feld steht. */
+.swatch-pick.extra { grid-column: 1; margin-top: 5px; }
+.swatch-pick.extra span { border-style: dashed; border-color: var(--text-soft); }

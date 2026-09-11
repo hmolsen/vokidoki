@@ -59,7 +59,14 @@ for ($y = 0; $y < $size; $y++) {
 // Maskable-Variante braucht Rand ("safe zone"), damit Android nichts abschneidet.
 $scale    = $maskable ? 0.42 : 0.56;
 $fontFile = __DIR__ . '/assets/Roboto-Bold.ttf';
-$white    = imagecolorallocatealpha($img, 255, 255, 255, 12);
+
+// Schriftfarbe nach der Helligkeit des Untergrunds. Die Palette im Admin reicht
+// von sehr hell bis sehr dunkel - weisse Schrift waere auf einem hellen Gelb
+// nicht zu lesen. Die Gewichte stammen aus der Helligkeitsformel für sRGB.
+$helligkeit = (0.2126 * $r + 0.7152 * $g + 0.0722 * $b) / 255;
+$ink        = $helligkeit > 0.62
+    ? imagecolorallocatealpha($img, 26, 26, 30, 12)
+    : imagecolorallocatealpha($img, 255, 255, 255, 12);
 
 if (is_file($fontFile) && function_exists('imagettfbbox')) {
     $fontSize = $size * $scale;
@@ -69,7 +76,7 @@ if (is_file($fontFile) && function_exists('imagettfbbox')) {
         $textH = $bbox[1] - $bbox[7];
         $x     = (int) (($size - $textW) / 2 - $bbox[0]);
         $y     = (int) (($size + $textH) / 2 - ($bbox[1]));
-        imagettftext($img, $fontSize, 0, $x, $y, $white, $fontFile, $initial);
+        imagettftext($img, $fontSize, 0, $x, $y, $ink, $fontFile, $initial);
     }
 } else {
     // Fallback ohne FreeType: schlichter weißer Balken als Unterscheidungsmerkmal.

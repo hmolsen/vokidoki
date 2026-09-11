@@ -5,7 +5,17 @@ require_once __DIR__ . '/_boot.php';
 
 admin_require();
 
-const COLORS = ['#e0559a', '#4f7cff', '#1c9d5c', '#e08a1e', '#8b5cf6', '#0ea5b7', '#d8402f'];
+/**
+ * Prüft nur das Format, nicht die Zugehörigkeit zur aktuellen Palette.
+ * Sonst liesse sich eine früher gesetzte Farbe beim Speichern nicht halten,
+ * wenn die Palette einmal wechselt.
+ */
+function valid_color(string $color): string
+{
+    return preg_match('/^#[0-9a-f]{6}$/i', $color) === 1
+        ? strtolower($color)
+        : color_palette()[27];   // ein kräftiges Blau als Rückfall
+}
 
 function valid_username(string $name): bool
 {
@@ -19,7 +29,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $username = strtolower(trim((string) ($_POST['username'] ?? '')));
         $display  = trim((string) ($_POST['display_name'] ?? ''));
         $password = (string) ($_POST['password'] ?? '');
-        $color    = (string) ($_POST['color'] ?? COLORS[0]);
+        $color    = (string) ($_POST['color'] ?? '');
 
         if (!valid_username($username)) {
             flash('Benutzername: 3-64 Zeichen, nur Kleinbuchstaben, Ziffern, . _ -', 'bad');
@@ -33,7 +43,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             q(
                 'INSERT INTO users (username, display_name, password_hash, color) VALUES (?, ?, ?, ?)',
                 [$username, mb_substr($display, 0, 64), password_hash($password, PASSWORD_DEFAULT),
-                 in_array($color, COLORS, true) ? $color : COLORS[0]],
+                 valid_color($color)],
             );
             flash('Account "' . $display . '" angelegt.');
         }
@@ -43,7 +53,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if (isset($_POST['update'])) {
         $id      = (int) ($_POST['id'] ?? 0);
         $display = trim((string) ($_POST['display_name'] ?? ''));
-        $color   = (string) ($_POST['color'] ?? COLORS[0]);
+        $color   = (string) ($_POST['color'] ?? '');
         $active  = isset($_POST['active']) ? 1 : 0;
 
         if ($display === '') {
@@ -51,7 +61,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         } else {
             q(
                 'UPDATE users SET display_name = ?, color = ?, active = ? WHERE id = ?',
-                [mb_substr($display, 0, 64), in_array($color, COLORS, true) ? $color : COLORS[0], $active, $id],
+                [mb_substr($display, 0, 64), valid_color($color), $active, $id],
             );
             flash('Account aktualisiert.');
         }
@@ -100,19 +110,6 @@ $users = qa(
 
 admin_head('Accounts', 'users.php');
 flash_render();
-
-$colorPicker = static function (string $selected, string $name = 'color'): string {
-    $out = '<select name="' . h($name) . '">';
-    foreach (COLORS as $c) {
-        $out .= sprintf(
-            '<option value="%s"%s>%s</option>',
-            h($c),
-            $c === $selected ? ' selected' : '',
-            h($c),
-        );
-    }
-    return $out . '</select>';
-};
 ?>
 
 <h2>Neuen Account anlegen</h2>
@@ -132,14 +129,16 @@ $colorPicker = static function (string $selected, string $name = 'color'): strin
             <label for="password">Passwort</label>
             <input type="text" id="password" name="password" minlength="4" required>
         </div>
-        <div>
-            <label for="color">Farbe</label>
-            <?= $colorPicker(COLORS[0]) ?>
-        </div>
+
     </div>
+    <label>Farbe</label>
+    <?= color_grid(color_palette()[27]) ?>
+
     <p class="tiny muted">
         Der Anzeigename erscheint als App-Name auf dem Home-Bildschirm -
-        aus "Lilli" wird "Lillis Vokabeln".
+        aus "Lilli" wird "Lillis Vokabeln". Die Farbe ist die des
+        Homescreen-Symbols; die Initiale darauf wird hell oder dunkel gesetzt,
+        je nachdem was besser lesbar ist.
     </p>
     <button class="btn small" name="create" value="1">Account anlegen</button>
 </form>
@@ -172,12 +171,12 @@ $colorPicker = static function (string $selected, string $name = 'color'): strin
             <input type="hidden" name="id" value="<?= (int) $u['id'] ?>">
             <input type="text" name="display_name" value="<?= h($u['display_name']) ?>"
                    maxlength="64" style="width:180px;margin:0">
-            <?= $colorPicker($u['color']) ?>
             <label style="display:flex;align-items:center;gap:6px;margin:0;font-weight:500">
                 <input type="checkbox" name="active" value="1"<?= $u['active'] ? ' checked' : '' ?>
                        style="width:auto;min-height:auto;margin:0"> aktiv
             </label>
             <button class="btn secondary small" name="update" value="1">Speichern</button>
+            <?= color_grid($u['color']) ?>
         </form>
 
         <form method="post" class="inline" style="margin-bottom:12px">

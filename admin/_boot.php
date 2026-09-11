@@ -5,6 +5,7 @@ require_once __DIR__ . '/../lib/db.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/settings.php';
 require_once __DIR__ . '/../lib/cost.php';
+require_once __DIR__ . '/../lib/colors.php';
 require_once __DIR__ . '/../lib/errors.php';
 require_once __DIR__ . '/../lib/keyvault.php';
 require_once __DIR__ . '/../lib/schema.php';
@@ -267,3 +268,4 @@ function redirect(string $file): never
     header('Location: ' . admin_url($file));
     exit;
 }
+

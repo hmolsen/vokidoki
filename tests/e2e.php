@@ -986,6 +986,50 @@ $res = http($base . '/admin/sentences.php?' . http_build_query(['user' => $userI
 ok('Filter per URL wirken weiterhin', $res['status'] === 200
    && str_contains($res['body'], 'Testkind'));
 
+section('Farbwahl im Admin');
+
+require_once __DIR__ . '/../lib/colors.php';
+
+ok('Die Palette hat 64 Farben', count(color_palette()) === 64, (string) count(color_palette()));
+ok('Alle sind gültige Hexwerte',
+   count(array_filter(color_palette(),
+       static fn (string $c): bool => preg_match('/^#[0-9a-f]{6}$/', $c) === 1)) === 64);
+ok('Und alle verschieden', count(array_unique(color_palette())) === 64);
+
+$res = http($base . '/admin/users.php');
+ok('Die Seite zeigt das Farbfeld', str_contains($res['body'], 'class="palette"'));
+ok('Kein Auswahlfeld mehr für die Farbe', !str_contains($res['body'], '<select name="color"'));
+ok('64 Kacheln stehen zur Wahl',
+   substr_count($res['body'], 'class="swatch-pick"') >= 64,
+   (string) substr_count($res['body'], 'class="swatch-pick"'));
+
+// Eine Farbe aus dem Feld setzen.
+$farbe = color_palette()[40];
+adminPost('users.php', ['update' => '1', 'id' => $userId,
+                        'display_name' => 'Testkind', 'color' => $farbe, 'active' => '1']);
+ok('Gewählte Farbe wird gespeichert',
+   qv('SELECT color FROM users WHERE id = ?', [$userId]) === $farbe,
+   (string) qv('SELECT color FROM users WHERE id = ?', [$userId]));
+
+$res = http($base . '/admin/users.php');
+ok('Und ist im Feld als gewählt markiert',
+   str_contains($res['body'], 'value="' . $farbe . '" checked'));
+
+// Unsinn darf nicht durchrutschen.
+adminPost('users.php', ['update' => '1', 'id' => $userId,
+                        'display_name' => 'Testkind', 'color' => 'rot; drop table', 'active' => '1']);
+ok('Ungültige Farbe wird abgefangen',
+   preg_match('/^#[0-9a-f]{6}$/', (string) qv('SELECT color FROM users WHERE id = ?', [$userId])) === 1,
+   (string) qv('SELECT color FROM users WHERE id = ?', [$userId]));
+
+// Das Symbol muss mit heller wie dunkler Farbe lesbar bleiben.
+foreach ([color_palette()[0] => 'sehr hell', color_palette()[7] => 'sehr dunkel'] as $c => $was) {
+    q('UPDATE users SET color = ? WHERE id = ?', [$c, $userId]);
+    $png = http($base . '/icon.php?u=' . $userId . '&s=192');
+    ok("Symbol wird erzeugt ($was: $c)", str_starts_with($png['body'], chr(0x89) . 'PNG'));
+}
+q('UPDATE users SET color = ? WHERE id = ?', [$farbe, $userId]);
+
 // ------------------------------------------------------------------ Abmelden
 
 section('Abmelden und Token-Widerruf');
