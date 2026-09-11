@@ -89,6 +89,15 @@ p  { margin: 0 0 12px; }
 }
 .topbar h1 { flex: 1; font-size: 1.3rem; margin: 0; }
 
+/* Fortschritt neben dem Titel statt in einer eigenen Zeile darunter. */
+.topbar-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+}
+.topbar-progress .bar { width: 64px; margin-top: 0; }
+
 .iconbtn {
     flex: none;
     width: 44px;
@@ -511,75 +520,98 @@ html.locked body {
     justify-content: center;
 }
 
-/* Mit offener Tastatur zählt jeder Pixel: Der Lernstand tritt zurück, der
-   Satz und das Eingabefeld bleiben. */
-body.keyboard-open .screen-top .quiz-head,
-body.keyboard-open .screen-top .bar { display: none; }
+/* Das Formular ist die wachsende Spalte zwischen Kopf und Rand. */
+.screen-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
 
-body.keyboard-open .screen-top .topbar { margin-bottom: 8px; }
-body.keyboard-open .cloze { padding: 14px 16px; margin: 8px 0; }
-body.keyboard-open .accents { margin-bottom: 10px; }
+/* Mit offener Tastatur zählt jeder Pixel. Der Fortschritt in der Kopfzeile
+   tritt zurück, die Abstände schrumpfen - Satz und Lücke bleiben. */
+body.keyboard-open .topbar-progress { display: none; }
+body.keyboard-open .screen-top .topbar { margin-bottom: 6px; }
+body.keyboard-open .cloze-native { margin-bottom: 10px; }
+body.keyboard-open .cloze-dots { margin-top: 10px; }
+body.keyboard-open .accents { margin-bottom: 8px; }
 body.keyboard-open .accent { min-height: 44px; }
 
-/* Eingabefeld und Knopf nebeneinander - untereinander kosteten sie eine
-   ganze Zeile Höhe, die über der Tastatur fehlt. */
-.cloze-entry {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-}
-.cloze-entry .cloze-input { flex: 1; min-width: 0; margin-bottom: 0; }
-.cloze-entry .btn { width: auto; flex: none; padding: 14px 20px; }
+/* Die Zeichenreihe sitzt unter dem Knopf, direkt über der Tastatur - dort,
+   wo iOS seine eigene Zusatzleiste hätte. */
+.cloze-check + .accents { margin: 12px auto 0; }
 
-/* Die Zeichenreihe sitzt jetzt unter dem Feld, direkt über der Tastatur -
-   dort, wo iOS seine eigene Zusatzleiste hätte. */
-.cloze-entry + .accents { margin: 12px auto 0; }
-
-.cloze {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: 22px 18px;
-    margin: 16px 0 18px;
-    text-align: center;
-}
-
+/*
+ * Der Satz steht frei, ohne Karte drumherum. Rahmen, Schatten und 22px
+ * Polsterung kosteten über der Tastatur rund 90px - Platz, den der Satz
+ * selbst besser gebraucht hat.
+ */
 .cloze-native {
     font-size: 1.05rem;
     color: var(--text-soft);
-    margin: 0 0 14px;
+    margin: 0 0 16px;
+    text-align: center;
     overflow-wrap: anywhere;
 }
 
 .cloze-foreign {
     font-size: 1.35rem;
     font-weight: 600;
-    line-height: 1.6;
+    line-height: 1.9;
     margin: 0;
+    text-align: center;
     overflow-wrap: anywhere;
 }
 
-/* Die Lücke im Satz. Feste Breite, damit die Länge der Lösung nichts verrät. */
-.gap {
+/*
+ * Das Eingabefeld sitzt in der Lücke selbst.
+ *
+ * input[type=text] ist als Selektor genauso schwer wie eine Klasse, deshalb
+ * hier input.cloze-input - sonst gewönne die Grundregel weiter oben mit
+ * ihren 52px Höhe und voller Breite.
+ */
+input.cloze-input {
     display: inline-block;
-    width: 110px;
-    max-width: 60%;
+    width: 7ch;
+    min-height: 0;
+    margin: 0 4px;
+    padding: 0 4px 2px;
+    border: 0;
     border-bottom: 3px solid var(--accent);
-    vertical-align: -3px;
-    margin: 0 3px;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: inherit;
+    font-weight: 700;
+    text-align: center;
+    vertical-align: baseline;
+    transition: background .15s ease, border-color .15s ease;
 }
 
-.cloze-input {
-    text-align: center;
-    font-size: 20px;
-    font-weight: 600;
-    margin-bottom: 12px;
+input.cloze-input:focus {
+    outline: none;
+    border-bottom-color: var(--accent);
+    background: var(--surface-2);
 }
-.cloze-input.correct { border-color: var(--good); background: var(--good-bg); color: var(--good); }
-.cloze-input.almost  { border-color: var(--good); background: var(--good-bg); color: var(--text); }
-.cloze-input.wrong   { border-color: var(--bad);  background: var(--bad-bg);  color: var(--bad); }
-.cloze-input[readonly] { opacity: 1; }
+
+input.cloze-input.correct { border-bottom-color: var(--good); color: var(--good); background: var(--good-bg); }
+input.cloze-input.almost  { border-bottom-color: var(--good); background: var(--good-bg); }
+input.cloze-input.wrong   { border-bottom-color: var(--bad);  color: var(--bad);  background: var(--bad-bg); }
+input.cloze-input[readonly] { opacity: 1; }
+
+/* Wie oft die Vokabel schon hintereinander saß - gehört zu dieser Karte. */
+.cloze-dots {
+    display: flex;
+    justify-content: center;
+    margin-top: 18px;
+}
+
+/* Kein Knopf über die ganze Breite: Der Satz ist die Hauptsache. */
+.cloze-check {
+    margin: 0 auto;
+    min-width: 140px;
+}
 
 /*
  * Sonderzeichen zum Antippen. iOS gibt keiner Webseite die Möglichkeit, die
@@ -737,25 +769,6 @@ body.keyboard-open .accent { min-height: 44px; }
     color: var(--text-soft);
     opacity: .55;
 }
-
-/* Spinner in einer Zeile - zeigt, dass im Hintergrund noch gearbeitet wird. */
-.spinner.inline {
-    width: 20px;
-    height: 20px;
-    margin: 0;
-    border-width: 2px;
-    display: inline-block;
-    vertical-align: -4px;
-}
-
-.tiny.warn { color: var(--bad); }
-
-/* Nicht anklickbare Übungszeile, solange ihre Sätze entstehen. */
-.row[disabled] {
-    cursor: default;
-    opacity: .75;
-}
-.row[disabled]:active { transform: none; }
 
 /* Auf sehr schmalen Geräten rücken die beiden Spalten zusammen, statt
    untereinander zu rutschen - so bleiben die Symbole in einer Linie. */

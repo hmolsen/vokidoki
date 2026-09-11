@@ -295,11 +295,13 @@ ok('Die Mitte nimmt den uebrigen Platz und scrollt notfalls in sich',
    && preg_match('/\.screen-mid\s*\{[^}]*overflow-y:\s*auto/s', $css) === 1);
 
 // Was ueber der Tastatur keinen Platz mehr hat, tritt zurueck.
-ok('Bei offener Tastatur tritt der Lernstand zurueck',
-   preg_match('/body\.keyboard-open[^{]*\.quiz-head[^{]*\{[^}]*display:\s*none/s', $css) === 1);
-ok('Eingabefeld und Knopf stehen nebeneinander statt untereinander',
-   str_contains($js, 'class="cloze-entry"')
-   && preg_match('/\.cloze-entry\s*\{[^}]*display:\s*flex/s', $css) === 1);
+ok('Bei offener Tastatur tritt der Fortschritt zurueck',
+   preg_match('/body\.keyboard-open[^{]*\.topbar-progress[^{]*\{[^}]*display:\s*none/s', $css) === 1);
+ok('Der Fortschritt steht neben dem Titel, nicht in einer eigenen Zeile',
+   str_contains($js, 'class="topbar-progress"')
+   && preg_match('/\.topbar-progress\s*\{[^}]*display:\s*flex/s', $css) === 1);
+ok('Der Pruefen-Knopf nimmt nicht die ganze Breite',
+   str_contains($js, 'class="btn small cloze-check"'));
 
 // Der erste Anlauf reichte nicht: Solange html und body scrollen koennen,
 // schiebt iOS beim Fokus die ganze Seite nach oben - der Container mag so
@@ -313,16 +315,31 @@ ok('Und wird zurueckgeholt, falls iOS doch gescrollt hat',
    str_contains($appjs, 'offsetTop') && str_contains($appjs, '--vvtop')
    && preg_match('/\.app\.fitted\s*\{[^}]*top:\s*var\(--vvtop/s', $css) === 1);
 
-// Zweite, davon unabhaengige Absicherung: iOS scrollt auf das Eingabefeld.
-// Was unmittelbar darueber steht, bleibt dabei am ehesten zu sehen.
-$posSatz    = strpos($js, 'class="cloze-native"');
-$posFeld    = strpos($js, 'class="cloze-entry"');
-$posZeichen = strpos($js, '${accentRow(data.lang)}');
-ok('Das Eingabefeld steht direkt unter dem Satz',
-   $posSatz !== false && $posFeld !== false && $posSatz < $posFeld);
-ok('Und die Zeichenreihe darunter, nicht dazwischen',
-   $posZeichen !== false && $posFeld < $posZeichen,
-   "Satz $posSatz, Feld $posFeld, Zeichen $posZeichen");
+/*
+ * Zweite, davon unabhaengige Absicherung: Das Eingabefeld sitzt in der Luecke
+ * selbst. iOS scrollt beim Fokus darauf - und damit unweigerlich auf den
+ * Satz, denn das Feld steht mitten darin. Das ist der Teil, der auch dann
+ * traegt, wenn die Hoehenrechnung auf einem Geraet danebenliegt. Nebenbei
+ * spart es die Zeile, die das Feld vorher fuer sich brauchte.
+ */
+ok('Das Eingabefeld sitzt in der Luecke des Satzes',
+   preg_match('/function gapField\(/', $js) === 1
+   && str_contains($js, "replace('{}', feld)"));
+ok('Und wird nicht mehr daneben gesetzt',
+   !str_contains($js, 'class="cloze-entry"') && !str_contains($css, '.cloze-entry'));
+ok('Es sieht aus wie die Luecke, nicht wie ein Kasten',
+   preg_match('/input\.cloze-input\s*\{[^}]*border-bottom:\s*3px/s', $css) === 1
+   && preg_match('/input\.cloze-input\s*\{[^}]*background:\s*transparent/s', $css) === 1);
+
+// Die Breite darf nichts ueber die Laenge der Loesung verraten - sie waechst
+// erst mit dem, was das Kind selbst tippt.
+ok('Die Breite verraet die Loesung nicht',
+   str_contains($js, 'function fitField') && str_contains($js, 'input.value.length'));
+
+// Die Karte um den Satz ist weg: Rahmen, Schatten und Polsterung kosteten
+// ueber der Tastatur rund 90px, und der Satz stand in einem scrollenden Kasten.
+ok('Der Satz steht frei, ohne Karte drumherum',
+   preg_match('/^\.cloze \{/m', $css) !== 1);
 
 section('Abstände vor Satzzeichen');
 

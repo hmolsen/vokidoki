@@ -70,56 +70,49 @@ async function nextQuestion(unitId) {
         return;
     }
 
-    // Feste Spalte über die sichtbare Höhe: Kopf und Fuß stehen, der Satz in
-    // der Mitte bekommt, was übrig bleibt. So schiebt die Tastatur nichts
-    // mehr aus dem Bild - es gibt schlicht nichts zu scrollen.
+    /*
+     * Feste Spalte über die sichtbare Höhe: Kopf und Fuß stehen, der Satz
+     * dazwischen bekommt, was übrig bleibt.
+     *
+     * Das Eingabefeld sitzt in der Lücke selbst. Das spart nicht nur die
+     * Zeile, die es vorher für sich brauchte - es ist auch das, was die
+     * Übung eigentlich meint: Das Kind füllt die Lücke, es beantwortet
+     * nicht daneben eine Frage.
+     */
     render(`
         <div class="screen">
             <div class="screen-top">
-                ${topbar('Lückentext', { backTo: `/unit/${unitId}` })}
-
-                <div class="quiz-head">
-                    <span class="tiny muted">${data.known} von ${data.total} gelernt</span>
-                    <span class="dots">${
-                        [0, 1, 2].map((i) => `<i class="${i < Math.min(3, data.streak) ? 'on' : ''}"></i>`).join('')
-                    }</span>
-                </div>
-                ${progressBar(data.known, data.total)}
+                ${topbar('Lückentext', {
+                    backTo: `/unit/${unitId}`,
+                    action: `
+                        <div class="topbar-progress" title="${data.known} von ${data.total} gelernt">
+                            ${progressBar(data.known, data.total)}
+                            <span class="tiny muted">${data.known}/${data.total}</span>
+                        </div>`,
+                })}
             </div>
 
-            <div class="screen-mid">
-                <div class="cloze">
+            <form id="form" class="screen-body" autocomplete="off">
+                <div class="screen-mid">
                     <p class="cloze-native">${esc(data.native)}</p>
-                    <p class="cloze-foreign">${gapSentence(data.foreign)}</p>
-                </div>
-            </div>
+                    <p class="cloze-foreign">${gapField(data.foreign, data.lang)}</p>
 
-            <div class="screen-bottom">
-                <div class="verdict" id="verdict"></div>
-
-                <!--
-                    Das Eingabefeld steht bewusst direkt unter dem Satz und
-                    die Zeichenreihe darunter. iOS scrollt beim Fokus auf das
-                    Feld; was unmittelbar darüber steht, bleibt dabei am
-                    ehesten zu sehen. Sollte die Höhenrechnung auf einem Gerät
-                    doch einmal danebenliegen, ist wenigstens der Satz noch da.
-                -->
-                <form id="form" autocomplete="off">
-                    <div class="cloze-entry">
-                        <input type="text" id="answer" class="cloze-input"
-                               ${data.lang ? `lang="${esc(data.lang)}"` : ''}
-                               placeholder="Was fehlt?"
-                               maxlength="128"
-                               autocomplete="off" autocorrect="off"
-                               autocapitalize="off" spellcheck="false"
-                               enterkeyhint="done">
-                        <button class="btn" type="submit" id="check">Prüfen</button>
+                    <div class="cloze-dots">
+                        <span class="dots">${
+                            [0, 1, 2].map((i) =>
+                                `<i class="${i < Math.min(3, data.streak) ? 'on' : ''}"></i>`).join('')
+                        }</span>
                     </div>
-                    ${accentRow(data.lang)}
-                </form>
 
-                <div id="msg"></div>
-            </div>
+                    <div class="verdict" id="verdict"></div>
+                </div>
+
+                <div class="screen-bottom">
+                    <button class="btn small cloze-check" type="submit" id="check">Prüfen</button>
+                    ${accentRow(data.lang)}
+                    <div id="msg"></div>
+                </div>
+            </form>
         </div>
     `);
 
@@ -128,6 +121,9 @@ async function nextQuestion(unitId) {
     const form  = $('#form');
     const input = $('#answer');
     let answered = false;
+
+    fitField(input);
+    input.addEventListener('input', () => fitField(input));
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -248,9 +244,28 @@ function wireAccents(input, istBeantwortet) {
     });
 }
 
-/** Ersetzt den Platzhalter {} durch eine sichtbare Lücke. */
-function gapSentence(text) {
-    return esc(text).replace('{}', '<span class="gap"></span>');
+/**
+ * Setzt das Eingabefeld an die Stelle der Lücke.
+ *
+ * Die Breite ist bewusst fest und verrät nichts über die Länge der Lösung -
+ * sie wächst erst mit dem, was das Kind selbst tippt.
+ */
+function gapField(text, lang) {
+    const feld = `<input type="text" id="answer" class="cloze-input"
+                         ${lang ? `lang="${esc(lang)}"` : ''}
+                         maxlength="128" size="1"
+                         aria-label="Was fehlt?"
+                         autocomplete="off" autocorrect="off"
+                         autocapitalize="off" spellcheck="false"
+                         enterkeyhint="done">`;
+
+    return esc(text).replace('{}', feld);
+}
+
+/** Breite nach dem, was drinsteht - zwischen einer leeren Lücke und der Zeile. */
+function fitField(input) {
+    const zeichen = Math.min(Math.max(input.value.length + 1, 7), 20);
+    input.style.width = `${zeichen}ch`;
 }
 
 /** Wartebild, während die Sätze entstehen. */
