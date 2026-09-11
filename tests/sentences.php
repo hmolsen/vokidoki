@@ -205,6 +205,40 @@ ok('mousedown wird abgefangen - sonst klappt die Tastatur bei jedem Zeichen zu',
 ok('Die Schreibmarke wandert hinter das eingefügte Zeichen',
    str_contains($js, 'setSelectionRange'));
 
+// Freier Umbruch liess in der zweiten Reihe einen Rest stehen, der nicht
+// unter der ersten ausgerichtet war - das sah schlicht unaufgeräumt aus.
+$css = (string) file_get_contents(__DIR__ . '/../style.css');
+
+ok('Die Tasten stehen in einem Raster, nicht im freien Umbruch',
+   preg_match('/\.accents\s*\{[^}]*display:\s*grid/s', $css) === 1
+   && preg_match('/\.accents\s*\{[^}]*flex-wrap/s', $css) !== 1);
+ok('Die Spaltenzahl kommt aus dem Code, steht also nicht fest',
+   str_contains($js, '--cols:${accentColumns(keys.length)}')
+   && preg_match('/grid-template-columns:\s*repeat\(var\(--cols/', $css) === 1);
+ok('Die Tasten sind so groß wie die übrigen Bedienelemente',
+   preg_match('/\.accent\s*\{[^}]*min-height:\s*(\d+)px/s', $css, $m) === 1
+   && (int) $m[1] >= 44, $m[1] ?? 'keine Höhe');
+ok('Und benutzen die Schrift der App',
+   preg_match('/\.accent\s*\{[^}]*font:\s*inherit/s', $css) === 1);
+
+// Jede Sprache soll glatt aufgehen - sonst bleibt doch ein Rest stehen.
+$spalten = static function (int $n): int {
+    if ($n <= 7) return $n;
+    for ($s = 7; $s >= 4; $s--) {
+        if ($n % $s === 0) return $s;
+    }
+    return 7;
+};
+$krumm = [];
+foreach ($reihen as $sprache => $zeichen) {
+    $c = $spalten(count($zeichen));
+    if (count($zeichen) % $c !== 0) {
+        $krumm[] = $sprache . ':' . count($zeichen) . ' in ' . $c;
+    }
+}
+ok('Jede Zeichenreihe füllt ihre Reihen vollständig',
+   $krumm === [], implode(', ', $krumm));
+
 // Der eigentliche Punkt: Jedes angebotene Zeichen muss sich auf schlichte
 // Buchstaben zurückführen lassen, sonst kann der Vergleich es nicht einordnen.
 $unbekannt = [];

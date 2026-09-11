@@ -496,39 +496,51 @@ input:focus, select:focus {
  * funktioniert unabhängig davon, welche Tastaturen installiert sind.
  */
 .accents {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 6px;
-    margin-bottom: 10px;
+    /* Festes Raster statt freiem Umbruch: Die Tasten der zweiten Reihe
+       fluchten so mit denen darüber. --cols kommt aus views/cloze.js und
+       richtet sich nach der Anzahl der Zeichen. */
+    display: grid;
+    grid-template-columns: repeat(var(--cols, 7), minmax(0, 1fr));
+    gap: 8px;
+
+    /* Auf dem Handy füllt das Raster die Breite, auf Breiterem hören die
+       Tasten bei Eingabefeldgröße auf zu wachsen und stehen mittig. */
+    max-width: calc(var(--cols, 7) * 60px);
+    margin: 0 auto 14px;
 }
 
 .accent {
-    min-width: 40px;
-    height: 42px;
-    padding: 0 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    padding: 0;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--surface);
     color: var(--text);
-    font-size: 1.1rem;
+    /* Wie die übrigen Bedienelemente: geerbte Schrift, nur etwas größer,
+       weil hier ein einzelnes Zeichen für sich steht. */
+    font: inherit;
+    font-size: 19px;
     font-weight: 600;
     line-height: 1;
     cursor: pointer;
-    /* Der graue Aufblitz beim Antippen steht auf dem Handy nur im Weg. */
+    box-shadow: 0 1px 1px rgba(16, 20, 30, .04);
     -webkit-tap-highlight-color: transparent;
     transition: transform .08s ease, background .12s ease;
 }
 
+/* Dieselbe zurückhaltende Bewegung wie bei .btn - nicht mehr. */
 .accent:active {
     background: var(--surface-2);
-    transform: scale(.92);
+    transform: scale(.96);
 }
 
-/* Auf schmalen Geräten lieber eine Reihe mehr als Knöpfe, die man nicht trifft. */
+/* Auf schmalen Geräten enger, aber nicht so eng, dass man danebentippt. */
 @media (max-width: 360px) {
-    .accents { gap: 5px; }
-    .accent { min-width: 36px; height: 40px; padding: 0 6px; }
+    .accents { gap: 6px; }
+    .accent { min-height: 44px; font-size: 18px; }
 }
 
 /* Spinner in einer Zeile - zeigt, dass im Hintergrund noch gearbeitet wird. */
