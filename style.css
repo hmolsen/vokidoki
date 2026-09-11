@@ -534,10 +534,12 @@ body.keyboard-open .topbar-progress { display: none; }
 body.keyboard-open .screen-top .topbar { margin-bottom: 6px; }
 body.keyboard-open .cloze-native { margin-bottom: 10px; }
 body.keyboard-open .cloze-dots { margin-top: 10px; }
-body.keyboard-open .accents { margin-bottom: 8px; }
-body.keyboard-open .accent { min-height: 44px; }
 
-/* Die Zeichenreihe sitzt unter dem Knopf, direkt über der Tastatur - dort,
+/* Die Tasten behalten ihre Größe: Eine Reihe braucht keinen Sparzwang, und
+   Bedienelemente, die beim Aufklappen der Tastatur schrumpfen, wirken
+   unruhig. */
+
+/* Die Zeichenleiste sitzt unter dem Knopf, direkt über der Tastatur - dort,
    wo iOS seine eigene Zusatzleiste hätte. */
 .cloze-check + .accents { margin: 12px auto 0; }
 
@@ -633,28 +635,41 @@ input.cloze-input[readonly] { opacity: 1; }
 
 /*
  * Sonderzeichen zum Antippen. iOS gibt keiner Webseite die Möglichkeit, die
- * Tastatursprache zu bestimmen - diese Reihe ist der Ersatz dafür und
+ * Tastatursprache zu bestimmen - diese Leiste ist der Ersatz dafür und
  * funktioniert unabhängig davon, welche Tastaturen installiert sind.
+ *
+ * Eine Reihe zum Wischen statt zweier fester: Die zweite Reihe kostete 52px,
+ * und die fehlten oben beim deutschen Satz. Was nicht hineinpasst, liegt
+ * einen Wisch weit rechts.
  */
 .accents {
-    /* Festes Raster statt freiem Umbruch: Die Tasten der zweiten Reihe
-       fluchten so mit denen darüber. --cols kommt aus views/cloze.js und
-       richtet sich nach der Anzahl der Zeichen. */
-    display: grid;
-    grid-template-columns: repeat(var(--cols, 7), minmax(0, 1fr));
+    display: flex;
     gap: 8px;
+    overflow-x: auto;
 
-    /* Auf dem Handy füllt das Raster die Breite, auf Breiterem hören die
-       Tasten bei Eingabefeldgröße auf zu wachsen und stehen mittig. */
-    max-width: calc(var(--cols, 7) * 60px);
-    margin: 0 auto 14px;
+    /* Am Ende der Leiste nicht die Seite mitziehen. */
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+
+    /* Passt alles hinein, steht die Leiste mittig; sonst füllt sie die
+       Breite und wird wischbar. */
+    width: fit-content;
+    max-width: 100%;
+    margin: 0 auto 8px;
+
+    /* Sie ist zum Wischen da - ein Balken darunter nimmt nur Platz weg.
+       Dass es weitergeht, zeigt die angeschnittene Taste am Rand. */
+    scrollbar-width: none;
 }
+.accents::-webkit-scrollbar { display: none; }
 
 .accent {
+    flex: none;
+    width: 48px;
+    min-height: 48px;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 48px;
     padding: 0;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -681,7 +696,7 @@ input.cloze-input[readonly] { opacity: 1; }
 /* Auf schmalen Geräten enger, aber nicht so eng, dass man danebentippt. */
 @media (max-width: 360px) {
     .accents { gap: 6px; }
-    .accent { min-height: 44px; font-size: 18px; }
+    .accent { width: 44px; min-height: 44px; font-size: 18px; }
 }
 
 /* Spinner in einer Zeile - zeigt, dass im Hintergrund noch gearbeitet wird. */

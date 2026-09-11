@@ -209,35 +209,36 @@ ok('Die Schreibmarke wandert hinter das eingefügte Zeichen',
 // unter der ersten ausgerichtet war - das sah schlicht unaufgeräumt aus.
 $css = (string) file_get_contents(__DIR__ . '/../style.css');
 
-ok('Die Tasten stehen in einem Raster, nicht im freien Umbruch',
-   preg_match('/\.accents\s*\{[^}]*display:\s*grid/s', $css) === 1
-   && preg_match('/\.accents\s*\{[^}]*flex-wrap/s', $css) !== 1);
-ok('Die Spaltenzahl kommt aus dem Code, steht also nicht fest',
-   str_contains($js, '--cols:${accentColumns(keys.length)}')
-   && preg_match('/grid-template-columns:\s*repeat\(var\(--cols/', $css) === 1);
+/*
+ * Eine Reihe zum Wischen statt zweier fester. Die zweite Reihe kostete 52px,
+ * und die fehlten oben beim deutschen Satz - der war dadurch manchmal gar
+ * nicht zu sehen.
+ */
+ok('Die Tasten stehen in einer Reihe, nicht in mehreren',
+   preg_match('/^\.accents \{[^}]*display:\s*flex/ms', $css) === 1
+   && preg_match('/^\.accents \{[^}]*flex-wrap/ms', $css) !== 1
+   && preg_match('/^\.accents \{[^}]*display:\s*grid/ms', $css) !== 1);
+ok('Und die Reihe laesst sich wischen',
+   preg_match('/^\.accents \{[^}]*overflow-x:\s*auto/ms', $css) === 1);
+ok('Am Ende zieht sie nicht die Seite mit',
+   preg_match('/^\.accents \{[^}]*overscroll-behavior-x:\s*contain/ms', $css) === 1);
+ok('Kurze Reihen stehen mittig, lange fuellen die Breite',
+   preg_match('/^\.accents \{[^}]*width:\s*fit-content/ms', $css) === 1
+   && preg_match('/^\.accents \{[^}]*max-width:\s*100%/ms', $css) === 1);
+
+// Die Spaltenrechnung von vorher ist damit hinfaellig.
+ok('Die Spaltenrechnung ist weg',
+   !str_contains($js, 'accentColumns') && !str_contains($js, '--cols'));
+
 ok('Die Tasten sind so groß wie die übrigen Bedienelemente',
    preg_match('/^\.accent \{[^}]*min-height:\s*(\d+)px/ms', $css, $m) === 1
    && (int) $m[1] >= 44, $m[1] ?? 'keine Höhe');
-ok('Und benutzen die Schrift der App',
+ok('Und behalten ihre Groesse, wenn die Tastatur aufgeht',
+   preg_match('/body\.keyboard-open \.accent \{/', $css) !== 1);
+ok('Sie benutzen die Schrift der App',
    preg_match('/^\.accent \{[^}]*font:\s*inherit/ms', $css) === 1);
-
-// Jede Sprache soll glatt aufgehen - sonst bleibt doch ein Rest stehen.
-$spalten = static function (int $n): int {
-    if ($n <= 7) return $n;
-    for ($s = 7; $s >= 4; $s--) {
-        if ($n % $s === 0) return $s;
-    }
-    return 7;
-};
-$krumm = [];
-foreach ($reihen as $sprache => $zeichen) {
-    $c = $spalten(count($zeichen));
-    if (count($zeichen) % $c !== 0) {
-        $krumm[] = $sprache . ':' . count($zeichen) . ' in ' . $c;
-    }
-}
-ok('Jede Zeichenreihe füllt ihre Reihen vollständig',
-   $krumm === [], implode(', ', $krumm));
+ok('Und rutschen nicht zusammen, damit man sie trifft',
+   preg_match('/^\.accent \{[^}]*flex:\s*none/ms', $css) === 1);
 
 // Der eigentliche Punkt: Jedes angebotene Zeichen muss sich auf schlichte
 // Buchstaben zurückführen lassen, sonst kann der Vergleich es nicht einordnen.

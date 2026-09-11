@@ -310,30 +310,11 @@ function accentRow(lang) {
     if (!keys) return '';
 
     return `
-        <div class="accents" id="accents" role="group" aria-label="Sonderzeichen"
-             style="--cols:${accentColumns(keys.length)}">
+        <div class="accents" id="accents" role="group" aria-label="Sonderzeichen">
             ${keys.map((ch) => `
                 <button type="button" class="accent" data-ch="${esc(ch)}"
                         tabindex="-1">${esc(ch)}</button>`).join('')}
         </div>`;
-}
-
-/**
- * Wie viele Tasten je Reihe?
- *
- * Ein festes Raster statt freiem Umbruch: Sonst steht in der zweiten Reihe
- * ein Rest, der nicht unter der ersten ausgerichtet ist. Gesucht ist die
- * breiteste Aufteilung, die glatt aufgeht - bei 14 Zeichen also zweimal
- * sieben. Geht keine auf, bleiben es sieben; im Raster fluchten die Tasten
- * der letzten Reihe dann immer noch mit denen darüber.
- */
-function accentColumns(count) {
-    if (count <= 7) return count;
-
-    for (let spalten = 7; spalten >= 4; spalten--) {
-        if (count % spalten === 0) return spalten;
-    }
-    return 7;
 }
 
 /** Setzt ein Zeichen an der Schreibmarke ein, ohne den Fokus zu verlieren. */
