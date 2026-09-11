@@ -531,27 +531,68 @@ input:focus, select:focus {
     align-items: center;
 }
 
-/* Symbol der Übungsart plus Stand - schmal genug für zwei nebeneinander. */
+/*
+ * Jede Übungsart bekommt zwei Zellen fester Breite: Symbol und Stand. Drei
+ * Punkte sind breiter als ein Haken und der wiederum breiter als ein Strich -
+ * ohne feste Breiten tanzten die Symbole von Zeile zu Zeile, weil der Block
+ * rechtsbündig steht.
+ */
 .mark {
     display: flex;
     align-items: center;
     gap: 4px;
-    font-size: .82rem;
     line-height: 1;
+    flex: none;
+}
+
+.mark-icon {
+    width: 17px;
+    flex: none;
+    text-align: center;
+    font-size: .95rem;
+}
+
+.mark-state {
+    width: 36px;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .mark-done {
     color: var(--good);
     font-weight: 700;
-    font-size: 1rem;
+    font-size: 1.05rem;
 }
 
 .mark-off {
     color: var(--text-soft);
-    opacity: .5;
+    opacity: .55;
 }
 
-/* Auf sehr schmalen Geräten untereinander statt nebeneinander. */
+/* Spinner in einer Zeile - zeigt, dass im Hintergrund noch gearbeitet wird. */
+.spinner.inline {
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    border-width: 2px;
+    display: inline-block;
+    vertical-align: -4px;
+}
+
+.tiny.warn { color: var(--bad); }
+
+/* Nicht anklickbare Übungszeile, solange ihre Sätze entstehen. */
+.row[disabled] {
+    cursor: default;
+    opacity: .75;
+}
+.row[disabled]:active { transform: none; }
+
+/* Auf sehr schmalen Geräten rücken die beiden Spalten zusammen, statt
+   untereinander zu rutschen - so bleiben die Symbole in einer Linie. */
 @media (max-width: 360px) {
-    .marks { flex-direction: column; gap: 5px; align-items: flex-end; }
+    .marks { gap: 8px; }
+    .mark-state { width: 32px; }
 }

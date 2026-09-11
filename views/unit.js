@@ -222,20 +222,26 @@ function exerciseRow(mode, icon, title, hint, info) {
  * Vokabel keinen brauchbaren erzeugen konnte. Im Admin lässt sich nachtragen.
  */
 function mark(exercise, info) {
+    // Symbol und Stand jeweils in einer Zelle fester Breite: Drei Punkte sind
+    // breiter als ein Haken, sonst tanzten die Symbole von Zeile zu Zeile.
+    const zelle = (inhalt, titel) => `
+        <span class="mark" title="${esc(titel)}">
+            <span class="mark-icon">${exercise.icon}</span>
+            <span class="mark-state">${inhalt}</span>
+        </span>`;
+
     if (!info.possible) {
-        return `<span class="mark" title="${esc(exercise.title)}: noch kein Lückensatz"
-                      >${exercise.icon}<span class="mark-off">&ndash;</span></span>`;
+        return zelle('<span class="mark-off">&ndash;</span>',
+            `${exercise.title}: noch kein Lückensatz`);
     }
 
-    const inner = info.known
-        ? '<span class="mark-done">\u{2713}</span>'
-        : dots(info.streak);
+    if (info.known) {
+        return zelle('<span class="mark-done">\u{2713}</span>',
+            `${exercise.title}: gekonnt`);
+    }
 
-    const titel = info.known
-        ? `${exercise.title}: gekonnt`
-        : `${exercise.title}: ${Math.min(3, info.streak)} von 3 hintereinander`;
-
-    return `<span class="mark" title="${esc(titel)}">${exercise.icon}${inner}</span>`;
+    return zelle(dots(info.streak),
+        `${exercise.title}: ${Math.min(3, info.streak)} von 3 hintereinander`);
 }
 
 /** Drei Punkte zeigen, wie oft die Vokabel schon hintereinander saß. */
