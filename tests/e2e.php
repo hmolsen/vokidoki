@@ -1344,7 +1344,89 @@ ok('Die Huelle selbst wird nicht vorgehalten',
    str_contains(strtolower($res['headers']), 'cache-control: no-store'),
    'kein no-store im Kopf');
 
+section('Zusammenhalt der Module');
+
+/*
+ * Die App blieb nach einem Update weiss: app.js traegt als einzige Datei
+ * einen Versionsstempel in der Adresse, core.js und die Ansichten werden ohne
+ * importiert. Der Service Worker lieferte deshalb eine alte core.js an eine
+ * schon neue app.js, der Import eines dort neuen Namens schlug fehl - und ein
+ * fehlgeschlagener Import reisst den ganzen Modulgraphen mit, nicht nur die
+ * eine Ansicht. Hier wird gegengeprueft, was sich statisch pruefen laesst.
+ */
+$module = array_merge(
+    [__DIR__ . '/../app.js', __DIR__ . '/../core.js'],
+    glob(__DIR__ . '/../views/*.js') ?: [],
+);
+
+/** Namen, die eine Datei nach aussen gibt. */
+$exporte = static function (string $datei): array {
+    $quelle = (string) @file_get_contents($datei);
+    preg_match_all('/export\s+(?:async\s+)?(?:function|const|let|class)\s+([\w$]+)/',
+                   $quelle, $m);
+    return $m[1];
+};
+
+$fehlend = [];
+$geprueft = 0;
+foreach ($module as $datei) {
+    $quelle = (string) file_get_contents($datei);
+    preg_match_all('/import\s*\{([^}]*)\}\s*from\s*[\'"]([^\'"]+)[\'"]/s',
+                   $quelle, $treffer, PREG_SET_ORDER);
+
+    foreach ($treffer as $t) {
+        $ziel = realpath(dirname($datei) . '/' . $t[2]);
+        if ($ziel === false) {
+            $fehlend[] = basename($datei) . ' -> ' . $t[2] . ' (Datei fehlt)';
+            continue;
+        }
+        $vorhanden = $exporte($ziel);
+
+        foreach (explode(',', $t[1]) as $name) {
+            $name = trim(explode(' as ', trim($name))[0]);
+            if ($name === '') {
+                continue;
+            }
+            $geprueft++;
+            if (!in_array($name, $vorhanden, true)) {
+                $fehlend[] = basename($datei) . ' holt ' . $name
+                           . ' aus ' . basename($ziel) . ', das es dort nicht gibt';
+            }
+        }
+    }
+}
+
+ok('Es gibt etwas zu pruefen', $geprueft > 20, (string) $geprueft);
+ok('Jeder importierte Name wird auch exportiert',
+   $fehlend === [], implode('; ', $fehlend));
+
+// app.js kommt als einzige Datei verlaesslich frisch an. Je weniger sie aus
+// core.js zieht, desto kleiner der Schaden, wenn die beiden auseinanderlaufen.
+preg_match('/import\s*\{([^}]*)\}\s*from\s*[\'"]\.\/core\.js[\'"]/s',
+           (string) file_get_contents(__DIR__ . '/../app.js'), $m);
+$ausCore = array_filter(array_map('trim', explode(',', $m[1] ?? '')));
+ok('app.js haelt sich bei core.js zurueck',
+   count($ausCore) <= 6, implode(', ', $ausCore));
+
 $sw = file_get_contents(__DIR__ . '/../sw.js');
+
+// Der eigentliche Fehler: Code kam aus dem Zwischenspeicher, waehrend die
+// dazugehoerige app.js schon neu war.
+ok('Der Service Worker holt Code zuerst aus dem Netz',
+   preg_match('~\(js\|css\)\$/\.test\(url\.pathname\)~', $sw) === 1
+   && preg_match('~fetch\(request\)\.then\(merken\)\.catch\(\(\) => caches\.match~', $sw) === 1,
+   'kein Network-First fuer js/css');
+ok('Und traegt einen neuen Cache-Namen, damit der alte Bestand wegfaellt',
+   preg_match("~const CACHE = 'vokabeltrainer-v(\d+)'~", $sw, $cm) === 1
+   && (int) $cm[1] >= 4, $cm[1] ?? 'keiner');
+
+$ht = (string) file_get_contents(__DIR__ . '/../.htaccess');
+ok('Und der Server laesst js/css gegenpruefen',
+   preg_match('~FilesMatch "\\\\\.\(js\|css\)\$"~', $ht) === 1
+   && str_contains($ht, 'no-cache'), 'keine Cache-Control-Regel');
+
+section('PWA-Hülle, Fortsetzung');
+
 ok('Der Service Worker haelt nur die Offline-Seite im Voraus vor',
    str_contains($sw, "const ASSETS = ['./offline.html']"));
 

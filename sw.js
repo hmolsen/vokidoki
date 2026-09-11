@@ -3,7 +3,7 @@
    API laufen immer über das Netz - eine gecachte Shell könnte sonst den
    Namen des falschen Kindes anzeigen, weil index.php pro Account rendert. */
 
-const CACHE = 'vokabeltrainer-v3';
+const CACHE = 'vokabeltrainer-v4';
 
 /**
  * Im Voraus wird nur die Offline-Seite abgelegt.
@@ -57,18 +57,36 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Statische Dateien: aus dem Cache liefern, im Hintergrund erneuern.
+    const merken = (response) => {
+        if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(request, copy));
+        }
+        return response;
+    };
+
+    /*
+     * Code zuerst aus dem Netz, erst dann aus dem Cache.
+     *
+     * Vorher galt auch hier "aus dem Cache, im Hintergrund erneuern". Für
+     * Bilder ist das richtig, für Module war es gefährlich: Nur app.js trägt
+     * einen Versionsstempel in der Adresse, core.js und die Ansichten werden
+     * ohne importiert. Nach einem Update traf deshalb eine frische app.js auf
+     * eine alte core.js, der Import eines neuen Namens schlug fehl, und die
+     * App blieb komplett weiß. Ein zusammengehörender Satz Dateien ist mehr
+     * wert als die eingesparte Millisekunde.
+     */
+    if (/\.(js|css)$/.test(url.pathname)) {
+        event.respondWith(
+            fetch(request).then(merken).catch(() => caches.match(request)),
+        );
+        return;
+    }
+
+    // Alles Übrige: aus dem Cache liefern, im Hintergrund erneuern.
     event.respondWith(
         caches.match(request).then((cached) => {
-            const network = fetch(request)
-                .then((response) => {
-                    if (response.ok) {
-                        const copy = response.clone();
-                        caches.open(CACHE).then((cache) => cache.put(request, copy));
-                    }
-                    return response;
-                })
-                .catch(() => cached);
+            const network = fetch(request).then(merken).catch(() => cached);
             return cached || network;
         }),
     );

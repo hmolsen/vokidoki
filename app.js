@@ -2,7 +2,7 @@
    Hash-Routing, damit die App ohne Rewrite-Regeln in jedem Unterverzeichnis
    eines Shared-Hostings läuft. */
 
-import { VT, go, render, notice, trackViewport } from './core.js';
+import { VT, go, render, notice } from './core.js';
 import { loginView } from './views/login.js';
 import { languagesView } from './views/languages.js';
 import { languageView } from './views/language.js';
@@ -62,6 +62,38 @@ async function route() {
     }
 
     go(VT.user ? '/' : '/login', true);
+}
+
+/**
+ * Hält --vvh auf der Höhe, die tatsächlich zu sehen ist.
+ *
+ * Klappt auf dem iPhone die Tastatur auf, schrumpft nur der sichtbare
+ * Ausschnitt - die Seite bleibt so hoch wie zuvor. iOS scrollt daraufhin zum
+ * Eingabefeld, und alles darüber wandert aus dem Bild. Wer seine Höhe an
+ * --vvh bindet, hat nichts zu scrollen und bleibt stehen, wo er ist.
+ *
+ * Steht bewusst hier und nicht in core.js: app.js ist die einzige Datei, die
+ * ihren Versionsstempel in der Adresse trägt und damit nach einem Update
+ * verlässlich frisch ankommt. Ein neuer Name, den app.js aus core.js holt,
+ * schlägt fehl, solange der Browser noch die alte core.js liefert - und ein
+ * fehlgeschlagener Import reisst die ganze App mit. Genau das ist passiert.
+ */
+function trackViewport() {
+    const vv = window.visualViewport;
+    if (!vv) return;   // ältere Browser behalten 100svh
+
+    const anpassen = () => {
+        const hoehe = Math.round(vv.height);
+        document.documentElement.style.setProperty('--vvh', `${hoehe}px`);
+
+        // Deutlich kleiner als das Fenster heißt: Die Tastatur ist offen.
+        // Der Schwellwert liegt über allem, was Adressleisten ausmachen.
+        document.body.classList.toggle('keyboard-open', window.innerHeight - hoehe > 140);
+    };
+
+    vv.addEventListener('resize', anpassen);
+    vv.addEventListener('scroll', anpassen);
+    anpassen();
 }
 
 // Muss vor dem ersten View laufen: --vvh steht sonst beim Aufbau noch nicht.

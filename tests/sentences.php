@@ -268,11 +268,18 @@ section('Platz für die Tastatur im Lückentext');
 // Seite bleibt so hoch wie zuvor. iOS scrollt dann zum Eingabefeld, und der
 // Satz wandert aus dem Bild, waehrend unten graue Flaeche stehen bleibt.
 $core = (string) file_get_contents(__DIR__ . '/../core.js');
+$appjs = (string) file_get_contents(__DIR__ . '/../app.js');
 
+// Die Beobachtung sitzt in app.js, nicht in core.js: app.js ist die einzige
+// Datei, die ihren Versionsstempel in der Adresse traegt und nach einem
+// Update verlaesslich frisch ankommt. Ein neuer Name, den app.js aus core.js
+// holt, reisst die ganze App mit, solange dort noch die alte Fassung liegt.
 ok('Die sichtbare Hoehe wird nachgehalten',
-   str_contains($core, 'visualViewport') && str_contains($core, '--vvh'));
+   str_contains($appjs, 'visualViewport') && str_contains($appjs, '--vvh'));
 ok('Und eine offene Tastatur wird erkannt',
-   str_contains($core, 'keyboard-open'));
+   str_contains($appjs, 'keyboard-open'));
+ok('Ohne dass core.js dafuer einen neuen Namen herausgeben muss',
+   !str_contains($core, 'trackViewport'));
 ok('Die Huelle bindet sich daran, statt ihre Grundhoehe zu behalten',
    preg_match('/\.app\.fitted\s*\{[^}]*height:\s*var\(--vvh/s', $css) === 1);
 ok('Nur wenn die Ansicht das auch anbietet',

@@ -21,6 +21,18 @@ Options -Indexes
 </FilesMatch>
 
 <IfModule mod_headers.c>
+  # Module und Stile immer gegenpruefen lassen.
+  #
+  # Nur app.js traegt einen Versionsstempel in der Adresse; core.js und die
+  # Ansichten werden ohne importiert. Ohne diese Zeile entscheidet der Browser
+  # nach eigenem Gutduenken, wie lange er eine Datei fuer frisch haelt - und
+  # eine alte core.js neben einer neuen app.js laesst die App weiss bleiben.
+  # "no-cache" verbietet das Aufheben nicht, es erzwingt nur die Rueckfrage;
+  # unveraendert kostet sie ein 304 ohne Rumpf.
+  <FilesMatch "\.(js|css)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+
   Header always set X-Content-Type-Options "nosniff"
   Header always set X-Frame-Options "SAMEORIGIN"
   Header always set Referrer-Policy "same-origin"

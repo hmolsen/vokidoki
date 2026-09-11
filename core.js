@@ -73,32 +73,6 @@ export function render(html) {
     return app;
 }
 
-/**
- * Hält --vvh auf der Höhe, die tatsächlich zu sehen ist.
- *
- * Klappt auf dem iPhone die Tastatur auf, schrumpft nur der sichtbare
- * Ausschnitt - die Seite bleibt so hoch wie zuvor. iOS scrollt daraufhin zum
- * Eingabefeld, und alles darüber wandert aus dem Bild. Wer seine Höhe an
- * --vvh bindet, hat nichts zu scrollen und bleibt stehen, wo er ist.
- */
-export function trackViewport() {
-    const vv = window.visualViewport;
-    if (!vv) return;   // ältere Browser behalten 100svh
-
-    const anpassen = () => {
-        const hoehe = Math.round(vv.height);
-        document.documentElement.style.setProperty('--vvh', `${hoehe}px`);
-
-        // Deutlich kleiner als das Fenster heißt: Die Tastatur ist offen.
-        // Der Schwellwert liegt über allem, was Adressleisten ausmachen.
-        document.body.classList.toggle('keyboard-open', window.innerHeight - hoehe > 140);
-    };
-
-    vv.addEventListener('resize', anpassen);
-    vv.addEventListener('scroll', anpassen);
-    anpassen();
-}
-
 export function $(selector, root = document) {
     return root.querySelector(selector);
 }
