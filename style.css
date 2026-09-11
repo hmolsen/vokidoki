@@ -508,3 +508,50 @@ input:focus, select:focus {
     opacity: .75;
 }
 .row[disabled]:active { transform: none; }
+
+/* ------------------------------------------------- Vokabelliste mit Ständen */
+
+/* Legende über der Liste - erklärt die Symbole rechts an jeder Zeile. */
+.legend {
+    margin: -4px 0 10px;
+    text-align: right;
+}
+
+.row.vocab {
+    cursor: default;
+    align-items: center;
+    gap: 10px;
+}
+.row.vocab:active { transform: none; }
+
+.marks {
+    display: flex;
+    flex: none;
+    gap: 12px;
+    align-items: center;
+}
+
+/* Symbol der Übungsart plus Stand - schmal genug für zwei nebeneinander. */
+.mark {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: .82rem;
+    line-height: 1;
+}
+
+.mark-done {
+    color: var(--good);
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.mark-off {
+    color: var(--text-soft);
+    opacity: .5;
+}
+
+/* Auf sehr schmalen Geräten untereinander statt nebeneinander. */
+@media (max-width: 360px) {
+    .marks { flex-direction: column; gap: 5px; align-items: flex-end; }
+}

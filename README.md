@@ -311,6 +311,23 @@ Web-Schnittstelle. Das Kind tippt einmal auf die Weltkugel, iOS merkt es sich.
 Verhindert wird der größere Ärger: dass die deutsche Autokorrektur
 `Je m'appelle` in etwas Deutsches „verbessert".
 
+### Die Übersicht einer Lerneinheit
+
+Jede Vokabel zeigt ihren Stand in **beiden** Übungsarten nebeneinander — Haken,
+drei Punkte oder ein Strich:
+
+```
+                                      🎯 Auswählen · ✏️ Lückentext
+the pencil          der Bleistift        🎯 ✓      ✏️ ●○○
+the teacher         die Lehrerin         🎯 ●●○    ✏️ ✓
+Bonne nuit !        Gute Nacht!          🎯 ○○○    ✏️ –
+```
+
+Der Strich heißt „hier nicht übbar": Für Grußformeln und Fragen gibt es keinen
+Lückensatz, und ohne diese Unterscheidung sähen sie ewig unerledigt aus.
+Entsprechend zählen die beiden Übungen unterschiedlich viele Vokabeln —
+`Auswählen 1/9, Lückentext 1/6`.
+
 ### Lernlogik
 
 Der Trainer zieht eine zufällige noch nicht gekonnte Vokabel der Lerneinheit,

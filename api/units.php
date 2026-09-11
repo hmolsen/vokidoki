@@ -42,26 +42,58 @@ switch (action()) {
 
     case 'get':
         $unit  = own_unit($uid, (int) ($_GET['id'] ?? 0));
+
+        // Lernstand beider Übungsarten nebeneinander. Bisher stand hier nur
+        // Multiple Choice - dadurch sah eine Vokabel "geschafft" aus, obwohl
+        // sie im Lückentext noch offen war.
         $vocab = qa(
-            "SELECT v.id, v.term_foreign, v.term_native, v.note,
-                    COALESCE(p.correct_count, 0) AS correct,
-                    COALESCE(p.wrong_count, 0)   AS wrong,
-                    COALESCE(p.streak, 0)        AS streak,
-                    p.known_at
+            "SELECT v.id, v.term_foreign, v.term_native, v.note, v.word_type,
+                    COALESCE(pm.streak, 0)        AS mc_streak,
+                    COALESCE(pm.correct_count, 0) AS mc_correct,
+                    COALESCE(pm.wrong_count, 0)   AS mc_wrong,
+                    pm.known_at                   AS mc_known,
+                    COALESCE(pc.streak, 0)        AS cl_streak,
+                    COALESCE(pc.correct_count, 0) AS cl_correct,
+                    COALESCE(pc.wrong_count, 0)   AS cl_wrong,
+                    pc.known_at                   AS cl_known,
+                    EXISTS (SELECT 1 FROM sentences s WHERE s.vocab_id = v.id) AS has_sentences
                FROM vocab v
-               LEFT JOIN progress p ON p.vocab_id = v.id AND p.mode = 'mc'
+               LEFT JOIN progress pm ON pm.vocab_id = v.id AND pm.mode = ?
+               LEFT JOIN progress pc ON pc.vocab_id = v.id AND pc.mode = ?
               WHERE v.unit_id = ?
               ORDER BY v.position, v.id",
-            [(int) $unit['id']],
+            [MODE_CHOICE, MODE_CLOZE, (int) $unit['id']],
         );
-        foreach ($vocab as &$v) {
-            $v['id']      = (int) $v['id'];
-            $v['correct'] = (int) $v['correct'];
-            $v['wrong']   = (int) $v['wrong'];
-            $v['streak']  = (int) $v['streak'];
-            $v['known']   = $v['known_at'] !== null;
-            unset($v['known_at']);
+
+        $liste = [];
+        foreach ($vocab as $v) {
+            $liste[] = [
+                'id'           => (int) $v['id'],
+                'term_foreign' => $v['term_foreign'],
+                'term_native'  => $v['term_native'],
+                'note'         => $v['note'],
+                'word_type'    => $v['word_type'],
+                'modes'        => [
+                    'mc' => [
+                        'streak'   => (int) $v['mc_streak'],
+                        'correct'  => (int) $v['mc_correct'],
+                        'wrong'    => (int) $v['mc_wrong'],
+                        'known'    => $v['mc_known'] !== null,
+                        'possible' => true,
+                    ],
+                    'cloze' => [
+                        'streak'   => (int) $v['cl_streak'],
+                        'correct'  => (int) $v['cl_correct'],
+                        'wrong'    => (int) $v['cl_wrong'],
+                        'known'    => $v['cl_known'] !== null,
+                        // Ohne Satz lässt sich diese Vokabel hier nicht üben.
+                        'possible' => (int) $v['has_sentences'] === 1,
+                    ],
+                ],
+            ];
         }
+        $vocab = $liste;
+
         // Fortschritt je Übungsart. Der Lückentext zählt nur Vokabeln, zu denen
         // es einen Satz gibt - er wird beim ersten Start erst erzeugt.
         [$mcKnown, $mcTotal] = unit_progress((int) $unit['id'], MODE_CHOICE);

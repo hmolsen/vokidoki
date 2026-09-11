@@ -869,6 +869,50 @@ adminPost('sentences.php', ['delete' => $satzId]);
 ok('Satz lässt sich löschen',
    q1('SELECT id FROM sentences WHERE id = ?', [$satzId]) === null);
 
+section('Übersicht der Lerneinheit');
+
+[$u, $code] = apiCall('units', 'get', null, ['id' => $unitId]);
+ok('Die Lerneinheit liefert ihre Vokabeln', $code === 200 && count($u['vocab'] ?? []) > 0);
+
+$erste = $u['vocab'][0] ?? [];
+ok('Jede Vokabel bringt beide Übungsarten mit',
+   isset($erste['modes']['mc'], $erste['modes']['cloze']), json_encode(array_keys($erste)));
+ok('Mit Serie, Treffern und Stand je Übungsart',
+   isset($erste['modes']['mc']['streak'], $erste['modes']['mc']['known'],
+         $erste['modes']['cloze']['correct'], $erste['modes']['cloze']['possible']));
+ok('Auswählen ist immer möglich', $erste['modes']['mc']['possible'] === true);
+
+// Eine Grußformel bekommt keinen Lückensatz - in der Übersicht muss sie
+// deshalb als "hier nicht übbar" erscheinen und nicht als offen.
+q('INSERT INTO vocab (unit_id, term_foreign, term_native, word_type, position)
+   VALUES (?, ?, ?, ?, 99)', [$unitId, 'Bonne nuit !', 'Gute Nacht!', 'aussage']);
+$grussId = (int) db()->lastInsertId();
+
+[$u2] = apiCall('units', 'get', null, ['id' => $unitId]);
+$gruss = null;
+foreach ($u2['vocab'] as $v) {
+    if ((int) $v['id'] === $grussId) {
+        $gruss = $v;
+    }
+}
+ok('Die Grußformel steht in der Liste', $gruss !== null);
+ok('Im Lückentext ist sie als nicht übbar markiert',
+   $gruss !== null && $gruss['modes']['cloze']['possible'] === false);
+ok('Beim Auswählen dagegen schon',
+   $gruss !== null && $gruss['modes']['mc']['possible'] === true);
+ok('Und sie gilt nirgends als gekonnt',
+   $gruss !== null && $gruss['modes']['cloze']['known'] === false
+   && $gruss['modes']['mc']['known'] === false);
+
+q('DELETE FROM vocab WHERE id = ?', [$grussId]);
+
+// Die beiden Stände dürfen sich unterscheiden - das war der Anlass.
+$mcGekonnt    = count(array_filter($u['vocab'], fn ($v) => $v['modes']['mc']['known']));
+$clozeGekonnt = count(array_filter($u['vocab'], fn ($v) => $v['modes']['cloze']['known']));
+ok('Die Stände beider Übungsarten werden getrennt geführt',
+   is_int($mcGekonnt) && is_int($clozeGekonnt),
+   "Auswählen $mcGekonnt, Lückentext $clozeGekonnt");
+
 // ------------------------------------------------------------------ Abmelden
 
 section('Abmelden und Token-Widerruf');

@@ -3,27 +3,40 @@ import {
     showError, clearError,
 } from '../core.js';
 
+/** Die Übungsarten - Reihenfolge und Symbole gelten für die ganze Ansicht. */
+const EXERCISES = [
+    { mode: 'mc',    icon: '\u{1F3AF}', title: 'Auswählen' },
+    { mode: 'cloze', icon: '\u{270F}\u{FE0F}', title: 'Lückentext' },
+];
+
 /** Detailansicht einer Lerneinheit: Fortschritt, Wortliste, Aktionen. */
 export async function unitView(unitId) {
     render(loading());
 
     const { unit, vocab, modes } = await api('units', 'get', { query: { id: unitId } });
 
-    const known   = vocab.filter((v) => v.known).length;
-    const correct = vocab.reduce((sum, v) => sum + v.correct, 0);
-    const wrong   = vocab.reduce((sum, v) => sum + v.wrong, 0);
+    // Beide Übungsarten zusammen - eine Vokabel ist erst durch, wenn sie in
+    // jeder Form sitzt, in der sie überhaupt geübt werden kann.
+    const summe = (mode, feld) => vocab.reduce((s, v) => s + v.modes[mode][feld], 0);
+    const correct = summe('mc', 'correct') + summe('cloze', 'correct');
+    const wrong   = summe('mc', 'wrong')   + summe('cloze', 'wrong');
     const asked   = correct + wrong;
     const quota   = asked > 0 ? Math.round((correct / asked) * 100) : null;
-    const done    = vocab.length > 0 && known >= vocab.length;
+
+    const komplett = vocab.length > 0 && vocab.every(
+        (v) => EXERCISES.every((e) => !v.modes[e.mode].possible || v.modes[e.mode].known),
+    );
 
     const list = vocab.map((v) => `
-        <div class="row" style="cursor:default">
-            <span class="lead">${v.known ? '\u{2705}' : dots(v.streak)}</span>
+        <div class="row vocab">
             <span class="body">
                 <span class="title">${esc(v.term_foreign)}</span>
                 <span class="tiny muted">${esc(v.term_native)}${
                     v.note ? ` &middot; ${esc(v.note)}` : ''
                 }</span>
+            </span>
+            <span class="marks">
+                ${EXERCISES.map((e) => mark(e, v.modes[e.mode])).join('')}
             </span>
         </div>
     `).join('');
@@ -32,25 +45,24 @@ export async function unitView(unitId) {
         ${topbar(unit.title, { backTo: `/lang/${unit.language_id}/units` })}
         <div id="msg"></div>
 
-        <div class="card">
-            ${done ? '<div class="notice good">Diese Lerneinheit hast du geschafft!</div>' : ''}
-            <div class="tiny muted">Auswählen &ndash; gelernt</div>
-            <strong>${known} von ${vocab.length} Vokabeln</strong>
-            ${progressBar(known, vocab.length)}
-            ${quota === null ? '' : `
-                <p class="tiny muted" style="margin:10px 0 0">
-                    ${correct} richtig, ${wrong} falsch &middot; ${quota}% Trefferquote
-                </p>`}
-        </div>
+        ${komplett ? '<div class="notice good">Diese Lerneinheit hast du in beiden Übungen geschafft!</div>' : ''}
 
         <h2>Üben</h2>
         <div id="exercises">
-            ${exerciseRow('mc', '\u{1F3AF}', 'Auswählen',
+            ${exerciseRow(EXERCISES[0].mode, EXERCISES[0].icon, EXERCISES[0].title,
                 'Vier Antworten, eine ist richtig', modes.mc)}
             ${clozeRow(modes.cloze)}
         </div>
 
+        ${quota === null ? '' : `
+            <p class="tiny muted center" style="margin:-2px 0 4px">
+                Zusammen ${correct} richtig, ${wrong} falsch &middot; ${quota}% Trefferquote
+            </p>`}
+
         <h2>Alle Vokabeln (${vocab.length})</h2>
+        <p class="legend tiny muted">
+            ${EXERCISES.map((e) => `${e.icon} ${esc(e.title)}`).join(' &nbsp;&middot;&nbsp; ')}
+        </p>
         ${list}
 
         <h2>Verwalten</h2>
@@ -165,7 +177,7 @@ function watchSentences(unitId, modes) {
 
 /** Die Lückentext-Zeile - sie wechselt ihren Zustand im laufenden Betrieb. */
 function clozeRow(info) {
-    return exerciseRow('cloze', '\u{270F}\u{FE0F}', 'Lückentext',
+    return exerciseRow(EXERCISES[1].mode, EXERCISES[1].icon, EXERCISES[1].title,
         'Das fehlende Wort in den Satz eintippen', info);
 }
 
@@ -202,6 +214,28 @@ function exerciseRow(mode, icon, title, hint, info) {
             </span>
             <span class="chev">${wartet ? '' : '&#8250;'}</span>
         </button>`;
+}
+
+/**
+ * Der Stand einer Vokabel in einer Übungsart: Haken, drei Punkte oder Strich.
+ * Der Strich steht für "hier nicht übbar" - etwa eine Grußformel, für die es
+ * keinen Lückensatz gibt.
+ */
+function mark(exercise, info) {
+    if (!info.possible) {
+        return `<span class="mark" title="${esc(exercise.title)}: kein Lückensatz"
+                      >${exercise.icon}<span class="mark-off">&ndash;</span></span>`;
+    }
+
+    const inner = info.known
+        ? '<span class="mark-done">\u{2713}</span>'
+        : dots(info.streak);
+
+    const titel = info.known
+        ? `${exercise.title}: gekonnt`
+        : `${exercise.title}: ${Math.min(3, info.streak)} von 3 hintereinander`;
+
+    return `<span class="mark" title="${esc(titel)}">${exercise.icon}${inner}</span>`;
 }
 
 /** Drei Punkte zeigen, wie oft die Vokabel schon hintereinander saß. */
