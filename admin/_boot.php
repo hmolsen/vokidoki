@@ -135,6 +135,71 @@ function admin_login_page(?string $error): never
     exit;
 }
 
+// ---------------------------------------------------------------- Filter
+
+/**
+ * Eine Zeile Auswahlknöpfe statt eines Dropdowns.
+ *
+ * Ein Dropdown kostet zwei Klicks - aufklappen und wählen - und verbirgt, was
+ * es überhaupt zur Auswahl gibt. Bei zwei Kindern und einer Handvoll Sprachen
+ * ist eine Knopfreihe schneller und zeigt alles auf einen Blick. Nebenbei
+ * braucht sie kein JavaScript.
+ *
+ * @param $items  Einträge als ['id' => int, 'label' => string]
+ * @param $base   Übrige Filter, die erhalten bleiben
+ * @param $resets Filter, die beim Wechsel zurückfallen - wer ein anderes Kind
+ *                wählt, darf nicht auf dessen Sprache stehen bleiben
+ */
+function filter_chips(
+    string $label,
+    array $items,
+    int $current,
+    array $base,
+    string $param,
+    array $resets = [],
+    ?string $allLabel = null,
+): string {
+    if ($items === []) {
+        return '';
+    }
+
+    $page = basename((string) ($_SERVER['SCRIPT_NAME'] ?? 'index.php'));
+
+    $link = static function (int $id) use ($base, $param, $resets, $page): string {
+        $query = $base;
+        foreach ($resets as $r) {
+            unset($query[$r]);
+        }
+        $query[$param] = $id;
+        $query = array_filter($query, static fn ($v): bool => $v !== 0 && $v !== '' && $v !== null);
+        return admin_url($page) . ($query === [] ? '' : '?' . http_build_query($query));
+    };
+
+    $chips = '';
+    if ($allLabel !== null) {
+        $chips .= sprintf(
+            '<a class="chip%s" href="%s">%s</a>',
+            $current === 0 ? ' on' : '',
+            h($link(0)),
+            h($allLabel),
+        );
+    }
+    foreach ($items as $item) {
+        $chips .= sprintf(
+            '<a class="chip%s" href="%s">%s</a>',
+            (int) $item['id'] === $current ? ' on' : '',
+            h($link((int) $item['id'])),
+            h($item['label']),
+        );
+    }
+
+    return sprintf(
+        '<div class="filterrow"><span class="lbl">%s</span><span class="chips">%s</span></div>',
+        h($label),
+        $chips,
+    );
+}
+
 // ---------------------------------------------------------------- Layout
 
 function admin_head(string $title, string $active): void

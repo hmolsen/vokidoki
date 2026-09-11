@@ -154,3 +154,60 @@ td.wtcell select {
     width: auto;
     max-width: 132px;
 }
+
+/* ------------------------------------------------- Filter als Knopfreihen */
+
+/* Statt Dropdowns: alles sichtbar, ein Klick genügt. Reine Links - sie
+   funktionieren auch ohne JavaScript und lassen sich als Lesezeichen ablegen. */
+.filters { padding: 14px 16px; }
+
+.filterrow {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 0 0 10px;
+}
+.filterrow:last-child { margin-bottom: 0; }
+
+.filterrow > .lbl {
+    flex: none;
+    width: 92px;
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--text-soft);
+}
+
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+}
+
+.chip {
+    display: inline-block;
+    padding: 6px 13px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text);
+    text-decoration: none;
+    font-size: .9rem;
+    line-height: 1.35;
+    white-space: nowrap;
+}
+.chip:hover { background: var(--surface-2); }
+
+.chip.on {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+}
+
+@media (max-width: 620px) {
+    .filterrow > .lbl { width: 100%; }
+}

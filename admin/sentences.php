@@ -143,55 +143,43 @@ admin_head('Lückensätze', 'sentences.php');
 flash_render();
 ?>
 
-<form method="get" class="card">
-    <div class="formgrid">
-        <div>
-            <label for="user">Kind</label>
-            <select name="user" id="user" onchange="this.form.submit()">
-                <option value="0">alle</option>
-                <?php foreach ($users as $u): ?>
-                    <option value="<?= (int) $u['id'] ?>"<?= (int) $u['id'] === $userId ? ' selected' : '' ?>>
-                        <?= h($u['display_name']) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <?php if ($languages !== []): ?>
-        <div>
-            <label for="language">Sprache</label>
-            <select name="language" id="language" onchange="this.form.submit()">
-                <option value="0">alle</option>
-                <?php foreach ($languages as $l): ?>
-                    <option value="<?= (int) $l['id'] ?>"<?= (int) $l['id'] === $langId ? ' selected' : '' ?>>
-                        <?= h(trim($l['flag_emoji'] . ' ' . $l['name'])) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <?php endif; ?>
-        <?php if ($units !== []): ?>
-        <div>
-            <label for="unit">Lerneinheit</label>
-            <select name="unit" id="unit" onchange="this.form.submit()">
-                <option value="0">alle</option>
-                <?php foreach ($units as $t): ?>
-                    <option value="<?= (int) $t['id'] ?>"<?= (int) $t['id'] === $unitId ? ' selected' : '' ?>>
-                        <?= h($t['title']) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <?php endif; ?>
-        <div>
-            <label for="q">Suche</label>
-            <div class="inline">
-                <input type="text" id="q" name="q" value="<?= h($suche) ?>"
-                       placeholder="Satz oder Vokabel" style="margin:0;width:190px">
-                <button class="btn secondary small">Suchen</button>
-            </div>
-        </div>
-    </div>
-</form>
+<div class="card filters">
+    <?= filter_chips('Kind',
+        array_map(static fn (array $u): array =>
+            ['id' => (int) $u['id'], 'label' => $u['display_name']], $users),
+        $userId, ['q' => $suche], 'user', ['language', 'unit', 'p'], 'alle') ?>
+
+    <?= filter_chips('Sprache',
+        array_map(static fn (array $l): array => [
+            'id'    => (int) $l['id'],
+            'label' => trim($l['flag_emoji'] . ' ' . $l['name']),
+        ], $languages),
+        $langId, ['user' => $userId, 'q' => $suche], 'language', ['unit', 'p'], 'alle') ?>
+
+    <?= filter_chips('Lerneinheit',
+        array_map(static fn (array $t): array =>
+            ['id' => (int) $t['id'], 'label' => $t['title']], $units),
+        $unitId, ['user' => $userId, 'language' => $langId, 'q' => $suche], 'unit', ['p'], 'alle') ?>
+
+    <form method="get" class="filterrow">
+        <span class="lbl">Suche</span>
+        <span class="inline">
+            <?php foreach (['user' => $userId, 'language' => $langId, 'unit' => $unitId] as $k => $v): ?>
+                <?php if ($v > 0): ?>
+                    <input type="hidden" name="<?= h($k) ?>" value="<?= (int) $v ?>">
+                <?php endif; ?>
+            <?php endforeach; ?>
+            <input type="text" name="q" value="<?= h($suche) ?>"
+                   placeholder="Satz oder Vokabel" style="margin:0;width:200px">
+            <button class="btn secondary small">Suchen</button>
+            <?php if ($suche !== ''): ?>
+                <a class="chip" href="<?= h(admin_url('sentences.php') . '?' . http_build_query(
+                    array_filter(['user' => $userId, 'language' => $langId, 'unit' => $unitId])
+                )) ?>">zurücksetzen</a>
+            <?php endif; ?>
+        </span>
+    </form>
+</div>
 
 <?php if ($gesamt === 0): ?>
     <p class="muted">Keine Sätze gefunden.</p>

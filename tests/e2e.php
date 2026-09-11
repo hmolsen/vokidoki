@@ -925,6 +925,67 @@ ok('Die Stände beider Übungsarten werden getrennt geführt',
    is_int($mcGekonnt) && is_int($clozeGekonnt),
    "Auswählen $mcGekonnt, Lückentext $clozeGekonnt");
 
+section('Filter im Admin');
+
+// Dropdowns sind zwei Klicks fuer eine Auswahl. Jetzt sind es Links - die
+// funktionieren auch ohne JavaScript und lassen sich als Lesezeichen ablegen.
+foreach (['vocab.php', 'sentences.php'] as $seite) {
+    $res = http($base . '/admin/' . $seite);
+    ok("$seite zeigt die Kinder als Knoepfe",
+       str_contains($res['body'], 'class="chips"')
+       && str_contains($res['body'], 'class="chip"'), "Status {$res['status']}");
+    ok("$seite kommt ohne Auswahlfeld fuer das Kind aus",
+       !str_contains($res['body'], 'name="user" id="user"'));
+}
+
+// Ein Klick auf ein Kind fuehrt zu einem Link, der genau dieses setzt.
+$res = http($base . '/admin/vocab.php');
+ok('Der Knopf verweist auf das gewaehlte Kind',
+   str_contains($res['body'], 'vocab.php?user=' . $userId), 'Link nicht gefunden');
+
+// Sprache wechseln muss die tiefere Auswahl fallenlassen, sonst zeigte der
+// Filter auf eine Lerneinheit, die zur neuen Sprache nicht gehoert.
+$res = http($base . '/admin/vocab.php?' . http_build_query(
+    ['user' => $userId, 'language' => $languageId, 'unit' => $unitId]));
+
+/** Die Links einer Filterzeile, an ihrer Beschriftung erkannt. */
+$zeile = static function (string $body, string $label): array {
+    $muster = '#<span class="lbl">' . preg_quote($label, '#')
+            . '</span><span class="chips">(.*?)</span></div>#s';
+    if (preg_match($muster, $body, $m) !== 1) {
+        return [];
+    }
+    preg_match_all('#href="([^"]*)"#', $m[1], $links);
+    return array_map(static fn (string $l): string => html_entity_decode($l), $links[1]);
+};
+
+$sprachLinks = $zeile($res['body'], 'Sprache');
+ok('Die Sprachzeile hat Knoepfe', $sprachLinks !== []);
+ok('Beim Sprachwechsel faellt die Lerneinheit weg',
+   $sprachLinks !== [] && !array_filter($sprachLinks,
+       static fn (string $l): bool => str_contains($l, 'unit=')),
+   implode(' ', $sprachLinks));
+
+$kindLinks = $zeile($res['body'], 'Kind');
+ok('Beim Kindwechsel fallen Sprache und Lerneinheit weg',
+   $kindLinks !== [] && !array_filter($kindLinks,
+       static fn (string $l): bool => str_contains($l, 'language=') || str_contains($l, 'unit=')),
+   implode(' ', $kindLinks));
+
+$einheitLinks = $zeile($res['body'], 'Lerneinheit');
+ok('Die Lerneinheit-Knoepfe behalten Kind und Sprache',
+   $einheitLinks !== [] && !array_filter($einheitLinks,
+       static fn (string $l): bool => !str_contains($l, 'language=')),
+   implode(' ', $einheitLinks));
+
+ok('Die gewaehlte Lerneinheit ist hervorgehoben',
+   str_contains($res['body'], 'class="chip on"'));
+
+// Die Filter muessen weiter ueber die URL steuerbar sein.
+$res = http($base . '/admin/sentences.php?' . http_build_query(['user' => $userId]));
+ok('Filter per URL wirken weiterhin', $res['status'] === 200
+   && str_contains($res['body'], 'Testkind'));
+
 // ------------------------------------------------------------------ Abmelden
 
 section('Abmelden und Token-Widerruf');

@@ -358,77 +358,26 @@ flash_render();
 </div>
 <?php endif; ?>
 
-<form method="get" class="card">
-    <div class="formgrid">
-        <div>
-            <label for="user">Kind</label>
-            <select name="user" id="user" onchange="this.form.submit()">
-                <option value="0">- wählen -</option>
-                <?php foreach ($users as $u): ?>
-                    <option value="<?= (int) $u['id'] ?>"<?= (int) $u['id'] === $userId ? ' selected' : '' ?>>
-                        <?= h($u['display_name']) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <?php if ($languages !== []): ?>
-        <div>
-            <label for="language">Sprache</label>
-            <select name="language" id="language" onchange="this.form.submit()">
-                <option value="0">- wählen -</option>
-                <?php foreach ($languages as $l): ?>
-                    <option value="<?= (int) $l['id'] ?>"<?= (int) $l['id'] === $langId ? ' selected' : '' ?>>
-                        <?= h($l['flag_emoji'] . ' ' . $l['name']) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <?php endif; ?>
-        <?php if ($units !== []): ?>
-        <div>
-            <label for="unit">Lerneinheit</label>
-            <select name="unit" id="unit" onchange="this.form.submit()">
-                <option value="0">- wählen -</option>
-                <?php foreach ($units as $t): ?>
-                    <option value="<?= (int) $t['id'] ?>"<?= (int) $t['id'] === $unitId ? ' selected' : '' ?>>
-                        <?= h($t['title']) ?> (<?= (int) $t['n'] ?>)
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <?php endif; ?>
-    </div>
-    <noscript><button class="btn small">Anzeigen</button></noscript>
-</form>
+<div class="card filters">
+    <?= filter_chips('Kind',
+        array_map(static fn (array $u): array =>
+            ['id' => (int) $u['id'], 'label' => $u['display_name']], $users),
+        $userId, [], 'user') ?>
 
-<?php if ($userId > 0 && $languages !== []): ?>
-<h2>Sprachen</h2>
-<table class="data">
-    <tr><th>Sprache</th><th class="num">Lerneinheiten</th><th class="num">Vokabeln</th><th></th></tr>
-    <?php foreach ($languages as $l): ?>
-        <tr>
-            <td><?= h(($l['flag_emoji'] !== '' ? $l['flag_emoji'] . ' ' : '') . $l['name']) ?></td>
-            <td class="num"><?= (int) $l['units'] ?></td>
-            <td class="num"><?= (int) $l['words'] ?></td>
-            <td>
-                <form method="post" class="compact"
-                      onsubmit="return confirm('<?= h($l['name']) ?> endgültig löschen?
+    <?= filter_chips('Sprache',
+        array_map(static fn (array $l): array => [
+            'id'    => (int) $l['id'],
+            'label' => trim($l['flag_emoji'] . ' ' . $l['name']),
+        ], $languages),
+        $langId, ['user' => $userId], 'language', ['unit']) ?>
 
-Damit verschwinden <?= (int) $l['units'] ?> Lerneinheit(en) und <?= (int) $l['words'] ?> Vokabel(n) samt Lernstand.')">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="user" value="<?= $userId ?>">
-                    <button class="linkbtn" name="delete_language" value="<?= (int) $l['id'] ?>"
-                            style="color:var(--bad)">Sprache löschen</button>
-                </form>
-            </td>
-        </tr>
-    <?php endforeach; ?>
-</table>
-<p class="tiny muted">
-    Löschen entfernt die Sprache mit allen Lerneinheiten, Vokabeln und dem
-    Lernstand des Kindes. Das lässt sich nicht rückgängig machen.
-</p>
-<?php endif; ?>
+    <?= filter_chips('Lerneinheit',
+        array_map(static fn (array $t): array => [
+            'id'    => (int) $t['id'],
+            'label' => $t['title'] . ' (' . (int) $t['n'] . ')',
+        ], $units),
+        $unitId, ['user' => $userId, 'language' => $langId], 'unit') ?>
+</div>
 
 <?php if ($userId === 0): ?>
     <p class="muted">Wähle oben ein Kind aus.</p>
