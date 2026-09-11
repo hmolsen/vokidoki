@@ -31,6 +31,15 @@ function schema_migrations(): array
             static fn (): bool => !column_exists('languages', 'code'),
             'ALTER TABLE languages ADD COLUMN code VARCHAR(8) NULL AFTER flag_emoji',
         ],
+        // Zustand der Satzerzeugung je Lerneinheit. Sie laeuft seit neuestem
+        // im Hintergrund, also braucht die Oberflaeche etwas zum Abfragen.
+        'units.sentences_status' => [
+            static fn (): bool => !column_exists('units', 'sentences_status'),
+            "ALTER TABLE units
+               ADD COLUMN sentences_status VARCHAR(16) NULL,
+               ADD COLUMN sentences_started_at DATETIME NULL,
+               ADD COLUMN sentences_error VARCHAR(255) NULL",
+        ],
         'sentences' => [
             static fn (): bool => !table_exists('sentences'),
             'CREATE TABLE sentences (

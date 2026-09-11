@@ -64,8 +64,8 @@ switch (action()) {
         }
         // Fortschritt je Übungsart. Der Lückentext zählt nur Vokabeln, zu denen
         // es einen Satz gibt - er wird beim ersten Start erst erzeugt.
-        [$mcKnown, $mcTotal]       = unit_progress((int) $unit['id'], MODE_CHOICE);
-        [$clozeKnown, $clozeTotal] = cloze_progress((int) $unit['id']);
+        [$mcKnown, $mcTotal] = unit_progress((int) $unit['id'], MODE_CHOICE);
+        $cloze = sentence_status((int) $unit['id']);
 
         json_out(['ok' => true, 'unit' => [
             'id'          => (int) $unit['id'],
@@ -73,9 +73,14 @@ switch (action()) {
             'language_id' => (int) $unit['language_id'],
         ], 'vocab' => $vocab, 'modes' => [
             'mc'    => ['known' => $mcKnown, 'total' => $mcTotal],
-            'cloze' => ['known' => $clozeKnown, 'total' => $clozeTotal,
-                        'prepared' => $clozeTotal > 0],
+            'cloze' => $cloze,
         ]]);
+
+    case 'sentence_status':
+        // Schlank gehalten: Die Oberfläche fragt das im Sekundentakt ab,
+        // solange die Sätze im Hintergrund entstehen.
+        $unit = own_unit($uid, (int) ($_GET['id'] ?? 0));
+        json_out(['ok' => true, 'cloze' => sentence_status((int) $unit['id'])]);
 
     case 'rename':
         require_post();

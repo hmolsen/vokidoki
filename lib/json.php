@@ -35,6 +35,54 @@ function json_out(array $data, int $status = 200): never
     exit;
 }
 
+/**
+ * Schickt die Antwort ab und laeuft danach weiter.
+ *
+ * So bekommt das Kind sofort Bescheid, waehrend im selben Vorgang noch die
+ * Lueckensaetze entstehen - auf geteiltem Hosting gibt es keine Warteschlange
+ * und keinen Dienst, den man dafuer anwerfen koennte.
+ *
+ * Nach diesem Aufruf darf nichts mehr ausgegeben werden; der Aufrufer soll
+ * seine Arbeit erledigen und dann beenden.
+ */
+function json_out_and_continue(array $data): void
+{
+    $stray = ob_get_level() > 0 ? (string) ob_get_clean() : '';
+    if (trim($stray) !== '') {
+        error_log('[vokabeltrainer] Unerwartete Ausgabe vor der JSON-Antwort: '
+            . substr(trim($stray), 0, 500));
+    }
+
+    // Der Browser darf die Verbindung schliessen, ohne den Auftrag zu killen.
+    ignore_user_abort(true);
+
+    $body = (string) json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+    http_response_code(200);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+    header('Content-Length: ' . strlen($body));
+    header('Connection: close');
+    echo $body;
+
+    // Die Sitzung freigeben, sonst warten alle weiteren Anfragen desselben
+    // Kindes auf das Ende dieses Vorgangs.
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+        return;
+    }
+
+    // Ohne FPM: Puffer leeren und hoffen, dass der Server durchlaesst.
+    while (ob_get_level() > 0) {
+        ob_end_flush();
+    }
+    flush();
+}
+
 function json_fail(string $message, int $status = 400, array $extra = []): never
 {
     json_out(['ok' => false, 'error' => $message] + $extra, $status);

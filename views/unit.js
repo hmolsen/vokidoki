@@ -1,5 +1,5 @@
 import {
-    api, render, esc, $, on, go, topbar, loading, wireBack, progressBar,
+    api, render, esc, $, go, topbar, loading, wireBack, progressBar,
     showError, clearError,
 } from '../core.js';
 
@@ -44,13 +44,11 @@ export async function unitView(unitId) {
         </div>
 
         <h2>Üben</h2>
-        ${exerciseRow('mc', '\u{1F3AF}', 'Auswählen',
-            'Vier Antworten, eine ist richtig', modes.mc)}
-        ${exerciseRow('cloze', '\u{270F}\u{FE0F}', 'Lückentext',
-            modes.cloze.prepared
-                ? 'Das fehlende Wort in den Satz eintippen'
-                : 'Sätze werden beim ersten Start vorbereitet',
-            modes.cloze)}
+        <div id="exercises">
+            ${exerciseRow('mc', '\u{1F3AF}', 'Auswählen',
+                'Vier Antworten, eine ist richtig', modes.mc)}
+            ${clozeRow(modes.cloze)}
+        </div>
 
         <h2>Alle Vokabeln (${vocab.length})</h2>
         ${list}
@@ -65,23 +63,9 @@ export async function unitView(unitId) {
 
     wireBack();
 
-    on('[data-mode]', 'click', async (event) => {
-        const mode = event.currentTarget.dataset.mode;
-        const info = modes[mode];
+    wireExercises(unit.id, modes);
+    watchSentences(unit.id, modes);
 
-        // Eine bestandene Übung braucht einen frischen Lernstand, sonst wären
-        // sofort wieder alle Vokabeln als gekonnt markiert. Zurückgesetzt wird
-        // nur diese Übungsart - die andere behält ihren Fortschritt.
-        if (info.total > 0 && info.known >= info.total) {
-            try {
-                await api('units', 'reset', { body: { id: unit.id, mode } });
-            } catch (err) {
-                showError(err.message);
-                return;
-            }
-        }
-        go(`${mode === 'cloze' ? '/cloze' : '/quiz'}/${unit.id}`);
-    });
 
     $('#rename').addEventListener('click', async () => {
         const title = prompt('Neuer Titel der Lerneinheit:', unit.title);
@@ -116,20 +100,107 @@ export async function unitView(unitId) {
     });
 }
 
+/**
+ * Ein einziger Klick-Handler auf dem Behälter.
+ *
+ * Delegation statt Handler je Zeile: Die Lückentext-Zeile wird nachgezeichnet,
+ * sobald ihre Sätze fertig sind - mit Handlern an den Zeilen selbst haetten
+ * wir danach zwei auf der unveränderten Nachbarzeile.
+ */
+function wireExercises(unitId, modes) {
+    $('#exercises').addEventListener('click', async (event) => {
+        const row = event.target.closest('[data-mode]');
+        if (!row || row.disabled) return;
+
+        const mode = row.dataset.mode;
+        const info = modes[mode];
+
+        // Eine bestandene Übung braucht einen frischen Lernstand, sonst wären
+        // sofort wieder alle Vokabeln als gekonnt markiert. Zurückgesetzt wird
+        // nur diese Übungsart - die andere behält ihren Fortschritt.
+        if (info.total > 0 && info.known >= info.total) {
+            try {
+                await api('units', 'reset', { body: { id: Number(unitId), mode } });
+            } catch (err) {
+                showError(err.message);
+                return;
+            }
+        }
+        go(`${mode === 'cloze' ? '/cloze' : '/quiz'}/${unitId}`);
+    });
+}
+
+/**
+ * Fragt nach, bis die Sätze fertig sind, und schaltet die Zeile dann frei -
+ * ohne dass das Kind neu laden muss.
+ */
+function watchSentences(unitId, modes) {
+    if (modes.cloze.status !== 'running') return;
+
+    const tick = async () => {
+        const row = document.querySelector('[data-mode-row="cloze"]');
+        // Ansicht gewechselt: Der Router hat den Inhalt ersetzt, also aufhören.
+        if (!row) return;
+
+        let data;
+        try {
+            data = await api('units', 'sentence_status', { query: { id: unitId } });
+        } catch {
+            setTimeout(tick, 6000);   // Aussetzer überbrücken, nicht aufgeben
+            return;
+        }
+
+        if (data.cloze.status === 'running') {
+            setTimeout(tick, 2500);
+            return;
+        }
+
+        // Nur die Zeile tauschen; der Handler sitzt am Behälter und bleibt.
+        modes.cloze = data.cloze;
+        row.outerHTML = clozeRow(data.cloze);
+    };
+
+    setTimeout(tick, 2000);
+}
+
+/** Die Lückentext-Zeile - sie wechselt ihren Zustand im laufenden Betrieb. */
+function clozeRow(info) {
+    return exerciseRow('cloze', '\u{270F}\u{FE0F}', 'Lückentext',
+        'Das fehlende Wort in den Satz eintippen', info);
+}
+
 /** Eine Übungsart als Zeile mit eigenem Fortschritt. */
 function exerciseRow(mode, icon, title, hint, info) {
     const fertig = info.total > 0 && info.known >= info.total;
+    const wartet = info.status === 'running';
+    const kaputt = info.status === 'failed';
+
+    // Solange die Sätze entstehen: Spinner statt Symbol, Zeile nicht anklickbar.
+    const lead = wartet
+        ? '<span class="spinner inline"></span>'
+        : (fertig ? '\u{2705}' : icon);
+
+    let text;
+    if (wartet) {
+        text = 'Deine Sätze werden vorbereitet...';
+    } else if (kaputt) {
+        text = info.error || 'Die Sätze konnten nicht erzeugt werden.';
+    } else if (info.total > 0) {
+        text = `${info.known} von ${info.total} gelernt`;
+    } else {
+        text = hint;
+    }
+
     return `
-        <button class="row" data-mode="${mode}">
-            <span class="lead">${fertig ? '\u{2705}' : icon}</span>
+        <button class="row" data-mode-row="${mode}"
+                ${wartet ? 'disabled' : `data-mode="${mode}"`}>
+            <span class="lead">${lead}</span>
             <span class="body">
                 <span class="title">${esc(title)}</span>
-                <span class="tiny muted">${
-                    info.total > 0 ? `${info.known} von ${info.total} gelernt` : esc(hint)
-                }</span>
-                ${info.total > 0 ? progressBar(info.known, info.total) : ''}
+                <span class="tiny ${kaputt ? 'warn' : 'muted'}">${esc(text)}</span>
+                ${!wartet && info.total > 0 ? progressBar(info.known, info.total) : ''}
             </span>
-            <span class="chev">&#8250;</span>
+            <span class="chev">${wartet ? '' : '&#8250;'}</span>
         </button>`;
 }
 

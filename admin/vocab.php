@@ -501,6 +501,15 @@ Damit verschwinden <?= (int) $l['units'] ?> Lerneinheit(en) und <?= (int) $l['wo
 <h2>Lückensätze (<?= count($sentences) ?>)</h2>
 
 <div class="card">
+    <?php $zustand = sentence_status($unitId); ?>
+    <?php if ($zustand['status'] === SENTENCE_RUNNING): ?>
+        <div class="notice info">Die Sätze entstehen gerade im Hintergrund.</div>
+    <?php elseif ($zustand['status'] === SENTENCE_FAILED): ?>
+        <div class="notice">Letzter Versuch fehlgeschlagen<?= $zustand['error'] !== null
+            ? ': ' . h($zustand['error']) : '.' ?></div>
+    <?php elseif ($zustand['error'] !== null): ?>
+        <div class="notice info"><?= h($zustand['error']) ?></div>
+    <?php endif; ?>
     <?php if ($openSentences > 0): ?>
         <strong><?= $openSentences ?> Vokabel(n) ohne Satz</strong>
         <p class="tiny muted" style="margin:6px 0 12px">
@@ -525,41 +534,11 @@ Damit verschwinden <?= (int) $l['units'] ?> Lerneinheit(en) und <?= (int) $l['wo
 </div>
 
 <?php if ($sentences !== []): ?>
-<form method="post">
-    <?= csrf_field() ?>
-    <input type="hidden" name="user" value="<?= $userId ?>">
-    <input type="hidden" name="language" value="<?= $langId ?>">
-    <input type="hidden" name="unit" value="<?= $unitId ?>">
-
-    <table class="data">
-        <tr>
-            <th>Vokabel</th><th>Deutscher Satz</th>
-            <th>Fremdsprache (<code>{}</code> = Lücke)</th><th>Lösung</th><th></th>
-        </tr>
-        <?php foreach ($sentences as $s): ?>
-            <tr>
-                <td class="tiny muted"><?= h($s['term_foreign']) ?></td>
-                <td><input type="text" name="sn[<?= (int) $s['id'] ?>]"
-                           value="<?= h($s['native_text']) ?>" maxlength="255"></td>
-                <td><input type="text" name="sf[<?= (int) $s['id'] ?>]"
-                           value="<?= h($s['foreign_text']) ?>" maxlength="255"></td>
-                <td><input type="text" name="sa[<?= (int) $s['id'] ?>]"
-                           value="<?= h($s['answer']) ?>" maxlength="128" style="width:130px"></td>
-                <td>
-                    <button class="linkbtn" name="delete_sentence" value="<?= (int) $s['id'] ?>"
-                            formnovalidate style="color:var(--bad)"
-                            onclick="return confirm('Diesen Satz löschen?')">löschen</button>
-                </td>
-            </tr>
-        <?php endforeach; ?>
-    </table>
     <p class="tiny muted">
-        Ein Satz wird nur gespeichert, wenn er die Prüfung besteht: genau eine
-        Lücke <code>{}</code> im fremdsprachigen Satz, keine im deutschen, eine
-        nicht leere Lösung, und die Lösung darf nicht daneben im Satz stehen.
+        <a href="<?= h(admin_url('sentences.php') . '?' . http_build_query([
+            'user' => $userId, 'language' => $langId, 'unit' => $unitId,
+        ])) ?>">Diese <?= count($sentences) ?> Sätze ansehen und bearbeiten &rsaquo;</a>
     </p>
-    <button class="btn small" name="save_sentence_rows" value="1">Sätze speichern</button>
-</form>
 <?php endif; ?>
 
 <h2>Vokabel ergänzen</h2>

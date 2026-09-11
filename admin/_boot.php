@@ -143,6 +143,7 @@ function admin_head(string $title, string $active): void
         'index.php'     => 'Kosten',
         'users.php'     => 'Accounts',
         'vocab.php'     => 'Vokabeln',
+        'sentences.php' => 'Lückensätze',
         'settings.php'  => 'Einstellungen',
         'selfcheck.php' => 'Selbsttest',
     ];

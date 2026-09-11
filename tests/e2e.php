@@ -84,6 +84,26 @@ function http(string $url, ?array $json = null, array $headers = [], bool $follo
     ];
 }
 
+/**
+ * Wartet, bis die Satzerzeugung einer Lerneinheit durch ist.
+ *
+ * Seit sie im Hintergrund laeuft, ist die Antwort auf 'save' schon da, waehrend
+ * die Saetze noch entstehen - genau das ist der Zweck der Uebung.
+ */
+function waitForSentences(int $unitId, int $sekunden = 30): string
+{
+    $ende = time() + $sekunden;
+    do {
+        $status = (string) qv('SELECT sentences_status FROM units WHERE id = ?', [$unitId]);
+        if ($status !== 'running') {
+            return $status;
+        }
+        usleep(250000);
+    } while (time() < $ende);
+
+    return 'running';
+}
+
 /** API-Aufruf mit dem Header, den die App als CSRF-Schutz verlangt. */
 function apiCall(string $file, string $action, ?array $body = null, array $query = []): array
 {
@@ -389,6 +409,22 @@ if (!$isFake) {
        (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ? AND word_type IS NULL',
                 [$newUnit]) === 0);
 
+    // Neu: Die Lückensätze entstehen gleich beim Speichern im Hintergrund. Die
+    // Antwort auf 'save' ist also schon da, während noch gearbeitet wird.
+    ok('Die Satzerzeugung wurde angestossen',
+       in_array(qv('SELECT sentences_status FROM units WHERE id = ?', [$newUnit]),
+                ['running', 'done'], true));
+
+    $stand = waitForSentences($newUnit);
+    ok('Der Hintergrundlauf wird fertig', $stand === 'done', $stand);
+    ok('Sätze sind ohne weiteres Zutun da',
+       (int) qv('SELECT COUNT(*) FROM sentences s JOIN vocab v ON v.id = s.vocab_id
+                  WHERE v.unit_id = ?', [$newUnit]) > 0);
+
+    [$st, $code] = apiCall('units', 'sentence_status', null, ['id' => $newUnit]);
+    ok('Der Abfrage-Endpunkt meldet fertig', ($st['cloze']['status'] ?? '') === 'done');
+    ok('Und nennt den Fortschritt', ($st['cloze']['total'] ?? 0) > 0);
+
     // Nicht im Quiz-Abschnitt mitzählen lassen.
     q('DELETE FROM units WHERE id = ?', [$newUnit]);
 
@@ -634,14 +670,44 @@ if (!$isFake) {
         "SELECT COUNT(*) FROM progress p JOIN vocab v ON v.id = p.vocab_id
           WHERE v.unit_id = ? AND p.mode = 'mc'", [$unitId]);
 
-    [$data, $status] = apiCall('cloze', 'next', null, ['unit_id' => $unitId]);
-    ok('Vor dem ersten Mal meldet die App Vorbereitungsbedarf',
-       ($data['needs_preparation'] ?? false) === true, json_encode($data));
+    // Die Sätze dieser Einheit sind beim Einlesen im Hintergrund entstanden.
+    ok('Der Hintergrundlauf war schon durch', waitForSentences($unitId) === 'done');
 
+    // Im Admin-Abschnitt wurde eine Vokabel ergänzt - für die fehlen noch
+    // Sätze, also darf dieser Aufruf etwas tun.
+    [$data, $status] = apiCall('cloze', 'prepare', ['unit_id' => $unitId]);
+    ok('Nachträglich ergänzte Vokabeln bekommen ihre Sätze',
+       $status === 200 && ($data['created'] ?? 0) > 0, json_encode($data));
+    ok('Danach fehlt nichts mehr',
+       (int) qv('SELECT COUNT(*) FROM vocab v WHERE v.unit_id = ?
+                  AND v.word_type NOT IN (?, ?, ?)
+                  AND NOT EXISTS (SELECT 1 FROM sentences s WHERE s.vocab_id = v.id)',
+                [$unitId, 'aussage', 'frage', 'interjektion']) === 0);
+
+    // Und jetzt ist wirklich nichts mehr zu tun.
     $vorher = (int) qv("SELECT COUNT(*) FROM ai_requests WHERE purpose = 'sentences'");
     [$data, $status] = apiCall('cloze', 'prepare', ['unit_id' => $unitId]);
-    ok('Sätze werden erzeugt', $status === 200 && ($data['created'] ?? 0) > 0,
-       $data['error'] ?? json_encode($data));
+    ok('Ein weiterer Aufruf findet nichts zu tun', ($data['created'] ?? -1) === 0, json_encode($data));
+    ok('Und kostet nichts',
+       (int) qv("SELECT COUNT(*) FROM ai_requests WHERE purpose = 'sentences'") === $vorher);
+
+    // Eine Lerneinheit von vor dem Hintergrundlauf: dort greift 'prepare'.
+    q('INSERT INTO units (user_id, language_id, title) VALUES (?, ?, ?)',
+      [$userId, $languageId, 'Alter Bestand']);
+    $altUnit = (int) db()->lastInsertId();
+    q('INSERT INTO vocab (unit_id, term_foreign, term_native, word_type, position)
+       VALUES (?, ?, ?, ?, 0)', [$altUnit, 'vieux', 'alt', 'adjektiv']);
+
+    [$data] = apiCall('cloze', 'next', null, ['unit_id' => $altUnit]);
+    ok('Alter Bestand meldet Vorbereitungsbedarf',
+       ($data['needs_preparation'] ?? false) === true, json_encode($data));
+
+    [$data, $status] = apiCall('cloze', 'prepare', ['unit_id' => $altUnit]);
+    ok('Und lässt sich nachträglich vorbereiten',
+       $status === 200 && ($data['created'] ?? 0) > 0, $data['error'] ?? json_encode($data));
+    ok('Der Zustand steht danach auf fertig',
+       qv('SELECT sentences_status FROM units WHERE id = ?', [$altUnit]) === 'done');
+    q('DELETE FROM units WHERE id = ?', [$altUnit]);
 
     $anzahl = (int) qv(
         'SELECT COUNT(*) FROM sentences s JOIN vocab v ON v.id = s.vocab_id WHERE v.unit_id = ?',
@@ -649,12 +715,6 @@ if (!$isFake) {
     ok('Sätze liegen in der Datenbank', $anzahl > 0, (string) $anzahl);
     ok('Der unbrauchbare Satz des Modells wurde verworfen',
        (int) qv('SELECT COUNT(*) FROM sentences WHERE foreign_text NOT LIKE ?', ['%{}%']) === 0);
-
-    // Zweiter Aufruf darf nichts kosten.
-    [$data] = apiCall('cloze', 'prepare', ['unit_id' => $unitId]);
-    ok('Zweiter Start erzeugt nichts noch einmal', ($data['created'] ?? -1) === 0);
-    ok('Es gab genau einen KI-Aufruf dafür',
-       (int) qv("SELECT COUNT(*) FROM ai_requests WHERE purpose = 'sentences'") === $vorher + 1);
 
     // Eine Frage geht durch die Übung.
     [$card] = apiCall('cloze', 'next', null, ['unit_id' => $unitId]);
@@ -726,6 +786,88 @@ if (!$isFake) {
     [$data, $status] = apiCall('cloze', 'next', null, ['unit_id' => $otherUnitId]);
     ok('Fremde Lerneinheit bleibt gesperrt', $status === 404, "Status $status");
 }
+
+section('Zustand der Satzerzeugung');
+
+// Haengengebliebener Auftrag: Ohne Grenze bliebe die Uebung fuer immer gesperrt.
+q("UPDATE units SET sentences_status = 'running',
+       sentences_started_at = NOW() - INTERVAL 2 HOUR, sentences_error = NULL
+    WHERE id = ?", [$unitId]);
+[$st] = apiCall('units', 'sentence_status', null, ['id' => $unitId]);
+ok('Alter Auftrag mit vorhandenen Saetzen gilt als fertig',
+   ($st['cloze']['status'] ?? '') === 'done', json_encode($st['cloze'] ?? []));
+
+// Dasselbe ohne Saetze muss als gescheitert gelten.
+q('INSERT INTO units (user_id, language_id, title, sentences_status, sentences_started_at)
+   VALUES (?, ?, ?, ?, NOW() - INTERVAL 2 HOUR)',
+  [$userId, $languageId, 'Haengengeblieben', 'running']);
+$hUnit = (int) db()->lastInsertId();
+q('INSERT INTO vocab (unit_id, term_foreign, term_native, word_type, position)
+   VALUES (?, ?, ?, ?, 0)', [$hUnit, 'x', 'y', 'substantiv']);
+
+[$st] = apiCall('units', 'sentence_status', null, ['id' => $hUnit]);
+ok('Alter Auftrag ohne Saetze gilt als gescheitert',
+   ($st['cloze']['status'] ?? '') === 'failed', json_encode($st['cloze'] ?? []));
+ok('Mit einer Begruendung', ($st['cloze']['error'] ?? '') !== '');
+ok('Und der Zustand wurde festgeschrieben',
+   qv('SELECT sentences_status FROM units WHERE id = ?', [$hUnit]) === 'failed');
+
+// Ein laufender Auftrag sperrt die Uebung.
+q("UPDATE units SET sentences_status = 'running', sentences_started_at = NOW()
+    WHERE id = ?", [$hUnit]);
+[$c] = apiCall('cloze', 'next', null, ['unit_id' => $hUnit]);
+ok('Solange erzeugt wird, meldet die Uebung "in Arbeit"',
+   ($c['preparing'] ?? false) === true, json_encode($c));
+
+[$u] = apiCall('units', 'get', null, ['id' => $hUnit]);
+ok('Die Lerneinheit liefert den Zustand mit',
+   ($u['modes']['cloze']['status'] ?? '') === 'running');
+
+q('DELETE FROM units WHERE id = ?', [$hUnit]);
+
+[$st, $code] = apiCall('units', 'sentence_status', null, ['id' => $otherUnitId]);
+ok('Fremde Lerneinheit bleibt auch hier gesperrt', $code === 404, "Status $code");
+
+section('Lückensätze im Admin');
+
+$satzId = (int) qv('SELECT s.id FROM sentences s JOIN vocab v ON v.id = s.vocab_id
+                     WHERE v.unit_id = ? LIMIT 1', [$unitId]);
+
+$res = http($base . '/admin/sentences.php');
+ok('Die Seite listet alle Sätze', $res['status'] === 200
+   && str_contains($res['body'], 'name="sn[' . $satzId . ']"'), "Status {$res['status']}");
+ok('Mit Kind, Sprache und Lerneinheit daneben',
+   str_contains($res['body'], 'Testkind') && str_contains($res['body'], 'Testisch'));
+
+$res = http($base . '/admin/sentences.php?q=' . urlencode('gibtsnichtxyz'));
+ok('Die Suche filtert', str_contains($res['body'], 'Keine Sätze gefunden'));
+
+// Bearbeiten über die globale Seite.
+$res = adminPost('sentences.php', [
+    'save' => '1',
+    'sn'   => [$satzId => 'Ein neuer deutscher Satz.'],
+    'sf'   => [$satzId => 'Un {} nouveau.'],
+    'sa'   => [$satzId => 'texte'],
+]);
+$nach = q1('SELECT * FROM sentences WHERE id = ?', [$satzId]);
+ok('Satz lässt sich global bearbeiten',
+   $nach['native_text'] === 'Ein neuer deutscher Satz.' && $nach['answer'] === 'texte',
+   json_encode($nach));
+
+// Eine kaputte Form darf nichts überschreiben.
+$res = adminPost('sentences.php', [
+    'save' => '1',
+    'sn'   => [$satzId => 'Deutsch'],
+    'sf'   => [$satzId => 'ohne Lücke'],
+    'sa'   => [$satzId => 'texte'],
+]);
+ok('Ein Satz ohne Lücke wird nicht gespeichert',
+   qv('SELECT foreign_text FROM sentences WHERE id = ?', [$satzId]) === 'Un {} nouveau.');
+ok('Und die Meldung sagt warum', str_contains($res['body'], 'Form nicht stimmt'));
+
+adminPost('sentences.php', ['delete' => $satzId]);
+ok('Satz lässt sich löschen',
+   q1('SELECT id FROM sentences WHERE id = ?', [$satzId]) === null);
 
 // ------------------------------------------------------------------ Abmelden
 

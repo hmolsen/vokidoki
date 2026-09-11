@@ -47,6 +47,11 @@ CREATE TABLE IF NOT EXISTS units (
   language_id INT UNSIGNED NOT NULL,
   title       VARCHAR(128) NOT NULL,
   created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- Die Lueckensaetze entstehen im Hintergrund, gleich nach dem Einlesen.
+  -- NULL = nie angestossen, sonst running / done / failed.
+  sentences_status     VARCHAR(16)  NULL,
+  sentences_started_at DATETIME     NULL,
+  sentences_error      VARCHAR(255) NULL,
   KEY idx_units_user (user_id),
   KEY idx_units_lang (language_id),
   CONSTRAINT fk_units_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,

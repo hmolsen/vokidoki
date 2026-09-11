@@ -489,3 +489,22 @@ input:focus, select:focus {
 .cloze-input.almost  { border-color: var(--good); background: var(--good-bg); color: var(--text); }
 .cloze-input.wrong   { border-color: var(--bad);  background: var(--bad-bg);  color: var(--bad); }
 .cloze-input[readonly] { opacity: 1; }
+
+/* Spinner in einer Zeile - zeigt, dass im Hintergrund noch gearbeitet wird. */
+.spinner.inline {
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    border-width: 2px;
+    display: inline-block;
+    vertical-align: -4px;
+}
+
+.tiny.warn { color: var(--bad); }
+
+/* Nicht anklickbare Übungszeile, solange ihre Sätze entstehen. */
+.row[disabled] {
+    cursor: default;
+    opacity: .75;
+}
+.row[disabled]:active { transform: none; }

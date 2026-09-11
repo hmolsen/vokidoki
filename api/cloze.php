@@ -29,9 +29,14 @@ switch (action()) {
         // Für eine ganze Lerneinheit reicht die Standardlaufzeit nicht.
         set_time_limit(300);
 
+        sentence_status_set((int) $unit['id'], SENTENCE_RUNNING);
+
         try {
             $result = generate_sentences($unit, $user);
         } catch (KeyvaultException $e) {
+            db_ensure();
+            sentence_status_set((int) $unit['id'], SENTENCE_FAILED,
+                'Der Schlüsseldienst war nicht erreichbar.');
             error_log('[vokabeltrainer] Keyvault: ' . scrub_secrets($e->getMessage()));
             json_fail(
                 'Der Schlüsseldienst ist gerade nicht erreichbar. '
@@ -39,6 +44,9 @@ switch (action()) {
                 503,
             );
         } catch (Throwable $e) {
+            db_ensure();
+            sentence_status_set((int) $unit['id'], SENTENCE_FAILED,
+                'Die Sätze konnten nicht erzeugt werden.');
             error_log('[vokabeltrainer] Sätze: ' . scrub_secrets($e->getMessage()));
             json_fail(
                 'Die Sätze konnten nicht erzeugt werden. Bitte noch einmal versuchen.',
@@ -51,6 +59,8 @@ switch (action()) {
         // Hat ein Block gehalten, kann das Kind loslegen - der Rest lässt sich
         // später nachtragen. Nur wenn gar nichts entstand, ist Schluss.
         if ($total === 0) {
+            sentence_status_set((int) $unit['id'], SENTENCE_FAILED,
+                'Es entstand kein brauchbarer Satz.');
             error_log('[vokabeltrainer] Sätze: nichts brauchbar erzeugt'
                 . ($result['failed'] !== null ? ' - ' . scrub_secrets($result['failed']) : ''));
             json_fail(
@@ -59,6 +69,9 @@ switch (action()) {
                 422,
             );
         }
+
+        sentence_status_set((int) $unit['id'], SENTENCE_DONE,
+            $result['failed'] !== null ? 'Teilweise: ' . $result['failed'] : null);
 
         if ($result['failed'] !== null) {
             error_log('[vokabeltrainer] Sätze nur teilweise erzeugt: '
@@ -72,11 +85,19 @@ switch (action()) {
         ]);
 
     case 'next':
-        $unit = own_unit($uid, (int) ($_GET['unit_id'] ?? 0));
-        [$known, $total] = cloze_progress((int) $unit['id']);
+        $unit   = own_unit($uid, (int) ($_GET['unit_id'] ?? 0));
+        $stand  = sentence_status((int) $unit['id']);
+        $known  = $stand['known'];
+        $total  = $stand['total'];
+
+        // Der Hintergrundauftrag vom Einlesen ist noch unterwegs.
+        if ($total === 0 && $stand['status'] === SENTENCE_RUNNING) {
+            json_out(['ok' => true, 'preparing' => true]);
+        }
 
         if ($total === 0) {
-            // Noch keine Sätze - der Client ruft daraufhin 'prepare' auf.
+            // Nichts da und nichts unterwegs - der Client stösst 'prepare' an.
+            // Das betrifft Lerneinheiten von vor dem Hintergrundlauf.
             json_out(['ok' => true, 'needs_preparation' => true]);
         }
 

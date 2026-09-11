@@ -254,7 +254,22 @@ Die erwartete Antwort ist **nicht** die gespeicherte Vokabel: Aus `s'appeler`
 wird im Satz `Je m'appelle`. Deshalb liefert das Modell sie mit; ableiten
 lässt sie sich nicht.
 
-Die Sätze entstehen **beim ersten Start der Übung**, in Blöcken zu 20 Vokabeln. Einzeln abgefragt wäre dasselbe rund siebenmal so teuer —
+Die Sätze entstehen **im Hintergrund, gleich nach dem Einlesen**, in Blöcken zu
+20 Vokabeln. Das Kind sieht seine Lerneinheit sofort; die Zeile „Lückentext"
+zeigt so lange einen Spinner und ist nicht anklickbar und schaltet sich ohne
+Neuladen frei, sobald die Sätze stehen (`views/unit.js` fragt dafür
+`units.php?action=sentence_status` ab).
+
+Auf geteiltem Hosting gibt es keine Warteschlange und keinen Dienst, den man
+dafür anwerfen könnte. `json_out_and_continue()` in `lib/json.php` schickt
+deshalb die Antwort ab, gibt die Sitzung frei und arbeitet im selben Vorgang
+weiter — mit `ignore_user_abort()`, damit ein geschlossener Browser den Auftrag
+nicht killt.
+
+Der Zustand steht an der Lerneinheit (`sentences_status`: `running`, `done`,
+`failed`). Ein Lauf, der länger als 15 Minuten „running" ist, gilt als
+abgestürzt — sonst bliebe die Übung für immer gesperrt. Gibt es dann trotzdem
+Sätze, zählt das als fertig. Einzeln abgefragt wäre dasselbe rund siebenmal so teuer —
 Anweisung und Wortschatz (~1.400 Token) sind bei jedem Satz identisch und
 würden jedes Mal mitbezahlt. Bei 60 Vokabeln und drei Sätzen: rund 8 ct mit
 Sonnet 5, 21 ct mit Opus 5. Lerneinheiten, die nie so geübt werden, kosten

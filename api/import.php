@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/ai.php';
 require_once __DIR__ . '/../lib/wordtypes.php';
+require_once __DIR__ . '/../lib/sentences.php';
 
 require_api_request();
 $user = require_user();
@@ -158,7 +159,23 @@ switch (action()) {
             throw $e;
         }
 
-        json_out(['ok' => true, 'unit_id' => $unitId, 'count' => count($clean)]);
+        // Vor der Antwort auf "läuft" setzen: Das Kind landet gleich in der
+        // Lerneinheit und soll dort sofort den Spinner sehen, nicht erst beim
+        // zweiten Abfragen.
+        sentence_status_set($unitId, SENTENCE_RUNNING);
+
+        // Antwort sofort raus, dann im selben Vorgang die Lückensätze bauen.
+        // Das Kind sieht seine Lerneinheit, ohne zwanzig Sekunden zu warten;
+        // der Knopf für den Lückentext bleibt so lange ein Spinner.
+        json_out_and_continue([
+            'ok'      => true,
+            'unit_id' => $unitId,
+            'count'   => count($clean),
+        ]);
+
+        set_time_limit(900);
+        generate_sentences_tracked($unitId);
+        exit;
 
     default:
         json_fail('Unbekannte Aktion.', 404);

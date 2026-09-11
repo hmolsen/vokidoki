@@ -28,7 +28,15 @@ async function nextQuestion(unitId) {
         return;
     }
 
-    // Beim ersten Mal gibt es für diese Lerneinheit noch keine Sätze.
+    // Der Hintergrundauftrag vom Einlesen ist noch unterwegs - abwarten statt
+    // ein zweites Mal erzeugen zu lassen.
+    if (data.preparing) {
+        showPreparing(unitId);
+        setTimeout(() => nextQuestion(unitId), 2500);
+        return;
+    }
+
+    // Lerneinheiten von vor dem Hintergrundlauf: jetzt erzeugen.
     if (data.needs_preparation) {
         await prepare(unitId);
         return;
@@ -137,17 +145,24 @@ function gapSentence(text) {
     return esc(text).replace('{}', '<span class="gap"></span>');
 }
 
-async function prepare(unitId) {
+/** Wartebild, während die Sätze entstehen. */
+function showPreparing(unitId) {
+    if (document.getElementById('preparing')) return;   // schon zu sehen
+
     render(`
-        <div class="empty" style="padding-top:18vh">
+        <div class="empty" id="preparing" style="padding-top:18vh">
             <div class="spinner"></div>
             <strong>Deine Sätze werden vorbereitet...</strong>
             <p class="tiny muted">
-                Das dauert einmalig etwa zwanzig Sekunden.<br>
+                Das dauert einmalig etwa eine halbe Minute.<br>
                 Danach geht es immer sofort los.
             </p>
         </div>
     `);
+}
+
+async function prepare(unitId) {
+    showPreparing(unitId);
 
     try {
         await api('cloze', 'prepare', { body: { unit_id: Number(unitId) } });

@@ -500,3 +500,124 @@ function cloze_progress(int $unitId): array
     );
     return [(int) ($row['known'] ?? 0), (int) ($row['total'] ?? 0)];
 }
+
+// ---------------------------------------------------------------- Hintergrundlauf
+
+const SENTENCE_PENDING = 'pending';
+const SENTENCE_RUNNING = 'running';
+const SENTENCE_DONE    = 'done';
+const SENTENCE_FAILED  = 'failed';
+
+/**
+ * Ein Lauf, der laenger dauert, ist abgestuerzt.
+ *
+ * Ohne diese Grenze bliebe eine Lerneinheit fuer immer auf "running" stehen,
+ * wenn der Vorgang abgebrochen wurde - und der Knopf waere nie wieder
+ * anklickbar.
+ */
+const SENTENCE_STALE_AFTER = 900;   // Sekunden
+
+function sentence_status_set(int $unitId, string $status, ?string $error = null): void
+{
+    q(
+        'UPDATE units
+            SET sentences_status = ?,
+                sentences_error = ?,
+                sentences_started_at = CASE WHEN ? = ? THEN NOW() ELSE sentences_started_at END
+          WHERE id = ?',
+        [$status, $error !== null ? mb_substr($error, 0, 255) : null,
+         $status, SENTENCE_RUNNING, $unitId],
+    );
+}
+
+/**
+ * Zustand der Satzerzeugung, wie ihn die Oberflaeche braucht.
+ *
+ * @return array{status:string, error:?string, known:int, total:int}
+ */
+function sentence_status(int $unitId): array
+{
+    $unit = q1(
+        'SELECT sentences_status, sentences_error, sentences_started_at
+           FROM units WHERE id = ?',
+        [$unitId],
+    );
+    [$known, $total] = cloze_progress($unitId);
+
+    $status = (string) ($unit['sentences_status'] ?? '');
+    $error  = $unit['sentences_error'] ?? null;
+
+    // Haengengeblieben: Der Vorgang lebt nicht mehr, aber niemand hat es
+    // vermerkt. Gibt es trotzdem Saetze, ist es gut genug.
+    if ($status === SENTENCE_RUNNING && $unit['sentences_started_at'] !== null) {
+        $alter = time() - strtotime((string) $unit['sentences_started_at']);
+        if ($alter > SENTENCE_STALE_AFTER) {
+            $status = $total > 0 ? SENTENCE_DONE : SENTENCE_FAILED;
+            $error  = $total > 0 ? null : 'Der Vorgang wurde unterbrochen.';
+            sentence_status_set($unitId, $status, $error);
+        }
+    }
+
+    if ($status === '') {
+        // Lerneinheiten aus der Zeit vor dem Hintergrundlauf.
+        $status = $total > 0 ? SENTENCE_DONE : SENTENCE_PENDING;
+    }
+
+    return [
+        'status' => $status,
+        'error'  => $error,
+        'known'  => $known,
+        'total'  => $total,
+    ];
+}
+
+/**
+ * Erzeugt die Saetze einer Lerneinheit und fuehrt dabei den Zustand mit.
+ *
+ * Gedacht fuer den Lauf im Hintergrund: Der Aufrufer hat die Antwort an das
+ * Kind schon geschickt, hier darf nichts mehr ausgegeben werden. Fehler landen
+ * im Protokoll und am Zustand der Lerneinheit, nicht in einer Antwort.
+ */
+function generate_sentences_tracked(int $unitId): void
+{
+    $unit = q1('SELECT * FROM units WHERE id = ?', [$unitId]);
+    if ($unit === null) {
+        return;
+    }
+    $user = q1('SELECT id, display_name FROM users WHERE id = ?', [(int) $unit['user_id']]);
+    if ($user === null) {
+        return;
+    }
+
+    $blocked = budget_block_reason((int) $user['id']);
+    if ($blocked !== null) {
+        sentence_status_set($unitId, SENTENCE_FAILED, $blocked);
+        return;
+    }
+
+    sentence_status_set($unitId, SENTENCE_RUNNING);
+
+    try {
+        $res = generate_sentences($unit, $user);
+    } catch (Throwable $e) {
+        error_log('[vokabeltrainer] Saetze (Hintergrund): ' . scrub_secrets($e->getMessage()));
+        db_ensure();
+        sentence_status_set($unitId, SENTENCE_FAILED,
+            'Die Saetze konnten nicht erzeugt werden.');
+        return;
+    }
+
+    db_ensure();
+    [, $total] = cloze_progress($unitId);
+
+    if ($total === 0) {
+        sentence_status_set($unitId, SENTENCE_FAILED,
+            $res['failed'] ?? 'Es entstand kein brauchbarer Satz.');
+        return;
+    }
+
+    // Teilerfolg zaehlt als fertig: Das Kind kann ueben, der Rest laesst sich
+    // im Admin nachtragen.
+    sentence_status_set($unitId, SENTENCE_DONE,
+        $res['failed'] !== null ? 'Teilweise: ' . $res['failed'] : null);
+}
