@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
+require_once __DIR__ . '/../lib/punctuation.php';
 require_once __DIR__ . '/../lib/ai.php';
 require_once __DIR__ . '/../lib/wordtypes.php';
 require_once __DIR__ . '/../lib/sentences.php';
@@ -118,8 +119,11 @@ switch (action()) {
             if (!is_array($row)) {
                 continue;
             }
-            $f = trim((string) ($row['foreign'] ?? ''));
-            $n = trim((string) ($row['native'] ?? ''));
+            // Abstände vor Satzzeichen gleich beim Einlesen richtigstellen:
+            // Im Französischen gehört vor ! ? : ; eines hin, im Deutschen
+            // nicht, und das Modell trifft es nicht jedes Mal.
+            $f = punctuation_fix((string) ($row['foreign'] ?? ''), $lang['code'] ?? null);
+            $n = punctuation_fix((string) ($row['native'] ?? ''), 'de');
             if ($f === '' || $n === '') {
                 continue;
             }

@@ -34,6 +34,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $n   = 0;
         $bad = 0;
 
+        // Die Abstandsregel für Satzzeichen hängt an der Sprache, und diese
+        // Seite zeigt alle Kinder und Sprachen gemischt. Deshalb die Kürzel
+        // der bearbeiteten Zeilen in einem Zug holen.
+        $codes = [];
+        $ids   = array_map('intval', array_keys($nat));
+        if ($ids !== []) {
+            foreach (qa(
+                'SELECT s.id, l.code
+                   FROM sentences s
+                   JOIN vocab v ON v.id = s.vocab_id
+                   JOIN units t ON t.id = v.unit_id
+                   JOIN languages l ON l.id = t.language_id
+                  WHERE s.id IN (' . implode(',', $ids) . ')'
+            ) as $r) {
+                $codes[(int) $r['id']] = $r['code'];
+            }
+        }
+
         foreach ($nat as $id => $_v) {
             $id  = (int) $id;
             $row = sentence_clean([
@@ -42,7 +60,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 'native'   => (string) ($nat[$id] ?? ''),
                 'foreign'  => (string) ($frn[$id] ?? ''),
                 'answer'   => (string) ($ans[$id] ?? ''),
-            ], [1]);
+            ], [1], $codes[$id] ?? null);
 
             if ($row === null) {
                 $bad++;

@@ -228,6 +228,71 @@ ok('"soeur" zählt als richtig, mit Hinweis auf die Schreibweise',
 ok('"sœur" ist genau richtig',
    answer_check('sœur', 'sœur')['exact'], 'Ligatur schlägt bei exakter Eingabe fehl');
 
+section('Abstände vor Satzzeichen');
+
+require_once __DIR__ . '/../lib/punctuation.php';
+
+// Der Anlass: "Salut !" sah nach einem Fehler des Modells aus, ist aber
+// korrektes Französisch - vor ! ? : ; steht dort ein Leerzeichen, in den
+// anderen Schulsprachen nicht. Pauschales Putzen wäre also kein Fix gewesen,
+// sondern ein neuer Fehler.
+foreach ([
+    ['Salut!',           'fr',  'Salut !',        'fehlendes Leerzeichen kommt hinzu'],
+    ['Salut  !',         'fr',  'Salut !',        'doppelter Abstand wird einer'],
+    ['Salut !',          'fr',  'Salut !',        'richtig Gesetztes bleibt unberührt'],
+    ['Comment?',         'fr',  'Comment ?',      'Fragezeichen ebenso'],
+    ['Oui: bien',        'fr',  'Oui : bien',     'Doppelpunkt ebenso'],
+    ['Bonne nuit .',     'fr',  'Bonne nuit.',    'vor dem Punkt steht auch im Französischen keines'],
+    ['Merci , Madame!',  'fr',  'Merci, Madame !', 'Komma eng, Ausrufezeichen weit'],
+    ['Gute Nacht !',     'de',  'Gute Nacht!',    'im Deutschen fällt es weg'],
+    ['Hej !',            'da',  'Hej!',           'im Dänischen auch'],
+    ['Hello !',          'en',  'Hello!',         'im Englischen auch'],
+    ['Salve !',          'la',  'Salve!',         'im Lateinischen auch'],
+    ['Salut !',          null,  'Salut!',         'ohne Kürzel gilt die enge Schreibweise'],
+] as [$roh, $sprache, $soll, $was]) {
+    ok($was, punctuation_fix($roh, $sprache) === $soll,
+       sprintf('"%s" (%s) ergab "%s", erwartet "%s"',
+               $roh, $sprache ?? '-', punctuation_fix($roh, $sprache), $soll));
+}
+
+// Eine Uhrzeit ist kein Satzzeichen.
+ok('Der Doppelpunkt zwischen Ziffern bleibt eng',
+   punctuation_fix('Il est 10:30', 'fr') === 'Il est 10:30',
+   punctuation_fix('Il est 10:30', 'fr'));
+
+ok('Die Lücke bleibt unberührt',
+   punctuation_fix('Merci, {} !', 'fr') === 'Merci, {} !',
+   punctuation_fix('Merci, {} !', 'fr'));
+
+ok('Geschützte Leerzeichen werden mitgenommen',
+   punctuation_fix("Salut\u{00A0}!", 'fr') === 'Salut !',
+   punctuation_fix("Salut\u{00A0}!", 'fr'));
+
+// Ein zweiter Durchlauf darf nichts mehr verändern - sonst wanderte der Text
+// bei jedem Klick auf den Knopf weiter.
+$einmal = punctuation_fix('Salut!', 'fr');
+ok('Zweimal angewandt kommt dasselbe heraus',
+   punctuation_fix($einmal, 'fr') === $einmal, $einmal);
+
+section('Abstand vor Satzzeichen gilt nicht als Fehler');
+
+// Was das Kind tippt, soll an dieser Stelle nie darüber entscheiden, ob die
+// Antwort zählt - und auch keinen Schreibweise-Hinweis auslösen.
+foreach ([
+    ['Salut!',                  'Salut !',                  'Leerzeichen fehlt'],
+    ['Salut !',                 'Salut!',                   'Leerzeichen zu viel'],
+    ['Salut  !',                'Salut !',                  'zwei Leerzeichen'],
+    ["Comment tu t'appelles?",  "Comment tu t'appelles ?",  'ganze Frage'],
+    ['Gute Nacht !',            'Gute Nacht!',              'andersherum'],
+] as [$getippt, $erwartet, $was]) {
+    $r = answer_check($getippt, $erwartet);
+    ok("Zählt voll als richtig: $was", $r['correct'] && $r['exact'], json_encode($r));
+}
+
+// Es bleibt aber ein Vergleich - der Abstand entschuldigt nichts anderes.
+ok('Ein anderes Wort bleibt falsch',
+   !answer_check('Bonjour !', 'Salut !')['correct']);
+
 section('Wiederverbindung zur Datenbank');
 
 // Der echte Fehlerfall vom Server: Während des minutenlangen KI-Aufrufs

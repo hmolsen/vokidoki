@@ -752,6 +752,75 @@ foreach ($vorher as $z) {
     q('UPDATE languages SET code = ? WHERE id = ?', [$z['code'], (int) $z['id']]);
 }
 
+section('Abstände vor Satzzeichen');
+
+// Eine eigene Sprache mit französischem Kürzel - dort gilt die weite
+// Schreibweise, auf der deutschen Seite derselben Vokabel die enge.
+[$data] = apiCall('languages', 'create', ['name' => 'Abstandstest', 'flag' => '']);
+$absLang = (int) $data['id'];
+q('UPDATE languages SET code = ? WHERE id = ?', ['fr', $absLang]);
+
+[$data] = apiCall('import', 'save', [
+    'language_id' => $absLang,
+    'title'       => 'Abstände',
+    'entries'     => [
+        ['foreign' => 'Salut!',          'native' => 'Hallo !'],
+        ['foreign' => 'Bonne nuit  !',   'native' => 'Gute Nacht !'],
+        ['foreign' => 'Merci , Madame!', 'native' => 'Danke , gnädige Frau!'],
+        ['foreign' => 'Comment?',        'native' => 'Wie bitte ?'],
+    ],
+]);
+$absUnit = (int) $data['unit_id'];
+
+$eingelesen = qa('SELECT term_foreign, term_native FROM vocab WHERE unit_id = ? ORDER BY position',
+                 [$absUnit]);
+
+ok('Die Fremdsprache bekommt beim Einlesen ihr Leerzeichen',
+   ($eingelesen[0]['term_foreign'] ?? '') === 'Salut !',
+   json_encode($eingelesen[0] ?? null, JSON_UNESCAPED_UNICODE));
+ok('Und die deutsche Seite verliert ihres',
+   ($eingelesen[0]['term_native'] ?? '') === 'Hallo!',
+   json_encode($eingelesen[0] ?? null, JSON_UNESCAPED_UNICODE));
+ok('Doppelte Abstände werden zu einem',
+   ($eingelesen[1]['term_foreign'] ?? '') === 'Bonne nuit !',
+   json_encode($eingelesen[1] ?? null, JSON_UNESCAPED_UNICODE));
+ok('Komma eng, Ausrufezeichen weit - in einer Zeile',
+   ($eingelesen[2]['term_foreign'] ?? '') === 'Merci, Madame !'
+   && ($eingelesen[2]['term_native'] ?? '') === 'Danke, gnädige Frau!',
+   json_encode($eingelesen[2] ?? null, JSON_UNESCAPED_UNICODE));
+
+// ---------------------------------------------- der Knopf für den Bestand
+// Altbestand nachstellen: So sah es aus, bevor das Einlesen es richtigstellte.
+q("UPDATE vocab SET term_foreign = 'Salut!', term_native = 'Hallo !'
+    WHERE unit_id = ? AND position = 0", [$absUnit]);
+
+$seite = http($base . '/admin/vocab.php?' . http_build_query(['user' => $userId]))['body'];
+ok('Der Admin merkt, dass Abstände krumm sind',
+   str_contains($seite, 'name="fix_punctuation"'), 'keine Karte im Markup');
+ok('Und erklärt die französische Regel',
+   str_contains($seite, 'Salut !'));
+
+adminPost('vocab.php', ['fix_punctuation' => '1', 'user' => $userId],
+          http_build_query(['user' => $userId]));
+
+$nachher = q1('SELECT term_foreign, term_native FROM vocab WHERE unit_id = ? AND position = 0',
+              [$absUnit]);
+ok('Der Knopf rückt den Bestand zurecht',
+   $nachher['term_foreign'] === 'Salut !' && $nachher['term_native'] === 'Hallo!',
+   json_encode($nachher, JSON_UNESCAPED_UNICODE));
+
+$seite = http($base . '/admin/vocab.php?' . http_build_query(['user' => $userId]))['body'];
+ok('Danach verschwindet die Karte von selbst',
+   !str_contains($seite, 'name="fix_punctuation"'));
+
+// Ein zweiter Klick darf nichts weiterschieben.
+adminPost('vocab.php', ['fix_punctuation' => '1', 'user' => $userId],
+          http_build_query(['user' => $userId]));
+ok('Ein zweiter Durchlauf ändert nichts mehr',
+   qv('SELECT term_foreign FROM vocab WHERE unit_id = ? AND position = 0', [$absUnit]) === 'Salut !');
+
+q('DELETE FROM languages WHERE id = ?', [$absLang]);
+
 section('Lückentext');
 
 if (!$isFake) {

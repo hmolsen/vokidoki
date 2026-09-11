@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/punctuation.php';
 require_once __DIR__ . '/ai.php';
 require_once __DIR__ . '/wordtypes.php';
 require_once __DIR__ . '/progress.php';
@@ -56,7 +57,13 @@ function answer_normalize(string $text): string
     // Typografische Apostrophe und Anführungszeichen auf das schlichte ' bringen -
     // welches davon eine Handytastatur liefert, ist nicht vorhersagbar.
     $text = str_replace(["\u{2019}", "\u{02BC}", "\u{2018}", '`', "\u{00B4}"], "'", $text);
-    $text = preg_replace('/\s+/u', ' ', $text) ?? $text;
+    $text = preg_replace('/[\s\x{00A0}\x{202F}\x{2009}]+/u', ' ', $text) ?? $text;
+
+    // Der Abstand vor einem Satzzeichen zählt nicht mit. Im Französischen
+    // gehört dort eines hin ("Salut !"), auf einer Handytastatur tippt es
+    // aber kaum ein Kind - gemeint ist beides dasselbe, also darf es nicht
+    // den Unterschied zwischen richtig und falsch ausmachen.
+    $text = preg_replace('/ +([.,;:!?])/u', '$1', $text) ?? $text;
 
     return mb_strtolower(trim($text));
 }
@@ -107,16 +114,19 @@ function answer_check(string $typed, string $expected): array
  *
  * @param array<int,int> $allowedVocab Nummern, die angefragt wurden
  */
-function sentence_clean(array $row, array $allowedVocab): ?array
+function sentence_clean(array $row, array $allowedVocab, ?string $lang = null): ?array
 {
     $vocabId = (int) ($row['vocab_id'] ?? 0);
     if (!in_array($vocabId, $allowedVocab, true)) {
         return null;   // gehört nicht zur Anfrage
     }
 
-    $native  = trim((string) ($row['native'] ?? ''));
-    $foreign = trim((string) ($row['foreign'] ?? ''));
-    $answer  = trim((string) ($row['answer'] ?? ''));
+    // Abstände vor Satzzeichen richtigstellen, bevor geprüft und gespeichert
+    // wird - im Französischen gehört vor ! ? : ; eines hin, im Deutschen
+    // nicht. Die Lücke {} bleibt davon unberührt.
+    $native  = punctuation_fix((string) ($row['native'] ?? ''), 'de');
+    $foreign = punctuation_fix((string) ($row['foreign'] ?? ''), $lang);
+    $answer  = punctuation_fix((string) ($row['answer'] ?? ''), $lang);
 
     if ($native === '' || $foreign === '' || $answer === '') {
         return null;
@@ -316,7 +326,7 @@ function generate_sentences(array $unit, array $user): array
         $model = 'claude-sonnet-5';
     }
 
-    $lang = q1('SELECT name FROM languages WHERE id = ?', [(int) $unit['language_id']]);
+    $lang = q1('SELECT name, code FROM languages WHERE id = ?', [(int) $unit['language_id']]);
 
     // Nur Vokabeln ohne Sätze - so trägt der Knopf im Admin gezielt nach.
     $offen = qa(
@@ -348,7 +358,8 @@ function generate_sentences(array $unit, array $user): array
 
         try {
             [$c, $s] = generate_sentence_batch(
-                $batch, $known, (string) $lang['name'], $perVocab, $model, $user,
+                $batch, $known, (string) $lang['name'], $lang['code'],
+                $perVocab, $model, $user,
             );
             $created += $c;
             $skipped += $s;
@@ -376,6 +387,7 @@ function generate_sentence_batch(
     array $rows,
     array $known,
     string $languageName,
+    ?string $languageCode,
     int $perVocab,
     string $model,
     array $user,
@@ -453,7 +465,7 @@ function generate_sentence_batch(
     $skipped = 0;
 
     foreach ($data['sentences'] ?? [] as $row) {
-        $ok = is_array($row) ? sentence_clean($row, $allowed) : null;
+        $ok = is_array($row) ? sentence_clean($row, $allowed, $languageCode) : null;
         if ($ok === null) {
             $skipped++;
             continue;

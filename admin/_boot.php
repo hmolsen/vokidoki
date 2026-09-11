@@ -8,6 +8,7 @@ require_once __DIR__ . '/../lib/settings.php';
 require_once __DIR__ . '/../lib/cost.php';
 require_once __DIR__ . '/../lib/colors.php';
 require_once __DIR__ . '/../lib/pager.php';
+require_once __DIR__ . '/../lib/punctuation.php';
 require_once __DIR__ . '/../lib/errors.php';
 require_once __DIR__ . '/../lib/keyvault.php';
 require_once __DIR__ . '/../lib/schema.php';

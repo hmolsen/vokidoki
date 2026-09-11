@@ -74,6 +74,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $ans = (array) ($_POST['sa'] ?? []);
         $n   = 0;
 
+        // Alle Sätze hier gehören zur ausgewählten Sprache - ihr Kürzel
+        // entscheidet über den Abstand vor Satzzeichen.
+        $langCode = $langId > 0
+            ? qv('SELECT code FROM languages WHERE id = ?', [$langId])
+            : null;
+
         foreach ($nat as $id => $_v) {
             $id = (int) $id;
             $row = sentence_clean([
@@ -81,7 +87,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 'native'   => (string) ($nat[$id] ?? ''),
                 'foreign'  => (string) ($frn[$id] ?? ''),
                 'answer'   => (string) ($ans[$id] ?? ''),
-            ], [1]);
+            ], [1], $langCode);
 
             if ($row === null) {
                 continue;   // unbrauchbar - lieber nichts ändern als kaputt speichern
@@ -138,6 +144,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             error_log('[vokabeltrainer] Sätze: ' . scrub_secrets($e->getMessage()));
             flash('Die Sätze konnten nicht erzeugt werden. Details stehen im Protokoll.', 'bad');
         }
+        back_to_filter($userId, $langId, $unitId);
+    }
+
+    if (isset($_POST['fix_punctuation'])) {
+        // Kostet nichts und ruft kein Modell - reine Textarbeit.
+        set_time_limit(300);
+        $n = punctuation_repair(true);
+
+        flash($n['vocab'] === 0 && $n['sentences'] === 0
+            ? 'Die Abstände stimmten schon überall.'
+            : sprintf('Abstände zurechtgerückt: %d Vokabel(n) und %d Satz/Sätze.',
+                      $n['vocab'], $n['sentences']));
         back_to_filter($userId, $langId, $unitId);
     }
 
@@ -339,6 +357,10 @@ $vocab = $unit !== null
 
 $missingTypes = (int) qv('SELECT COUNT(*) FROM vocab WHERE word_type IS NULL');
 
+// Nur zählen, nicht ändern - die Karte erscheint dann, wenn es etwas zu tun
+// gibt, und verschwindet danach von selbst.
+$badSpacing = punctuation_repair(false);
+
 $sentences = $unit !== null
     ? qa(
         'SELECT s.*, v.term_foreign, v.term_native
@@ -354,6 +376,30 @@ $openSentences = $unit !== null ? vocab_without_sentences($unitId) : 0;
 admin_head('Vokabeln', 'vocab.php');
 flash_render();
 ?>
+
+<?php if ($badSpacing['vocab'] > 0 || $badSpacing['sentences'] > 0): ?>
+<div class="card">
+    <strong>
+        Abstände vor Satzzeichen:
+        <?= $badSpacing['vocab'] ?> Vokabel(n),
+        <?= $badSpacing['sentences'] ?> Satz/Sätze
+    </strong>
+    <p class="tiny muted" style="margin:6px 0 12px">
+        Im Französischen gehört vor <code>!</code> <code>?</code> <code>:</code>
+        <code>;</code> ein Leerzeichen &ndash; &bdquo;Salut !&ldquo; ist also
+        richtig gesetzt. Im Deutschen, Englischen, Dänischen und Lateinischen
+        steht dort keines. Der Knopf rückt beides je Sprache zurecht und
+        räumt doppelte Abstände mit weg. Kostet nichts und fragt kein Modell.
+    </p>
+    <form method="post">
+        <?= csrf_field() ?>
+        <input type="hidden" name="user" value="<?= $userId ?>">
+        <input type="hidden" name="language" value="<?= $langId ?>">
+        <input type="hidden" name="unit" value="<?= $unitId ?>">
+        <button class="btn small" name="fix_punctuation" value="1">Abstände zurechtrücken</button>
+    </form>
+</div>
+<?php endif; ?>
 
 <?php if ($missingTypes > 0): ?>
 <div class="card">
