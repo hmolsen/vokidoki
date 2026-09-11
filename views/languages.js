@@ -1,5 +1,6 @@
 import {
     VT, api, render, esc, $, $$, on, go, topbar, loading, showError, clearError, withBusy,
+    hardRefresh,
 } from '../core.js';
 
 /* Die Sprachen, die hier gebraucht werden. Alles andere lässt sich
@@ -12,7 +13,7 @@ const PRESETS = [
 ];
 
 export async function languagesView() {
-    render(topbar(VT.user.appName, { action: logoutButton() }) + loading('Sprachen werden geladen...'));
+    render(topbar(VT.user.appName, { action: cornerButton() }) + loading('Sprachen werden geladen...'));
 
     const { languages } = await api('languages', 'list');
 
@@ -25,7 +26,7 @@ export async function languagesView() {
     `).join('');
 
     render(`
-        ${topbar(VT.user.appName, { action: logoutButton() })}
+        ${topbar(VT.user.appName, { action: cornerButton() })}
         <div id="msg"></div>
         ${languages.length === 0 ? `
             <div class="empty">
@@ -44,14 +45,33 @@ export async function languagesView() {
 
     on('[data-lang]', 'click', (e) => go(`/lang/${e.currentTarget.dataset.lang}`));
     $('#add').addEventListener('click', showAddForm);
-    wireLogout();
+    wireCornerButton();
 }
 
-function logoutButton() {
-    return '<button class="iconbtn" id="logout" aria-label="Abmelden">&#9099;</button>';
+/**
+ * In der installierten App steht dort kein Abmelden, sondern Aktualisieren.
+ *
+ * Das Symbol gehört zu genau einem Kind - sich dort abzumelden hilft niemandem
+ * und nimmt nur den Zugang. Was in der App dagegen fehlt, ist ein Weg, eine
+ * neue Fassung zu holen: keine Adresszeile, kein Neu-Laden.
+ */
+function cornerButton() {
+    return VT.standalone
+        ? '<button class="iconbtn" id="refresh" aria-label="App aktualisieren">&#8635;</button>'
+        : '<button class="iconbtn" id="logout" aria-label="Abmelden">&#9099;</button>';
 }
 
-function wireLogout() {
+function wireCornerButton() {
+    const refresh = $('#refresh');
+    if (refresh) {
+        refresh.addEventListener('click', async () => {
+            refresh.disabled = true;
+            refresh.innerHTML = '<span class="spinner inline"></span>';
+            await hardRefresh();
+        });
+        return;
+    }
+
     const btn = $('#logout');
     if (!btn) return;
     btn.addEventListener('click', async () => {

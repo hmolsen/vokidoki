@@ -131,8 +131,10 @@ flash_render();
         </div>
 
     </div>
-    <label>Farbe</label>
-    <?= color_grid(color_palette()[27]) ?>
+    <div class="inline" style="margin-bottom:12px">
+        <label style="margin:0">Farbe</label>
+        <?= color_picker(color_palette()[27]) ?>
+    </div>
 
     <p class="tiny muted">
         Der Anzeigename erscheint als App-Name auf dem Home-Bildschirm -
@@ -171,12 +173,12 @@ flash_render();
             <input type="hidden" name="id" value="<?= (int) $u['id'] ?>">
             <input type="text" name="display_name" value="<?= h($u['display_name']) ?>"
                    maxlength="64" style="width:180px;margin:0">
+            <?= color_picker($u['color']) ?>
             <label style="display:flex;align-items:center;gap:6px;margin:0;font-weight:500">
                 <input type="checkbox" name="active" value="1"<?= $u['active'] ? ' checked' : '' ?>
                        style="width:auto;min-height:auto;margin:0"> aktiv
             </label>
             <button class="btn secondary small" name="update" value="1">Speichern</button>
-            <?= color_grid($u['color']) ?>
         </form>
 
         <form method="post" class="inline" style="margin-bottom:12px">

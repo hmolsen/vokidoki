@@ -136,6 +136,20 @@ das Symbol landet dann beim nächsten Start wieder im Login.
 
 **Wichtig:** Ohne HTTPS gibt es weder Service Worker noch Kamerazugriff in iOS.
 
+### Aktualisierungen erreichen die installierte App
+
+In der installierten App gibt es keine Adresszeile und kein Neu-Laden. Damit
+eine neue Fassung dort ankommt, greifen drei Dinge ineinander:
+
+- `index.php` hängt an jede Datei einen Versionsstempel aus deren
+  **Änderungsdatum** — nach einem Upload zeigt die Adresse also auf etwas
+  Neues, und weder Browser noch Service Worker liefern die alte Fassung.
+- Die Hülle selbst wird mit `Cache-Control: no-store` ausgeliefert.
+- Oben rechts steht in der App ein **Aktualisieren-Knopf** statt des
+  Abmeldens: Er meldet den Service Worker ab, leert die Zwischenspeicher und
+  startet neu. Abmelden wäre dort ohnehin sinnlos — das Symbol gehört zu genau
+  einem Kind.
+
 ---
 
 ## Absicherung

@@ -59,29 +59,47 @@ function hsl_to_hex(float $h, float $s, float $l): string
         (int) round(($b + $m) * 255));
 }
 
-/** Das anklickbare Farbfeld. Radiofelder - es funktioniert ohne JavaScript. */
-function color_grid(string $selected, string $name = 'color'): string
+/**
+ * Farbwahl als Flyout.
+ *
+ * Das Raster stand vorher offen in der Bearbeitungszeile eines Accounts - in
+ * einer flex-Zeile schrumpften die Kacheln auf Pixelgrösse, während die
+ * Abstände blieben. Jetzt zeigt ein Knopf die aktuelle Farbe und klappt das
+ * Feld darüber auf.
+ *
+ * details/summary statt eigener Klapplogik: Das kommt ohne JavaScript aus und
+ * ist mit der Tastatur bedienbar.
+ */
+function color_picker(string $selected, string $name = 'color'): string
 {
-    $out = '<div class="palette">';
-    foreach (color_palette() as $farbe) {
-        $out .= sprintf(
+    $farben = color_palette();
+    $gewaehlt = preg_match('/^#[0-9a-f]{6}$/i', $selected) === 1 ? strtolower($selected) : $farben[27];
+
+    $kacheln = '';
+    foreach ($farben as $farbe) {
+        $kacheln .= sprintf(
             '<label class="swatch-pick" style="--c:%s" title="%s">'
                 . '<input type="radio" name="%s" value="%s"%s><span></span></label>',
             e($farbe), e($farbe), e($name), e($farbe),
-            strcasecmp($farbe, $selected) === 0 ? ' checked' : '',
+            $farbe === $gewaehlt ? ' checked' : '',
         );
     }
 
-    // Eine schon gesetzte Farbe, die nicht im Feld steht, darf nicht verloren
-    // gehen - etwa aus einer früheren Palette.
-    if (!in_array(strtolower($selected), array_map('strtolower', color_palette()), true)
-        && preg_match('/^#[0-9a-f]{6}$/i', $selected) === 1) {
-        $out .= sprintf(
+    // Eine Farbe aus einer früheren Palette darf nicht verlorengehen.
+    $extra = '';
+    if (!in_array($gewaehlt, $farben, true)) {
+        $extra = sprintf(
             '<label class="swatch-pick extra" style="--c:%s" title="bisherige Farbe %s">'
                 . '<input type="radio" name="%s" value="%s" checked><span></span></label>',
-            e($selected), e($selected), e($name), e($selected),
+            e($gewaehlt), e($gewaehlt), e($name), e($gewaehlt),
         );
     }
 
-    return $out . '</div>';
+    return sprintf(
+        '<details class="colorpick">'
+            . '<summary title="Farbe wählen"><span class="swatch-current" style="--c:%s"></span></summary>'
+            . '<div class="colorpop"><div class="palette">%s%s</div></div>'
+            . '</details>',
+        e($gewaehlt), $kacheln, $extra,
+    );
 }

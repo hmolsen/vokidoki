@@ -244,7 +244,32 @@ function admin_head(string $title, string $active): void
 
 function admin_foot(): void
 {
-    echo '</main></body></html>';
+    // Kleine Zugabe: Nach der Wahl klappt das Farbfeld zu und der Knopf zeigt
+    // die neue Farbe. Ohne dieses Skript funktioniert die Wahl trotzdem - dann
+    // bleibt das Feld eben offen stehen, bis gespeichert wird.
+    ?>
+    <script>
+    document.addEventListener('change', (event) => {
+        const input = event.target;
+        if (!input.matches('.swatch-pick input')) return;
+
+        const picker = input.closest('.colorpick');
+        if (!picker) return;
+
+        const knopf = picker.querySelector('.swatch-current');
+        if (knopf) knopf.style.setProperty('--c', input.value);
+        picker.open = false;
+    });
+
+    // Klick daneben schliesst ein offenes Farbfeld.
+    document.addEventListener('click', (event) => {
+        document.querySelectorAll('.colorpick[open]').forEach((picker) => {
+            if (!picker.contains(event.target)) picker.open = false;
+        });
+    });
+    </script>
+    </main></body></html>
+    <?php
 }
 
 /** Meldung für die nächste Seite hinterlegen (Redirect-nach-POST). */

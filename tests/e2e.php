@@ -1003,6 +1003,12 @@ ok('64 Kacheln stehen zur Wahl',
    substr_count($res['body'], 'class="swatch-pick"') >= 64,
    (string) substr_count($res['body'], 'class="swatch-pick"'));
 
+// Das Feld liegt zugeklappt hinter einem Knopf - offen in der Zeile schrumpften
+// die Kacheln auf Pixelgrösse.
+ok('Die Farbwahl steckt in einem Flyout', str_contains($res['body'], 'class="colorpick"'));
+ok('Der Knopf zeigt die aktuelle Farbe', str_contains($res['body'], 'class="swatch-current"'));
+ok('Und ist zugeklappt', !preg_match('/<details class="colorpick" open/', $res['body']));
+
 // Eine Farbe aus dem Feld setzen.
 $farbe = color_palette()[40];
 adminPost('users.php', ['update' => '1', 'id' => $userId,
@@ -1029,6 +1035,36 @@ foreach ([color_palette()[0] => 'sehr hell', color_palette()[7] => 'sehr dunkel'
     ok("Symbol wird erzeugt ($was: $c)", str_starts_with($png['body'], chr(0x89) . 'PNG'));
 }
 q('UPDATE users SET color = ? WHERE id = ?', [$farbe, $userId]);
+
+section('Aktualisieren statt Abmelden in der App');
+
+// In der installierten App gibt es keine Adresszeile - ohne diesen Weg kaeme
+// eine neue Fassung dort nie an.
+$js = file_get_contents(__DIR__ . '/../core.js');
+ok('core.js bringt hardRefresh mit', str_contains($js, 'export async function hardRefresh'));
+ok('Es meldet den Service Worker ab', str_contains($js, 'r.unregister()'));
+ok('Und leert den Zwischenspeicher', str_contains($js, 'caches.delete'));
+
+$view = file_get_contents(__DIR__ . '/../views/languages.js');
+ok('In der App steht dort Aktualisieren statt Abmelden',
+   str_contains($view, 'VT.standalone') && str_contains($view, "id=\"refresh\""));
+ok('Im Browser bleibt das Abmelden', str_contains($view, "id=\"logout\""));
+
+// Der Versionsstempel muss sich mit den Dateien aendern, sonst liefern Browser
+// und Service Worker ewig die alte Fassung aus.
+$res = http($base . '/');
+preg_match('/app\.js\?v=(\d+)/', $res['body'], $m);
+$stempel = (int) ($m[1] ?? 0);
+ok('Die Huelle traegt einen Versionsstempel', $stempel > 1000000000, (string) $stempel);
+ok('Er stammt vom Aenderungsdatum der Dateien',
+   $stempel >= (int) filemtime(__DIR__ . '/../app.js'), (string) $stempel);
+ok('Die Huelle selbst wird nicht vorgehalten',
+   str_contains(strtolower($res['headers']), 'cache-control: no-store'),
+   'kein no-store im Kopf');
+
+$sw = file_get_contents(__DIR__ . '/../sw.js');
+ok('Der Service Worker haelt nur die Offline-Seite im Voraus vor',
+   str_contains($sw, "const ASSETS = ['./offline.html']"));
 
 // ------------------------------------------------------------------ Abmelden
 

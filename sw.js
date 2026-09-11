@@ -3,22 +3,18 @@
    API laufen immer über das Netz - eine gecachte Shell könnte sonst den
    Namen des falschen Kindes anzeigen, weil index.php pro Account rendert. */
 
-const CACHE = 'vokabeltrainer-v2';
+const CACHE = 'vokabeltrainer-v3';
 
-const ASSETS = [
-    './style.css',
-    './core.js',
-    './app.js',
-    './views/login.js',
-    './views/languages.js',
-    './views/language.js',
-    './views/units.js',
-    './views/unit.js',
-    './views/import.js',
-    './views/quiz.js',
-    './views/cloze.js',
-    './offline.html',
-];
+/**
+ * Im Voraus wird nur die Offline-Seite abgelegt.
+ *
+ * Alles andere trägt einen Versionsstempel in der Adresse (app.js?v=...), den
+ * der Service Worker hier gar nicht kennen kann - ein Vorrat ohne Stempel ging
+ * an den tatsächlich angefragten Adressen vorbei und wurde nie benutzt. Die
+ * Dateien landen stattdessen beim ersten Abruf im Zwischenspeicher, und ein
+ * neuer Stempel führt von selbst zu einem neuen Eintrag.
+ */
+const ASSETS = ['./offline.html'];
 
 self.addEventListener('install', (event) => {
     event.waitUntil(

@@ -16,7 +16,17 @@ require_once __DIR__ . '/lib/errors.php';
 
 boot_error_handling();
 
-$appVersion = '1';
+/**
+ * Versionsstempel der Oberfläche.
+ *
+ * Aus dem jüngsten Änderungsdatum der Kerndateien statt von Hand gepflegt -
+ * eine feste Zahl vergisst man beim Hochladen, und dann liefern Browser und
+ * Service Worker ewig die alte Fassung an die installierte App.
+ */
+$appVersion = (string) max(array_map(
+    static fn (string $f): int => is_file(__DIR__ . '/' . $f) ? (int) filemtime(__DIR__ . '/' . $f) : 0,
+    ['app.js', 'core.js', 'style.css', 'sw.js', 'views/unit.js', 'views/cloze.js', 'views/quiz.js'],
+));
 
 // Start aus dem Homescreen-Icon: start_url trägt den Geräte-Token. Er wird
 // gegen eine Session in *diesem* Container getauscht und danach aus der URL
@@ -54,6 +64,10 @@ if ($user !== null) {
 $appName = $user !== null ? app_name_for($user) : 'Vokabeln';
 $color   = $user !== null ? $user['color'] : '#4f7cff';
 $e       = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+
+// Die Hülle selbst nie vorhalten: Sie trägt den Namen des Kindes und die
+// Versionsstempel der Dateien - beides muss immer frisch sein.
+header('Cache-Control: no-store, must-revalidate');
 ?>
 <!doctype html>
 <html lang="de">
