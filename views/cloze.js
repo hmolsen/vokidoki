@@ -7,6 +7,8 @@ const NEXT_DELAY_HINT    = 2400;   // Schreibweise lesen können
 // Fuer eine falsche Antwort gibt es keine Wartezeit mehr: Dort entscheidet
 // das Kind selbst, wann es weitergeht.
 
+const GAP = '{}';
+
 /*
  * Zeichen, die auf der deutschen Tastatur nur hinter einem langen Druck
  * liegen. iOS lässt sich das Tastaturlayout nicht vorschreiben - es gibt
@@ -30,7 +32,21 @@ const ACCENT_KEYS = {
     pt: ['á', 'â', 'ã', 'à', 'é', 'ê', 'í', 'ó', 'ô', 'õ', 'ú', 'ç'],
 };
 
+/**
+ * Der gerade sichtbare Bildschirm.
+ *
+ * Er wird je Lerneinheit einmal gebaut; danach werden nur noch die Texte
+ * getauscht. Der Grund ist die Tastatur: Baut man das Eingabefeld für jede
+ * Vokabel neu, verliert es den Fokus, und iOS öffnet die Tastatur nicht von
+ * selbst wieder - programmatischer Fokus zieht sie dort nur hoch, wenn er
+ * unmittelbar aus einer Berührung kommt, und dazwischen liegt jedes Mal ein
+ * Abruf beim Server. Bleibt dasselbe Feld stehen, bleibt auch die Tastatur.
+ */
+let zustand = null;
+
 export async function clozeView(unitId) {
+    zustand = null;
+
     render(`
         ${topbar('Lückentext', { backTo: `/unit/${unitId}` })}
         <div id="msg"></div>
@@ -67,44 +83,65 @@ async function nextQuestion(unitId) {
     }
 
     if (data.done) {
+        zustand = null;
         showFinished(unitId, data);
         return;
     }
 
-    /*
-     * Feste Spalte über die sichtbare Höhe: Kopf und Fuß stehen, der Satz
-     * dazwischen bekommt, was übrig bleibt.
-     *
-     * Das Eingabefeld sitzt in der Lücke selbst. Das spart nicht nur die
-     * Zeile, die es vorher für sich brauchte - es ist auch das, was die
-     * Übung eigentlich meint: Das Kind füllt die Lücke, es beantwortet
-     * nicht daneben eine Frage.
-     */
+    // Steht der Bildschirm schon, wird nur die Karte getauscht.
+    if (zustand !== null
+        && zustand.unitId === String(unitId)
+        && document.getElementById('answer') !== null) {
+        showCard(data);
+        return;
+    }
+
+    buildScreen(unitId, data);
+}
+
+/**
+ * Baut den Bildschirm einmal auf.
+ *
+ * Feste Spalte über die sichtbare Höhe: Kopf und Fuß stehen, der Satz
+ * dazwischen bekommt, was übrig bleibt. Das Eingabefeld sitzt in der Lücke
+ * selbst - das spart nicht nur die Zeile, die es vorher für sich brauchte,
+ * es ist auch das, was die Übung meint: Das Kind füllt die Lücke, es
+ * beantwortet nicht daneben eine Frage.
+ */
+function buildScreen(unitId, data) {
     render(`
         <div class="screen">
             <div class="screen-top">
                 ${topbar('Lückentext', {
                     backTo: `/unit/${unitId}`,
-                    action: `
-                        <div class="topbar-progress" title="${data.known} von ${data.total} gelernt">
-                            ${progressBar(data.known, data.total)}
-                            <span class="tiny muted">${data.known}/${data.total}</span>
-                        </div>`,
+                    action: '<div class="topbar-progress" id="progress"></div>',
                 })}
             </div>
 
             <form id="form" class="screen-body" autocomplete="off">
                 <div class="screen-mid">
-                    <p class="cloze-native">${esc(data.native)}</p>
-                    <p class="cloze-foreign">${gapField(data.foreign, data.lang)}</p>
+                    <p class="cloze-native" id="native"></p>
 
-                    <div class="cloze-dots">
-                        <span class="dots">${
-                            [0, 1, 2].map((i) =>
-                                `<i class="${i < Math.min(3, data.streak) ? 'on' : ''}"></i>`).join('')
-                        }</span>
-                    </div>
+                    <!--
+                        Die beiden Hälften des Satzes stehen in eigenen
+                        Elementen, damit das Eingabefeld dazwischen nie
+                        angefasst werden muss. Würde es beim Wechsel bewegt
+                        oder neu gebaut, verlöre es den Fokus - und die
+                        Tastatur ginge zu.
+                    -->
+                    <p class="cloze-foreign">
+                        <span id="gap-before"></span
+                        ><input type="text" id="answer" class="cloze-input"
+                                ${data.lang ? `lang="${esc(data.lang)}"` : ''}
+                                maxlength="128" size="1"
+                                aria-label="Was fehlt?"
+                                autocomplete="off" autocorrect="off"
+                                autocapitalize="off" spellcheck="false"
+                                enterkeyhint="done"
+                        ><span id="gap-after"></span>
+                    </p>
 
+                    <div class="cloze-dots"><span class="dots" id="dots"></span></div>
                     <div class="verdict" id="verdict"></div>
                 </div>
 
@@ -119,96 +156,149 @@ async function nextQuestion(unitId) {
 
     wireBack();
 
-    const form  = $('#form');
     const input = $('#answer');
     const check = $('#check');
 
-    let answered = false;
-    let wartet   = false;   // Ergebnis steht, der nächste Klick geht weiter
-    let weiter   = false;   // schon unterwegs zur nächsten Vokabel
+    zustand = {
+        unitId: String(unitId),
+        data,
+        input,
+        check,
+        answered: false,
+        wartet: false,
+        weiter: false,
+    };
 
-    fitField(input);
     input.addEventListener('input', () => fitField(input));
+
+    // Wie bei den Zeichentasten: Ohne das nimmt der Knopf dem Feld den Fokus,
+    // und die Tastatur klappt bei jedem Prüfen zu.
+    check.addEventListener('mousedown', (event) => event.preventDefault());
+
+    $('#form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        onSubmit(unitId);
+    });
+
+    wireAccents(input, () => zustand.answered);
+    showCard(data);
+}
+
+/** Tauscht die Aufgabe aus, ohne das Eingabefeld anzufassen. */
+function showCard(data) {
+    const { input, check } = zustand;
+
+    zustand.data     = data;
+    zustand.answered = false;
+    zustand.wartet   = false;
+    zustand.weiter   = false;
+
+    $('#native').textContent = data.native;
+
+    const [vor, nach] = String(data.foreign).split(GAP);
+    $('#gap-before').textContent = vor ?? '';
+    $('#gap-after').textContent  = nach ?? '';
+
+    input.value = '';
+    input.readOnly = false;
+    input.classList.remove('correct', 'almost', 'wrong');
+    fitField(input);
+
+    check.disabled = false;
+    check.classList.remove('good', 'bad');
+    check.textContent = 'Prüfen';
+
+    const verdict = $('#verdict');
+    verdict.className = 'verdict';
+    verdict.textContent = '';
+
+    $('#dots').innerHTML = [0, 1, 2]
+        .map((i) => `<i class="${i < Math.min(3, data.streak) ? 'on' : ''}"></i>`)
+        .join('');
+
+    const fortschritt = $('#progress');
+    fortschritt.innerHTML = `
+        ${progressBar(data.known, data.total)}
+        <span class="tiny muted">${data.known}/${data.total}</span>`;
+    fortschritt.title = `${data.known} von ${data.total} gelernt`;
+
+    input.focus();
+}
+
+async function onSubmit(unitId) {
+    const z = zustand;
+    const { input, check } = z;
 
     /** Genau einmal weiterschalten - egal ob durch Klick oder Zeitablauf. */
     const naechste = () => {
-        if (weiter) return;
-        weiter = true;
+        if (z.weiter) return;
+        z.weiter = true;
         nextQuestion(unitId);
     };
 
-    form.addEventListener('submit', async (event) => {
-        event.preventDefault();
+    // Nach einer falschen Antwort ist der Knopf der Weiter-Knopf. Nach einer
+    // richtigen schaltet er nur vorzeitig weiter, statt die Rückmeldung
+    // abzuwarten.
+    if (z.wartet) {
+        naechste();
+        return;
+    }
+    if (z.answered) return;
 
-        // Nach einer falschen Antwort ist der Knopf der Weiter-Knopf. Nach
-        // einer richtigen schaltet er nur vorzeitig weiter, statt die
-        // Rückmeldung abzuwarten.
-        if (wartet) {
-            naechste();
-            return;
-        }
-        if (answered) return;
+    const text = input.value.trim();
+    if (text === '') {
+        input.focus();
+        return;
+    }
 
-        const text = input.value.trim();
-        if (text === '') {
-            input.focus();
-            return;
-        }
+    z.answered = true;
+    input.readOnly = true;
+    check.disabled = true;
 
-        answered = true;
-        input.readOnly = true;
-        check.disabled = true;
-
-        let result;
-        try {
-            result = await api('cloze', 'answer', {
-                body: { nonce: data.nonce, text },
-            });
-        } catch (err) {
-            answered = false;
-            input.readOnly = false;
-            check.disabled = false;
-            showError(err.message);
-            return;
-        }
-
-        const verdict = $('#verdict');
+    let result;
+    try {
+        result = await api('cloze', 'answer', { body: { nonce: z.data.nonce, text } });
+    } catch (err) {
+        z.answered = false;
+        input.readOnly = false;
         check.disabled = false;
-        wartet = true;
+        showError(err.message);
+        return;
+    }
 
-        if (result.correct && result.exact) {
-            input.classList.add('correct');
-            check.classList.add('good');
-            check.textContent = result.just_learned ? 'Sitzt!' : 'Richtig!';
-            verdict.className = 'verdict good';
-            verdict.textContent = result.just_learned
-                ? 'Diese Vokabel kannst du jetzt.'
-                : 'Weiter so!';
-            setTimeout(naechste, NEXT_DELAY_CORRECT);
-        } else if (result.correct) {
-            // Zählt als richtig, aber die Schreibweise soll das Kind sehen.
-            input.classList.add('almost');
-            check.classList.add('good');
-            check.textContent = 'Fast richtig!';
-            verdict.className = 'verdict good';
-            verdict.innerHTML = `So schreibt man es:<br><strong>${esc(result.answer)}</strong>`;
-            setTimeout(naechste, NEXT_DELAY_HINT);
-        } else {
-            /*
-             * Falsch: kein Zeitablauf. Das Kind soll die richtige Lösung in
-             * Ruhe lesen können und selbst entscheiden, wann es weitergeht -
-             * genau die Stelle, an der Lernen passiert.
-             */
-            input.classList.add('wrong');
-            check.classList.add('bad');
-            check.textContent = 'Weiter';
-            verdict.className = 'verdict bad';
-            verdict.innerHTML = `Nicht ganz. Richtig ist:<br><strong>${esc(result.answer)}</strong>`;
-        }
-    });
+    const verdict = $('#verdict');
+    check.disabled = false;
+    z.wartet = true;
 
-    wireAccents(input, () => answered);
-    input.focus();
+    if (result.correct && result.exact) {
+        input.classList.add('correct');
+        check.classList.add('good');
+        check.textContent = result.just_learned ? 'Sitzt!' : 'Richtig!';
+        verdict.className = 'verdict good';
+        verdict.textContent = result.just_learned
+            ? 'Diese Vokabel kannst du jetzt.'
+            : 'Weiter so!';
+        setTimeout(naechste, NEXT_DELAY_CORRECT);
+    } else if (result.correct) {
+        // Zählt als richtig, aber die Schreibweise soll das Kind sehen.
+        input.classList.add('almost');
+        check.classList.add('good');
+        check.textContent = 'Fast richtig!';
+        verdict.className = 'verdict good';
+        verdict.innerHTML = `So schreibt man es:<br><strong>${esc(result.answer)}</strong>`;
+        setTimeout(naechste, NEXT_DELAY_HINT);
+    } else {
+        /*
+         * Falsch: kein Zeitablauf. Das Kind soll die richtige Lösung in Ruhe
+         * lesen können und selbst entscheiden, wann es weitergeht - genau die
+         * Stelle, an der Lernen passiert.
+         */
+        input.classList.add('wrong');
+        check.classList.add('bad');
+        check.textContent = 'Weiter';
+        verdict.className = 'verdict bad';
+        verdict.innerHTML = `Nicht ganz. Richtig ist:<br><strong>${esc(result.answer)}</strong>`;
+    }
 }
 
 /**
@@ -269,29 +359,17 @@ function wireAccents(input, istBeantwortet) {
         // weiter am Anfang des Feldes.
         const danach = von + zeichen.length;
         input.setSelectionRange(danach, danach);
+        fitField(input);
         input.focus();
     });
 }
 
 /**
- * Setzt das Eingabefeld an die Stelle der Lücke.
+ * Breite nach dem, was drinsteht.
  *
- * Die Breite ist bewusst fest und verrät nichts über die Länge der Lösung -
- * sie wächst erst mit dem, was das Kind selbst tippt.
+ * Die Untergrenze verrät nichts über die Länge der Lösung - das Feld wächst
+ * erst mit dem, was das Kind selbst tippt.
  */
-function gapField(text, lang) {
-    const feld = `<input type="text" id="answer" class="cloze-input"
-                         ${lang ? `lang="${esc(lang)}"` : ''}
-                         maxlength="128" size="1"
-                         aria-label="Was fehlt?"
-                         autocomplete="off" autocorrect="off"
-                         autocapitalize="off" spellcheck="false"
-                         enterkeyhint="done">`;
-
-    return esc(text).replace('{}', feld);
-}
-
-/** Breite nach dem, was drinsteht - zwischen einer leeren Lücke und der Zeile. */
 function fitField(input) {
     const zeichen = Math.min(Math.max(input.value.length + 1, 7), 20);
     input.style.width = `${zeichen}ch`;
@@ -301,6 +379,7 @@ function fitField(input) {
 function showPreparing(unitId) {
     if (document.getElementById('preparing')) return;   // schon zu sehen
 
+    zustand = null;
     render(`
         <div class="empty" id="preparing" style="padding-top:18vh">
             <div class="spinner"></div>
@@ -327,6 +406,7 @@ async function prepare(unitId) {
 }
 
 function showFailure(unitId, message) {
+    zustand = null;
     render(`
         ${topbar('Lückentext', { backTo: `/unit/${unitId}` })}
         <div id="msg"></div>

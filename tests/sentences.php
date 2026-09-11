@@ -300,6 +300,36 @@ ok('Bei offener Tastatur tritt der Fortschritt zurueck',
 ok('Der Fortschritt steht neben dem Titel, nicht in einer eigenen Zeile',
    str_contains($js, 'class="topbar-progress"')
    && preg_match('/\.topbar-progress\s*\{[^}]*display:\s*flex/s', $css) === 1);
+section('Tastatur bleibt offen');
+
+/*
+ * iOS zieht die Tastatur bei programmatischem Fokus nur hoch, wenn der
+ * unmittelbar aus einer Beruehrung kommt - und zwischen Klick und Anzeige
+ * liegt jedes Mal ein Abruf beim Server. Ein input.focus() nach dem Neubau
+ * bleibt deshalb wirkungslos. Die Loesung ist, das Feld gar nicht erst neu
+ * zu bauen: Wer den Fokus nie verliert, braucht ihn auch nicht zurueck.
+ */
+ok('Der Bildschirm wird einmal gebaut, die Karte danach getauscht',
+   str_contains($js, 'function buildScreen') && str_contains($js, 'function showCard'));
+ok('Und nur dann neu, wenn es ihn noch nicht gibt',
+   preg_match('/document\.getElementById\(.answer.\) !== null/', $js) === 1
+   && preg_match('/showCard\(data\);\s*return;/s', $js) === 1);
+
+// Die beiden Haelften des Satzes stehen in eigenen Elementen. Wuerde das Feld
+// beim Wechsel bewegt oder neu gesetzt, verloere es den Fokus.
+ok('Das Feld wird beim Wechsel nicht angefasst',
+   preg_match('/\$\(.#gap-before.\)\.textContent/', $js) === 1
+   && preg_match('/\$\(.#gap-after.\)\.textContent/', $js) === 1);
+ok('Nur sein Inhalt wird geleert',
+   preg_match('/input\.value = .{2};/', $js) === 1);
+ok('Und der Fokus danach bestaetigt',
+   preg_match('/input\.focus\(\);\s*\}/s', $js) === 1);
+
+// Auch der Pruefen-Knopf darf dem Feld den Fokus nicht wegnehmen - sonst
+// ginge die Tastatur bei jeder Antwort zu.
+ok('Der Pruefen-Knopf nimmt dem Feld den Fokus nicht',
+   preg_match('/check\.addEventListener\(.mousedown., \(event\) => event\.preventDefault\(\)\)/', $js) === 1);
+
 section('Rueckmeldung am Pruefen-Knopf');
 
 ok('Der Knopf geht ueber die ganze Breite',
@@ -324,12 +354,12 @@ ok('Nach einer falschen Antwort laeuft keine Uhr',
 ok('Stattdessen heisst der Knopf dann "Weiter"',
    str_contains($js, "check.textContent = 'Weiter'"));
 ok('Und der naechste Klick schaltet weiter',
-   preg_match('/if \(wartet\)\s*\{\s*naechste\(\);/s', $js) === 1);
+   preg_match('/if \(z\.wartet\)\s*\{\s*naechste\(\);/s', $js) === 1);
 
 // Ein Klick waehrend der Wartezeit darf nicht zusaetzlich zum Zeitgeber
 // weiterschalten - sonst ueberspraenge man eine Vokabel.
 ok('Weitergeschaltet wird genau einmal',
-   preg_match('/const naechste = \(\) => \{\s*if \(weiter\) return;/s', $js) === 1);
+   preg_match('/const naechste = \(\) => \{\s*if \(z\.weiter\) return;/s', $js) === 1);
 
 // Der erste Anlauf reichte nicht: Solange html und body scrollen koennen,
 // schiebt iOS beim Fokus die ganze Seite nach oben - der Container mag so
@@ -351,8 +381,8 @@ ok('Und wird zurueckgeholt, falls iOS doch gescrollt hat',
  * spart es die Zeile, die das Feld vorher fuer sich brauchte.
  */
 ok('Das Eingabefeld sitzt in der Luecke des Satzes',
-   preg_match('/function gapField\(/', $js) === 1
-   && str_contains($js, "replace('{}', feld)"));
+   str_contains($js, 'id="gap-before"') && str_contains($js, 'id="gap-after"')
+   && preg_match('/String\(data\.foreign\)\.split\(GAP\)/', $js) === 1);
 ok('Und wird nicht mehr daneben gesetzt',
    !str_contains($js, 'class="cloze-entry"') && !str_contains($css, '.cloze-entry'));
 ok('Es sieht aus wie die Luecke, nicht wie ein Kasten',
