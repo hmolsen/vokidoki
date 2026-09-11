@@ -12,28 +12,59 @@ $uid  = (int) $user['id'];
 switch (action()) {
     case 'list':
         $lang = own_language($uid, (int) ($_GET['language_id'] ?? 0));
+        /*
+         * Beide Übungsarten, nicht nur Multiple Choice.
+         *
+         * Hier stand dieselbe Verkürzung wie früher in 'get': Es zählte nur
+         * mode='mc', und eine Lerneinheit sah fertig aus, während im
+         * Lückentext noch alles offen war.
+         *
+         * Gezählt wird in Schritten, nicht in Vokabeln: Jede Vokabel bringt
+         * einen Schritt fürs Auswählen mit, und einen zweiten fürs Einsetzen,
+         * sofern sie einen Lückensatz hat. Das gibt Teilerfolge wieder,
+         * statt eine halb gelernte Vokabel als gar nicht gelernt zu führen.
+         */
         $rows = qa(
             "SELECT u.id, u.title, u.created_at,
-                    COUNT(v.id) AS total,
-                    SUM(CASE WHEN p.known_at IS NOT NULL THEN 1 ELSE 0 END) AS known,
-                    COALESCE(SUM(p.correct_count), 0) AS correct,
-                    COALESCE(SUM(p.wrong_count), 0)   AS wrong
+                    (SELECT COUNT(*) FROM vocab v WHERE v.unit_id = u.id) AS total,
+                    (SELECT COUNT(*) FROM vocab v
+                       JOIN progress p ON p.vocab_id = v.id AND p.mode = 'mc'
+                      WHERE v.unit_id = u.id AND p.known_at IS NOT NULL) AS known,
+                    (SELECT COUNT(*) FROM vocab v
+                      WHERE v.unit_id = u.id
+                        AND EXISTS (SELECT 1 FROM sentences s WHERE s.vocab_id = v.id)
+                    ) AS cloze_total,
+                    (SELECT COUNT(*) FROM vocab v
+                       JOIN progress p ON p.vocab_id = v.id AND p.mode = 'cloze'
+                      WHERE v.unit_id = u.id AND p.known_at IS NOT NULL) AS cloze_known,
+                    (SELECT COALESCE(SUM(p.correct_count), 0) FROM vocab v
+                       JOIN progress p ON p.vocab_id = v.id
+                      WHERE v.unit_id = u.id) AS correct,
+                    (SELECT COALESCE(SUM(p.wrong_count), 0) FROM vocab v
+                       JOIN progress p ON p.vocab_id = v.id
+                      WHERE v.unit_id = u.id) AS wrong
                FROM units u
-               LEFT JOIN vocab v ON v.unit_id = u.id
-               LEFT JOIN progress p ON p.vocab_id = v.id AND p.mode = 'mc'
               WHERE u.language_id = ? AND u.user_id = ?
-              GROUP BY u.id, u.title, u.created_at
               ORDER BY u.created_at DESC",
             [(int) $lang['id'], $uid],
         );
         foreach ($rows as &$r) {
-            $r['id']      = (int) $r['id'];
-            $r['total']   = (int) $r['total'];
-            $r['known']   = (int) $r['known'];
-            $r['correct'] = (int) $r['correct'];
-            $r['wrong']   = (int) $r['wrong'];
-            $r['done']    = $r['total'] > 0 && $r['known'] >= $r['total'];
+            $r['id']          = (int) $r['id'];
+            $r['total']       = (int) $r['total'];
+            $r['known']       = (int) $r['known'];
+            $r['cloze_total'] = (int) $r['cloze_total'];
+            $r['cloze_known'] = (int) $r['cloze_known'];
+            $r['correct']     = (int) $r['correct'];
+            $r['wrong']       = (int) $r['wrong'];
+
+            $r['steps_total'] = $r['total'] + $r['cloze_total'];
+            $r['steps_done']  = $r['known'] + $r['cloze_known'];
+            $r['percent']     = $r['steps_total'] > 0
+                ? (int) round($r['steps_done'] / $r['steps_total'] * 100)
+                : 0;
+            $r['done'] = $r['steps_total'] > 0 && $r['steps_done'] >= $r['steps_total'];
         }
+        unset($r);
         json_out(['ok' => true, 'language' => [
             'id'   => (int) $lang['id'],
             'name' => $lang['name'],

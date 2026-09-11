@@ -1032,6 +1032,95 @@ adminPost('sentences.php', ['delete' => $satzId]);
 ok('Satz lässt sich löschen',
    q1('SELECT id FROM sentences WHERE id = ?', [$satzId]) === null);
 
+section('Gesamtfortschritt der Sprache');
+
+/*
+ * Die Uebersicht zaehlte nur Multiple Choice. Eine Lerneinheit stand damit
+ * auf voll, waehrend im Lueckentext noch alles offen war - genau die
+ * Verkuerzung, die in 'get' schon einmal behoben worden war.
+ *
+ * Gezaehlt wird in Schritten: je Vokabel einer fuers Auswaehlen, und ein
+ * zweiter fuers Einsetzen, sofern sie einen Lueckensatz hat.
+ */
+[$liste, $code] = apiCall('units', 'list', null, ['language_id' => $languageId]);
+ok('Die Uebersicht antwortet', $code === 200 && isset($liste['units']));
+
+$dieEinheit = null;
+foreach ($liste['units'] as $u) {
+    if ((int) $u['id'] === $unitId) {
+        $dieEinheit = $u;
+    }
+}
+ok('Die Lerneinheit ist dabei', $dieEinheit !== null);
+
+ok('Beide Uebungsarten werden ausgewiesen',
+   isset($dieEinheit['known'], $dieEinheit['total'],
+         $dieEinheit['cloze_known'], $dieEinheit['cloze_total']),
+   json_encode(array_keys($dieEinheit ?? [])));
+
+ok('Die Schritte sind die Summe aus beiden',
+   $dieEinheit['steps_total'] === $dieEinheit['total'] + $dieEinheit['cloze_total']
+   && $dieEinheit['steps_done'] === $dieEinheit['known'] + $dieEinheit['cloze_known'],
+   json_encode($dieEinheit));
+
+$erwartet = $dieEinheit['steps_total'] > 0
+    ? (int) round($dieEinheit['steps_done'] / $dieEinheit['steps_total'] * 100)
+    : 0;
+ok('Die Prozentzahl passt dazu', $dieEinheit['percent'] === $erwartet,
+   $dieEinheit['percent'] . ' statt ' . $erwartet);
+
+// Der Kern: Alles im Auswaehlen gekonnt, im Lueckentext nichts - dann darf
+// nicht "fertig" dastehen.
+q('DELETE FROM progress WHERE vocab_id IN (SELECT id FROM vocab WHERE unit_id = ?)',
+  [$unitId]);
+foreach (qa('SELECT id FROM vocab WHERE unit_id = ?', [$unitId]) as $v) {
+    q('INSERT INTO progress (user_id, vocab_id, mode, streak, known_at)
+       VALUES (?, ?, ?, 3, NOW())', [$userId, (int) $v['id'], 'mc']);
+}
+
+[$liste] = apiCall('units', 'list', null, ['language_id' => $languageId]);
+$nurMc = null;
+foreach ($liste['units'] as $u) {
+    if ((int) $u['id'] === $unitId) {
+        $nurMc = $u;
+    }
+}
+ok('Auswaehlen vollstaendig gekonnt', $nurMc['known'] === $nurMc['total']);
+ok('Aber die Lerneinheit gilt nicht als fertig',
+   $nurMc['cloze_total'] > 0 ? $nurMc['done'] === false : true,
+   json_encode($nurMc));
+ok('Und der Fortschritt steht nicht bei 100 Prozent',
+   $nurMc['cloze_total'] > 0 ? $nurMc['percent'] < 100 : true,
+   $nurMc['percent'] . ' %');
+
+// Jetzt auch den Lueckentext - dann erst ist es geschafft.
+foreach (qa('SELECT v.id FROM vocab v
+              WHERE v.unit_id = ?
+                AND EXISTS (SELECT 1 FROM sentences s WHERE s.vocab_id = v.id)',
+            [$unitId]) as $v) {
+    q('INSERT INTO progress (user_id, vocab_id, mode, streak, known_at)
+       VALUES (?, ?, ?, 3, NOW())', [$userId, (int) $v['id'], 'cloze']);
+}
+
+[$liste] = apiCall('units', 'list', null, ['language_id' => $languageId]);
+foreach ($liste['units'] as $u) {
+    if ((int) $u['id'] === $unitId) {
+        ok('Mit beiden Uebungsarten gilt sie als fertig', $u['done'] === true, json_encode($u));
+        ok('Und steht bei 100 Prozent', $u['percent'] === 100, $u['percent'] . ' %');
+    }
+}
+
+q('DELETE FROM progress WHERE vocab_id IN (SELECT id FROM vocab WHERE unit_id = ?)',
+  [$unitId]);
+
+$js = (string) file_get_contents(__DIR__ . '/../views/language.js');
+ok('Die Uebersicht zeigt die Prozentzahl gross',
+   str_contains($js, 'bigpercent') && str_contains($js, '${prozent}'));
+ok('Und rechnet mit den Schritten beider Uebungsarten',
+   str_contains($js, 'u.steps_total') && str_contains($js, 'u.steps_done'));
+ok('Sie benennt auch, woraus sich das zusammensetzt',
+   str_contains($js, 'Auswählen') && str_contains($js, 'Lückentext'));
+
 section('Aufgabe melden');
 
 // Vielleicht lag nicht das Kind daneben, sondern der Satz. Dann soll es das
