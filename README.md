@@ -254,12 +254,22 @@ Die erwartete Antwort ist **nicht** die gespeicherte Vokabel: Aus `s'appeler`
 wird im Satz `Je m'appelle`. Deshalb liefert das Modell sie mit; ableiten
 lässt sie sich nicht.
 
-Die Sätze entstehen **beim ersten Start der Übung**, in *einem* Aufruf für die
-ganze Lerneinheit. Einzeln abgefragt wäre dasselbe rund siebenmal so teuer —
+Die Sätze entstehen **beim ersten Start der Übung**, in Blöcken zu 20 Vokabeln. Einzeln abgefragt wäre dasselbe rund siebenmal so teuer —
 Anweisung und Wortschatz (~1.400 Token) sind bei jedem Satz identisch und
 würden jedes Mal mitbezahlt. Bei 60 Vokabeln und drei Sätzen: rund 8 ct mit
 Sonnet 5, 21 ct mit Opus 5. Lerneinheiten, die nie so geübt werden, kosten
 nichts.
+
+Warum Blöcke und nicht ein Aufruf für alles: Bei einer Einheit mit 79 Vokabeln
+lief der eine Aufruf 95 Sekunden. So lange liegt die Datenbankverbindung
+ungenutzt herum — länger als der `wait_timeout` vieler Hoster, und das
+Speichern scheiterte danach mit „MySQL server has gone away", *nachdem* die
+Anfrage bezahlt war. Blöcke sind kürzer unterwegs, und ein misslungener Block
+kostet nicht die ganze Einheit. Zusätzlich setzt `lib/db.php` einen großzügigen
+`wait_timeout` und prüft nach jedem KI-Aufruf mit `db_ensure()`, ob die
+Verbindung noch steht. Das Kostenprotokoll wird **vor** dem Speichern
+geschrieben — ein bezahlter Aufruf soll auch dann auftauchen, wenn das
+Speichern danach schiefgeht.
 
 Als bekannt gelten die Vokabeln der Einheit, bis zu 300 Wörter aus früheren
 Einheiten derselben Sprache und Grundwörter wie Artikel, Zahlwörter und die

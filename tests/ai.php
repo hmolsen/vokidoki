@@ -180,6 +180,78 @@ ok('Kosten werden auch dafür berechnet', (float) $logTypes['cost_usd'] > 0);
 
 q('DELETE FROM languages WHERE id = ?', [$wtLang]);
 
+section('Lückensätze in Blöcken');
+
+require_once __DIR__ . '/../lib/sentences.php';
+
+// 25 Vokabeln: mehr als SENTENCE_BATCH, also zwei Aufrufe. Genau daran ist es
+// auf dem Server gescheitert - ein einziger Aufruf über eine grosse Einheit
+// lief so lange, dass die Datenbankverbindung dazwischen wegfiel.
+q('INSERT INTO languages (user_id, name, flag_emoji, code) VALUES (?, ?, ?, ?)',
+  [(int) $user['id'], 'Blockisch', '', 'fr']);
+$bLang = (int) db()->lastInsertId();
+q('INSERT INTO units (user_id, language_id, title) VALUES (?, ?, ?)',
+  [(int) $user['id'], $bLang, 'Grosse Einheit']);
+$bUnit = (int) db()->lastInsertId();
+for ($i = 0; $i < 25; $i++) {
+    q('INSERT INTO vocab (unit_id, term_foreign, term_native, word_type, position)
+       VALUES (?, ?, ?, ?, ?)',
+      [$bUnit, 'mot' . $i, 'Wort' . $i, 'substantiv', $i]);
+}
+
+ok('Mehr Vokabeln als ein Block fasst', 25 > SENTENCE_BATCH, 'Blockgrösse ' . SENTENCE_BATCH);
+
+$vorher = (int) qv("SELECT COUNT(*) FROM ai_requests WHERE purpose = 'sentences'");
+$res    = generate_sentences(
+    q1('SELECT * FROM units WHERE id = ?', [$bUnit]), $user,
+);
+
+$aufrufe = (int) qv("SELECT COUNT(*) FROM ai_requests WHERE purpose = 'sentences'") - $vorher;
+ok('Es wurden zwei Aufrufe daraus', $aufrufe === 2, "$aufrufe Aufrufe");
+ok('Kein Block ist gescheitert', $res['failed'] === null, (string) $res['failed']);
+ok('Alle 25 Vokabeln haben Sätze',
+   vocab_without_sentences($bUnit) === 0, vocab_without_sentences($bUnit) . ' offen');
+ok('Drei Sätze je Vokabel', $res['created'] === 75, (string) $res['created']);
+
+// Ein zweiter Durchlauf darf nichts mehr tun.
+$res2 = generate_sentences(q1('SELECT * FROM units WHERE id = ?', [$bUnit]), $user);
+ok('Nichts mehr nachzutragen', $res2['created'] === 0);
+ok('Und kein weiterer Aufruf',
+   (int) qv("SELECT COUNT(*) FROM ai_requests WHERE purpose = 'sentences'") - $vorher === 2);
+
+q('DELETE FROM languages WHERE id = ?', [$bLang]);
+ok('Sätze verschwinden mit der Sprache',
+   (int) qv('SELECT COUNT(*) FROM sentences s JOIN vocab v ON v.id = s.vocab_id
+              WHERE v.unit_id = ?', [$bUnit]) === 0);
+
+section('Fehlerfall: abgeschnittene Antwort');
+
+// Wird die Antwort am Ausgabelimit gekappt, ist das JSON unlesbar. Ohne die
+// Prüfung von stop_reason stünde im Protokoll "ok" mit null Einträgen - der
+// bezahlte Aufruf sähe aus wie ein Erfolg.
+q('INSERT INTO languages (user_id, name, flag_emoji) VALUES (?, ?, ?)',
+  [(int) $user['id'], 'Abgeschnitten', '']);
+$cLang = (int) db()->lastInsertId();
+q('INSERT INTO units (user_id, language_id, title) VALUES (?, ?, ?)',
+  [(int) $user['id'], $cLang, 'Zu lang']);
+$cUnit = (int) db()->lastInsertId();
+q('INSERT INTO vocab (unit_id, term_foreign, term_native, word_type, position)
+   VALUES (?, ?, ?, ?, 0)', [$cUnit, 'mot', 'Wort', 'substantiv']);
+
+$res = generate_sentences(q1('SELECT * FROM units WHERE id = ?', [$cUnit]), $user);
+ok('Der Block meldet den Abbruch', $res['failed'] !== null, 'kein Fehler gemeldet');
+ok('Nichts wurde gespeichert', $res['created'] === 0);
+
+$cut = q1("SELECT * FROM ai_requests WHERE purpose = 'sentences' ORDER BY id DESC LIMIT 1");
+ok('Im Protokoll steht error, nicht ok', ($cut['status'] ?? '') === 'error',
+   (string) ($cut['status'] ?? ''));
+ok('Und der Grund ist benannt',
+   str_contains((string) $cut['error'], 'max_tokens'), (string) $cut['error']);
+ok('Die verbrauchten Token sind trotzdem verbucht',
+   (int) $cut['output_tokens'] === 16000 && (float) $cut['cost_usd'] > 0);
+
+q('DELETE FROM languages WHERE id = ?', [$cLang]);
+
 section('Fehlerfall: die API antwortet mit einem Fehler');
 
 $countBefore = (int) qv('SELECT COUNT(*) FROM ai_requests');

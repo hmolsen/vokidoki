@@ -120,14 +120,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
         try {
             $res = generate_sentences($target, $owner);
-            flash(sprintf(
+            $text = sprintf(
                 '%d Satz/Sätze erzeugt%s.%s',
                 $res['created'],
                 $res['skipped'] > 0 ? sprintf(' (%d verworfen)', $res['skipped']) : '',
                 $res['without'] > 0
-                    ? sprintf(' %d Vokabel(n) haben noch keinen.', $res['without'])
+                    ? sprintf(' %d Vokabel(n) haben noch keinen - Knopf noch einmal drücken.',
+                              $res['without'])
                     : '',
-            ));
+            );
+            if ($res['failed'] !== null) {
+                flash($text . ' Abgebrochen: ' . $res['failed'], 'bad');
+            } else {
+                flash($text);
+            }
         } catch (Throwable $e) {
             error_log('[vokabeltrainer] Sätze: ' . scrub_secrets($e->getMessage()));
             flash('Die Sätze konnten nicht erzeugt werden. Details stehen im Protokoll.', 'bad');

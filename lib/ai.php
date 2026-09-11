@@ -182,6 +182,10 @@ function analyze_vocab_images(array $images, string $languageName, array $user):
 
     $durationMs = (int) ((microtime(true) - $started) * 1000);
 
+    // Der Aufruf lief ohne Datenbankverkehr - die Verbindung kann inzwischen
+    // geschlossen worden sein.
+    db_ensure();
+
     // Sicherheitsklassifikatoren können einen Request ablehnen - das kommt als
     // HTTP 200 zurück, also vor dem Lesen von content immer stopReason prüfen.
     if ($message->stopReason === 'refusal') {
@@ -340,6 +344,9 @@ function classify_word_types(array $rows, string $languageName, array $user): ar
     }
 
     $durationMs = (int) ((microtime(true) - $started) * 1000);
+
+    // Wie oben: nach dem Aufruf kann die Verbindung weg sein.
+    db_ensure();
 
     if ($message->stopReason === 'refusal') {
         ai_log($logBase + ['duration_ms' => $durationMs, 'status' => 'refusal']);

@@ -125,11 +125,68 @@ foreach ([
     ok("Verworfen: $was", sentence_clean($row, [7, 8]) === null, json_encode($row));
 }
 
+section('Gültige Sätze werden nicht fälschlich verworfen');
+
+// Ein früherer Versuch verglich ohne Leerzeichen - da fand sich "le" in fast
+// jedem französischen Satz, und die Hälfte aller Sätze flog raus.
+foreach ([
+    ['le chien mange {} pain', 'le', 'kurzer Artikel steht normal im Satz'],
+    ['Nous avons {} maison', 'la', 'Artikel als Lösung'],
+    ['Il a {} ans et elle a dix ans', 'dix', 'kurze Zahl kommt doppelt vor'],
+    ['Il danse {} le jardin', 'dans', '"dans" steckt in "danse", ist aber eigenes Wort'],
+    ['Je mange {} tous les jours', 'une pomme', 'Lösung kommt nicht vor'],
+] as [$foreign, $answer, $was]) {
+    ok("Angenommen: $was",
+       sentence_clean(['vocab_id' => 7, 'native' => 'x',
+                       'foreign' => $foreign, 'answer' => $answer], [7]) !== null,
+       "\"$foreign\" / \"$answer\"");
+}
+
 section('Kategorien ohne Lückensatz');
 
 ok('Aussage, Frage und Interjektion werden übersprungen',
    SENTENCE_SKIP_TYPES === ['aussage', 'frage', 'interjektion'],
    implode(', ', SENTENCE_SKIP_TYPES));
+
+section('Wiederverbindung zur Datenbank');
+
+// Der echte Fehlerfall vom Server: Während des minutenlangen KI-Aufrufs
+// schliesst MySQL die untätige Verbindung. Hier wird sie absichtlich
+// abgeschossen - genau das tut wait_timeout auch.
+require_once __DIR__ . '/../lib/db.php';
+
+$vorher = (int) qv('SELECT CONNECTION_ID()');
+ok('Verbindung steht', $vorher > 0);
+
+$c      = cfg('db');
+$zweite = new PDO(
+    sprintf('mysql:host=%s;port=%d;dbname=%s', $c['host'], (int) $c['port'], $c['name']),
+    $c['user'], $c['pass'],
+);
+$zweite->exec('KILL ' . $vorher);
+usleep(300000);
+
+$tot = false;
+try {
+    db()->query('SELECT 1');
+} catch (Throwable $e) {
+    $tot = true;
+}
+ok('Die Verbindung ist wirklich tot', $tot, 'Abschuss hat nicht gewirkt');
+
+db_ensure();
+$nachher = (int) qv('SELECT CONNECTION_ID()');
+ok('db_ensure() baut neu auf', $nachher > 0 && $nachher !== $vorher,
+   "vorher $vorher, nachher $nachher");
+ok('Und es lässt sich wieder abfragen', (int) qv('SELECT COUNT(*) FROM users') >= 0);
+
+$id = (int) qv('SELECT CONNECTION_ID()');
+db_ensure();
+ok('Gesunde Verbindung bleibt bestehen', (int) qv('SELECT CONNECTION_ID()') === $id);
+
+ok('wait_timeout ist grosszügig gesetzt',
+   (int) qv('SELECT @@SESSION.wait_timeout') >= 600,
+   (string) qv('SELECT @@SESSION.wait_timeout'));
 
 echo "\n" . str_repeat('-', 52) . "\n";
 printf("%d bestanden, %d fehlgeschlagen\n", $passed, $failed);

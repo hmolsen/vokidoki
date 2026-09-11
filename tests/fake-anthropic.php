@@ -116,6 +116,21 @@ if ($schemaKeys === ['types']) {
 
 // Betriebsart: Lückensätze für eine Lerneinheit.
 if ($schemaKeys === ['sentences']) {
+    // Erzwingt den max_tokens-Zweig: Antwort abgeschnitten, JSON unlesbar.
+    if (str_contains($instruction, 'Abgeschnitten')) {
+        echo json_encode([
+            'id'            => 'msg_test_cut',
+            'type'          => 'message',
+            'role'          => 'assistant',
+            'model'         => $request['model'] ?? 'unbekannt',
+            'content'       => [['type' => 'text', 'text' => '{"sentences":[{"vocab_id":1,']],
+            'stop_reason'   => 'max_tokens',
+            'stop_sequence' => null,
+            'usage'         => ['input_tokens' => 800, 'output_tokens' => 16000],
+        ]);
+        exit;
+    }
+
     $per       = 3;
     $sentences = [];
     foreach (explode("\n", $instruction) as $line) {

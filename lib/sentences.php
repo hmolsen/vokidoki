@@ -26,6 +26,15 @@ const SENTENCE_SKIP_TYPES = ['aussage', 'frage', 'interjektion'];
 /** So viele Wörter aus früheren Lerneinheiten gehen als bekannt in den Prompt. */
 const KNOWN_VOCAB_LIMIT = 300;
 
+/**
+ * So viele Vokabeln je KI-Aufruf.
+ *
+ * 20 Vokabeln zu je drei Sätzen sind rund 7.000 Ausgabe-Token und knapp eine
+ * halbe Minute - kurz genug, dass die Datenbankverbindung nicht wegläuft, und
+ * weit unter dem Ausgabelimit.
+ */
+const SENTENCE_BATCH = 20;
+
 // ---------------------------------------------------------------- Antwortvergleich
 
 /**
@@ -55,11 +64,16 @@ function answer_normalize(string $text): string
     return mb_strtolower(trim($text));
 }
 
-/** Zusätzlich ohne Zeichen und Apostrophe - die tolerante Stufe. */
+/** Normalisiert und entfernt Akzente - Wortgrenzen bleiben erhalten. */
+function answer_fold(string $text): string
+{
+    return strtr(answer_normalize($text), DIACRITICS);
+}
+
+/** Zusätzlich ohne Apostrophe, Bindestriche und Leerzeichen - die tolerante Stufe. */
 function answer_simplify(string $text): string
 {
-    $text = strtr(answer_normalize($text), DIACRITICS);
-    return str_replace(["'", '-', ' '], '', $text);
+    return str_replace(["'", '-', ' '], '', answer_fold($text));
 }
 
 /**
@@ -119,9 +133,7 @@ function sentence_clean(array $row, array $allowedVocab): ?array
         return null;
     }
 
-    // Die Lösung darf nicht daneben stehen - sonst ist die Übung sinnlos.
-    $rest = answer_simplify(str_replace(SENTENCE_PLACEHOLDER, ' ', $foreign));
-    if ($rest !== '' && str_contains($rest, answer_simplify($answer))) {
+    if (answer_is_given_away($foreign, $answer)) {
         return null;
     }
 
@@ -131,6 +143,34 @@ function sentence_clean(array $row, array $allowedVocab): ?array
         'foreign'  => mb_substr($foreign, 0, 255),
         'answer'   => mb_substr($answer, 0, 128),
     ];
+}
+
+/**
+ * Steht die Lösung schon im Satz? Dann wäre die Übung sinnlos.
+ *
+ * Bewusst wortweise und erst ab vier Zeichen. Ein früherer Versuch verglich
+ * die Zeichenketten ohne Leerzeichen - dabei fand sich "le" in nahezu jedem
+ * französischen Satz, und gültige Sätze wurden reihenweise verworfen. Kurze
+ * Funktionswörter tauchen nun einmal überall auf und verraten nichts; ein
+ * Inhaltswort dagegen schon.
+ */
+function answer_is_given_away(string $foreign, string $answer): bool
+{
+    // Ohne Akzente vergleichen: "Eleve" neben der Lösung "élève" verrät genauso.
+    $needle = answer_fold($answer);
+    if (mb_strlen($needle) < 4) {
+        return false;
+    }
+
+    $rest = answer_fold(str_replace(SENTENCE_PLACEHOLDER, ' ', $foreign));
+    if ($rest === '') {
+        return false;
+    }
+
+    // Wortgrenzen statt roher Teilzeichenkette: "ans" darf in "dans" stecken.
+    $pattern = '/(?<!\pL)' . preg_quote($needle, '/') . '(?!\pL)/u';
+
+    return preg_match($pattern, $rest) === 1;
 }
 
 // ---------------------------------------------------------------- Erzeugung
@@ -239,12 +279,19 @@ function sentence_prompt(string $languageName, int $perVocab, array $rows, array
 }
 
 /**
+/**
  * Erzeugt fehlende Lückensätze für eine Lerneinheit und speichert sie.
  *
- * Ein Aufruf je Lerneinheit: Anweisung und Wortschatz sind für jeden Satz
- * dieselben - einzeln abgefragt bezahlt man sie hundertfach.
+ * In Blöcken zu SENTENCE_BATCH Vokabeln. Ein einzelner Aufruf über eine ganze
+ * grosse Lerneinheit lief minutenlang - lange genug, dass MySQL die untätige
+ * Verbindung schloss und das Speichern danach mit "server has gone away"
+ * scheiterte, nachdem die Anfrage bereits bezahlt war. Kleinere Blöcke sind
+ * kürzer unterwegs, und ein misslungener Block kostet nicht die ganze Einheit.
  *
- * @return array{created:int, skipped:int, without:int}
+ * Der Wortschatz-Vorspann wird dadurch mehrfach geschickt; das sind bei vier
+ * Blöcken ein bis zwei Cent - der Preis für Verlässlichkeit.
+ *
+ * @return array{created:int, skipped:int, without:int, failed:?string}
  */
 function generate_sentences(array $unit, array $user): array
 {
@@ -257,21 +304,74 @@ function generate_sentences(array $unit, array $user): array
         $model = 'claude-sonnet-5';
     }
 
-    $lang = q1('SELECT name, id FROM languages WHERE id = ?', [(int) $unit['language_id']]);
-    $all  = sentence_candidates($unitId);
+    $lang = q1('SELECT name FROM languages WHERE id = ?', [(int) $unit['language_id']]);
 
-    // Nur Vokabeln ohne Sätze - der Knopf im Admin trägt so gezielt nach.
-    $rows = array_values(array_filter($all, static function (array $r): bool {
-        return (int) qv('SELECT COUNT(*) FROM sentences WHERE vocab_id = ?', [(int) $r['id']]) === 0;
-    }));
+    // Nur Vokabeln ohne Sätze - so trägt der Knopf im Admin gezielt nach.
+    $offen = qa(
+        'SELECT v.id, v.term_foreign, v.term_native, v.word_type
+           FROM vocab v
+          WHERE v.unit_id = ?
+            AND NOT EXISTS (SELECT 1 FROM sentences s WHERE s.vocab_id = v.id)
+          ORDER BY v.position, v.id',
+        [$unitId],
+    );
+    $rows = array_values(array_filter(
+        $offen,
+        static fn (array $r): bool => !in_array((string) ($r['word_type'] ?? ''), SENTENCE_SKIP_TYPES, true),
+    ));
 
     if ($rows === []) {
-        return ['created' => 0, 'skipped' => 0, 'without' => 0];
+        return ['created' => 0, 'skipped' => 0, 'without' => 0, 'failed' => null];
     }
 
-    $known  = known_vocabulary((int) $unit['language_id'], $unitId);
-    $prompt = sentence_prompt((string) $lang['name'], $perVocab, $rows, $known);
+    $known   = known_vocabulary((int) $unit['language_id'], $unitId);
+    $created = 0;
+    $skipped = 0;
+    $failed  = null;
 
+    foreach (array_chunk($rows, SENTENCE_BATCH) as $batch) {
+        // Vor jedem Block prüfen: Ein Abbruch soll nicht erst beim Budget enden.
+        $blocked = budget_block_reason((int) $user['id']);
+        if ($blocked !== null) {
+            $failed = $blocked;
+            break;
+        }
+
+        try {
+            [$c, $s] = generate_sentence_batch(
+                $batch, $known, (string) $lang['name'], $perVocab, $model, $user,
+            );
+            $created += $c;
+            $skipped += $s;
+        } catch (Throwable $e) {
+            // Was frühere Blöcke erzeugt haben, bleibt erhalten.
+            $failed = $e->getMessage();
+            break;
+        }
+    }
+
+    return [
+        'created' => $created,
+        'skipped' => $skipped,
+        'without' => vocab_without_sentences($unitId),
+        'failed'  => $failed,
+    ];
+}
+
+/**
+ * Ein Block: ein API-Aufruf, dann protokollieren, dann speichern.
+ *
+ * @return array{0:int, 1:int} erzeugt, verworfen
+ */
+function generate_sentence_batch(
+    array $rows,
+    array $known,
+    string $languageName,
+    int $perVocab,
+    string $model,
+    array $user,
+): array {
+    $prompt  = sentence_prompt($languageName, $perVocab, $rows, $known);
     $started = microtime(true);
     $logBase = [
         'user_id'    => (int) $user['id'],
@@ -283,7 +383,7 @@ function generate_sentences(array $unit, array $user): array
     try {
         $message = anthropic_client()->messages->create(
             model: $model,
-            maxTokens: 32000,
+            maxTokens: 16000,
             messages: [['role' => 'user', 'content' => $prompt]],
             outputConfig: OutputConfig::with(
                 effort: 'medium',
@@ -291,6 +391,7 @@ function generate_sentences(array $unit, array $user): array
             ),
         );
     } catch (Throwable $e) {
+        db_ensure();
         ai_log($logBase + [
             'duration_ms' => (int) ((microtime(true) - $started) * 1000),
             'status'      => 'error',
@@ -301,9 +402,32 @@ function generate_sentences(array $unit, array $user): array
 
     $durationMs = (int) ((microtime(true) - $started) * 1000);
 
+    // Der Aufruf lief minutenlang ohne Datenbankverkehr - die Verbindung kann
+    // in der Zwischenzeit geschlossen worden sein.
+    db_ensure();
+
+    $usage = [
+        'input_tokens'       => $message->usage->inputTokens,
+        'output_tokens'      => $message->usage->outputTokens,
+        'cache_read_tokens'  => $message->usage->cacheReadInputTokens ?? 0,
+        'cache_write_tokens' => $message->usage->cacheCreationInputTokens ?? 0,
+        'duration_ms'        => $durationMs,
+    ];
+
     if ($message->stopReason === 'refusal') {
-        ai_log($logBase + ['duration_ms' => $durationMs, 'status' => 'refusal']);
+        ai_log($logBase + $usage + ['status' => 'refusal']);
         throw new RuntimeException('Die Sätze konnten nicht erzeugt werden.');
+    }
+
+    // Abgeschnittene Antwort: Das JSON ist unvollständig und nicht lesbar.
+    // Ohne diese Prüfung stünde im Protokoll "ok" mit null Einträgen.
+    if ($message->stopReason === 'max_tokens') {
+        ai_log($logBase + $usage + [
+            'status' => 'error',
+            'error'  => 'Antwort war zu lang und wurde abgeschnitten (max_tokens). '
+                      . 'Weniger Sätze je Vokabel einstellen oder kleinere Blöcke.',
+        ]);
+        throw new RuntimeException('Die Antwort des Modells war zu lang.');
     }
 
     $json = '';
@@ -316,42 +440,33 @@ function generate_sentences(array $unit, array $user): array
 
     $allowed = array_map(static fn (array $r): int => (int) $r['id'], $rows);
     $data    = json_decode($json, true);
-    $created = 0;
+    $clean   = [];
     $skipped = 0;
+
+    foreach ($data['sentences'] ?? [] as $row) {
+        $ok = is_array($row) ? sentence_clean($row, $allowed) : null;
+        if ($ok === null) {
+            $skipped++;
+            continue;
+        }
+        $clean[] = $ok;
+    }
+
+    // Erst protokollieren, dann speichern: Geht das Speichern schief, ist der
+    // bezahlte Aufruf trotzdem verbucht.
+    ai_log($logBase + $usage + [
+        'entry_count' => count($clean),
+        'status'      => 'ok',
+    ]);
 
     $st = db()->prepare(
         'INSERT INTO sentences (vocab_id, native_text, foreign_text, answer) VALUES (?, ?, ?, ?)'
     );
-
-    foreach ($data['sentences'] ?? [] as $row) {
-        if (!is_array($row)) {
-            $skipped++;
-            continue;
-        }
-        $clean = sentence_clean($row, $allowed);
-        if ($clean === null) {
-            $skipped++;
-            continue;
-        }
-        $st->execute([$clean['vocab_id'], $clean['native'], $clean['foreign'], $clean['answer']]);
-        $created++;
+    foreach ($clean as $c) {
+        $st->execute([$c['vocab_id'], $c['native'], $c['foreign'], $c['answer']]);
     }
 
-    ai_log($logBase + [
-        'input_tokens'       => $message->usage->inputTokens,
-        'output_tokens'      => $message->usage->outputTokens,
-        'cache_read_tokens'  => $message->usage->cacheReadInputTokens ?? 0,
-        'cache_write_tokens' => $message->usage->cacheCreationInputTokens ?? 0,
-        'entry_count'        => $created,
-        'duration_ms'        => $durationMs,
-        'status'             => 'ok',
-    ]);
-
-    return [
-        'created' => $created,
-        'skipped' => $skipped,
-        'without' => vocab_without_sentences($unitId),
-    ];
+    return [count($clean), $skipped];
 }
 
 /** Wie viele geeignete Vokabeln der Einheit noch keinen Satz haben. */

@@ -47,12 +47,22 @@ switch (action()) {
         }
 
         [$known, $total] = cloze_progress((int) $unit['id']);
+
+        // Hat ein Block gehalten, kann das Kind loslegen - der Rest lässt sich
+        // später nachtragen. Nur wenn gar nichts entstand, ist Schluss.
         if ($total === 0) {
+            error_log('[vokabeltrainer] Sätze: nichts brauchbar erzeugt'
+                . ($result['failed'] !== null ? ' - ' . scrub_secrets($result['failed']) : ''));
             json_fail(
                 'Für diese Lerneinheit ließen sich keine Lückensätze erzeugen. '
                 . 'Papa kann im Admin-Bereich nachsehen.',
                 422,
             );
+        }
+
+        if ($result['failed'] !== null) {
+            error_log('[vokabeltrainer] Sätze nur teilweise erzeugt: '
+                . scrub_secrets($result['failed']));
         }
 
         json_out([
