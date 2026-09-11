@@ -467,8 +467,25 @@ body.keyboard-open .screen-bottom .verdict:empty { min-height: 0; margin: 0; }
  * an das, was man wirklich sieht, gibt es nichts zu scrollen - und der Satz
  * bleibt, wo er ist.
  */
+/* Das Dokument selbst festsetzen. Ohne das scrollt iOS beim Fokus die ganze
+   Seite nach oben, egal wie hoch der Container ist - und das Eingabefeld
+   klebt am oberen Rand, während der Satz darüber verschwindet. */
+html.locked,
+html.locked body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+}
+
 .app.fitted {
-    height: var(--vvh, 100svh);
+    /* Fixiert, damit ein trotzdem erfolgtes Scrollen der Layout-Ansicht die
+       Ansicht nicht mitnimmt. --vvtop holt sie zurück, falls doch. */
+    position: fixed;
+    top: var(--vvtop, 0px);
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    height: var(--vvh, 100dvh);
     min-height: 0;
     overflow: hidden;
 }
@@ -513,6 +530,10 @@ body.keyboard-open .accent { min-height: 44px; }
 }
 .cloze-entry .cloze-input { flex: 1; min-width: 0; margin-bottom: 0; }
 .cloze-entry .btn { width: auto; flex: none; padding: 14px 20px; }
+
+/* Die Zeichenreihe sitzt jetzt unter dem Feld, direkt über der Tastatur -
+   dort, wo iOS seine eigene Zusatzleiste hätte. */
+.cloze-entry + .accents { margin: 12px auto 0; }
 
 .cloze {
     background: var(--surface);

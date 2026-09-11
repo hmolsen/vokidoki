@@ -97,8 +97,14 @@ async function nextQuestion(unitId) {
             <div class="screen-bottom">
                 <div class="verdict" id="verdict"></div>
 
+                <!--
+                    Das Eingabefeld steht bewusst direkt unter dem Satz und
+                    die Zeichenreihe darunter. iOS scrollt beim Fokus auf das
+                    Feld; was unmittelbar darüber steht, bleibt dabei am
+                    ehesten zu sehen. Sollte die Höhenrechnung auf einem Gerät
+                    doch einmal danebenliegen, ist wenigstens der Satz noch da.
+                -->
                 <form id="form" autocomplete="off">
-                    ${accentRow(data.lang)}
                     <div class="cloze-entry">
                         <input type="text" id="answer" class="cloze-input"
                                ${data.lang ? `lang="${esc(data.lang)}"` : ''}
@@ -109,6 +115,7 @@ async function nextQuestion(unitId) {
                                enterkeyhint="done">
                         <button class="btn" type="submit" id="check">Prüfen</button>
                     </div>
+                    ${accentRow(data.lang)}
                 </form>
 
                 <div id="msg"></div>

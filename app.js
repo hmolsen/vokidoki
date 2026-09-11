@@ -82,9 +82,19 @@ function trackViewport() {
     const vv = window.visualViewport;
     if (!vv) return;   // ältere Browser behalten 100svh
 
+    const wurzel = document.documentElement;
+
     const anpassen = () => {
         const hoehe = Math.round(vv.height);
-        document.documentElement.style.setProperty('--vvh', `${hoehe}px`);
+
+        /*
+         * Der zweite Wert ist der entscheidende. iOS scrollt beim Fokus die
+         * Layout-Ansicht, nicht den Container - ein fixiertes Element hängt
+         * danach genau um diesen Betrag über dem sichtbaren Rand. offsetTop
+         * sagt, um wie viel, und holt es wieder herunter.
+         */
+        wurzel.style.setProperty('--vvh', `${hoehe}px`);
+        wurzel.style.setProperty('--vvtop', `${Math.round(vv.offsetTop)}px`);
 
         // Deutlich kleiner als das Fenster heißt: Die Tastatur ist offen.
         // Der Schwellwert liegt über allem, was Adressleisten ausmachen.

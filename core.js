@@ -64,9 +64,12 @@ export function render(html) {
     app.innerHTML = html;
 
     // Ansichten, die sich an die sichtbare Höhe binden, bringen ein .screen
-    // mit. Die Hülle darf dann nicht zusätzlich ihre Grundhöhe beisteuern,
-    // sonst gäbe es doch wieder etwas zu scrollen.
-    app.classList.toggle('fitted', app.querySelector(':scope > .screen') !== null);
+    // mit. Dann wird zusätzlich das Dokument selbst festgesetzt: Solange
+    // html und body scrollen können, schiebt iOS beim Fokus die ganze Seite
+    // nach oben, ganz gleich wie hoch der Container ist.
+    const fest = app.querySelector(':scope > .screen') !== null;
+    app.classList.toggle('fitted', fest);
+    document.documentElement.classList.toggle('locked', fest);
 
     app.scrollTop = 0;
     window.scrollTo(0, 0);

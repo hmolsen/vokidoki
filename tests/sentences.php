@@ -301,6 +301,29 @@ ok('Eingabefeld und Knopf stehen nebeneinander statt untereinander',
    str_contains($js, 'class="cloze-entry"')
    && preg_match('/\.cloze-entry\s*\{[^}]*display:\s*flex/s', $css) === 1);
 
+// Der erste Anlauf reichte nicht: Solange html und body scrollen koennen,
+// schiebt iOS beim Fokus die ganze Seite nach oben - der Container mag so
+// hoch sein, wie er will.
+ok('Das Dokument selbst wird festgesetzt',
+   str_contains($core, "'locked'")
+   && preg_match('/html\.locked[^{]*\{[^}]*overflow:\s*hidden/s', $css) === 1);
+ok('Die Ansicht ist fixiert, damit ein Scrollen sie nicht mitnimmt',
+   preg_match('/\.app\.fitted\s*\{[^}]*position:\s*fixed/s', $css) === 1);
+ok('Und wird zurueckgeholt, falls iOS doch gescrollt hat',
+   str_contains($appjs, 'offsetTop') && str_contains($appjs, '--vvtop')
+   && preg_match('/\.app\.fitted\s*\{[^}]*top:\s*var\(--vvtop/s', $css) === 1);
+
+// Zweite, davon unabhaengige Absicherung: iOS scrollt auf das Eingabefeld.
+// Was unmittelbar darueber steht, bleibt dabei am ehesten zu sehen.
+$posSatz    = strpos($js, 'class="cloze-native"');
+$posFeld    = strpos($js, 'class="cloze-entry"');
+$posZeichen = strpos($js, '${accentRow(data.lang)}');
+ok('Das Eingabefeld steht direkt unter dem Satz',
+   $posSatz !== false && $posFeld !== false && $posSatz < $posFeld);
+ok('Und die Zeichenreihe darunter, nicht dazwischen',
+   $posZeichen !== false && $posFeld < $posZeichen,
+   "Satz $posSatz, Feld $posFeld, Zeichen $posZeichen");
+
 section('Abstände vor Satzzeichen');
 
 require_once __DIR__ . '/../lib/punctuation.php';
