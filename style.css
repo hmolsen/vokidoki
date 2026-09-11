@@ -528,9 +528,12 @@ html.locked body {
     flex-direction: column;
 }
 
-/* Mit offener Tastatur zählt jeder Pixel. Der Fortschritt in der Kopfzeile
-   tritt zurück, die Abstände schrumpfen - Satz und Lücke bleiben. */
-body.keyboard-open .topbar-progress { display: none; }
+/* Mit offener Tastatur zählt jeder Pixel: Die Abstände schrumpfen, Satz und
+   Lücke bleiben.
+
+   Der Fortschritt in der Kopfzeile war einmal ausgeblendet - das brachte
+   aber nichts, weil die Kopfzeile ohnehin 44px hoch ist. Er bleibt also
+   stehen, wo er hingehört. */
 body.keyboard-open .screen-top .topbar { margin-bottom: 6px; }
 body.keyboard-open .cloze-native { margin-bottom: 10px; }
 body.keyboard-open .cloze-dots { margin-top: 10px; }

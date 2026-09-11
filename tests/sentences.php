@@ -296,8 +296,11 @@ ok('Die Mitte nimmt den uebrigen Platz und scrollt notfalls in sich',
    && preg_match('/\.screen-mid\s*\{[^}]*overflow-y:\s*auto/s', $css) === 1);
 
 // Was ueber der Tastatur keinen Platz mehr hat, tritt zurueck.
-ok('Bei offener Tastatur tritt der Fortschritt zurueck',
-   preg_match('/body\.keyboard-open[^{]*\.topbar-progress[^{]*\{[^}]*display:\s*none/s', $css) === 1);
+// Er war einmal ausgeblendet, solange die Tastatur offen ist. Das brachte
+// aber keinen Pixel: Die Kopfzeile ist ohnehin 44px hoch, ob dort etwas
+// steht oder nicht.
+ok('Der Fortschritt bleibt auch bei offener Tastatur stehen',
+   preg_match('/body\.keyboard-open[^{]*\.topbar-progress[^{]*\{[^}]*display:\s*none/s', $css) !== 1);
 ok('Der Fortschritt steht neben dem Titel, nicht in einer eigenen Zeile',
    str_contains($js, 'class="topbar-progress"')
    && preg_match('/\.topbar-progress\s*\{[^}]*display:\s*flex/s', $css) === 1);
