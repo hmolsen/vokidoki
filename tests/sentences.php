@@ -304,6 +304,34 @@ ok('Der Fortschritt bleibt auch bei offener Tastatur stehen',
 ok('Der Fortschritt steht neben dem Titel, nicht in einer eigenen Zeile',
    str_contains($js, 'class="topbar-progress"')
    && preg_match('/\.topbar-progress\s*\{[^}]*display:\s*flex/s', $css) === 1);
+section('Aufgabe melden');
+
+// Der Meldeknopf erscheint nur nach einer falschen Antwort - genau dann ist
+// der Verdacht berechtigt, dass nicht das Kind danebenlag, sondern der Satz.
+ok('Der Meldeknopf steht neben dem Weiter-Knopf',
+   str_contains($js, 'class="btn flagbtn"')
+   && preg_match('/\.cloze-actions\s*\{[^}]*display:\s*flex/s', $css) === 1);
+ok('Der Weiter-Knopf nimmt dann nicht mehr die ganze Breite',
+   preg_match('/\.cloze-actions \.cloze-check\s*\{[^}]*flex:\s*1/s', $css) === 1);
+ok('Und der Meldeknopf ist quadratisch',
+   preg_match('/\.flagbtn\s*\{[^}]*width:\s*var\(--tap\)/s', $css) === 1);
+
+ok('Er ist zunaechst verborgen',
+   preg_match('/id="flag" hidden/', $js) === 1);
+ok('Und erscheint erst bei einer falschen Antwort',
+   preg_match('/\$\(.#flag.\)\.hidden = false;/', $js) === 1);
+ok('Bei der naechsten Vokabel ist er wieder weg',
+   preg_match('/flagge\.hidden = true;/', $js) === 1);
+
+ok('Gemeldet wird ueber die API',
+   str_contains($js, "api('cloze', 'flag'"));
+ok('Mit dem, was das Kind getippt hatte',
+   preg_match('/sentence_id: Number\(z\.sentenceId\), text: z\.typed/', $js) === 1);
+ok('Das Kind bekommt eine Bestaetigung',
+   str_contains($js, 'flag-done') && str_contains($js, 'Danke!'));
+ok('Und der Knopf nimmt dem Feld den Fokus nicht',
+   preg_match('/\$\(.#flag.\)\.addEventListener\(.mousedown./', $js) === 1);
+
 section('Tastatur bleibt offen');
 
 /*

@@ -365,3 +365,28 @@ td.wtcell select {
     .pg-info { width: 100%; margin: 0 0 6px; text-align: center; }
     .pg { min-width: 34px; height: 34px; padding: 0 7px; }
 }
+
+/* ------------------------------------------------- Gemeldete Saetze */
+
+/*
+ * Ein gemeldeter Satz ist der, der Arbeit verlangt. Er steht in der Liste
+ * immer oben und hebt sich ab - ihn zwischen hunderten heraussuchen zu
+ * muessen waere die sicherste Art, ihn nie zu bearbeiten.
+ */
+.flagged-note {
+    border-left: 4px solid var(--bad);
+}
+
+tr.flagged > td {
+    background: var(--bad-bg);
+}
+
+.flagcount {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--bad);
+    color: #fff;
+    font-weight: 600;
+    white-space: nowrap;
+}

@@ -67,6 +67,30 @@ function schema_migrations(): array
                ADD COLUMN sentences_started_at DATETIME NULL,
                ADD COLUMN sentences_error VARCHAR(255) NULL",
         ],
+        /*
+         * Gemeldete Lückensätze.
+         *
+         * Eine Zeile je Kind und Satz statt eines Zählers in sentences: So
+         * kann ein Kind denselben Satz nicht mehrfach melden, und im Admin
+         * steht, wer gemeldet hat und was getippt wurde. Gerade das Getippte
+         * entscheidet oft, ob der Satz oder die Antwort daneben lag.
+         */
+        'sentence_flags' => [
+            static fn (): bool => !table_exists('sentence_flags'),
+            'CREATE TABLE sentence_flags (
+               id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+               sentence_id INT UNSIGNED NOT NULL,
+               user_id     INT UNSIGNED NOT NULL,
+               typed       VARCHAR(128) NULL,
+               created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               UNIQUE KEY uq_flag (sentence_id, user_id),
+               KEY idx_flag_sentence (sentence_id),
+               CONSTRAINT fk_flag_sentence FOREIGN KEY (sentence_id)
+                   REFERENCES sentences(id) ON DELETE CASCADE,
+               CONSTRAINT fk_flag_user FOREIGN KEY (user_id)
+                   REFERENCES users(id) ON DELETE CASCADE
+             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+        ],
         'sentences' => [
             static fn (): bool => !table_exists('sentences'),
             'CREATE TABLE sentences (

@@ -140,9 +140,10 @@ switch (action()) {
             $_SESSION['cloze'] = [];
         }
         $_SESSION['cloze'][$nonce] = [
-            'vocab_id' => (int) $card['id'],
-            'unit_id'  => (int) $unit['id'],
-            'answer'   => (string) $sentence['answer'],
+            'vocab_id'    => (int) $card['id'],
+            'unit_id'     => (int) $unit['id'],
+            'sentence_id' => (int) $sentence['id'],
+            'answer'      => (string) $sentence['answer'],
         ];
         if (count($_SESSION['cloze']) > 20) {
             $_SESSION['cloze'] = array_slice($_SESSION['cloze'], -20, null, true);
@@ -185,6 +186,9 @@ switch (action()) {
 
         json_out([
             'ok'           => true,
+            // Für das Melden eines schiefen Satzes. Wer sie missbraucht,
+            // kommt trotzdem nur an eigene Sätze - 'flag' prüft das.
+            'sentence_id'  => (int) $pending['sentence_id'],
             'correct'      => $check['correct'],
             // exact=false bei richtiger Antwort heißt: Schreibweise zeigen.
             'exact'        => $check['exact'],
@@ -195,6 +199,36 @@ switch (action()) {
             'total'        => $total,
             'done'         => $total > 0 && $known >= $total,
         ]);
+
+    case 'flag':
+        require_post();
+        $b     = json_body();
+        $satzId = body_int($b, 'sentence_id');
+        $typed  = body_str($b, 'text', 128);
+
+        // Der Satz muss zu einer Lerneinheit dieses Kindes gehören.
+        $eigen = q1(
+            'SELECT s.id
+               FROM sentences s
+               JOIN vocab v ON v.id = s.vocab_id
+               JOIN units t ON t.id = v.unit_id
+              WHERE s.id = ? AND t.user_id = ?',
+            [$satzId, $uid],
+        );
+        if ($eigen === null) {
+            json_fail('Diesen Satz gibt es nicht.', 404);
+        }
+
+        // Zweimal melden ändert nichts - der eindeutige Schlüssel fängt das
+        // ab, und das Kind bekommt trotzdem seine Bestätigung.
+        q(
+            'INSERT INTO sentence_flags (sentence_id, user_id, typed)
+             VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE typed = VALUES(typed), created_at = NOW()',
+            [$satzId, $uid, $typed === '' ? null : $typed],
+        );
+
+        json_out(['ok' => true]);
 
     default:
         json_fail('Unbekannte Aktion.', 404);

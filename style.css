@@ -542,9 +542,9 @@ body.keyboard-open .cloze-dots { margin-top: 10px; }
    Bedienelemente, die beim Aufklappen der Tastatur schrumpfen, wirken
    unruhig. */
 
-/* Die Zeichenleiste sitzt unter dem Knopf, direkt über der Tastatur - dort,
-   wo iOS seine eigene Zusatzleiste hätte. */
-.cloze-check + .accents { margin: 12px auto 0; }
+/* Die Zeichenleiste sitzt unter der Knopfzeile, direkt über der Tastatur -
+   dort, wo iOS seine eigene Zusatzleiste hätte. */
+.screen-bottom .accents { margin: 12px auto 0; }
 
 /*
  * Der Satz steht frei, ohne Karte drumherum. Rahmen, Schatten und 22px
@@ -613,6 +613,48 @@ input.cloze-input[readonly] { opacity: 1; }
 }
 
 /*
+ * Knopfzeile: der Hauptknopf und, nach einer falschen Antwort, die Meldung.
+ *
+ * Der Meldeknopf ist quadratisch und steht rechts daneben - er soll erreichbar
+ * sein, aber nicht mit dem Weiterkommen konkurrieren.
+ */
+.cloze-actions {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    margin-top: 4px;
+}
+.cloze-actions .cloze-check { flex: 1; min-width: 0; margin-top: 0; }
+
+.flagbtn {
+    flex: none;
+    width: var(--tap);
+    padding: 0;
+    background: var(--surface);
+    color: var(--text-soft);
+    border-color: var(--border);
+    font-size: 1.35rem;
+    line-height: 1;
+}
+.flagbtn:active { background: var(--surface-2); }
+
+/* Gemeldet: Der Knopf bleibt stehen und zeigt, dass es angekommen ist. */
+.flagbtn.done {
+    background: var(--good-bg);
+    border-color: var(--good);
+    color: var(--good);
+    opacity: 1;
+}
+.flagbtn.done[disabled] { opacity: 1; }
+
+.flag-done {
+    margin: 8px 0 0;
+    text-align: center;
+    font-size: .85rem;
+    color: var(--good);
+}
+
+/*
  * Der Knopf trägt die Rückmeldung mit: grün bei richtig, rot bei falsch.
  *
  * Bei einer falschen Antwort bleibt er stehen und heißt "Weiter" - erst ein
@@ -620,7 +662,6 @@ input.cloze-input[readonly] { opacity: 1; }
  * Lösung ansieht, statt nach zweieinhalb Sekunden überholt zu werden.
  */
 .cloze-check {
-    margin-top: 4px;
     transition: background .18s ease, border-color .18s ease, transform .08s ease;
 }
 

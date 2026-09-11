@@ -1032,6 +1032,82 @@ adminPost('sentences.php', ['delete' => $satzId]);
 ok('Satz lässt sich löschen',
    q1('SELECT id FROM sentences WHERE id = ?', [$satzId]) === null);
 
+section('Aufgabe melden');
+
+// Vielleicht lag nicht das Kind daneben, sondern der Satz. Dann soll es das
+// sagen koennen, ohne dass Papa davon erfaehrt, indem er hunderte Saetze
+// durchsieht.
+$flagSatz = (int) qv('SELECT s.id FROM sentences s
+                       JOIN vocab v ON v.id = s.vocab_id
+                      WHERE v.unit_id = ? LIMIT 1', [$unitId]);
+ok('Ein Satz zum Melden ist da', $flagSatz > 0);
+
+[$res, $code] = apiCall('cloze', 'flag',
+    ['sentence_id' => $flagSatz, 'text' => 'mein Versuch']);
+ok('Die Meldung wird angenommen', $code === 200 && ($res['ok'] ?? false) === true,
+   json_encode($res));
+
+$eintrag = q1('SELECT * FROM sentence_flags WHERE sentence_id = ?', [$flagSatz]);
+ok('Und landet in der Datenbank', $eintrag !== null);
+ok('Mit dem Kind, das gemeldet hat', (int) ($eintrag['user_id'] ?? 0) === $userId);
+ok('Und mit dem, was es getippt hatte',
+   ($eintrag['typed'] ?? '') === 'mein Versuch', json_encode($eintrag));
+
+// Zweimal melden darf den Zaehler nicht hochtreiben - sonst ergaebe ein
+// veraergertes Kind zehn Meldungen fuer denselben Satz.
+apiCall('cloze', 'flag', ['sentence_id' => $flagSatz, 'text' => 'zweiter Versuch']);
+ok('Zweimal melden zaehlt nur einmal',
+   (int) qv('SELECT COUNT(*) FROM sentence_flags WHERE sentence_id = ?', [$flagSatz]) === 1);
+ok('Der letzte Versuch wird aber vermerkt',
+   qv('SELECT typed FROM sentence_flags WHERE sentence_id = ?', [$flagSatz]) === 'zweiter Versuch');
+
+// Ein fremder Satz geht niemanden etwas an.
+$fremderSatz = (int) qv('SELECT s.id FROM sentences s
+                          JOIN vocab v ON v.id = s.vocab_id
+                          JOIN units t ON t.id = v.unit_id
+                         WHERE t.user_id <> ? LIMIT 1', [$userId]);
+if ($fremderSatz > 0) {
+    [$res, $code] = apiCall('cloze', 'flag', ['sentence_id' => $fremderSatz, 'text' => 'x']);
+    ok('Ein fremder Satz laesst sich nicht melden', $code === 404,
+       "Status $code");
+    ok('Und es entsteht kein Eintrag',
+       (int) qv('SELECT COUNT(*) FROM sentence_flags WHERE sentence_id = ?', [$fremderSatz]) === 0);
+} else {
+    ok('Ein fremder Satz laesst sich nicht melden', true, 'kein fremder Satz vorhanden');
+    ok('Und es entsteht kein Eintrag', true, 'kein fremder Satz vorhanden');
+}
+
+section('Gemeldete Saetze im Admin');
+
+$seite = http($base . '/admin/sentences.php')['body'];
+ok('Der Admin weist auf Meldungen hin', str_contains($seite, 'gemeldete'));
+ok('Mit einem Weg, nur diese zu zeigen', str_contains($seite, 'flagged=1'));
+ok('Die gemeldete Zeile hebt sich ab', str_contains($seite, 'class="flagged"'));
+ok('Und nennt, wer was getippt hat',
+   str_contains($seite, 'Testkind') && str_contains($seite, 'zweiter Versuch'));
+
+// Gemeldete Saetze stehen oben - sonst muesste man sie suchen.
+$posGemeldet = strpos($seite, 'class="flagged"');
+ok('Gemeldetes steht vor dem Rest',
+   $posGemeldet !== false, 'keine gemeldete Zeile gefunden');
+
+$nur = http($base . '/admin/sentences.php?flagged=1')['body'];
+ok('Der Filter zeigt nur Gemeldetes',
+   substr_count($nur, '<tr class="flagged"') === 1
+   && substr_count($nur, '<tr>') <= 1,
+   substr_count($nur, '<tr class="flagged"') . ' gemeldet, '
+   . substr_count($nur, '<tr>') . ' uebrige');
+
+// Eine Meldung kann auch unbegruendet sein.
+$res = adminPost('sentences.php', ['clear_flags' => $flagSatz]);
+ok('Die Meldung laesst sich zuruecknehmen',
+   (int) qv('SELECT COUNT(*) FROM sentence_flags WHERE sentence_id = ?', [$flagSatz]) === 0);
+ok('Und es wird gemeldet, dass es geschah',
+   str_contains($res['body'], 'zurückgenommen'));
+
+$seite = http($base . '/admin/sentences.php')['body'];
+ok('Danach ist der Hinweis verschwunden', !str_contains($seite, 'gemeldete'));
+
 section('Seitenblätterung');
 
 require_once __DIR__ . '/../lib/pager.php';

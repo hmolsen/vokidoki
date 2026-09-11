@@ -146,7 +146,20 @@ function buildScreen(unitId, data) {
                 </div>
 
                 <div class="screen-bottom">
-                    <button class="btn cloze-check" type="submit" id="check">Prüfen</button>
+                    <div class="cloze-actions">
+                        <button class="btn cloze-check" type="submit" id="check">Prüfen</button>
+                        <!--
+                            Erscheint nur nach einer falschen Antwort. Genau
+                            dann ist der Verdacht berechtigt, dass nicht das
+                            Kind danebenlag, sondern der Satz.
+                        -->
+                        <button type="button" class="btn flagbtn" id="flag" hidden
+                                aria-label="Diese Aufgabe melden"
+                                title="Stimmt hier etwas nicht?">\u{2691}</button>
+                    </div>
+
+                    <p class="flag-done" id="flag-done" hidden></p>
+
                     ${accentRow(data.lang)}
                     <div id="msg"></div>
                 </div>
@@ -174,11 +187,14 @@ function buildScreen(unitId, data) {
     // Wie bei den Zeichentasten: Ohne das nimmt der Knopf dem Feld den Fokus,
     // und die Tastatur klappt bei jedem Prüfen zu.
     check.addEventListener('mousedown', (event) => event.preventDefault());
+    $('#flag').addEventListener('mousedown', (event) => event.preventDefault());
 
     $('#form').addEventListener('submit', (event) => {
         event.preventDefault();
         onSubmit(unitId);
     });
+
+    $('#flag').addEventListener('click', () => reportSentence());
 
     wireAccents(input, () => zustand.answered);
     showCard(data);
@@ -207,6 +223,15 @@ function showCard(data) {
     check.disabled = false;
     check.classList.remove('good', 'bad');
     check.textContent = 'Prüfen';
+
+    // Die Meldemöglichkeit gehört zur Aufgabe, nicht zum Bildschirm - bei
+    // jeder neuen Vokabel fängt sie wieder bei null an.
+    const flagge = $('#flag');
+    flagge.hidden = true;
+    flagge.disabled = false;
+    flagge.classList.remove('done');
+    flagge.textContent = '\u{2691}';
+    $('#flag-done').hidden = true;
 
     const verdict = $('#verdict');
     verdict.className = 'verdict';
@@ -298,7 +323,44 @@ async function onSubmit(unitId) {
         check.textContent = 'Weiter';
         verdict.className = 'verdict bad';
         verdict.innerHTML = `Nicht ganz. Richtig ist:<br><strong>${esc(result.answer)}</strong>`;
+
+        // Vielleicht lag ja gar nicht das Kind daneben, sondern der Satz.
+        z.sentenceId = result.sentence_id;
+        z.typed = text;
+        $('#flag').hidden = false;
     }
+}
+
+/**
+ * Meldet, dass mit dieser Aufgabe etwas nicht stimmt.
+ *
+ * Das Getippte geht mit: Im Admin entscheidet meist genau das, ob der Satz
+ * schief war oder die erwartete Antwort - ohne diese Angabe bliebe nur die
+ * Vermutung.
+ */
+async function reportSentence() {
+    const z = zustand;
+    const flagge = $('#flag');
+    const fertig = $('#flag-done');
+
+    if (!z || !z.sentenceId || flagge.disabled) return;
+
+    flagge.disabled = true;
+
+    try {
+        await api('cloze', 'flag', {
+            body: { sentence_id: Number(z.sentenceId), text: z.typed ?? '' },
+        });
+    } catch (err) {
+        flagge.disabled = false;
+        showError(err.message);
+        return;
+    }
+
+    flagge.classList.add('done');
+    flagge.textContent = '\u{2713}';
+    fertig.textContent = 'Danke! Papa schaut sich die Aufgabe an.';
+    fertig.hidden = false;
 }
 
 /**
