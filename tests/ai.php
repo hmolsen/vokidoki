@@ -26,6 +26,16 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require_once __DIR__ . '/../lib/ai.php';
+require_once __DIR__ . '/../lib/access.php';
+
+/*
+ * Die Lerneinheiten dieser Suite entstehen per SQL und muessen deshalb selbst
+ * sagen, wie weit sie freigegeben sind - die Spalte faengt bei null an, und
+ * fuer nicht Freigegebenes werden bewusst keine Saetze erzeugt. Hier geht es
+ * um die Mechanik der Satzerzeugung, also steht alles offen. Was beim
+ * Einlesen tatsaechlich eingetragen wird, entscheidet
+ * initial_released_position(); das prueft tests/e2e.php.
+ */
 
 $passed = 0;
 $failed = 0;
@@ -143,8 +153,8 @@ section('Kategorien nachtragen');
 q('INSERT INTO languages (user_id, name, flag_emoji) VALUES (?, ?, ?)',
   [(int) $user['id'], 'Testisch-AI', '']);
 $wtLang = (int) db()->lastInsertId();
-q('INSERT INTO units (user_id, language_id, title) VALUES (?, ?, ?)',
-  [(int) $user['id'], $wtLang, 'Alt']);
+q('INSERT INTO units (user_id, language_id, title, released_position) VALUES (?, ?, ?, ?)',
+  [(int) $user['id'], $wtLang, 'Alt', RELEASED_ALL]);
 $wtUnit = (int) db()->lastInsertId();
 $altbestand = [
     ['to run', 'rennen'],
@@ -190,8 +200,8 @@ require_once __DIR__ . '/../lib/sentences.php';
 q('INSERT INTO languages (user_id, name, flag_emoji, code) VALUES (?, ?, ?, ?)',
   [(int) $user['id'], 'Blockisch', '', 'fr']);
 $bLang = (int) db()->lastInsertId();
-q('INSERT INTO units (user_id, language_id, title) VALUES (?, ?, ?)',
-  [(int) $user['id'], $bLang, 'Grosse Einheit']);
+q('INSERT INTO units (user_id, language_id, title, released_position) VALUES (?, ?, ?, ?)',
+  [(int) $user['id'], $bLang, 'Grosse Einheit', RELEASED_ALL]);
 $bUnit = (int) db()->lastInsertId();
 for ($i = 0; $i < 25; $i++) {
     q('INSERT INTO vocab (unit_id, term_foreign, term_native, word_type, position)
@@ -232,8 +242,8 @@ section('Fehlerfall: abgeschnittene Antwort');
 q('INSERT INTO languages (user_id, name, flag_emoji) VALUES (?, ?, ?)',
   [(int) $user['id'], 'Abgeschnitten', '']);
 $cLang = (int) db()->lastInsertId();
-q('INSERT INTO units (user_id, language_id, title) VALUES (?, ?, ?)',
-  [(int) $user['id'], $cLang, 'Zu lang']);
+q('INSERT INTO units (user_id, language_id, title, released_position) VALUES (?, ?, ?, ?)',
+  [(int) $user['id'], $cLang, 'Zu lang', RELEASED_ALL]);
 $cUnit = (int) db()->lastInsertId();
 q('INSERT INTO vocab (unit_id, term_foreign, term_native, word_type, position)
    VALUES (?, ?, ?, ?, 0)', [$cUnit, 'mot', 'Wort', 'substantiv']);
