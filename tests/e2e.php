@@ -2713,6 +2713,63 @@ teacherRequest($base . '/teacher/class.php?id=' . $klasseId, [
 ok('Ein Kind aus einer anderen Klasse bleibt unberührt',
    (string) qv('SELECT password_hash FROM users WHERE id = ?', [$userId]) === $fremdesHash);
 
+// ------------------------------------------------------ Der Ausdruck
+
+section('Zettel mit den Zugangsdaten');
+
+require_once __DIR__ . '/../lib/letter.php';
+
+ok('Die Vorlage nennt Name, Benutzername und Passwort',
+   str_contains(letter_default(), '{name}')
+   && str_contains(letter_default(), '{benutzername}')
+   && str_contains(letter_default(), '{passwort}'));
+
+$gefuellt = letter_render(letter_template(), [
+    'name'         => 'Lilli M.',
+    'benutzername' => 'lilli.m',
+    'passwort'     => 'müder Gepard',
+    'klasse'       => '5B',
+    'schule'       => 'Testschule',
+    'url'          => 'https://example.test/vt',
+]);
+ok('Die Platzhalter werden ersetzt',
+   str_contains($gefuellt, 'müder Gepard') && !str_contains($gefuellt, '{passwort}'));
+
+/*
+ * Ein Tippfehler im Platzhalter soll auffallen, nicht verschwinden. Eine
+ * leere Stelle waere ein Kind ohne Passwort auf dem Zettel.
+ */
+ok('Ein unbekannter Platzhalter bleibt stehen',
+   str_contains(letter_render('Hallo {name}, dein {passwrot}', ['name' => 'Max']),
+                '{passwrot}'));
+
+$res = teacherGet('print.php?class=' . $klasseId);
+ok('Die Druckansicht öffnet sich', $res['status'] === 200, 'Status ' . $res['status']);
+ok('Sie zeigt ein Blatt je Kind',
+   substr_count($res['body'], 'class="blatt"') === 4,
+   substr_count($res['body'], 'class="blatt"') . ' Blätter');
+ok('Mit einem QR-Code darauf', str_contains($res['body'], '<svg '));
+ok('Und dem Anfangspasswort im Klartext',
+   str_contains($res['body'], (string) $lilliNeu['initial_password']));
+ok('Die Bedienleiste verschwindet beim Drucken',
+   str_contains($res['body'], '.bar { display: none; }'));
+ok('Nach jedem Kind kommt eine neue Seite',
+   str_contains($res['body'], 'page-break-after: always'));
+
+$res = teacherGet('print.php?class=' . $klasseId . '&user=' . (int) $lilli['id']);
+ok('Ein einzelnes Blatt lässt sich nachdrucken',
+   substr_count($res['body'], 'class="blatt"') === 1,
+   substr_count($res['body'], 'class="blatt"') . ' Blätter');
+
+/*
+ * Und die Grenze: Ein Kind aus einer anderen Klasse darf auch dann nicht auf
+ * dem Zettel landen, wenn seine Nummer im Aufruf steht.
+ */
+$res = teacherGet('print.php?class=' . $klasseId . '&user=' . $userId);
+ok('Ein fremdes Kind kommt nicht auf den Ausdruck',
+   substr_count($res['body'], 'class="blatt"') === 0
+   && str_contains($res['body'], 'nichts zu drucken'));
+
 // Eine Klasse einer anderen Schule geht niemanden etwas an.
 q("INSERT IGNORE INTO schools (name) VALUES ('Fremde Schule 2')");
 $fremdeSchule2 = (int) qv("SELECT id FROM schools WHERE name = 'Fremde Schule 2'");

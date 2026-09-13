@@ -91,6 +91,104 @@ function password_tidy(string $typed): string
     return trim($t);
 }
 
+// -------------------------------------------------------------- Pflege
+
+/**
+ * Die Liste zum Bearbeiten: ein Wort je Zeile, bei Tieren mit Geschlecht.
+ *
+ * Ein Textfeld statt einer Tabelle mit hundert Zeilen. Wer ein Wort streichen
+ * will, markiert die Zeile und drückt Entf - das ist schneller als hundert
+ * Häkchen, und die Liste lässt sich am Stück ersetzen.
+ */
+function password_words_text(string $kind): string
+{
+    $zeilen = [];
+    foreach (password_words($kind) as $w) {
+        $zeilen[] = $kind === PW_ANIMAL
+            ? $w['word'] . ' ' . $w['gender']
+            : $w['word'];
+    }
+    return implode("\n", $zeilen);
+}
+
+/**
+ * Ersetzt die Liste einer Wortart durch die eingegebene.
+ *
+ * Gestrichene Wörter werden nicht gelöscht, sondern abgeschaltet: Wer aus
+ * Versehen die halbe Liste markiert hat, soll sie wiederbekommen können, und
+ * eine abgeschaltete Zeile kostet nichts.
+ *
+ * @return array{0: int, 1: ?string} Anzahl und, falls etwas nicht ging, eine Meldung
+ */
+function password_words_replace(string $kind, string $text): array
+{
+    $woerter = [];
+    $fehler  = [];
+
+    foreach (preg_split('/\R/u', $text) ?: [] as $nr => $zeile) {
+        $zeile = trim(preg_replace('/[\s\x{00A0}]+/u', ' ', $zeile) ?? $zeile);
+        if ($zeile === '') {
+            continue;
+        }
+
+        if ($kind === PW_ANIMAL) {
+            $teile   = explode(' ', $zeile);
+            $genus   = mb_strtolower((string) array_pop($teile));
+            $wort    = implode(' ', $teile);
+
+            if (!in_array($genus, ['m', 'f', 'n'], true)) {
+                $fehler[] = sprintf('Zeile %d ("%s"): am Ende fehlt m, f oder n',
+                                    $nr + 1, mb_substr($zeile, 0, 24));
+                continue;
+            }
+        } else {
+            $wort  = $zeile;
+            $genus = null;
+        }
+
+        if ($wort === '' || mb_strlen($wort) > 48
+            || preg_match('/^[\p{L}\-]+$/u', $wort) !== 1) {
+            $fehler[] = sprintf('Zeile %d ("%s"): nur Buchstaben und Bindestriche',
+                                $nr + 1, mb_substr($zeile, 0, 24));
+            continue;
+        }
+
+        $woerter[$wort] = $genus;
+    }
+
+    if ($fehler !== []) {
+        return [0, implode('; ', array_slice($fehler, 0, 3))
+                   . (count($fehler) > 3 ? sprintf(' (und %d weitere)', count($fehler) - 3) : '')];
+    }
+
+    /*
+     * Unter zwanzig wird es zu eng. Zwanzig Adjektive und zwanzig Tiere
+     * ergeben vierhundert Kombinationen - dagegen hilft auch die
+     * Anmeldebremse nicht mehr zuverlässig.
+     */
+    if (count($woerter) < 20) {
+        return [0, sprintf('Zu wenige Wörter (%d). Mindestens zwanzig, sonst sind '
+                           . 'die Passwörter zu leicht zu erraten.', count($woerter))];
+    }
+
+    db()->beginTransaction();
+    try {
+        q('UPDATE password_words SET active = 0 WHERE kind = ?', [$kind]);
+        foreach ($woerter as $wort => $genus) {
+            q('INSERT INTO password_words (kind, word, gender, active)
+               VALUES (?, ?, ?, 1)
+               ON DUPLICATE KEY UPDATE gender = VALUES(gender), active = 1',
+              [$kind, (string) $wort, $genus]);
+        }
+        db()->commit();
+    } catch (Throwable $e) {
+        db()->rollBack();
+        return [0, 'Speichern fehlgeschlagen: ' . $e->getMessage()];
+    }
+
+    return [count($woerter), null];
+}
+
 // ---------------------------------------------------------------- Saatgut
 
 /**

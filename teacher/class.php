@@ -137,16 +137,25 @@ teacher_flash_render();
                         Passwort neu
                     </button>
                 </form>
+                &middot;
+                <a href="<?= h(teacher_url('print.php') . '?class=' . $classId . '&user=' . (int) $k['id']) ?>"
+                   target="_blank" rel="noopener">Zettel</a>
                 <?php endif; ?>
             </td>
         </tr>
     <?php endforeach; ?>
 </table>
 
+<p>
+    <a class="btn" href="<?= h(teacher_url('print.php') . '?class=' . $classId) ?>"
+       target="_blank" rel="noopener">Zettel für die ganze Klasse</a>
+</p>
+
 <p class="tiny muted">
     Das Anfangspasswort steht hier im Klartext, damit sich das Anschreiben
     nachdrucken lässt. Sobald ein Kind sein Passwort selbst ändert,
-    verschwindet es aus dieser Spalte.
+    verschwindet es aus dieser Spalte. Den Text des Anschreibens legt der
+    Betreiber im Admin-Bereich fest.
 </p>
 <?php endif; ?>
 

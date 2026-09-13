@@ -25,6 +25,55 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         redirect('settings.php');
     }
 
+    if (isset($_POST['save_letter'])) {
+        /*
+         * Reiner Text, unveraendert gespeichert. Die Vorlage geht an alle
+         * Kinder einer Schule; liesse sie Markup zu, waere sie eine offene
+         * Tuer. Ausgegeben wird sie in teacher/print.php durch h().
+         */
+        $text = (string) ($_POST['letter_template'] ?? '');
+
+        if (trim($text) === '') {
+            setting_set('letter_template', '');
+            flash('Anschreiben auf die Standardfassung zurückgesetzt.');
+            redirect('settings.php');
+        }
+
+        $fehlend = [];
+        foreach (['name', 'benutzername', 'passwort'] as $noetig) {
+            if (!str_contains($text, '{' . $noetig . '}')) {
+                $fehlend[] = '{' . $noetig . '}';
+            }
+        }
+
+        // Kein Verbot, nur ein Hinweis: Vielleicht steht der Name ja schon in
+        // der Kopfzeile des Blattes, und das Anschreiben braucht ihn nicht.
+        setting_set('letter_template', $text);
+        flash($fehlend === []
+            ? 'Anschreiben gespeichert.'
+            : 'Anschreiben gespeichert - ohne ' . implode(' und ', $fehlend)
+              . '. Das ist erlaubt, aber bitte einmal Probe drucken.');
+        redirect('settings.php');
+    }
+
+    if (isset($_POST['save_words'])) {
+        $art = (string) ($_POST['word_kind'] ?? '');
+        if (!in_array($art, [PW_ADJECTIVE, PW_ANIMAL], true)) {
+            flash('Unbekannte Wortart.', 'bad');
+            redirect('settings.php');
+        }
+
+        [$anzahl, $meldung] = password_words_replace($art, (string) ($_POST['words'] ?? ''));
+
+        if ($meldung !== null) {
+            flash($meldung, 'bad');
+        } else {
+            flash(sprintf('%d %s gespeichert.', $anzahl,
+                $art === PW_ADJECTIVE ? 'Adjektive' : 'Tiere'));
+        }
+        redirect('settings.php');
+    }
+
     if (isset($_POST['save_sentences'])) {
         $model = (string) ($_POST['sentence_model'] ?? '');
         if (!array_key_exists($model, VISION_MODELS)) {
@@ -216,6 +265,68 @@ flash_render();
     </p>
     <button class="btn small" name="save_prices" value="1">Speichern</button>
 </form>
+
+<h2>Anschreiben für die Kinder</h2>
+<form method="post" class="card">
+    <?= csrf_field() ?>
+    <label for="letter">Text des Zettels</label>
+    <textarea id="letter" name="letter_template" rows="18"
+              style="width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.9rem"
+    ><?= h(letter_template()) ?></textarea>
+    <p class="tiny muted">
+        Reiner Text, kein HTML - so kann eine Formulierung nichts kaputtmachen.
+        Diese Platzhalter werden ersetzt:
+        <?php foreach (letter_placeholders() as $p => $was): ?>
+            <br><code class="token">{<?= h($p) ?>}</code> &ndash; <?= h($was) ?>
+        <?php endforeach; ?>
+        <br><br>Leeren und speichern stellt die Standardfassung wieder her.
+    </p>
+    <button class="btn small" name="save_letter" value="1">Speichern</button>
+</form>
+
+<h2>Wörter für die Anfangspasswörter</h2>
+
+<div class="stats" style="align-items:start">
+    <form method="post" class="card">
+        <?= csrf_field() ?>
+        <input type="hidden" name="word_kind" value="<?= h(PW_ADJECTIVE) ?>">
+        <label for="adj">Adjektive (<?= count(password_words(PW_ADJECTIVE)) ?>)</label>
+        <textarea id="adj" name="words" rows="14"
+                  style="width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.88rem"
+        ><?= h(password_words_text(PW_ADJECTIVE)) ?></textarea>
+        <p class="tiny muted">
+            Ein Wort je Zeile, als <strong>Stamm ohne Endung</strong> - also
+            "müd", nicht "müde". Die Endung kommt beim Erzeugen dazu und richtet
+            sich nach dem Tier. Nur regelmässige Adjektive: "dunkel" würde zu
+            "dunkler" statt "dunkeler" und gehört deshalb nicht hierher.
+        </p>
+        <button class="btn small" name="save_words" value="1">Speichern</button>
+    </form>
+
+    <form method="post" class="card">
+        <?= csrf_field() ?>
+        <input type="hidden" name="word_kind" value="<?= h(PW_ANIMAL) ?>">
+        <label for="tier">Tiere (<?= count(password_words(PW_ANIMAL)) ?>)</label>
+        <textarea id="tier" name="words" rows="14"
+                  style="width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.88rem"
+        ><?= h(password_words_text(PW_ANIMAL)) ?></textarea>
+        <p class="tiny muted">
+            Ein Tier je Zeile, dahinter das Geschlecht: <code class="token">m</code>
+            für der, <code class="token">f</code> für die,
+            <code class="token">n</code> für das. Ohne das käme "müde Gepard"
+            heraus, und das ist in einer Schule peinlich.
+        </p>
+        <button class="btn small" name="save_words" value="1">Speichern</button>
+    </form>
+</div>
+
+<p class="tiny muted">
+    Zusammen ergeben die Listen
+    <strong><?= number_format(count(password_words(PW_ADJECTIVE))
+                              * count(password_words(PW_ANIMAL)), 0, ',', '.') ?></strong>
+    mögliche Anfangspasswörter. Ein gestrichenes Wort wird nur abgeschaltet, nicht
+    gelöscht - versehentlich Entferntes kommt durch erneutes Eintragen zurück.
+</p>
 
 <h2>Admin-Passwort</h2>
 <form method="post" class="card">
