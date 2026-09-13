@@ -11,7 +11,7 @@ $uid  = (int) $user['id'];
 
 switch (action()) {
     case 'list':
-        $lang = own_language($uid, (int) ($_GET['language_id'] ?? 0));
+        $lang = view_language($user, (int) ($_GET['language_id'] ?? 0));
         /*
          * Beide Übungsarten, nicht nur Multiple Choice.
          *
@@ -74,7 +74,7 @@ switch (action()) {
         ], 'units' => $rows]);
 
     case 'get':
-        $unit  = own_unit($uid, (int) ($_GET['id'] ?? 0));
+        $unit  = view_unit($user, (int) ($_GET['id'] ?? 0));
 
         // Lernstand beider Übungsarten nebeneinander. Bisher stand hier nur
         // Multiple Choice - dadurch sah eine Vokabel "geschafft" aus, obwohl
@@ -146,24 +146,25 @@ switch (action()) {
     case 'sentence_status':
         // Schlank gehalten: Die Oberfläche fragt das im Sekundentakt ab,
         // solange die Sätze im Hintergrund entstehen.
-        $unit = own_unit($uid, (int) ($_GET['id'] ?? 0));
+        $unit = view_unit($user, (int) ($_GET['id'] ?? 0));
         json_out(['ok' => true, 'cloze' => sentence_status((int) $unit['id'], $uid)]);
 
     case 'rename':
         require_post();
         $b     = json_body();
-        $unit  = own_unit($uid, body_int($b, 'id'));
+        $unit  = edit_unit($user, body_int($b, 'id'));
         $title = body_str($b, 'title', 128);
         if ($title === '') {
             json_fail('Bitte einen Titel angeben.');
         }
-        q('UPDATE units SET title = ? WHERE id = ? AND user_id = ?', [$title, (int) $unit['id'], $uid]);
+        // Freigegeben hat edit_unit(); die Zeile ist damit die richtige.
+        q('UPDATE units SET title = ? WHERE id = ?', [$title, (int) $unit['id']]);
         json_out(['ok' => true]);
 
     case 'reset':
         require_post();
         $b    = json_body();
-        $unit = own_unit($uid, body_int($b, 'id'));
+        $unit = view_unit($user, body_int($b, 'id'));
 
         // Ohne Angabe wird alles zurückgesetzt; mit 'mode' nur eine Übungsart.
         $mode = isset($b['mode']) ? body_str($b, 'mode', 16) : '';
@@ -177,8 +178,8 @@ switch (action()) {
     case 'delete':
         require_post();
         $b    = json_body();
-        $unit = own_unit($uid, body_int($b, 'id'));
-        q('DELETE FROM units WHERE id = ? AND user_id = ?', [(int) $unit['id'], $uid]);
+        $unit = edit_unit($user, body_int($b, 'id'));
+        q('DELETE FROM units WHERE id = ?', [(int) $unit['id']]);
         json_out(['ok' => true]);
 
     default:

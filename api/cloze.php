@@ -13,7 +13,7 @@ switch (action()) {
     case 'prepare':
         require_post();
         $b    = json_body();
-        $unit = own_unit($uid, body_int($b, 'unit_id'));
+        $unit = edit_unit($user, body_int($b, 'unit_id'));
 
         $offen = vocab_without_sentences((int) $unit['id']);
         if ($offen === 0) {
@@ -85,7 +85,7 @@ switch (action()) {
         ]);
 
     case 'next':
-        $unit   = own_unit($uid, (int) ($_GET['unit_id'] ?? 0));
+        $unit   = view_unit($user, (int) ($_GET['unit_id'] ?? 0));
         $stand  = sentence_status((int) $unit['id'], $uid);
         $known  = $stand['known'];
         $total  = $stand['total'];
@@ -176,7 +176,7 @@ switch (action()) {
         }
         unset($_SESSION['cloze'][$nonce]);
 
-        $unit    = own_unit($uid, (int) $pending['unit_id']);
+        $unit    = view_unit($user, (int) $pending['unit_id']);
         $vocabId = (int) $pending['vocab_id'];
         $expected = (string) $pending['answer'];
 
@@ -207,18 +207,8 @@ switch (action()) {
         $satzId = body_int($b, 'sentence_id');
         $typed  = body_str($b, 'text', 128);
 
-        // Der Satz muss zu einer Lerneinheit dieses Kindes gehören.
-        $eigen = q1(
-            'SELECT s.id
-               FROM sentences s
-               JOIN vocab v ON v.id = s.vocab_id
-               JOIN units t ON t.id = v.unit_id
-              WHERE s.id = ? AND t.user_id = ?',
-            [$satzId, $uid],
-        );
-        if ($eigen === null) {
-            json_fail('Diesen Satz gibt es nicht.', 404);
-        }
+        // Der Satz muss zu einer Lerneinheit gehören, die dieses Kind sehen darf.
+        view_sentence($user, $satzId);
 
         // Zweimal melden ändert nichts - der eindeutige Schlüssel fängt das
         // ab, und das Kind bekommt trotzdem seine Bestätigung.

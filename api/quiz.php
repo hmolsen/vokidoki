@@ -13,7 +13,7 @@ const OPTION_COUNT = 4;
 
 switch (action()) {
     case 'next':
-        $unit = own_unit($uid, (int) ($_GET['unit_id'] ?? 0));
+        $unit = view_unit($user, (int) ($_GET['unit_id'] ?? 0));
         [$known, $total] = unit_progress((int) $unit['id'], $uid, QUIZ_MODE);
         $langName = (string) qv(
             'SELECT name FROM languages WHERE id = ?',
@@ -128,7 +128,7 @@ switch (action()) {
         // Einmalig verwendbar - verhindert mehrfaches Einreichen derselben Frage.
         unset($_SESSION['quiz'][$nonce]);
 
-        $unit     = own_unit($uid, (int) $pending['unit_id']);
+        $unit     = view_unit($user, (int) $pending['unit_id']);
         $vocabId  = (int) $pending['vocab_id'];
         $isRight  = $index === (int) $pending['correct'];
 
@@ -148,7 +148,7 @@ switch (action()) {
         ]);
 
     case 'stats':
-        $unit = own_unit($uid, (int) ($_GET['unit_id'] ?? 0));
+        $unit = view_unit($user, (int) ($_GET['unit_id'] ?? 0));
         $row  = q1(
             "SELECT COUNT(v.id) AS total,
                     SUM(CASE WHEN p.known_at IS NOT NULL THEN 1 ELSE 0 END) AS known,

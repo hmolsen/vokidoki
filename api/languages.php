@@ -55,8 +55,11 @@ switch (action()) {
     case 'delete':
         require_post();
         $b   = json_body();
-        $lang = own_language($uid, body_int($b, 'id'));
-        q('DELETE FROM languages WHERE id = ? AND user_id = ?', [(int) $lang['id'], $uid]);
+        $lang = edit_language($user, body_int($b, 'id'));
+        // $lang kommt aus edit_language() und ist damit bereits freigegeben.
+        // Eine zweite Besitzpruefung hier waere eine zweite Wahrheit - und
+        // genau die, die beim Umstieg auf Kurse falsch wuerde.
+        q('DELETE FROM languages WHERE id = ?', [(int) $lang['id']]);
         json_out(['ok' => true]);
 
     default:

@@ -19,7 +19,8 @@ switch (action()) {
     case 'analyze':
         require_post();
         $b    = json_body();
-        $lang = own_language($uid, body_int($b, 'language_id'));
+        require_cap($user, CAP_IMPORT);
+        $lang = view_language($user, body_int($b, 'language_id'));
 
         $raw = $b['images'] ?? null;
         if (!is_array($raw) || $raw === []) {
@@ -100,7 +101,8 @@ switch (action()) {
     case 'save':
         require_post();
         $b     = json_body();
-        $lang  = own_language($uid, body_int($b, 'language_id'));
+        require_cap($user, CAP_IMPORT);
+        $lang  = edit_language($user, body_int($b, 'language_id'));
         $title = body_str($b, 'title', 128);
         if ($title === '') {
             json_fail('Bitte einen Titel für die Lerneinheit angeben.');

@@ -502,6 +502,81 @@ if ($isFake) {
 
 // ------------------------------------------------------------------ Fremdzugriff
 
+section('Zugriffsregeln an einer Stelle');
+
+/*
+ * Die Regel, wer was sehen und aendern darf, stand bis vor kurzem in zwei
+ * Funktionen in api/_boot.php, die drei Dinge zugleich taten: pruefen, laden
+ * und im Fehlerfall eine JSON-Antwort schicken. Jetzt steht sie in
+ * lib/access.php - ohne Sitzung, ohne Ausgabe, und damit auch fuer einen
+ * Lehrkraft-Bereich brauchbar, der weiterleitet statt JSON zu schicken.
+ *
+ * Diese Pruefungen halten die Naht zusammen. Sie kosten wenig und verhindern
+ * genau das, was sonst passiert: dass jemand "nur schnell" wieder eine eigene
+ * Besitzabfrage in einen Endpunkt schreibt.
+ */
+$accessDatei = __DIR__ . '/../lib/access.php';
+ok('Es gibt eine eigene Datei fuer die Zugriffsregeln', is_file($accessDatei));
+
+$access = (string) file_get_contents($accessDatei);
+
+// Kommentare duerfen die Begriffe nennen - es geht um tatsaechliche Aufrufe.
+$ohneKommentare = (string) preg_replace(
+    ['~/\*.*?\*/~s', '~//[^
+]*~'], '', $access,
+);
+$effekte = [];
+foreach (['session_start', 'session_boot', 'json_fail', 'json_out', 'header('] as $wort) {
+    if (str_contains($ohneKommentare, $wort)) {
+        $effekte[] = $wort;
+    }
+}
+ok('Sie kennt weder Sitzung noch Ausgabe', $effekte === [], implode(', ', $effekte));
+
+ok('Und braucht nur die Datenbank',
+   preg_match_all('~^require_once[^
+]*~m', $ohneKommentare, $reqs) === 1
+   && str_contains($reqs[0][0], 'db.php'),
+   implode(' | ', $reqs[0] ?? []));
+
+// Der Beweis, dass beim Laden nichts passiert: vorher wie nachher keine Sitzung.
+$vorher = session_status();
+require_once $accessDatei;
+ok('Das blosse Laden startet keine Sitzung',
+   session_status() === $vorher && $vorher === PHP_SESSION_NONE);
+ok('Und die Regeln stehen danach bereit', function_exists('load_unit_for_view'));
+
+ok('Sehen und Aendern sind getrennte Fragen',
+   str_contains($access, 'function load_unit_for_view')
+   && str_contains($access, 'function load_unit_for_edit'));
+
+// Kein Endpunkt darf die Regel umgehen. Gesucht wird nach eigenen
+// Besitzabfragen - "user_id = ?" in einem SELECT ausserhalb der Huellen.
+$umgeher = [];
+foreach (glob(__DIR__ . '/../api/*.php') ?: [] as $datei) {
+    if (basename($datei) === '_boot.php') {
+        continue;
+    }
+    $quelle = (string) file_get_contents($datei);
+    // Gesucht ist die Besitzpruefung an einem einzelnen Datensatz, also
+    // "WHERE id = ? AND user_id = ?". Eine schlichte Auflistung der eigenen
+    // Sprachen filtert ebenfalls auf user_id und ist voellig in Ordnung.
+    if (preg_match('/WHERE\s+\w*\.?id\s*=\s*\?\s+AND\s+\w*\.?user_id\s*=\s*\?/i', $quelle) === 1) {
+        $umgeher[] = basename($datei);
+    }
+}
+ok('Kein Endpunkt prueft den Besitz noch selbst',
+   $umgeher === [], implode(', ', $umgeher));
+
+ok('Die alten Funktionen sind verschwunden',
+   !str_contains((string) file_get_contents(__DIR__ . '/../api/_boot.php'), 'function own_unit'));
+
+// Das Einlesen haengt an einer Faehigkeit, nicht mehr allein am Besitz.
+$importQuelle = (string) file_get_contents(__DIR__ . '/../api/import.php');
+ok('Einlesen verlangt eine ausdrueckliche Berechtigung',
+   substr_count($importQuelle, 'require_cap($user, CAP_IMPORT)') === 2,
+   substr_count($importQuelle, 'require_cap($user, CAP_IMPORT)') . ' von 2 Aktionen');
+
 section('Fremdzugriff');
 
 // Gegen die im Admin-Abschnitt gezielt angelegten Daten des zweiten Kindes.

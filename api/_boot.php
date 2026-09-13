@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../lib/json.php';
 require_once __DIR__ . '/../lib/auth.php';
+require_once __DIR__ . '/../lib/access.php';
 
 json_boot();
 
@@ -32,22 +33,72 @@ function require_post(): void
     }
 }
 
-/** Sprache des angemeldeten Kindes laden oder abbrechen. */
-function own_language(int $userId, int $languageId): array
+/*
+ * Dünne Hüllen um lib/access.php.
+ *
+ * Die Regel steht dort, hier steht nur, was im Fehlerfall passiert: eine
+ * JSON-Antwort. Der Lehrkraft-Bereich bekommt später eigene Hüllen um
+ * dieselben Regeln, die stattdessen weiterleiten.
+ *
+ * Bewusst überall 404, auch beim Änderungsversuch: Ein 403 verriete, dass es
+ * die Lerneinheit gibt. Wer sie nicht sehen darf, soll nicht erfahren, dass
+ * sie existiert.
+ */
+
+/** Sprache zum Ansehen, oder abbrechen. */
+function view_language(array $user, int $languageId): array
 {
-    $row = q1('SELECT * FROM languages WHERE id = ? AND user_id = ?', [$languageId, $userId]);
+    $row = load_language_for_view($user, $languageId);
     if ($row === null) {
         json_fail('Sprache nicht gefunden.', 404);
     }
     return $row;
 }
 
-/** Lerneinheit des angemeldeten Kindes laden oder abbrechen. */
-function own_unit(int $userId, int $unitId): array
+/** Sprache zum Ändern, oder abbrechen. */
+function edit_language(array $user, int $languageId): array
 {
-    $row = q1('SELECT * FROM units WHERE id = ? AND user_id = ?', [$unitId, $userId]);
+    $row = load_language_for_edit($user, $languageId);
+    if ($row === null) {
+        json_fail('Sprache nicht gefunden.', 404);
+    }
+    return $row;
+}
+
+/** Lerneinheit zum Ansehen und Üben, oder abbrechen. */
+function view_unit(array $user, int $unitId): array
+{
+    $row = load_unit_for_view($user, $unitId);
     if ($row === null) {
         json_fail('Lerneinheit nicht gefunden.', 404);
     }
     return $row;
+}
+
+/** Lerneinheit zum Ändern, oder abbrechen. */
+function edit_unit(array $user, int $unitId): array
+{
+    $row = load_unit_for_edit($user, $unitId);
+    if ($row === null) {
+        json_fail('Lerneinheit nicht gefunden.', 404);
+    }
+    return $row;
+}
+
+/** Lückensatz zum Ansehen, oder abbrechen. */
+function view_sentence(array $user, int $sentenceId): array
+{
+    $row = load_sentence_for_view($user, $sentenceId);
+    if ($row === null) {
+        json_fail('Diesen Satz gibt es nicht.', 404);
+    }
+    return $row;
+}
+
+/** Eine Fähigkeit verlangen, sonst abbrechen. */
+function require_cap(array $user, string $cap): void
+{
+    if (!user_can($user, $cap)) {
+        json_fail('Dafür fehlt dir die Berechtigung.', 403);
+    }
 }
