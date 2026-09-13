@@ -1993,6 +1993,132 @@ ok('Der Service Worker haelt nur die Offline-Seite im Voraus vor',
 
 // ------------------------------------------------------------------ Abmelden
 
+section('Bereich für Lehrkräfte');
+
+/*
+ * Eigener Cookie-Topf: Die Lehrkraft meldet sich an, ohne die Sitzung des
+ * Testkindes anzufassen - sonst liefe der Rest der Suite ins Leere.
+ */
+$lehrerJar = tempnam(sys_get_temp_dir(), 'vtlehr');
+
+function teacherGet(string $pfad): array
+{
+    global $base, $lehrerJar;
+    return teacherRequest($base . '/teacher/' . $pfad, null);
+}
+
+function teacherRequest(string $url, ?array $post): array
+{
+    global $lehrerJar;
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_COOKIEJAR      => $lehrerJar,
+        CURLOPT_COOKIEFILE     => $lehrerJar,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT        => 30,
+    ]);
+    if ($post !== null) {
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post));
+    }
+    $body   = (string) curl_exec($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ['status' => $status, 'body' => $body];
+}
+
+function teacherLogin(string $user, string $pass): array
+{
+    global $base;
+    $seite = teacherRequest($base . '/teacher/', null);
+    preg_match('/name="csrf" value="([a-f0-9]+)"/', $seite['body'], $m);
+    return teacherRequest($base . '/teacher/index.php', [
+        'teacher_login' => '1',
+        'username'      => $user,
+        'password'      => $pass,
+        'csrf'          => $m[1] ?? '',
+    ]);
+}
+
+// Eine Lehrkraft anlegen - wie es der Admin tut.
+$lehrerName = 'lehr_' . bin2hex(random_bytes(3));
+q('INSERT INTO users (username, display_name, password_hash, color, role, can_import)
+   VALUES (?, ?, ?, ?, ?, 1)',
+  [$lehrerName, 'Frau Meier', password_hash('lehrerin123', PASSWORD_DEFAULT),
+   '#4f7cff', 'teacher']);
+$lehrerId = (int) db()->lastInsertId();
+user_assign_to_school($lehrerId);
+ok('Eine Lehrkraft ist angelegt', $lehrerId > 0);
+ok('Mit der Rolle teacher',
+   qv('SELECT role FROM users WHERE id = ?', [$lehrerId]) === 'teacher');
+
+$res = teacherGet('');
+ok('Ohne Anmeldung kommt die Anmeldeseite',
+   $res['status'] === 200 && str_contains($res['body'], 'Bereich für Lehrkräfte'));
+
+$res = teacherLogin($lehrerName, 'garantiert-falsch');
+ok('Falsches Passwort wird abgewiesen',
+   $res['status'] === 401 && str_contains($res['body'], 'stimmt nicht'));
+
+// Ein Schuelerkonto darf hier nicht hinein - und bekommt dieselbe Meldung,
+// damit die Rolle eines Kontos nicht ausplauderbar wird.
+$res = teacherLogin($username, 'geheim123');
+ok('Ein Schuelerkonto kommt nicht in den Lehrkraft-Bereich', $res['status'] === 401);
+ok('Und erfaehrt nicht, woran es lag',
+   str_contains($res['body'], 'stimmt nicht')
+   && !str_contains($res['body'], 'keine Lehrkraft'));
+
+$res = teacherLogin($lehrerName, 'lehrerin123');
+ok('Die Lehrkraft kommt hinein',
+   $res['status'] === 200 && str_contains($res['body'], 'Meine Kurse'), "Status {$res['status']}");
+ok('Und sieht ihre Schule', str_contains($res['body'], 'Familie'));
+ok('Sowie die Kurse der Schule',
+   preg_match('/course\.php\?id=(\d+)/', $res['body'], $km) === 1);
+
+$kursId = (int) ($km[1] ?? 0);
+$res = teacherGet('course.php?id=' . $kursId);
+ok('Die Kursansicht öffnet sich', $res['status'] === 200);
+ok('Sie zeigt die Lerneinheiten', str_contains($res['body'], 'Lerneinheiten'));
+ok('Und wer im Kurs ist', str_contains($res['body'], 'Wer im Kurs ist'));
+
+// Ein Kurs einer anderen Schule geht niemanden etwas an.
+q("INSERT IGNORE INTO schools (name) VALUES ('Fremde Schule')");
+$fremdeSchule = (int) qv("SELECT id FROM schools WHERE name = 'Fremde Schule'");
+q('INSERT INTO courses (school_id, language_id, name) VALUES (?, ?, ?)',
+  [$fremdeSchule, $languageId, 'Fremder Kurs']);
+$fremderKurs = (int) db()->lastInsertId();
+
+$res = teacherGet('course.php?id=' . $fremderKurs);
+ok('Ein Kurs einer anderen Schule bleibt verschlossen',
+   !str_contains($res['body'], 'Fremder Kurs'), 'fremder Kurs war sichtbar');
+
+q('DELETE FROM courses WHERE id = ?', [$fremderKurs]);
+q('DELETE FROM schools WHERE id = ?', [$fremdeSchule]);
+
+/*
+ * Der Lehrkraft-Bereich fuehrt bewusst keine Schemaaenderungen aus: Mehrere
+ * Lehrkraefte koennten sonst gleichzeitig dasselbe ALTER anstossen. Er merkt
+ * aber, wenn etwas aussteht, und arbeitet dann nicht weiter.
+ */
+$boot = (string) file_get_contents(__DIR__ . '/../teacher/_boot.php');
+ok('Der Lehrkraft-Bereich migriert nicht selbst',
+   !preg_match('/^\s*ensure_schema\(\);/m', $boot));
+ok('Merkt aber, wenn das Schema aussteht',
+   str_contains($boot, 'schema_pending()'));
+
+$res = teacherRequest($base . '/teacher/index.php',
+    ['teacher_logout' => '1', 'csrf' => (function () use ($base): string {
+        $s = teacherRequest($base . '/teacher/index.php', null);
+        preg_match('/name="csrf" value="([a-f0-9]+)"/', $s['body'], $m);
+        return $m[1] ?? '';
+    })()]);
+ok('Abmelden führt zurück zur Anmeldung',
+   str_contains($res['body'], 'Bereich für Lehrkräfte'));
+
+q('DELETE FROM users WHERE id = ?', [$lehrerId]);
+@unlink($lehrerJar);
+
 section('Abmelden und Token-Widerruf');
 
 apiCall('auth', 'logout', []);

@@ -118,3 +118,72 @@ function user_assign_to_school(int $userId, ?int $schoolId = null): ?int
 
     return $schoolId;
 }
+
+/**
+ * Alle Kurse einer Schule, mit den Zahlen, die eine Lehrkraft sehen will.
+ *
+ * Eine Lehrkraft sieht die Kurse ihrer Schule, nicht nur die eigenen. Eine
+ * Schule ist eine Vertrauensgemeinschaft; dass eine Kollegin bei einer
+ * Vertretung an die Unterlagen kommt, ist der Normalfall und kein Einbruch.
+ * Wer einen Kurs leitet, steht als Mitglied mit der Rolle "teacher" darin.
+ */
+function courses_for_school(int $schoolId): array
+{
+    return qa(
+        "SELECT co.*,
+                c.name AS class_name,
+                l.name AS language_name, l.flag_emoji,
+                (SELECT COUNT(*) FROM course_members m
+                  WHERE m.course_id = co.id AND m.member_role = 'student') AS students,
+                (SELECT COUNT(*) FROM course_members m
+                  WHERE m.course_id = co.id AND m.member_role = 'teacher') AS teachers,
+                (SELECT COUNT(*) FROM units t WHERE t.course_id = co.id) AS units
+           FROM courses co
+           JOIN languages l ON l.id = co.language_id
+           LEFT JOIN classes c ON c.id = co.class_id
+          WHERE co.school_id = ?
+          ORDER BY c.name IS NULL, c.name, co.name",
+        [$schoolId],
+    );
+}
+
+/** Ein Kurs, aber nur wenn er zur Schule dieser Lehrkraft gehört. */
+function course_in_school(int $courseId, int $schoolId): ?array
+{
+    return q1(
+        'SELECT co.*, c.name AS class_name, l.name AS language_name, l.flag_emoji, l.code
+           FROM courses co
+           JOIN languages l ON l.id = co.language_id
+           LEFT JOIN classes c ON c.id = co.class_id
+          WHERE co.id = ? AND co.school_id = ?',
+        [$courseId, $schoolId],
+    );
+}
+
+/** Wer gehört zum Kurs? Lehrkräfte zuerst. */
+function course_members_list(int $courseId): array
+{
+    return qa(
+        "SELECT m.member_role, u.id, u.display_name, u.username, u.active
+           FROM course_members m
+           JOIN users u ON u.id = m.user_id
+          WHERE m.course_id = ?
+          ORDER BY m.member_role = 'student', u.display_name",
+        [$courseId],
+    );
+}
+
+/** Die Lerneinheiten eines Kurses samt Umfang und Freigabestand. */
+function course_units_list(int $courseId): array
+{
+    return qa(
+        'SELECT t.*,
+                (SELECT COUNT(*) FROM vocab v WHERE v.unit_id = t.id) AS vocab_count,
+                (SELECT COUNT(*) FROM vocab v
+                  WHERE v.unit_id = t.id AND v.position < t.released_position) AS released_count
+           FROM units t
+          WHERE t.course_id = ?
+          ORDER BY t.created_at DESC',
+        [$courseId],
+    );
+}

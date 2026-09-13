@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/courses.php';
+require_once __DIR__ . '/../lib/access.php';
 
 admin_require();
 
@@ -62,13 +63,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $display = trim((string) ($_POST['display_name'] ?? ''));
         $color   = (string) ($_POST['color'] ?? '');
         $active  = isset($_POST['active']) ? 1 : 0;
+        $role    = (string) ($_POST['role'] ?? ROLE_STUDENT);
+        $import  = isset($_POST['can_import']) ? 1 : 0;
+
+        if (!in_array($role, [ROLE_STUDENT, ROLE_TEACHER], true)) {
+            $role = ROLE_STUDENT;
+        }
 
         if ($display === '') {
             flash('Der Anzeigename darf nicht leer sein.', 'bad');
         } else {
             q(
-                'UPDATE users SET display_name = ?, color = ?, active = ? WHERE id = ?',
-                [mb_substr($display, 0, 64), valid_color($color), $active, $id],
+                'UPDATE users SET display_name = ?, color = ?, active = ?,
+                                  role = ?, can_import = ?
+                  WHERE id = ?',
+                [mb_substr($display, 0, 64), valid_color($color), $active,
+                 $role, $import, $id],
             );
             flash('Account aktualisiert.');
         }
@@ -181,9 +191,18 @@ flash_render();
             <input type="text" name="display_name" value="<?= h($u['display_name']) ?>"
                    maxlength="64" style="width:180px;margin:0">
             <?= color_picker($u['color']) ?>
+            <select name="role" style="width:auto;margin:0">
+                <option value="student"<?= $u['role'] === 'teacher' ? '' : ' selected' ?>>SchülerIn</option>
+                <option value="teacher"<?= $u['role'] === 'teacher' ? ' selected' : '' ?>>Lehrkraft</option>
+            </select>
             <label style="display:flex;align-items:center;gap:6px;margin:0;font-weight:500">
                 <input type="checkbox" name="active" value="1"<?= $u['active'] ? ' checked' : '' ?>
                        style="width:auto;min-height:auto;margin:0"> aktiv
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;margin:0;font-weight:500"
+                   title="Lektionen per Foto einlesen. Kostet Geld - Lehrkräfte dürfen es immer.">
+                <input type="checkbox" name="can_import" value="1"<?= $u['can_import'] ? ' checked' : '' ?>
+                       style="width:auto;min-height:auto;margin:0"> einlesen
             </label>
             <button class="btn secondary small" name="update" value="1">Speichern</button>
         </form>

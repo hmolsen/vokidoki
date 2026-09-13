@@ -24,6 +24,23 @@ require_once __DIR__ . '/db.php';
  * Datei, nicht mehr fünfzehn Aufrufstellen.
  */
 
+// ---------------------------------------------------------------- Rollen
+
+const ROLE_STUDENT = 'student';
+const ROLE_TEACHER = 'teacher';
+
+/** Die Rolle eines Kontos. Unbekanntes gilt als SchülerIn. */
+function user_role(array $user): string
+{
+    $rolle = (string) ($user['role'] ?? ROLE_STUDENT);
+    return in_array($rolle, [ROLE_STUDENT, ROLE_TEACHER], true) ? $rolle : ROLE_STUDENT;
+}
+
+function user_is_teacher(array $user): bool
+{
+    return user_role($user) === ROLE_TEACHER;
+}
+
 // ---------------------------------------------------------------- Fähigkeiten
 
 /** Lektionen per Foto einlesen. Kostet Geld, wird deshalb einzeln vergeben. */
@@ -32,13 +49,16 @@ const CAP_IMPORT = 'import';
 /**
  * Darf dieser Account das?
  *
- * Heute darf jeder alles - es gibt weder Rollen noch Freischaltungen. Die
- * Abfrage steht trotzdem schon an den richtigen Stellen, damit später nur
- * diese Funktion Bescheid wissen muss und nicht jeder Endpunkt.
+ * Lehrkräfte dürfen einlesen, weil es zu ihrer Arbeit gehört. Für einzelne
+ * Kinder lässt es sich im Admin freischalten - gedacht als spätere
+ * Zusatzleistung, deshalb steht es am Konto und nicht an der Rolle.
  */
 function user_can(array $user, string $cap): bool
 {
-    return $user !== [] && $cap !== '';
+    if ($cap === CAP_IMPORT) {
+        return user_is_teacher($user) || (int) ($user['can_import'] ?? 0) === 1;
+    }
+    return false;
 }
 
 // ---------------------------------------------------------------- Sprachen
