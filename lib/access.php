@@ -145,6 +145,96 @@ function load_unit_for_edit(array $user, int $unitId): ?array
     );
 }
 
+// ---------------------------------------------------------------- Freigabe
+
+/**
+ * "Alles" - für alle, die keine Freigabemarke kennen.
+ *
+ * Ein echter Wert und kein Sonderfall wie null: Dadurch trägt jede Abfrage
+ * dieselbe Bedingung, egal wer fragt. Eine Abfrage, die den Filter nur
+ * manchmal anhängt, ist eine Abfrage, die ihn irgendwann vergisst.
+ */
+const POSITION_ALL = PHP_INT_MAX;
+
+/**
+ * "Alles" als Wert, der in die Spalte passt.
+ *
+ * units.released_position ist INT UNSIGNED; PHP_INT_MAX passt dort nicht
+ * hinein. Beim Vergleichen ist das gleichgültig, beim Speichern nicht -
+ * deshalb zwei Konstanten statt einer, die an der falschen Stelle abgeschnitten
+ * würde.
+ */
+const RELEASED_ALL = 4294967295;
+
+/**
+ * Bis zu welcher vocab.position darf dieses Konto in diese Lerneinheit sehen?
+ *
+ * Das ist absichtlich kein Ja/Nein. Eine Lehrkraft liest eine ganze Unit ein
+ * und gibt sie portionsweise frei - "Unit 1 bis 'stressed'". Für die Klasse
+ * endet die Einheit dann dort, für die Lehrkraft nicht.
+ *
+ * Gemeint ist "so viele Vokabeln sind auf": Freigegeben ist, was
+ * `v.position < released_position` erfüllt. Damit ist 0 = noch nichts, und
+ * der Altbestand steht auf dem Höchstwert.
+ *
+ * Jede schülerseitige Vokabelabfrage muss das anwenden - einschliesslich des
+ * Ablenkerpools im Quiz, der sonst nicht freigegebene Wörter als falsche
+ * Antworten ausplaudert.
+ */
+function visible_position(array $user, array $unit): int
+{
+    if (user_is_teacher($user)) {
+        return POSITION_ALL;
+    }
+    return (int) ($unit['released_position'] ?? 0);
+}
+
+/**
+ * Dasselbe, wenn nur die Nummern zur Hand sind.
+ *
+ * Die Funktionen in lib/progress.php und lib/sentences.php bekommen Zahlen,
+ * keine Zeilen. Sie sollen die Marke trotzdem selbst ermitteln statt sie
+ * durchgereicht zu bekommen: Ein Parameter mit Vorgabewert wäre eine
+ * Einladung, ihn an einer Aufrufstelle zu vergessen - und das fiele erst
+ * auf, wenn ein Kind Vokabeln sieht, die es nicht sehen soll.
+ */
+/**
+ * Womit eine frisch eingelesene Lerneinheit anfängt.
+ *
+ * Wer für sich selbst einliest, gibt sich damit auch frei - ein Kind, das
+ * seine eigene Buchseite abfotografiert, soll danach üben können und nicht
+ * auf eine Freigabe warten, die niemand erteilen wird.
+ *
+ * Eine Lehrkraft liest dagegen für andere ein. Ihre Einheit fängt bei null
+ * an und wird portionsweise aufgemacht - das ist der Sinn der ganzen Etappe,
+ * und es spart die Sätze für alles, was noch nicht dran ist.
+ */
+function initial_released_position(array $user): int
+{
+    return user_is_teacher($user) ? 0 : RELEASED_ALL;
+}
+
+function visible_position_for(int $unitId, int $userId): int
+{
+    $row = q1(
+        'SELECT t.released_position, u.role
+           FROM units t
+           JOIN users u ON u.id = ?
+          WHERE t.id = ?',
+        [$userId, $unitId],
+    );
+
+    if ($row === null) {
+        // Kein Konto oder keine Einheit: nichts sehen ist die sichere Antwort.
+        return 0;
+    }
+
+    return visible_position(
+        ['role' => $row['role']],
+        ['released_position' => $row['released_position']],
+    );
+}
+
 // ---------------------------------------------------------------- Lückensätze
 
 /**

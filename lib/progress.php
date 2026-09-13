@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/access.php';
 
 /**
  * Lernlogik, gemeinsam für alle Übungsarten.
@@ -24,7 +25,13 @@ const KNOWN_THRESHOLD = 3;
 const MODE_CHOICE = 'mc';      // Multiple Choice
 const MODE_CLOZE  = 'cloze';   // Lückentext
 
-/** Fortschritt einer Lerneinheit für ein Kind als [gekonnt, gesamt]. */
+/**
+ * Fortschritt einer Lerneinheit für ein Kind als [gekonnt, gesamt].
+ *
+ * "Gesamt" heisst: was für dieses Kind freigegeben ist. Sonst stünde bei
+ * einer Klasse, die drei von zwanzig Vokabeln aufhat, dauerhaft "0 von 20" -
+ * und ein Balken, der sich nicht bewegen kann, entmutigt.
+ */
 function unit_progress(int $unitId, int $userId, string $mode): array
 {
     $row = q1(
@@ -33,8 +40,8 @@ function unit_progress(int $unitId, int $userId, string $mode): array
            FROM vocab v
            LEFT JOIN progress p
                   ON p.vocab_id = v.id AND p.mode = ? AND p.user_id = ?
-          WHERE v.unit_id = ?',
-        [$mode, $userId, $unitId],
+          WHERE v.unit_id = ? AND v.position < ?',
+        [$mode, $userId, $unitId, visible_position_for($unitId, $userId)],
     );
     return [(int) ($row['known'] ?? 0), (int) ($row['total'] ?? 0)];
 }
@@ -101,7 +108,14 @@ function record_answer(int $userId, int $vocabId, string $mode, bool $correct): 
     return ['streak' => $streak, 'just_learned' => $nowKnown];
 }
 
-/** Setzt den Lernstand einer Lerneinheit zurück - eine Übungsart oder alle. */
+/**
+ * Setzt den Lernstand einer Lerneinheit zurück - eine Übungsart oder alle.
+ *
+ * Ausdrücklich ohne Rücksicht auf die Freigabe, anders als alles darüber.
+ * Hier wird gelöscht, nicht gezeigt: Zurücknehmen einer Freigabe darf keine
+ * Lernstände zurücklassen, die beim nächsten Freigeben wieder auftauchen und
+ * einem Kind eine Serie gutschreiben, die es nicht mehr hat.
+ */
 function reset_unit_progress(int $unitId, int $userId, ?string $mode = null): void
 {
     if ($mode === null) {

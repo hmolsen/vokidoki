@@ -112,11 +112,11 @@ switch (action()) {
                FROM vocab v
                LEFT JOIN progress p
                       ON p.vocab_id = v.id AND p.mode = ? AND p.user_id = ?
-              WHERE v.unit_id = ? AND p.known_at IS NULL
+              WHERE v.unit_id = ? AND v.position < ? AND p.known_at IS NULL
                 AND EXISTS (SELECT 1 FROM sentences s WHERE s.vocab_id = v.id)
               ORDER BY RAND()
               LIMIT 1',
-            [MODE_CLOZE, $uid, (int) $unit['id']],
+            [MODE_CLOZE, $uid, (int) $unit['id'], visible_position($user, $unit)],
         );
 
         if ($card === null) {

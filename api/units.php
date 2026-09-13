@@ -24,31 +24,52 @@ switch (action()) {
          * sofern sie einen Lückensatz hat. Das gibt Teilerfolge wieder,
          * statt eine halb gelernte Vokabel als gar nicht gelernt zu führen.
          */
+        /*
+         * Die Freigabemarke als Textbaustein statt als Parameter.
+         *
+         * Hier wird je Lerneinheit gezaehlt, und die Marke steht in der Zeile
+         * der Einheit selbst - ein gebundener Wert koennte das nicht
+         * ausdruecken, es braucht den Spaltenvergleich auf die aeussere
+         * Zeile. Der Baustein kommt aus einem Ja/Nein und niemals aus einer
+         * Eingabe.
+         */
+        $frei = user_is_teacher($user) ? '' : ' AND v.position < u.released_position';
+
+        /*
+         * Und der Kurs statt u.user_id.
+         *
+         * Bis hierher stand hier noch "die Einheit gehoert einem Konto".
+         * In einer Familie faellt das nicht auf, weil jede Sprache genau
+         * einem Kind gehoert - in einer Klasse waere die Liste leer, obwohl
+         * die Einheit da ist.
+         */
         $rows = qa(
             "SELECT u.id, u.title, u.created_at,
-                    (SELECT COUNT(*) FROM vocab v WHERE v.unit_id = u.id) AS total,
+                    (SELECT COUNT(*) FROM vocab v
+                      WHERE v.unit_id = u.id{$frei}) AS total,
                     (SELECT COUNT(*) FROM vocab v
                        JOIN progress p ON p.vocab_id = v.id
                                       AND p.mode = 'mc' AND p.user_id = ?
-                      WHERE v.unit_id = u.id AND p.known_at IS NOT NULL) AS known,
+                      WHERE v.unit_id = u.id AND p.known_at IS NOT NULL{$frei}) AS known,
                     (SELECT COUNT(*) FROM vocab v
-                      WHERE v.unit_id = u.id
+                      WHERE v.unit_id = u.id{$frei}
                         AND EXISTS (SELECT 1 FROM sentences s WHERE s.vocab_id = v.id)
                     ) AS cloze_total,
                     (SELECT COUNT(*) FROM vocab v
                        JOIN progress p ON p.vocab_id = v.id
                                       AND p.mode = 'cloze' AND p.user_id = ?
-                      WHERE v.unit_id = u.id AND p.known_at IS NOT NULL) AS cloze_known,
+                      WHERE v.unit_id = u.id AND p.known_at IS NOT NULL{$frei}) AS cloze_known,
                     (SELECT COALESCE(SUM(p.correct_count), 0) FROM vocab v
                        JOIN progress p ON p.vocab_id = v.id AND p.user_id = ?
-                      WHERE v.unit_id = u.id) AS correct,
+                      WHERE v.unit_id = u.id{$frei}) AS correct,
                     (SELECT COALESCE(SUM(p.wrong_count), 0) FROM vocab v
                        JOIN progress p ON p.vocab_id = v.id AND p.user_id = ?
-                      WHERE v.unit_id = u.id) AS wrong
+                      WHERE v.unit_id = u.id{$frei}) AS wrong
                FROM units u
-              WHERE u.language_id = ? AND u.user_id = ?
+               JOIN course_members m ON m.course_id = u.course_id AND m.user_id = ?
+              WHERE u.language_id = ?
               ORDER BY u.created_at DESC",
-            [$uid, $uid, $uid, $uid, (int) $lang['id'], $uid],
+            [$uid, $uid, $uid, $uid, $uid, (int) $lang['id']],
         );
         foreach ($rows as &$r) {
             $r['id']          = (int) $r['id'];
@@ -95,9 +116,10 @@ switch (action()) {
                       ON pm.vocab_id = v.id AND pm.mode = ? AND pm.user_id = ?
                LEFT JOIN progress pc
                       ON pc.vocab_id = v.id AND pc.mode = ? AND pc.user_id = ?
-              WHERE v.unit_id = ?
+              WHERE v.unit_id = ? AND v.position < ?
               ORDER BY v.position, v.id",
-            [MODE_CHOICE, $uid, MODE_CLOZE, $uid, (int) $unit['id']],
+            [MODE_CHOICE, $uid, MODE_CLOZE, $uid, (int) $unit['id'],
+             visible_position($user, $unit)],
         );
 
         $liste = [];

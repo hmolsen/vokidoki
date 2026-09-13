@@ -120,6 +120,7 @@ echo "End-to-End-Test gegen $base\n";
 section('Testaccount vorbereiten');
 
 require_once __DIR__ . '/../lib/courses.php';
+require_once __DIR__ . '/../lib/access.php';
 
 /*
  * Ein Konto entsteht nie fuer sich allein - es gehoert zu einer Schule, und
@@ -156,14 +157,26 @@ function makeLanguage(int $userId, string $name, ?string $code = null): int
     return $langId;
 }
 
-/** Lerneinheit am Kurs der Sprache, wie api/import.php sie anlegt. */
+/**
+ * Lerneinheit am Kurs der Sprache, wie api/import.php sie anlegt.
+ *
+ * Einschliesslich der Freigabemarke: Wer fuer sich selbst einliest, gibt sich
+ * damit auch frei. Stuende hier stattdessen ein fester Wert, pruefte die Suite
+ * eine Regel, die es in der Anwendung nicht gibt - und genau dieser
+ * Unterschied faellt erst auf, wenn ein Kind vor einer leeren Lerneinheit
+ * sitzt.
+ */
 function makeUnit(int $userId, int $langId, string $title, string $extraCols = '',
                   array $extraVals = []): int
 {
     $kurs = course_for_language($langId);
-    q('INSERT INTO units (user_id, language_id, course_id, title' . $extraCols . ')
-       VALUES (?, ?, ?, ?' . str_repeat(', ?', count($extraVals)) . ')',
-      array_merge([$userId, $langId, $kurs === null ? null : (int) $kurs['id'], $title],
+    $user = q1('SELECT * FROM users WHERE id = ?', [$userId]);
+
+    q('INSERT INTO units (user_id, language_id, course_id, title, released_position'
+      . $extraCols . ')
+       VALUES (?, ?, ?, ?, ?' . str_repeat(', ?', count($extraVals)) . ')',
+      array_merge([$userId, $langId, $kurs === null ? null : (int) $kurs['id'], $title,
+                   initial_released_position($user ?? [])],
                   $extraVals));
     return (int) db()->lastInsertId();
 }
@@ -2124,6 +2137,163 @@ q('INSERT INTO password_words (kind, word, gender, active) VALUES (?, ?, NULL, 0
 ok('Ein abgeschaltetes Wort wird nicht mehr vergeben',
    !in_array($probe, array_column(password_words(PW_ADJECTIVE), 'word'), true));
 q('DELETE FROM password_words WHERE kind = ? AND word = ?', [PW_ADJECTIVE, $probe]);
+
+section('Gestufte Freigabe');
+
+/*
+ * Die Lehrkraft liest eine ganze Unit ein, gibt sie aber portionsweise frei -
+ * "Unit 1 bis 'stressed'". Das spart die Saetze fuer den Rest, und die kosten
+ * Geld.
+ *
+ * Die Marke steht als units.released_position und meint "so viele Vokabeln
+ * sind auf": Freigegeben ist, was v.position < released_position erfuellt.
+ * Der Altbestand steht auf dem Hoechstwert und bleibt damit vollstaendig
+ * sichtbar - haetten die Kinder ihre bisherigen Vokabeln ploetzlich nicht
+ * mehr, waere die Umstellung ein Rueckschritt.
+ *
+ * Diese Pruefungen beschreiben den Zielzustand und sind rot, bevor es ihn
+ * gibt. Der Punkt ist nicht, dass eine Abfrage weniger Zeilen liefert,
+ * sondern dass KEINE schuelerseitige Abfrage die Sperre vergisst - auch
+ * nicht der Ablenkerpool im Quiz, der sonst nicht freigegebene Woerter als
+ * falsche Antworten ausplaudert.
+ */
+
+require_once __DIR__ . '/../lib/access.php';
+
+/** Einen API-Aufruf mit einem anderen Cookie-Topf machen. */
+function apiAls(string $topf, callable $was): mixed
+{
+    global $jar;
+    $alt = $jar;
+    $jar = $topf;
+    try {
+        return $was();
+    } finally {
+        $jar = $alt;
+    }
+}
+
+$freiLang = makeLanguage($userId, 'Freigabisch');
+$freiUnit = makeUnit($userId, $freiLang, 'Unit mit Stufen');
+
+// Zehn Vokabeln, deren Reihenfolge feststeht - sonst laesst sich nicht sagen,
+// welche freigegeben sein muessten.
+$freiWoerter = ['alpha', 'bravo', 'charlie', 'delta', 'echo',
+                'foxtrot', 'golf', 'hotel', 'india', 'juliett'];
+foreach ($freiWoerter as $i => $w) {
+    q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, ?)',
+      [$freiUnit, $w, 'de-' . $w, $i]);
+}
+
+$freiUnitRow = q1('SELECT * FROM units WHERE id = ?', [$freiUnit]);
+$kindRow     = q1('SELECT * FROM users WHERE id = ?', [$userId]);
+
+ok('Eine frische Lerneinheit hat zehn Vokabeln',
+   (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$freiUnit]) === 10);
+
+// ---- Die Naht selbst, ohne HTTP.
+
+$freiUnitRow['released_position'] = 3;
+ok('Ein Kind sieht nur bis zur Freigabemarke',
+   visible_position($kindRow, $freiUnitRow) === 3,
+   (string) visible_position($kindRow, $freiUnitRow));
+
+$lehrRow = ['id' => 0, 'role' => ROLE_TEACHER];
+ok('Eine Lehrkraft sieht alles',
+   visible_position($lehrRow, $freiUnitRow) >= 10,
+   (string) visible_position($lehrRow, $freiUnitRow));
+
+$freiUnitRow['released_position'] = 0;
+ok('Ohne Freigabe sieht ein Kind nichts',
+   visible_position($kindRow, $freiUnitRow) === 0);
+
+// ---- Und jetzt durch die API, so wie das Kind es erlebt.
+
+q('UPDATE units SET released_position = 3 WHERE id = ?', [$freiUnit]);
+
+[$d, $s] = apiCall('units', 'get', null, ['id' => $freiUnit]);
+$sichtbar = array_column($d['vocab'] ?? [], 'term_foreign');
+sort($sichtbar);
+ok('Die Vokabelliste zeigt nur die freigegebenen',
+   $sichtbar === ['alpha', 'bravo', 'charlie'], implode(', ', $sichtbar));
+
+ok('Und der Fortschritt zaehlt auch nur die freigegebenen',
+   (int) ($d['modes']['mc']['total'] ?? -1) === 3,
+   var_export($d['modes']['mc']['total'] ?? null, true));
+
+[$d, $s] = apiCall('units', 'list', null, ['language_id' => $freiLang]);
+$dieseUnit = null;
+foreach ($d['units'] ?? [] as $u) {
+    if ((int) $u['id'] === $freiUnit) {
+        $dieseUnit = $u;
+    }
+}
+ok('Auch die Uebersicht rechnet mit der Freigabe',
+   $dieseUnit !== null && (int) $dieseUnit['total'] === 3,
+   var_export($dieseUnit['total'] ?? null, true));
+
+/*
+ * Der Ablenkerpool. Dreissig Zuege, damit ein Versehen nicht durchrutscht:
+ * Bei nur drei freigegebenen Woertern muss jede der vier Antworten aus
+ * diesen dreien stammen - oder aus einer anderen freigegebenen Einheit.
+ */
+$verraten = [];
+for ($i = 0; $i < 30; $i++) {
+    [$d, $s] = apiCall('quiz', 'next', null, ['unit_id' => $freiUnit]);
+    if (($d['done'] ?? false) || !isset($d['options'])) {
+        break;
+    }
+    foreach (array_merge($d['options'], [$d['question']]) as $wort) {
+        if (in_array($wort, array_slice($freiWoerter, 3), true)
+            || in_array($wort, array_map(static fn ($w) => 'de-' . $w,
+                                         array_slice($freiWoerter, 3)), true)) {
+            $verraten[$wort] = true;
+        }
+    }
+}
+ok('Das Quiz plaudert keine gesperrte Vokabel aus - auch nicht als Ablenker',
+   $verraten === [], implode(', ', array_keys($verraten)));
+
+// ---- Die Lehrkraft sieht dieselbe Einheit vollstaendig.
+
+$freiLehrer = 'freilehr_' . bin2hex(random_bytes(3));
+$freiSchule = (int) qv('SELECT school_id FROM users WHERE id = ?', [$userId]);
+q('INSERT INTO users (school_id, username, display_name, password_hash, color, role, can_import)
+   VALUES (?, ?, ?, ?, ?, ?, 1)',
+  [$freiSchule, $freiLehrer, 'Frau Freigabe',
+   password_hash('lehrerin123', PASSWORD_DEFAULT), '#4f7cff', ROLE_TEACHER]);
+$freiLehrerId = (int) db()->lastInsertId();
+course_add_member((int) course_for_language($freiLang)['id'], $freiLehrerId, 'teacher');
+
+$lehrJar = tempnam(sys_get_temp_dir(), 'vtfrei');
+$gesehen = apiAls($lehrJar, function () use ($freiLehrer, $freiUnit) {
+    apiCall('auth', 'login', ['username' => $freiLehrer, 'password' => 'lehrerin123']);
+    [$d, $s] = apiCall('units', 'get', null, ['id' => $freiUnit]);
+    return array_column($d['vocab'] ?? [], 'term_foreign');
+});
+ok('Die Lehrkraft sieht die ganze Einheit',
+   count($gesehen) === 10, count($gesehen) . ' von 10');
+
+// ---- Der Altbestand bleibt unberuehrt.
+
+q('UPDATE units SET released_position = 4294967295 WHERE id = ?', [$freiUnit]);
+[$d, $s] = apiCall('units', 'get', null, ['id' => $freiUnit]);
+ok('Eine Einheit auf dem Hoechstwert zeigt weiter alles',
+   count($d['vocab'] ?? []) === 10, count($d['vocab'] ?? []) . ' von 10');
+
+// ---- Nichts freigegeben heisst: nichts zu ueben.
+
+q('UPDATE units SET released_position = 0 WHERE id = ?', [$freiUnit]);
+[$d, $s] = apiCall('units', 'get', null, ['id' => $freiUnit]);
+ok('Ohne Freigabe ist die Vokabelliste leer', ($d['vocab'] ?? null) === []);
+
+[$d, $s] = apiCall('quiz', 'next', null, ['unit_id' => $freiUnit]);
+ok('Und das Quiz sagt das freundlich statt zu stolpern',
+   $s === 422 || ($d['done'] ?? false) === true,
+   'Status ' . $s . ' ' . var_export($d, true));
+
+q('DELETE FROM users WHERE id = ?', [$freiLehrerId]);
+@unlink($lehrJar);
 
 section('Kosten je Schule');
 

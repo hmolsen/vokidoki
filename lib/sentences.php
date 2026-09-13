@@ -536,9 +536,9 @@ function cloze_progress(int $unitId, int $userId): array
            FROM vocab v
            LEFT JOIN progress p
                   ON p.vocab_id = v.id AND p.mode = ? AND p.user_id = ?
-          WHERE v.unit_id = ?
+          WHERE v.unit_id = ? AND v.position < ?
             AND EXISTS (SELECT 1 FROM sentences s WHERE s.vocab_id = v.id)',
-        [MODE_CLOZE, $userId, $unitId],
+        [MODE_CLOZE, $userId, $unitId, visible_position_for($unitId, $userId)],
     );
     return [(int) ($row['known'] ?? 0), (int) ($row['total'] ?? 0)];
 }

@@ -14,6 +14,11 @@ const OPTION_COUNT = 4;
 switch (action()) {
     case 'next':
         $unit = view_unit($user, (int) ($_GET['unit_id'] ?? 0));
+
+        // Die Freigabemarke einmal holen und dann an jede Vokabelabfrage
+        // dieser Antwort haengen - auch an den Ablenkerpool.
+        $bis = visible_position($user, $unit);
+
         [$known, $total] = unit_progress((int) $unit['id'], $uid, QUIZ_MODE);
         $langName = (string) qv(
             'SELECT name FROM languages WHERE id = ?',
@@ -31,10 +36,10 @@ switch (action()) {
                FROM vocab v
                LEFT JOIN progress p
                       ON p.vocab_id = v.id AND p.mode = ? AND p.user_id = ?
-              WHERE v.unit_id = ? AND p.known_at IS NULL
+              WHERE v.unit_id = ? AND v.position < ? AND p.known_at IS NULL
               ORDER BY RAND()
               LIMIT 1",
-            [QUIZ_MODE, $uid, (int) $unit['id']],
+            [QUIZ_MODE, $uid, (int) $unit['id'], $bis],
         );
 
         if ($card === null) {
@@ -57,15 +62,31 @@ switch (action()) {
         $need    = OPTION_COUNT - 1;
         $options = [$answer];
 
+        /*
+         * Der Ablenkerpool ist die Stelle, an der die Freigabe am leisesten
+         * kaputtgeht.
+         *
+         * Ein nicht freigegebenes Wort taucht hier nicht als Frage auf,
+         * sondern als falsche Antwort - und verraet damit trotzdem, was in
+         * der naechsten Portion steht. Deshalb traegt auch dieser Pool die
+         * Marke; im zweiten Fall je Einheit, weil dort mehrere zusammenkommen.
+         *
+         * Und auch hier faellt u.user_id weg: Der Nachschub kommt aus den
+         * Einheiten desselben Kurses, nicht aus denen desselben Kontos.
+         */
         $pools = [
             ["SELECT DISTINCT {$col} AS t FROM vocab
-               WHERE unit_id = ? AND {$col} <> ? ORDER BY RAND() LIMIT {$need}",
-             [(int) $unit['id'], $answer]],
-            ["SELECT DISTINCT v.{$col} AS t FROM vocab v
-                JOIN units u ON u.id = v.unit_id
-               WHERE u.language_id = ? AND u.user_id = ? AND v.{$col} <> ?
+               WHERE unit_id = ? AND position < ? AND {$col} <> ?
                ORDER BY RAND() LIMIT {$need}",
-             [(int) $unit['language_id'], $uid, $answer]],
+             [(int) $unit['id'], $bis, $answer]],
+            ["SELECT DISTINCT v.{$col} AS t FROM vocab v
+                JOIN units u          ON u.id = v.unit_id
+                JOIN course_members m ON m.course_id = u.course_id AND m.user_id = ?
+               WHERE u.language_id = ? AND v.{$col} <> ?
+                 AND (? = 1 OR v.position < u.released_position)
+               ORDER BY RAND() LIMIT {$need}",
+             [$uid, (int) $unit['language_id'], $answer,
+              user_is_teacher($user) ? 1 : 0]],
         ];
 
         foreach ($pools as [$sql, $params]) {
