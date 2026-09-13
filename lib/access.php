@@ -43,11 +43,26 @@ function user_can(array $user, string $cap): bool
 
 // ---------------------------------------------------------------- Sprachen
 
+/*
+ * Ab hier entscheidet die Kurszugehörigkeit, nicht mehr das Feld user_id.
+ *
+ * Vorher lautete die Regel "die Lerneinheit gehört genau einem Kind". Jetzt
+ * lautet sie "wer im Kurs ist, darf". Für eine Familie ist das dieselbe
+ * Aussage - jedes Kind ist alleiniges Mitglied seiner eigenen Kurse -, und
+ * genau deshalb dürfen die Prüfungen sich nicht rühren. Täten sie es, wäre
+ * die Überführung des Bestandes unvollständig gewesen.
+ */
+
 /** Sprache zum Ansehen laden, oder null. */
 function load_language_for_view(array $user, int $languageId): ?array
 {
     return q1(
-        'SELECT * FROM languages WHERE id = ? AND user_id = ?',
+        'SELECT l.*
+           FROM languages l
+           JOIN courses co        ON co.language_id = l.id
+           JOIN course_members m  ON m.course_id = co.id
+          WHERE l.id = ? AND m.user_id = ?
+          LIMIT 1',
         [$languageId, (int) $user['id']],
     );
 }
@@ -57,11 +72,20 @@ function load_language_for_view(array $user, int $languageId): ?array
  *
  * "Ändern" schließt das Anlegen von Lerneinheiten darin ein - wer eine Lektion
  * in eine Sprache einliest, verändert deren Inhalt.
+ *
+ * Heute darf jedes Mitglied ändern. Sobald es Lehrkräfte gibt, wird hier auf
+ * member_role eingeschränkt - und weil alle Endpunkte durch diese Funktion
+ * gehen, ist das dann eine Zeile.
  */
 function load_language_for_edit(array $user, int $languageId): ?array
 {
     return q1(
-        'SELECT * FROM languages WHERE id = ? AND user_id = ?',
+        'SELECT l.*
+           FROM languages l
+           JOIN courses co        ON co.language_id = l.id
+           JOIN course_members m  ON m.course_id = co.id
+          WHERE l.id = ? AND m.user_id = ?
+          LIMIT 1',
         [$languageId, (int) $user['id']],
     );
 }
@@ -79,7 +103,11 @@ function load_language_for_edit(array $user, int $languageId): ?array
 function load_unit_for_view(array $user, int $unitId): ?array
 {
     return q1(
-        'SELECT * FROM units WHERE id = ? AND user_id = ?',
+        'SELECT t.*
+           FROM units t
+           JOIN course_members m ON m.course_id = t.course_id
+          WHERE t.id = ? AND m.user_id = ?
+          LIMIT 1',
         [$unitId, (int) $user['id']],
     );
 }
@@ -88,7 +116,11 @@ function load_unit_for_view(array $user, int $unitId): ?array
 function load_unit_for_edit(array $user, int $unitId): ?array
 {
     return q1(
-        'SELECT * FROM units WHERE id = ? AND user_id = ?',
+        'SELECT t.*
+           FROM units t
+           JOIN course_members m ON m.course_id = t.course_id
+          WHERE t.id = ? AND m.user_id = ?
+          LIMIT 1',
         [$unitId, (int) $user['id']],
     );
 }
@@ -107,9 +139,11 @@ function load_sentence_for_view(array $user, int $sentenceId): ?array
     return q1(
         'SELECT s.*
            FROM sentences s
-           JOIN vocab v ON v.id = s.vocab_id
-           JOIN units t ON t.id = v.unit_id
-          WHERE s.id = ? AND t.user_id = ?',
+           JOIN vocab v          ON v.id = s.vocab_id
+           JOIN units t          ON t.id = v.unit_id
+           JOIN course_members m ON m.course_id = t.course_id
+          WHERE s.id = ? AND m.user_id = ?
+          LIMIT 1',
         [$sentenceId, (int) $user['id']],
     );
 }

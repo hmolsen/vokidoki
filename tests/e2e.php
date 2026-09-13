@@ -119,14 +119,61 @@ echo "End-to-End-Test gegen $base\n";
 
 section('Testaccount vorbereiten');
 
+require_once __DIR__ . '/../lib/courses.php';
+
+/*
+ * Ein Konto entsteht nie fuer sich allein - es gehoert zu einer Schule, und
+ * ohne die kann es weder eine Sprache anlegen noch eine Lerneinheit sehen,
+ * weil beides am Kurs haengt. Die Vorbereitung bildet deshalb ab, was
+ * admin/users.php tut.
+ */
+function makeUser(string $username, string $display, string $color = '#e0559a'): int
+{
+    q('DELETE FROM users WHERE username = ?', [$username]);
+    q('INSERT INTO users (username, display_name, password_hash, color, can_import)
+       VALUES (?, ?, ?, ?, 1)',
+      [$username, $display, password_hash('geheim123', PASSWORD_DEFAULT), $color]);
+
+    $id = (int) db()->lastInsertId();
+    user_assign_to_school($id);
+    return $id;
+}
+
+/**
+ * Sprache samt Kurs, wie api/languages.php sie anlegt. Ohne Kurs waere die
+ * Sprache da, aber fuer ihren eigenen Urheber unsichtbar.
+ */
+function makeLanguage(int $userId, string $name, ?string $code = null): int
+{
+    q('INSERT INTO languages (user_id, school_id, name, flag_emoji, code)
+       VALUES (?, (SELECT school_id FROM users WHERE id = ?), ?, ?, ?)',
+      [$userId, $userId, $name, '', $code]);
+    $langId = (int) db()->lastInsertId();
+
+    $user = q1('SELECT * FROM users WHERE id = ?', [$userId]);
+    course_create_for_language(['id' => $langId, 'name' => $name], $user);
+
+    return $langId;
+}
+
+/** Lerneinheit am Kurs der Sprache, wie api/import.php sie anlegt. */
+function makeUnit(int $userId, int $langId, string $title, string $extraCols = '',
+                  array $extraVals = []): int
+{
+    $kurs = course_for_language($langId);
+    q('INSERT INTO units (user_id, language_id, course_id, title' . $extraCols . ')
+       VALUES (?, ?, ?, ?' . str_repeat(', ?', count($extraVals)) . ')',
+      array_merge([$userId, $langId, $kurs === null ? null : (int) $kurs['id'], $title],
+                  $extraVals));
+    return (int) db()->lastInsertId();
+}
+
 $username = 'e2e_test';
-q('DELETE FROM users WHERE username = ?', [$username]);
-q(
-    'INSERT INTO users (username, display_name, password_hash, color) VALUES (?, ?, ?, ?)',
-    [$username, 'Testkind', password_hash('geheim123', PASSWORD_DEFAULT), '#e0559a'],
-);
-$userId = (int) db()->lastInsertId();
+$userId   = makeUser($username, 'Testkind');
 ok('Account angelegt', $userId > 0);
+ok('Und gehoert zu einer Schule',
+   (int) qv('SELECT school_id FROM users WHERE id = ?', [$userId]) > 0,
+   'ohne Schule kann das Konto keinen Kurs haben');
 
 /** Holt das CSRF-Token aus einem gerenderten Admin-Formular. */
 function csrfFrom(string $html): string
@@ -207,10 +254,8 @@ $res = adminPost('users.php', ['create' => '1', 'username' => 'UNGUELTIG!',
 ok('Ungültiger Benutzername wird abgelehnt', str_contains($res['body'], 'Benutzername: 3-64'));
 
 // Fremddaten anlegen, gegen die der Zugriffsschutz gleich geprüft wird.
-q('INSERT INTO languages (user_id, name, flag_emoji) VALUES (?, ?, ?)', [$otherId, 'Fremdisch', '']);
-$otherLang = (int) db()->lastInsertId();
-q('INSERT INTO units (user_id, language_id, title) VALUES (?, ?, ?)', [$otherId, $otherLang, 'Fremde Unit']);
-$otherUnitId = (int) db()->lastInsertId();
+$otherLang   = makeLanguage($otherId, 'Fremdisch');
+$otherUnitId = makeUnit($otherId, $otherLang, 'Fremde Unit');
 
 // Vorherige Einstellung merken, damit der Test nichts dauerhaft verändert.
 $prevModel  = (string) qv("SELECT v FROM settings WHERE k = 'vision_model'");
@@ -782,20 +827,35 @@ $doppelt = (int) qv('SELECT COUNT(*) FROM (
                      ) d');
 ok('Und keine Sprache zwei', $doppelt === 0, $doppelt . ' doppelt');
 
-// Noch liest kein Code die neuen Tabellen - das ist der Sinn dieser Etappe.
-$liest = [];
-foreach (array_merge(glob(__DIR__ . '/../api/*.php') ?: [],
-                     glob(__DIR__ . '/../lib/*.php') ?: []) as $datei) {
-    if (basename($datei) === 'schema.php') {
-        continue;
-    }
-    if (preg_match('/FROM\s+(courses|course_members|classes|class_members|schools)\b/i',
-                   (string) file_get_contents($datei)) === 1) {
-        $liest[] = basename($datei);
-    }
-}
-ok('Noch liest kein Endpunkt die neuen Tabellen',
-   $liest === [], implode(', ', $liest));
+/*
+ * Der Zugriff haengt jetzt an der Kurszugehoerigkeit statt an units.user_id.
+ * Dass die uebrigen Pruefungen dieser Suite davon unberuehrt bleiben, ist der
+ * eigentliche Beweis: Die Ueberfuehrung des Bestandes war vollstaendig.
+ */
+$accessQuelle = (string) file_get_contents(__DIR__ . '/../lib/access.php');
+ok('Die Zugriffsregeln fragen die Kurszugehoerigkeit',
+   substr_count($accessQuelle, 'course_members') >= 4,
+   substr_count($accessQuelle, 'course_members') . ' Abfragen');
+ok('Und nicht mehr den Besitzer der Lerneinheit',
+   !str_contains($accessQuelle, 'FROM units WHERE id = ? AND user_id'));
+
+// Eine frisch angelegte Sprache bekommt sofort ihren Kurs - sonst waere sie
+// fuer ihren eigenen Urheber unsichtbar.
+[$neu, $code] = apiCall('languages', 'create', ['name' => 'Kursprobe', 'flag' => '']);
+ok('Eine neue Sprache laesst sich anlegen', $code === 200, json_encode($neu));
+$probeLang = (int) ($neu['id'] ?? 0);
+ok('Und bekommt sofort einen Kurs',
+   q1('SELECT id FROM courses WHERE language_id = ?', [$probeLang]) !== null);
+ok('Mit dem Urheber als Mitglied',
+   (int) qv('SELECT COUNT(*) FROM course_members m
+               JOIN courses co ON co.id = m.course_id
+              WHERE co.language_id = ? AND m.user_id = ?', [$probeLang, $userId]) === 1);
+
+[$sichtbar] = apiCall('units', 'list', null, ['language_id' => $probeLang]);
+ok('Und ist fuer ihren Urheber sichtbar', ($sichtbar['ok'] ?? false) === true,
+   json_encode($sichtbar));
+
+apiCall('languages', 'delete', ['id' => $probeLang]);
 
 /*
  * Zwei Wege fuehren zum Schema: schema.sql bei einer Neuinstallation und die
@@ -848,10 +908,7 @@ section('Lernstand gehört dem Kind');
  */
 require_once __DIR__ . '/../lib/progress.php';
 
-$zweitname = 'testzweit_' . bin2hex(random_bytes(3));
-q('INSERT INTO users (username, display_name, password_hash, color) VALUES (?, ?, ?, ?)',
-  [$zweitname, 'Zweitkind', password_hash('geheim123', PASSWORD_DEFAULT), '#4f7cff']);
-$zweitId = (int) db()->lastInsertId();
+$zweitId = makeUser('testzweit_' . bin2hex(random_bytes(3)), 'Zweitkind', '#4f7cff');
 ok('Ein zweites Kind ist angelegt', $zweitId > 0 && $zweitId !== $userId);
 
 $gemeinsam = (int) qv('SELECT id FROM vocab WHERE unit_id = ? ORDER BY position LIMIT 1', [$unitId]);
@@ -1138,9 +1195,7 @@ if (!$isFake) {
        (int) qv("SELECT COUNT(*) FROM ai_requests WHERE purpose = 'sentences'") === $vorher);
 
     // Eine Lerneinheit von vor dem Hintergrundlauf: dort greift 'prepare'.
-    q('INSERT INTO units (user_id, language_id, title) VALUES (?, ?, ?)',
-      [$userId, $languageId, 'Alter Bestand']);
-    $altUnit = (int) db()->lastInsertId();
+    $altUnit = makeUnit($userId, $languageId, 'Alter Bestand');
     q('INSERT INTO vocab (unit_id, term_foreign, term_native, word_type, position)
        VALUES (?, ?, ?, ?, 0)', [$altUnit, 'vieux', 'alt', 'adjektiv']);
 
@@ -1244,10 +1299,9 @@ ok('Alter Auftrag mit vorhandenen Saetzen gilt als fertig',
    ($st['cloze']['status'] ?? '') === 'done', json_encode($st['cloze'] ?? []));
 
 // Dasselbe ohne Saetze muss als gescheitert gelten.
-q('INSERT INTO units (user_id, language_id, title, sentences_status, sentences_started_at)
-   VALUES (?, ?, ?, ?, NOW() - INTERVAL 2 HOUR)',
-  [$userId, $languageId, 'Haengengeblieben', 'running']);
-$hUnit = (int) db()->lastInsertId();
+$hUnit = makeUnit($userId, $languageId, 'Haengengeblieben',
+                  ', sentences_status', ['running']);
+q('UPDATE units SET sentences_started_at = NOW() - INTERVAL 2 HOUR WHERE id = ?', [$hUnit]);
 q('INSERT INTO vocab (unit_id, term_foreign, term_native, word_type, position)
    VALUES (?, ?, ?, ?, 0)', [$hUnit, 'x', 'y', 'substantiv']);
 

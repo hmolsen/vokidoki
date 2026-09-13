@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
+require_once __DIR__ . '/../lib/courses.php';
 require_once __DIR__ . '/../lib/languages.php';
 
 require_api_request();
@@ -47,10 +48,27 @@ switch (action()) {
         }
 
         q(
-            'INSERT INTO languages (user_id, name, flag_emoji, code) VALUES (?, ?, ?, ?)',
-            [$uid, $name, $flag, $code],
+            'INSERT INTO languages (user_id, school_id, name, flag_emoji, code)
+             VALUES (?, ?, ?, ?, ?)',
+            [$uid, $user['school_id'] ?? null, $name, $flag, $code],
         );
-        json_out(['ok' => true, 'id' => (int) db()->lastInsertId()]);
+        $languageId = (int) db()->lastInsertId();
+
+        /*
+         * Zu jeder Sprache gehoert ein Kurs - daran haengen die Lerneinheiten
+         * und die Zugriffsregeln. Entstuende er nicht, waere die Sprache
+         * angelegt, aber fuer ihren eigenen Urheber unsichtbar.
+         */
+        $kurs = course_create_for_language(
+            ['id' => $languageId, 'name' => $name],
+            $user,
+        );
+        if ($kurs === null) {
+            q('DELETE FROM languages WHERE id = ?', [$languageId]);
+            json_fail('Dieses Konto gehoert zu keiner Schule.', 409);
+        }
+
+        json_out(['ok' => true, 'id' => $languageId]);
 
     case 'delete':
         require_post();

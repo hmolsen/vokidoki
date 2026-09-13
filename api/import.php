@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
+require_once __DIR__ . '/../lib/courses.php';
 require_once __DIR__ . '/../lib/punctuation.php';
 require_once __DIR__ . '/../lib/ai.php';
 require_once __DIR__ . '/../lib/wordtypes.php';
@@ -146,9 +147,13 @@ switch (action()) {
         $pdo = db();
         $pdo->beginTransaction();
         try {
+            // Die Lerneinheit gehoert dem Kurs. Ohne course_id waere sie
+            // nach der Umstellung der Zugriffsregeln fuer niemanden sichtbar.
+            $kurs = course_for_language((int) $lang['id']);
             q(
-                'INSERT INTO units (user_id, language_id, title) VALUES (?, ?, ?)',
-                [$uid, (int) $lang['id'], $title],
+                'INSERT INTO units (user_id, language_id, course_id, title)
+                 VALUES (?, ?, ?, ?)',
+                [$uid, (int) $lang['id'], $kurs === null ? null : (int) $kurs['id'], $title],
             );
             $unitId = (int) $pdo->lastInsertId();
 

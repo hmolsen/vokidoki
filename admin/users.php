@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
+require_once __DIR__ . '/../lib/courses.php';
 
 admin_require();
 
@@ -45,6 +46,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 [$username, mb_substr($display, 0, 64), password_hash($password, PASSWORD_DEFAULT),
                  valid_color($color)],
             );
+
+            // Ohne Schule kann das Konto weder eine Sprache anlegen noch eine
+            // Lerneinheit sehen - beides haengt am Kurs. Solange es nur eine
+            // Schule gibt, faellt die Wahl leicht; mit dem Lehrkraft-Bereich
+            // wird sie hier zur Auswahl.
+            user_assign_to_school((int) db()->lastInsertId());
             flash('Account "' . $display . '" angelegt.');
         }
         redirect('users.php');
