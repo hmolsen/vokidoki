@@ -26,7 +26,24 @@ switch (action()) {
         );
 
         if ($total === 0) {
-            json_fail('Diese Lerneinheit enthält noch keine Vokabeln.', 422);
+            /*
+             * Zwei verschiedene Lagen, die sich fuer das Kind gleich anfuehlen
+             * und verschieden erklaert gehoeren: Die Lerneinheit ist wirklich
+             * leer, oder sie ist nur noch nicht aufgemacht. "Enthaelt keine
+             * Vokabeln" waere im zweiten Fall schlicht gelogen, und das Kind
+             * suchte den Fehler bei sich.
+             */
+            $vorhanden = (int) qv(
+                'SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [(int) $unit['id']],
+            );
+
+            json_fail(
+                $vorhanden > 0
+                    ? 'Diese Lektion ist noch nicht freigegeben. '
+                      . 'Deine Lehrkraft macht sie auf, wenn sie dran ist.'
+                    : 'Diese Lerneinheit enthält noch keine Vokabeln.',
+                422,
+            );
         }
 
         // Noch offene Vokabel ziehen. ORDER BY RAND() ist hier unkritisch -

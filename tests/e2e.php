@@ -2304,8 +2304,23 @@ ok('Ohne Freigabe ist die Vokabelliste leer', ($d['vocab'] ?? null) === []);
 
 [$d, $s] = apiCall('quiz', 'next', null, ['unit_id' => $freiUnit]);
 ok('Und das Quiz sagt das freundlich statt zu stolpern',
-   $s === 422 || ($d['done'] ?? false) === true,
-   'Status ' . $s . ' ' . var_export($d, true));
+   $s === 422, 'Status ' . $s . ' ' . var_export($d, true));
+
+/*
+ * Und es sagt die Wahrheit. "Enthaelt keine Vokabeln" waere hier gelogen -
+ * die Einheit hat zehn, sie sind nur noch nicht dran. Ein Kind, dem man das
+ * falsch erklaert, sucht den Fehler bei sich.
+ */
+ok('Und nennt den richtigen Grund - nicht freigegeben, nicht leer',
+   str_contains((string) ($d['error'] ?? ''), 'freigegeben'),
+   (string) ($d['error'] ?? ''));
+
+$leereUnit = makeUnit($userId, $freiLang, 'Wirklich leer');
+[$d, $s] = apiCall('quiz', 'next', null, ['unit_id' => $leereUnit]);
+ok('Eine wirklich leere Einheit bekommt weiter ihre eigene Meldung',
+   str_contains((string) ($d['error'] ?? ''), 'keine Vokabeln'),
+   (string) ($d['error'] ?? ''));
+q('DELETE FROM units WHERE id = ?', [$leereUnit]);
 
 // ---- Was ueberhaupt Saetze bekommt, haengt an der Freigabe.
 

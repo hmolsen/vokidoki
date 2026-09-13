@@ -416,7 +416,7 @@ php -S 127.0.0.1:8125 tests/fake-anthropic.php &
 
 php tests/sentences.php  # 136 Prüfungen, braucht nichts davon
 php tests/keyvault.php   # 15 Prüfungen
-php tests/ai.php         # 58 Prüfungen
+php tests/ai.php         # 59 Prüfungen
 ```
 
 `tests/keyvault.php` prüft Abruf und Format, Zeilenumbrüche, leere Antwort, HTML
@@ -446,6 +446,6 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 678 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 715 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
