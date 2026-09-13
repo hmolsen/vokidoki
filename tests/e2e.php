@@ -2125,6 +2125,101 @@ ok('Ein abgeschaltetes Wort wird nicht mehr vergeben',
    !in_array($probe, array_column(password_words(PW_ADJECTIVE), 'word'), true));
 q('DELETE FROM password_words WHERE kind = ? AND word = ?', [PW_ADJECTIVE, $probe]);
 
+section('Kosten je Schule');
+
+require_once __DIR__ . '/../lib/cost.php';
+
+/*
+ * Der teuerste bekannte Preis statt null.
+ *
+ * Anthropic benennt Modelle um. Frueher kam fuer einen unbekannten Namen
+ * still 0.00 heraus - ab diesem Tag kostet scheinbar alles nichts, kein
+ * Deckel greift, und auffallen wuerde es erst auf der Rechnung.
+ */
+$bekannt = array_key_first(price_table());
+ok('Ein bekanntes Modell wird nach Liste berechnet',
+   cost_for((string) $bekannt, 1_000_000, 0) > 0);
+ok('Ein unbekanntes Modell kostet nicht plötzlich nichts',
+   cost_for('claude-gibt-es-nicht-9', 1_000_000, 0) > 0,
+   'wieder 0.00 - der Deckel griffe nicht mehr');
+ok('Und zwar mindestens so viel wie das teuerste bekannte',
+   cost_for('claude-gibt-es-nicht-9', 1_000_000, 1_000_000)
+   >= max(array_map(
+       static fn ($m) => cost_for((string) $m, 1_000_000, 1_000_000),
+       array_keys(price_table()))));
+
+// Auch ohne Preisliste darf nichts umsonst sein.
+$preiseVorher = setting('prices_json', '');
+setting_set('prices_json', '{}');
+settings_reset_cache();
+ok('Selbst mit leerer Preisliste kostet ein Aufruf etwas',
+   cost_for('irgendwas', 1_000_000, 0) > 0);
+setting_set('prices_json', $preiseVorher);
+settings_reset_cache();
+
+// Eine Kostenzeile bekommt die Schule ihres Kontos, ohne dass der Aufrufer
+// daran denken muss.
+$kostenUser = makeUser('e2e_kosten', 'Kostenkind');
+$kostenSchule = (int) qv('SELECT school_id FROM users WHERE id = ?', [$kostenUser]);
+
+$vorher = cost_this_month($kostenSchule);
+ai_log([
+    'user_id'       => $kostenUser,
+    'user_label'    => 'Kostenkind',
+    'model'         => (string) $bekannt,
+    'purpose'       => 'test',
+    'input_tokens'  => 1_000_000,
+    'output_tokens' => 0,
+]);
+
+$zeile = q1('SELECT * FROM ai_requests WHERE user_id = ? ORDER BY id DESC LIMIT 1',
+            [$kostenUser]);
+ok('Eine Kostenzeile merkt sich die Schule von selbst',
+   (int) ($zeile['school_id'] ?? 0) === $kostenSchule,
+   'school_id = ' . var_export($zeile['school_id'] ?? null, true));
+ok('Und taucht in der Auswertung dieser Schule auf',
+   cost_this_month($kostenSchule) > $vorher);
+
+$proSchule = cost_this_month_by_school();
+ok('Die Auswertung führt jede Schule auf',
+   count($proSchule) >= 1
+   && array_filter($proSchule, static fn ($s) => (int) $s['id'] === $kostenSchule) !== []);
+
+/*
+ * Der eigene Deckel einer Schule. Er wird auf einen Cent gesetzt - die
+ * gerade gebuchte Zeile ueberschreitet ihn sicher.
+ */
+$deckelVorher = qv('SELECT monthly_cost_cap_usd FROM schools WHERE id = ?', [$kostenSchule]);
+q('UPDATE schools SET monthly_cost_cap_usd = 0.01 WHERE id = ?', [$kostenSchule]);
+$grund = budget_block_reason($kostenUser);
+ok('Ein aufgebrauchtes Schulbudget hält die Bilderkennung an',
+   $grund !== null && str_contains($grund, 'Schule'), $grund ?? '(kein Grund)');
+
+q('UPDATE schools SET monthly_cost_cap_usd = 100000 WHERE id = ?', [$kostenSchule]);
+$capVorher = setting('monthly_cost_cap_usd', '10.00');
+setting_set('monthly_cost_cap_usd', '0');
+settings_reset_cache();
+ok('Mit reichlich Budget läuft sie wieder', budget_block_reason($kostenUser) === null,
+   budget_block_reason($kostenUser) ?? '');
+
+/*
+ * Und die Gegenprobe: Der Deckel des Betreibers gilt auch fuer eine Schule,
+ * die grosszuegig eingestellt ist - er bekommt die Rechnung.
+ */
+setting_set('monthly_cost_cap_usd', '0.0001');
+settings_reset_cache();
+$grund = budget_block_reason($kostenUser);
+ok('Der Deckel des Betreibers lässt sich nicht umgehen',
+   $grund !== null && str_contains($grund, 'Betreiber'), $grund ?? '(kein Grund)');
+
+setting_set('monthly_cost_cap_usd', $capVorher);
+settings_reset_cache();
+q('UPDATE schools SET monthly_cost_cap_usd = ' . ($deckelVorher === null ? 'NULL' : '?')
+  . ' WHERE id = ?',
+  $deckelVorher === null ? [$kostenSchule] : [$deckelVorher, $kostenSchule]);
+q('DELETE FROM ai_requests WHERE user_id = ?', [$kostenUser]);
+q('DELETE FROM users WHERE id = ?', [$kostenUser]);
+
 section('QR-Code');
 
 require_once __DIR__ . '/../lib/qr.php';

@@ -437,6 +437,21 @@ function schema_migrations(): array
          * koennen soll, das in ihrer Klasse zum Spitznamen wird - ohne dass
          * dafuer jemand die Anwendung neu hochlaedt.
          */
+        /*
+         * Die vorhandenen Kostenzeilen der Schule zuordnen, zu der ihr Konto
+         * gehoert. Ohne das steht die Familie in der Auswertung bei null,
+         * obwohl die Summe stimmt - und der Unterschied faellt genau dann auf,
+         * wenn man ihm nicht mehr nachgehen kann.
+         */
+        'family.ai_requests' => [
+            static fn (): bool => column_exists('ai_requests', 'school_id')
+                && !schema_was_applied('family.ai_requests'),
+            'UPDATE ai_requests a
+               JOIN users u ON u.id = a.user_id
+                SET a.school_id = u.school_id
+              WHERE a.school_id IS NULL AND u.school_id IS NOT NULL',
+        ],
+
         'password_words.table' => [
             static fn (): bool => !table_exists('password_words'),
             "CREATE TABLE password_words (

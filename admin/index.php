@@ -121,6 +121,49 @@ flash_render();
 </div>
 <p class="tiny muted">Höchster Tageswert: <?= $eur($maxDaily) ?></p>
 
+<h2>Nach Schule (dieser Monat)</h2>
+<?php $proSchule = cost_this_month_by_school(); ?>
+<?php if ($proSchule === []): ?>
+    <p class="muted">Es gibt noch keine Schule.</p>
+<?php else: ?>
+<table class="data">
+    <tr><th>Schule</th><th class="num">Anfragen</th><th class="num">Kosten</th>
+        <th class="num">Eigenes Limit</th><th></th></tr>
+    <?php foreach ($proSchule as $s): ?>
+        <?php
+        $eigen  = $s['monthly_cost_cap_usd'] === null ? null : (float) $s['monthly_cost_cap_usd'];
+        $kosten = (float) $s['cost_usd'];
+        $voll   = $eigen !== null && $eigen > 0 && $kosten >= $eigen;
+        ?>
+        <tr<?= $voll ? ' class="dim"' : '' ?>>
+            <td><?= h($s['name']) ?></td>
+            <td class="num"><?= (int) $s['requests'] ?></td>
+            <td class="num"><?= $eur($kosten) ?></td>
+            <td class="num">
+                <?= $eigen === null ? '<span class="muted">&ndash;</span>' : $usd($eigen) ?>
+            </td>
+            <td class="tiny">
+                <?= $voll ? '<strong>aufgebraucht</strong>' : '' ?>
+            </td>
+        </tr>
+    <?php endforeach; ?>
+</table>
+<p class="tiny muted">
+    Ohne eigenes Limit gilt nur das Monatsbudget des Betreibers. Ein eigenes
+    Limit begrenzt zusätzlich, was eine einzelne Schule verbrauchen kann -
+    damit eine verrechnete Schule nicht die anderen mit aussperrt.
+</p>
+<?php endif; ?>
+
+<?php $ohnePreis = models_without_price(); ?>
+<?php if ($ohnePreis !== []): ?>
+<div class="notice bad">
+    <strong>Kein Preis hinterlegt für:</strong> <?= h(implode(', ', $ohnePreis)) ?>.
+    Gerechnet wird solange mit dem teuersten bekannten Preis - die Beträge oben
+    sind also zu hoch, nicht zu niedrig. Bitte unter Einstellungen ergänzen.
+</div>
+<?php endif; ?>
+
 <h2>Nach Kind (dieser Monat)</h2>
 <?php if ($perUser === []): ?>
     <p class="muted">In diesem Monat gab es noch keine Anfragen.</p>

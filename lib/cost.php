@@ -11,8 +11,25 @@ require_once __DIR__ . '/settings.php';
 function cost_for(string $model, int $in, int $out, int $cacheRead = 0, int $cacheWrite = 0): float
 {
     $p = price_table()[$model] ?? null;
+
     if (!is_array($p)) {
-        return 0.0;
+        /*
+         * Unbekanntes Modell - und das passiert, weil Anthropic Modelle
+         * umbenennt und neue herausbringt.
+         *
+         * Frueher kam hier 0.00 heraus. Das ist die gefaehrlichste aller
+         * Antworten: Ab dem Tag der Umbenennung kostet scheinbar alles
+         * nichts, kein Deckel greift mehr, und auffallen wuerde es erst auf
+         * der Rechnung. Stattdessen wird der teuerste bekannte Preis
+         * angesetzt. Dann ist die Schaetzung zu hoch statt zu niedrig, der
+         * Deckel greift zu frueh statt gar nicht, und jemand merkt es.
+         */
+        $p = price_table_worst();
+        error_log(sprintf(
+            '[vokabeltrainer] Unbekanntes Modell "%s" - gerechnet wird mit dem '
+            . 'teuersten bekannten Preis. Bitte im Admin die Preisliste ergaenzen.',
+            $model,
+        ));
     }
 
     return (
@@ -23,18 +40,90 @@ function cost_for(string $model, int $in, int $out, int $cacheRead = 0, int $cac
     ) / 1_000_000;
 }
 
+/**
+ * Der jeweils hoechste bekannte Preis je Token-Art.
+ *
+ * Nicht die Preise eines bestimmten Modells, sondern spaltenweise das
+ * Maximum - so ist die Schaetzung fuer ein unbekanntes Modell sicher zu hoch
+ * und nicht zufaellig zu niedrig, weil das teuerste Modell gerade bei den
+ * Cache-Preisen guenstig ist.
+ */
+function price_table_worst(): array
+{
+    $schlimmst = ['in' => 0.0, 'out' => 0.0, 'cache_read' => 0.0, 'cache_write' => 0.0];
+
+    foreach (price_table() as $p) {
+        if (!is_array($p)) {
+            continue;
+        }
+        foreach ($schlimmst as $art => $bisher) {
+            $schlimmst[$art] = max($bisher, (float) ($p[$art] ?? 0));
+        }
+    }
+
+    // Eine leere Preisliste darf nicht dazu fuehren, dass wieder alles
+    // nichts kostet. Dann lieber ein grob geschaetzter Wert.
+    if (array_sum($schlimmst) <= 0) {
+        return ['in' => 15.0, 'out' => 75.0, 'cache_read' => 1.5, 'cache_write' => 18.75];
+    }
+
+    return $schlimmst;
+}
+
+/** Modelle, die im Protokoll vorkommen, aber keinen Preis haben. */
+function models_without_price(): array
+{
+    $bekannt = array_keys(price_table());
+
+    $gesehen = array_column(qa(
+        "SELECT DISTINCT model FROM ai_requests
+          WHERE created_at >= NOW() - INTERVAL 90 DAY"
+    ), 'model');
+
+    return array_values(array_diff($gesehen, $bekannt));
+}
+
 function usd_to_eur(float $usd): float
 {
     return $usd * (float) setting('usd_eur', '0.92');
 }
 
-/** Bisherige Kosten des laufenden Kalendermonats in USD. */
-function cost_this_month(): float
+/**
+ * Bisherige Kosten des laufenden Kalendermonats in USD.
+ *
+ * Ohne Schule die Summe ueber alles - das ist der Blick des Betreibers, der
+ * die Rechnung bezahlt. Mit Schule nur deren Anteil.
+ */
+function cost_this_month(?int $schoolId = null): float
 {
+    if ($schoolId === null) {
+        return (float) (qv(
+            "SELECT COALESCE(SUM(cost_usd), 0) FROM ai_requests
+              WHERE created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')"
+        ) ?? 0);
+    }
+
     return (float) (qv(
         "SELECT COALESCE(SUM(cost_usd), 0) FROM ai_requests
-          WHERE created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')"
+          WHERE school_id = ? AND created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')",
+        [$schoolId],
     ) ?? 0);
+}
+
+/** Kosten des laufenden Monats je Schule, teuerste zuerst. */
+function cost_this_month_by_school(): array
+{
+    return qa(
+        "SELECT s.id, s.name, s.monthly_cost_cap_usd,
+                COALESCE(SUM(a.cost_usd), 0) AS cost_usd,
+                COUNT(a.id) AS requests
+           FROM schools s
+           LEFT JOIN ai_requests a
+                  ON a.school_id = s.id
+                 AND a.created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')
+          GROUP BY s.id, s.name, s.monthly_cost_cap_usd
+          ORDER BY cost_usd DESC, s.name"
+    );
 }
 
 /**
@@ -43,10 +132,29 @@ function cost_this_month(): float
  */
 function budget_block_reason(int $userId): ?string
 {
+    /*
+     * Zwei Deckel, und beide muessen halten.
+     *
+     * Der eine gehoert der Schule: Sie soll sich verrechnen koennen, ohne
+     * dass es die anderen trifft. Der andere gehoert dem Betreiber und faengt
+     * alles zusammen ab - er bekommt die Rechnung, und eine Schule ohne
+     * eigenen Deckel darf ihn nicht umgehen.
+     */
+    $schoolId = (int) (qv('SELECT school_id FROM users WHERE id = ?', [$userId]) ?? 0);
+
+    if ($schoolId > 0) {
+        $eigener = qv('SELECT monthly_cost_cap_usd FROM schools WHERE id = ?', [$schoolId]);
+        if ($eigener !== null && (float) $eigener > 0
+            && cost_this_month($schoolId) >= (float) $eigener) {
+            return 'Das Monatsbudget dieser Schule für die Bilderkennung ist '
+                 . 'aufgebraucht. Die Schulleitung kann es anheben lassen.';
+        }
+    }
+
     $cap = (float) setting('monthly_cost_cap_usd', '10.00');
     if ($cap > 0 && cost_this_month() >= $cap) {
         return 'Das Monatsbudget für die Bilderkennung ist aufgebraucht. '
-             . 'Papa kann es im Admin-Bereich erhöhen.';
+             . 'Der Betreiber kann es im Admin-Bereich erhöhen.';
     }
 
     $perHour = (int) setting('imports_per_hour', '20');
@@ -75,14 +183,27 @@ function ai_log(array $row): float
         (int) ($row['cache_write_tokens'] ?? 0),
     );
 
+    /*
+     * Die Schule wird hier nachgeschlagen und nicht vom Aufrufer erwartet.
+     * Jede Aufrufstelle daran zu erinnern hiesse, dass eine es vergisst - und
+     * fehlt sie einmal, laesst sich hinterher nicht mehr feststellen, wessen
+     * Klasse die Rechnung getrieben hat. Der Weg ueber die Lerneinheit hilft
+     * dann nicht: Die kann geloescht sein.
+     */
+    $schoolId = $row['school_id'] ?? null;
+    if ($schoolId === null && ($row['user_id'] ?? null) !== null) {
+        $schoolId = qv('SELECT school_id FROM users WHERE id = ?', [(int) $row['user_id']]);
+    }
+
     q(
         'INSERT INTO ai_requests
-            (user_id, user_label, model, purpose, input_tokens, output_tokens,
+            (user_id, school_id, user_label, model, purpose, input_tokens, output_tokens,
              cache_read_tokens, cache_write_tokens, image_count, entry_count,
              cost_usd, duration_ms, status, error)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
         [
             $row['user_id'] ?? null,
+            $schoolId === null ? null : (int) $schoolId,
             (string) ($row['user_label'] ?? ''),
             (string) $row['model'],
             (string) ($row['purpose'] ?? 'vocab_ocr'),
