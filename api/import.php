@@ -173,8 +173,10 @@ switch (action()) {
 
         // Vor der Antwort auf "läuft" setzen: Das Kind landet gleich in der
         // Lerneinheit und soll dort sofort den Spinner sehen, nicht erst beim
-        // zweiten Abfragen.
-        sentence_status_set($unitId, SENTENCE_RUNNING);
+        // zweiten Abfragen. Bei einer frisch angelegten Einheit kann der
+        // Anspruch nicht scheitern - der Aufruf hält die Reihenfolge trotzdem
+        // ein, damit hier nicht als Einziges am Riegel vorbeigearbeitet wird.
+        sentence_claim($unitId);
 
         // Antwort sofort raus, dann im selben Vorgang die Lückensätze bauen.
         // Das Kind sieht seine Lerneinheit, ohne zwanzig Sekunden zu warten;

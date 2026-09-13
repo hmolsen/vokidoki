@@ -36,6 +36,21 @@ $jar     = tempnam(sys_get_temp_dir(), 'vtjar');
 $passed  = 0;
 $failed  = 0;
 
+/*
+ * Wo das Kostenprotokoll beim Start stand.
+ *
+ * Der Lauf erzeugt Eintraege gegen den Simulator - kostenlos in echtem Geld,
+ * aber sie zaehlen auf das Monatsbudget. Bisher blieben sie liegen: Beim
+ * Loeschen eines Testkontos setzt der Fremdschluessel user_id auf NULL,
+ * die Zeile bleibt. Nach genug Laeufen war das Budget aufgebraucht, und die
+ * Suite scheiterte an sich selbst statt an einem Fehler.
+ *
+ * Am Ende werden deshalb genau die Waisen oberhalb dieser Marke geloescht.
+ * Eine Zeile eines echten Kindes ueberlebt: Dessen Konto wird nicht
+ * geloescht, also bleibt user_id gesetzt.
+ */
+$aiMarke = (int) (qv('SELECT COALESCE(MAX(id), 0) FROM ai_requests') ?? 0);
+
 function ok(string $label, bool $condition, string $detail = ''): void
 {
     global $passed, $failed;
@@ -2435,6 +2450,76 @@ freiPost($base . '/teacher/unit.php?id=' . $fremdUnit, [
 ok('Eine Lerneinheit einer anderen Schule laesst sich nicht freigeben',
    (int) qv('SELECT released_position FROM units WHERE id = ?', [$fremdUnit]) === 0);
 
+// ---- Nur ein Satzlauf, auch wenn eine ganze Klasse gleichzeitig draufsieht.
+
+/*
+ * Bei einer Familie feuert das nie: Ein Kind stoesst die Satzerzeugung an,
+ * fertig. Bei einer Klasse sitzen 28 Kinder in derselben Minute davor, alle
+ * sehen "noch keine Saetze" - und ohne Riegel starten alle denselben Lauf.
+ * Achtundzwanzig bezahlte Anfragen fuer ein Ergebnis.
+ */
+q('UPDATE units SET sentences_status = NULL, sentences_started_at = NULL WHERE id = ?',
+  [$freiUnit]);
+
+$ansprueche = 0;
+for ($i = 0; $i < 28; $i++) {
+    if (sentence_claim($freiUnit)) {
+        $ansprueche++;
+    }
+}
+ok('Von achtundzwanzig Anlaeufen kommt genau einer durch',
+   $ansprueche === 1, $ansprueche . ' statt 1');
+
+/*
+ * Und eine Pruefung am Quelltext, die unbequem ist, aber ehrlich.
+ *
+ * Die Schleife darueber laeuft nacheinander. Sie zeigt den Zustandsautomaten,
+ * aber NICHT das Wettrennen: Ein Pruefen-dann-Setzen besteht sie genauso,
+ * weil zwischen den Durchlaeufen nichts dazwischenkommen kann. Ein echtes
+ * Wettrennen liesse sich hier auch nicht herstellen - der eingebaute
+ * PHP-Server arbeitet Anfragen einzeln ab, gleichzeitige Aufrufe wuerden
+ * ohnehin hintereinander laufen.
+ *
+ * Was sich pruefen laesst, ist die Form: Die Entscheidung muss in einem
+ * einzigen UPDATE mit Bedingung stecken und darf nicht aus einem gelesenen
+ * Wert in PHP folgen. Das ist der ganze Unterschied.
+ */
+$quelle = (string) file_get_contents(__DIR__ . '/../lib/sentences.php');
+preg_match('/function sentence_claim\(.*?\n\}/s', $quelle, $qm);
+$rumpf = $qm[0] ?? '';
+
+ok('Der Anspruch faellt in einem einzigen UPDATE mit Bedingung',
+   str_contains($rumpf, 'UPDATE units')
+   && str_contains($rumpf, 'rowCount()')
+   && preg_match('/\bWHERE\b.*\bsentences_status\b/s', $rumpf) === 1,
+   'sentence_claim() entscheidet nicht in der Datenbank');
+ok('Und nicht aus einem vorher gelesenen Wert',
+   !preg_match('/\bq1\s*\(|\bqv\s*\(/', $rumpf),
+   'es wird erst gelesen und dann gesetzt - dazwischen passt ein zweiter Aufruf');
+
+ok('Und die Einheit steht danach auf "laeuft"',
+   qv('SELECT sentences_status FROM units WHERE id = ?', [$freiUnit]) === SENTENCE_RUNNING);
+
+/*
+ * Ein abgestuerzter Lauf darf kein Riegel sein, den niemand mehr aufbekommt.
+ * Der Startzeitpunkt wird kuenstlich alt gemacht.
+ */
+q('UPDATE units SET sentences_started_at = NOW() - INTERVAL ? SECOND WHERE id = ?',
+  [SENTENCE_STALE_AFTER + 60, $freiUnit]);
+ok('Ein haengengebliebener Lauf gibt die Einheit wieder frei',
+   sentence_claim($freiUnit));
+
+// Und der frische Anspruch haelt sofort wieder dicht.
+ok('Danach ist wieder zu', !sentence_claim($freiUnit));
+
+q('UPDATE units SET sentences_status = ?, sentences_started_at = NULL WHERE id = ?',
+  [SENTENCE_DONE, $freiUnit]);
+ok('Eine fertige Einheit laesst sich erneut beanspruchen - fuers Nachtragen',
+   sentence_claim($freiUnit));
+
+q('UPDATE units SET sentences_status = NULL, sentences_started_at = NULL WHERE id = ?',
+  [$freiUnit]);
+
 q('DELETE FROM users WHERE id = ?', [$freiLehrerId]);
 q('DELETE FROM languages WHERE id IN (?, ?)', [$freiLang, $fremdLang]);
 q('DELETE FROM schools WHERE id = ?', [$fremdeSchule3]);
@@ -3256,6 +3341,14 @@ ok('Widerrufener Token meldet niemanden mehr an',
 
 q('DELETE FROM users WHERE id = ?', [$userId]);
 q("DELETE FROM users WHERE username IN ('e2e_other')");
+
+// Die eigenen Kostenzeilen mitnehmen - siehe $aiMarke ganz oben.
+$weg = q('DELETE FROM ai_requests WHERE id > ? AND user_id IS NULL', [$aiMarke])->rowCount();
+ok('Der Lauf hinterlaesst keine Kostenzeilen',
+   (int) qv('SELECT COUNT(*) FROM ai_requests WHERE id > ? AND user_id IS NULL',
+            [$aiMarke]) === 0,
+   $weg . ' aufgeraeumt');
+
 @unlink($jar);
 
 echo "\n" . str_repeat('-', 52) . "\n";

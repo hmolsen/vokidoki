@@ -93,12 +93,61 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['release'])) {
         teacher_redirect($zurueck);
     }
 
-    sentence_status_set($unitId, SENTENCE_RUNNING);
+    /*
+     * Laeuft schon einer, wird nicht ein zweiter gestartet. Die eben
+     * freigegebenen Vokabeln bekommt der laufende aber nicht mehr mit - er
+     * hat seine Liste beim Start geholt. Das wird hier gesagt, statt es zu
+     * beschoenigen; nachtragen laesst es sich unten mit einem Knopf.
+     */
+    if (!sentence_claim($unitId)) {
+        teacher_flash(sprintf(
+            '%d Vokabeln freigegeben. Es läuft schon ein Satzlauf - die neuen '
+            . 'sind noch nicht dabei. Wenn er durch ist, "Sätze nachtragen".',
+            $bis,
+        ));
+        teacher_redirect($zurueck);
+    }
+
     teacher_flash(sprintf(
         '%d Vokabeln freigegeben. Die Lückensätze für %d neue entstehen gerade.',
         $bis, $offen,
     ));
 
+    teacher_redirect_and_continue($zurueck);
+
+    set_time_limit(900);
+    generate_sentences_tracked($unitId);
+    exit;
+}
+
+/*
+ * Saetze nachtragen.
+ *
+ * Das Sicherheitsnetz fuer alles, was einen Lauf unvollstaendig zuruecklaesst:
+ * ein abgebrochener Lauf, ein aufgebrauchtes Budget, oder eine Freigabe, die
+ * einen bereits laufenden Lauf nicht mehr erreicht hat. Ein Knopf, der genau
+ * das erzeugt, was fehlt.
+ */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['catch_up'])) {
+    teacher_csrf_check();
+
+    if (vocab_without_sentences($unitId) === 0) {
+        teacher_flash('Es fehlt kein Satz.');
+        teacher_redirect($zurueck);
+    }
+
+    $blocked = budget_block_reason((int) $user['id']);
+    if ($blocked !== null) {
+        teacher_flash($blocked, 'bad');
+        teacher_redirect($zurueck);
+    }
+
+    if (!sentence_claim($unitId)) {
+        teacher_flash('Es läuft schon ein Satzlauf. Bitte abwarten.', 'bad');
+        teacher_redirect($zurueck);
+    }
+
+    teacher_flash('Die fehlenden Lückensätze entstehen gerade.');
     teacher_redirect_and_continue($zurueck);
 
     set_time_limit(900);
@@ -179,6 +228,18 @@ teacher_flash_render();
         </button>
     <?php endif; ?>
 </form>
+
+<?php $fehlen = vocab_without_sentences($unitId); ?>
+<?php if ($fehlen > 0 && $zustand['status'] !== SENTENCE_RUNNING): ?>
+<form method="post" class="compact">
+    <?= teacher_csrf_field() ?>
+    <input type="hidden" name="unit_id" value="<?= $unitId ?>">
+    <button class="btn small" name="catch_up" value="1"
+            data-confirm="Für <?= $fehlen ?> freigegebene Vokabeln fehlen noch Lückensätze. Jetzt erzeugen? Das kostet.">
+        Sätze nachtragen (<?= $fehlen ?>)
+    </button>
+</form>
+<?php endif; ?>
 
 <table class="data">
     <tr>

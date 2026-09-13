@@ -284,7 +284,21 @@ ok('Kein Schlüsselmaterial im Protokoll',
    !str_contains((string) $errLog['error'], 'sk-ant-api03-FAKE'),
    (string) $errLog['error']);
 
+/*
+ * Erst die Kostenzeilen, dann das Konto.
+ *
+ * In dieser Reihenfolge, weil der Fremdschluessel beim Loeschen des Kontos
+ * user_id auf NULL setzt statt die Zeile mitzunehmen - danach waere nicht
+ * mehr zu erkennen, welche Zeilen aus diesem Lauf stammen. Sie blieben
+ * liegen und zaehlten weiter auf das Monatsbudget, bis die Suite an ihrem
+ * eigenen Muell scheitert.
+ */
+q('DELETE FROM ai_requests WHERE user_id = ?', [(int) $user['id']]);
 q('DELETE FROM users WHERE id = ?', [(int) $user['id']]);
+
+ok('Der Lauf hinterlaesst keine Kostenzeilen',
+   (int) qv('SELECT COUNT(*) FROM ai_requests WHERE user_label = ?',
+            [(string) $user['display_name']]) === 0);
 
 echo "\n" . str_repeat('-', 52) . "\n";
 printf("%d bestanden, %d fehlgeschlagen\n", $passed, $failed);

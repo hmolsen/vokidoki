@@ -26,10 +26,17 @@ switch (action()) {
             json_fail($blocked, 429);
         }
 
+        /*
+         * Nur eine Anfrage darf erzeugen. Sitzt eine Klasse gleichzeitig
+         * davor, sehen alle "noch keine Sätze" - ohne diesen Riegel würden
+         * daraus 28 bezahlte Läufe für ein Ergebnis.
+         */
+        if (!sentence_claim((int) $unit['id'])) {
+            json_out(['ok' => true, 'preparing' => true, 'created' => 0]);
+        }
+
         // Für eine ganze Lerneinheit reicht die Standardlaufzeit nicht.
         set_time_limit(300);
-
-        sentence_status_set((int) $unit['id'], SENTENCE_RUNNING);
 
         try {
             $result = generate_sentences($unit, $user);

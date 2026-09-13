@@ -597,6 +597,49 @@ const SENTENCE_FAILED  = 'failed';
  */
 const SENTENCE_STALE_AFTER = 900;   // Sekunden
 
+/**
+ * Den Lauf für sich beanspruchen. Gibt false zurück, wenn schon einer läuft.
+ *
+ * Bisher stand hier ein Prüfen und danach ein Setzen, mit einer Lücke
+ * dazwischen. Bei einer Familie feuert das nie: Ein Kind stösst die
+ * Satzerzeugung an, fertig. Bei einer Klasse sitzen 28 Kinder in derselben
+ * Minute davor, alle sehen "noch keine Sätze", und alle starten denselben
+ * Lauf - achtundzwanzig bezahlte Anfragen für ein Ergebnis.
+ *
+ * Ein einziges UPDATE mit der Bedingung im WHERE entscheidet die Sache in
+ * der Datenbank statt in PHP. Genau eine Anfrage bekommt die Zeile.
+ *
+ * Ein hängengebliebener Lauf blockiert dabei nicht für immer: Ist der
+ * Startzeitpunkt alt genug, gilt die Zeile wieder als frei. Ohne diese
+ * Bedingung wäre eine abgestürzte Erzeugung ein Riegel, den niemand mehr
+ * aufbekommt.
+ *
+ * Der Startzeitpunkt wird in jedem Fall neu geschrieben. Das ist kein
+ * Beiwerk: MySQL zählt bei einem UPDATE nur die tatsächlich geänderten
+ * Zeilen, und wäre der Status der einzige Wert, meldete ein Übergang von
+ * "running" (abgestanden) nach "running" null geänderte Zeilen - der
+ * Anspruch ginge verloren, obwohl er berechtigt war.
+ */
+function sentence_claim(int $unitId): bool
+{
+    $stale = (int) SENTENCE_STALE_AFTER;
+
+    $st = q(
+        "UPDATE units
+            SET sentences_status     = '" . SENTENCE_RUNNING . "',
+                sentences_error      = NULL,
+                sentences_started_at = NOW()
+          WHERE id = ?
+            AND (sentences_status IS NULL
+                 OR sentences_status <> '" . SENTENCE_RUNNING . "'
+                 OR sentences_started_at IS NULL
+                 OR sentences_started_at < NOW() - INTERVAL $stale SECOND)",
+        [$unitId],
+    );
+
+    return $st->rowCount() === 1;
+}
+
 function sentence_status_set(int $unitId, string $status, ?string $error = null): void
 {
     q(
