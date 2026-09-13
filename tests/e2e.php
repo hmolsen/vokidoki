@@ -2292,8 +2292,154 @@ ok('Und das Quiz sagt das freundlich statt zu stolpern',
    $s === 422 || ($d['done'] ?? false) === true,
    'Status ' . $s . ' ' . var_export($d, true));
 
+// ---- Was ueberhaupt Saetze bekommt, haengt an der Freigabe.
+
+require_once __DIR__ . '/../lib/sentences.php';
+
+q('UPDATE units SET released_position = 4 WHERE id = ?', [$freiUnit]);
+$kandidaten = array_column(sentence_candidates($freiUnit), 'term_foreign');
+sort($kandidaten);
+ok('Saetze entstehen nur fuer Freigegebenes',
+   $kandidaten === ['alpha', 'bravo', 'charlie', 'delta'], implode(', ', $kandidaten));
+
+q('UPDATE units SET released_position = 0 WHERE id = ?', [$freiUnit]);
+ok('Ohne Freigabe gibt es nichts zu erzeugen - und nichts zu bezahlen',
+   sentence_candidates($freiUnit) === []);
+
+/*
+ * Der Wortschatz-Vorspann fuer den Prompt: andere Einheiten desselben
+ * KURSES, nicht derselben Sprache. In einer Familie ist das dasselbe, in
+ * einer Schule wanderte sonst der Wortschatz fremder Klassen in die Anfrage.
+ */
+$fremdLang = makeLanguage($userId, 'Fremdgabisch');
+$fremdUnit = makeUnit($userId, $fremdLang, 'Fremde Einheit');
+q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, 0)',
+  [$fremdUnit, 'zulu', 'de-zulu']);
+
+q('UPDATE units SET released_position = 10 WHERE id = ?', [$freiUnit]);
+$nachbarUnit = makeUnit($userId, $freiLang, 'Nachbareinheit');
+q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, 0)',
+  [$nachbarUnit, 'kilo', 'de-kilo']);
+q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, 1)',
+  [$nachbarUnit, 'lima', 'de-lima']);
+q('UPDATE units SET released_position = 1 WHERE id = ?', [$nachbarUnit]);
+
+$kurs    = course_for_language($freiLang);
+$bekannt = array_column(known_vocabulary((int) $kurs['id'], $freiUnit), 'term_foreign');
+
+ok('Als bekannt gilt der Nachbar im selben Kurs',
+   in_array('kilo', $bekannt, true), implode(', ', $bekannt));
+ok('Aber nicht, was dort noch gesperrt ist',
+   !in_array('lima', $bekannt, true), implode(', ', $bekannt));
+ok('Und nichts aus einem anderen Kurs',
+   !in_array('zulu', $bekannt, true), implode(', ', $bekannt));
+ok('Die eigene Einheit zaehlt nicht als bekannt',
+   !in_array('alpha', $bekannt, true), implode(', ', $bekannt));
+
+ok('Ohne Kurs bleibt der Vorspann leer statt fremd zu werden',
+   known_vocabulary(null, $freiUnit) === []);
+
+// ---- Und jetzt das Freigeben durch die Oberflaeche der Lehrkraft.
+
+$freiJar = tempnam(sys_get_temp_dir(), 'vtfrl');
+
+function freiGet(string $pfad): array
+{
+    global $base, $freiJar;
+    return freiPost($base . '/teacher/' . $pfad, null);
+}
+
+function freiPost(string $url, ?array $post): array
+{
+    global $freiJar;
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_COOKIEJAR      => $freiJar,
+        CURLOPT_COOKIEFILE     => $freiJar,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT        => 60,
+    ]);
+    if ($post !== null) {
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post));
+    }
+    $body   = (string) curl_exec($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ['status' => $status, 'body' => $body];
+}
+
+$seite = freiPost($base . '/teacher/', null);
+preg_match('/name="csrf" value="([a-f0-9]+)"/', $seite['body'], $fm);
+freiPost($base . '/teacher/index.php', [
+    'teacher_login' => '1',
+    'username'      => $freiLehrer,
+    'password'      => 'lehrerin123',
+    'csrf'          => $fm[1] ?? '',
+]);
+
+q('UPDATE units SET released_position = 0 WHERE id = ?', [$freiUnit]);
+
+$res = freiGet('unit.php?id=' . $freiUnit);
+ok('Die Lehrkraft kann die Lerneinheit oeffnen', $res['status'] === 200,
+   'Status ' . $res['status']);
+ok('Und sieht alle zehn Vokabeln, auch die gesperrten',
+   str_contains($res['body'], 'juliett'));
+ok('Der Stand steht oben drueber',
+   str_contains($res['body'], 'Noch nichts freigegeben'));
+
+preg_match('/name="csrf" value="([a-f0-9]+)"/', $res['body'], $fm);
+$freiCsrf = $fm[1] ?? '';
+
+/*
+ * Drei Vokabeln freigeben. Die Satzerzeugung laeuft danach gegen den
+ * Simulator; wichtig ist hier die Marke, nicht das Ergebnis.
+ */
+freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
+    'release'  => 3,
+    'unit_id'  => $freiUnit,
+    'csrf'     => $freiCsrf,
+]);
+ok('Freigeben setzt die Marke',
+   (int) qv('SELECT released_position FROM units WHERE id = ?', [$freiUnit]) === 3,
+   (string) qv('SELECT released_position FROM units WHERE id = ?', [$freiUnit]));
+
+// Eine Stelle, die es nicht gibt, wird abgelehnt statt gespeichert.
+freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
+    'release' => 99, 'unit_id' => $freiUnit, 'csrf' => $freiCsrf,
+]);
+ok('Eine Stelle jenseits der Einheit wird abgelehnt',
+   (int) qv('SELECT released_position FROM units WHERE id = ?', [$freiUnit]) === 3);
+
+// Zuruecknehmen.
+freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
+    'release' => 0, 'unit_id' => $freiUnit, 'csrf' => $freiCsrf,
+]);
+ok('Und laesst sich zuruecknehmen',
+   (int) qv('SELECT released_position FROM units WHERE id = ?', [$freiUnit]) === 0);
+
+/*
+ * Die Grenze: Eine Lerneinheit einer anderen Schule geht niemanden etwas an -
+ * auch nicht ueber ein untergeschobenes Formular.
+ */
+q("INSERT IGNORE INTO schools (name) VALUES ('Fremde Schule 3')");
+$fremdeSchule3 = (int) qv("SELECT id FROM schools WHERE name = 'Fremde Schule 3'");
+q('UPDATE courses SET school_id = ? WHERE id = ?',
+  [$fremdeSchule3, (int) course_for_language($fremdLang)['id']]);
+q('UPDATE units SET released_position = 0 WHERE id = ?', [$fremdUnit]);
+
+freiPost($base . '/teacher/unit.php?id=' . $fremdUnit, [
+    'release' => 1, 'unit_id' => $fremdUnit, 'csrf' => $freiCsrf,
+]);
+ok('Eine Lerneinheit einer anderen Schule laesst sich nicht freigeben',
+   (int) qv('SELECT released_position FROM units WHERE id = ?', [$fremdUnit]) === 0);
+
 q('DELETE FROM users WHERE id = ?', [$freiLehrerId]);
+q('DELETE FROM languages WHERE id IN (?, ?)', [$freiLang, $fremdLang]);
+q('DELETE FROM schools WHERE id = ?', [$fremdeSchule3]);
 @unlink($lehrJar);
+@unlink($freiJar);
 
 section('Kosten je Schule');
 

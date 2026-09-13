@@ -79,6 +79,51 @@ function teacher_redirect(string $file): never
 }
 
 /**
+ * Weiterleiten und danach noch weiterarbeiten.
+ *
+ * Dasselbe Mittel wie json_out_and_continue() beim Einlesen, nur für eine
+ * HTML-Seite: Das Freigeben stösst die Satzerzeugung an, und die dauert je
+ * Portion um die zwanzig Sekunden. Die Lehrkraft soll währenddessen ihre
+ * Seite sehen und nicht in einen Zeitablauf laufen.
+ *
+ * Bleibt der Vorgang trotzdem stecken - kein FPM, ein Server, der nicht
+ * durchlässt -, ist nichts verloren: Der Zustand steht auf "läuft", und der
+ * Weg über den Lückentext des Kindes stösst denselben Lauf noch einmal an.
+ * Dieser Trick ist eine Abkürzung, kein tragender Teil.
+ */
+function teacher_redirect_and_continue(string $file): void
+{
+    $stray = ob_get_level() > 0 ? (string) ob_get_clean() : '';
+    if (trim($stray) !== '') {
+        error_log('[vokabeltrainer] Unerwartete Ausgabe vor der Weiterleitung: '
+            . substr(trim($stray), 0, 500));
+    }
+
+    ignore_user_abort(true);
+
+    http_response_code(303);
+    header('Location: ' . teacher_url($file));
+    header('Content-Length: 0');
+    header('Connection: close');
+
+    // Die Sitzung freigeben, sonst wartet die weitergeleitete Anfrage
+    // derselben Lehrkraft auf das Ende dieses Vorgangs.
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+        return;
+    }
+
+    while (ob_get_level() > 0) {
+        ob_end_flush();
+    }
+    flush();
+}
+
+/**
  * Sorgt für eine angemeldete Lehrkraft - oder zeigt die Anmeldung.
  *
  * Die Sitzung ist dieselbe wie in der App. Das ist Absicht: Zum Einlesen der

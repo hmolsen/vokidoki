@@ -43,7 +43,8 @@ teacher_flash_render();
 <?php else: ?>
 <table class="data">
     <tr>
-        <th>Titel</th><th class="num">Vokabeln</th><th>Freigegeben</th><th>Angelegt</th>
+        <th>Titel</th><th class="num">Vokabeln</th><th>Freigegeben</th>
+        <th>Angelegt</th><th></th>
     </tr>
     <?php foreach ($einheiten as $e): ?>
         <tr>
@@ -65,13 +66,20 @@ teacher_flash_render();
                 ?>
             </td>
             <td class="tiny muted"><?= h(substr((string) $e['created_at'], 0, 10)) ?></td>
+            <td>
+                <a href="<?= h(teacher_url('unit.php') . '?id=' . (int) $e['id']) ?>">
+                    freigeben
+                </a>
+            </td>
         </tr>
     <?php endforeach; ?>
 </table>
 <p class="tiny muted">
-    Das Einlesen neuer Lektionen und das portionsweise Freigeben kommen als
-    Nächstes. Fotografiert wird in der App auf dem Handy - dafür braucht es
-    die Kamera.
+    Freigegeben wird portionsweise, und das hat einen Grund: Zu jeder
+    freigegebenen Vokabel entstehen Lückensätze, und die kosten. Eine ganze
+    Unit einlesen und nur das aufmachen, was dran ist, spart den Rest -
+    solange er nicht dran ist. Fotografiert wird in der App auf dem Handy;
+    dafür braucht es die Kamera.
 </p>
 <?php endif; ?>
 

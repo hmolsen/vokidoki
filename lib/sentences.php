@@ -218,26 +218,53 @@ function sentence_schema(): array
  */
 function sentence_candidates(int $unitId): array
 {
-    $rows = qa(
-        'SELECT id, term_foreign, term_native, word_type
-           FROM vocab WHERE unit_id = ? ORDER BY position, id',
+    /*
+     * Nur bis zur Freigabemarke.
+     *
+     * Saetze kosten Geld, und genau dafuer gibt es die Marke: Die Lehrkraft
+     * liest eine ganze Unit ein, gibt aber "bis stressed" frei - fuer den
+     * Rest soll nichts erzeugt werden, solange er nicht dran ist. Gebunden
+     * wird an die Einheit, nicht an den Aufrufer: Erzeugt wird, was die
+     * Klasse sehen darf, auch wenn eine Lehrkraft den Lauf anstoesst.
+     */
+    return qa(
+        'SELECT v.id, v.term_foreign, v.term_native, v.word_type
+           FROM vocab v
+           JOIN units t ON t.id = v.unit_id
+          WHERE v.unit_id = ? AND v.position < t.released_position
+          ORDER BY v.position, v.id',
         [$unitId],
     );
-
-    return $rows;
 }
 
-/** Wortschatz derselben Sprache aus anderen Lerneinheiten - gilt als bekannt. */
-function known_vocabulary(int $languageId, int $exceptUnitId): array
+/**
+ * Wortschatz aus den anderen Lerneinheiten desselben Kurses - gilt als bekannt.
+ *
+ * Zweck ist ein besserer Prompt: Das Modell soll Saetze aus Woertern bauen,
+ * die das Kind schon kennt. Frueher zaehlte dafuer die ganze Sprache. In
+ * einer Familie ist das dasselbe, in einer Schule nicht - dann wanderte der
+ * Wortschatz fremder Klassen in die Anfrage. Das bricht nichts, macht den
+ * Prompt aber teurer und die Saetze schlechter, weil "bekannt" dann Woerter
+ * meint, die dieses Kind nie gesehen hat.
+ *
+ * Ebenfalls nur Freigegebenes: Ein Satz soll nicht aus einem Wort bestehen,
+ * das erst naechste Woche drankommt.
+ */
+function known_vocabulary(?int $courseId, int $exceptUnitId): array
 {
+    if ($courseId === null) {
+        return [];
+    }
+
     return qa(
         'SELECT v.term_foreign, v.term_native
            FROM vocab v
            JOIN units t ON t.id = v.unit_id
-          WHERE t.language_id = ? AND t.id <> ?
+          WHERE t.course_id = ? AND t.id <> ?
+            AND v.position < t.released_position
           ORDER BY t.created_at DESC, v.position
           LIMIT ' . KNOWN_VOCAB_LIMIT,
-        [$languageId, $exceptUnitId],
+        [$courseId, $exceptUnitId],
     );
 }
 
@@ -328,22 +355,32 @@ function generate_sentences(array $unit, array $user): array
 
     $lang = q1('SELECT name, code FROM languages WHERE id = ?', [(int) $unit['language_id']]);
 
-    // Nur Vokabeln ohne Sätze - so trägt der Knopf im Admin gezielt nach.
-    $offen = qa(
+    /*
+     * Nur freigegebene Vokabeln ohne Sätze.
+     *
+     * Zwei Bedingungen, die zusammen die portionsweise Freigabe tragen: Der
+     * Knopf im Admin trägt gezielt nach, was fehlt, und die Marke sorgt
+     * dafür, dass für den noch gesperrten Rest gar nichts erst entsteht.
+     * Beim nächsten Freigeben läuft dieselbe Abfrage und findet genau die
+     * neu aufgemachten - eine Bereichsangabe braucht es dafür nicht.
+     */
+    $rows = qa(
         'SELECT v.id, v.term_foreign, v.term_native, v.word_type
            FROM vocab v
-          WHERE v.unit_id = ?
+          WHERE v.unit_id = ? AND v.position < ?
             AND NOT EXISTS (SELECT 1 FROM sentences s WHERE s.vocab_id = v.id)
           ORDER BY v.position, v.id',
-        [$unitId],
+        [$unitId, (int) ($unit['released_position'] ?? 0)],
     );
-    $rows = $offen;
 
     if ($rows === []) {
         return ['created' => 0, 'skipped' => 0, 'without' => 0, 'failed' => null];
     }
 
-    $known   = known_vocabulary((int) $unit['language_id'], $unitId);
+    $known = known_vocabulary(
+        $unit['course_id'] === null ? null : (int) $unit['course_id'],
+        $unitId,
+    );
     $created = 0;
     $skipped = 0;
     $failed  = null;
@@ -513,7 +550,8 @@ function cloze_sentence_count(int $unitId): int
 {
     return (int) qv(
         'SELECT COUNT(*) FROM vocab v
-          WHERE v.unit_id = ?
+           JOIN units t ON t.id = v.unit_id
+          WHERE v.unit_id = ? AND v.position < t.released_position
             AND EXISTS (SELECT 1 FROM sentences s WHERE s.vocab_id = v.id)',
         [$unitId],
     );
