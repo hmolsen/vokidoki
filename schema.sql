@@ -111,8 +111,12 @@ CREATE TABLE IF NOT EXISTS progress (
   wrong_count   INT UNSIGNED NOT NULL DEFAULT 0,
   known_at      DATETIME     NULL,
   last_seen_at  DATETIME     NULL,
-  UNIQUE KEY uq_progress (vocab_id, mode),
-  KEY idx_progress_user (user_id),
+  -- Der Lernstand gehoert dem Kind. Frueher stand hier (vocab_id, mode) ohne
+  -- user_id - solange jede Vokabel einem Kind gehoerte, trug das. Sobald sich
+  -- mehrere Kinder einen Vokabelsatz teilen, teilen sie sonst auch die Serie.
+  UNIQUE KEY uq_progress_user (user_id, vocab_id, mode),
+  -- Deckt den Fremdschluessel auf vocab_id ab, den frueher uq_progress trug.
+  KEY idx_progress_vocab (vocab_id, mode),
   CONSTRAINT fk_progress_user  FOREIGN KEY (user_id)  REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_progress_vocab FOREIGN KEY (vocab_id) REFERENCES vocab(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

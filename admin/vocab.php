@@ -346,12 +346,16 @@ $units = $langId > 0
 $unit  = $unitId > 0 ? q1('SELECT * FROM units WHERE id = ?', [$unitId]) : null;
 $vocab = $unit !== null
     ? qa(
+        // Der Lernstand gehoert einem Kind - hier dem Besitzer der Einheit.
+        // Ohne den Filter zaehlte die Abfrage die Treffer aller Kinder
+        // zusammen, sobald sich mehrere einen Vokabelsatz teilen.
         "SELECT v.*, p.streak, p.correct_count, p.wrong_count, p.known_at
            FROM vocab v
-           LEFT JOIN progress p ON p.vocab_id = v.id AND p.mode = 'mc'
+           LEFT JOIN progress p
+                  ON p.vocab_id = v.id AND p.mode = 'mc' AND p.user_id = ?
           WHERE v.unit_id = ?
           ORDER BY v.position, v.id",
-        [$unitId],
+        [(int) $unit['user_id'], $unitId],
       )
     : [];
 
@@ -564,7 +568,7 @@ foreach ($languages as $l) {
 <h2>Lückensätze (<?= count($sentences) ?>)</h2>
 
 <div class="card">
-    <?php $zustand = sentence_status($unitId); ?>
+    <?php $zustand = sentence_status($unitId, (int) $unit['user_id']); ?>
     <?php if ($zustand['status'] === SENTENCE_RUNNING): ?>
         <div class="notice info">Die Sätze entstehen gerade im Hintergrund.</div>
     <?php elseif ($zustand['status'] === SENTENCE_FAILED): ?>

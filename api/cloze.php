@@ -54,7 +54,7 @@ switch (action()) {
             );
         }
 
-        [$known, $total] = cloze_progress((int) $unit['id']);
+        [$known, $total] = cloze_progress((int) $unit['id'], $uid);
 
         // Hat ein Block gehalten, kann das Kind loslegen - der Rest lässt sich
         // später nachtragen. Nur wenn gar nichts entstand, ist Schluss.
@@ -86,7 +86,7 @@ switch (action()) {
 
     case 'next':
         $unit   = own_unit($uid, (int) ($_GET['unit_id'] ?? 0));
-        $stand  = sentence_status((int) $unit['id']);
+        $stand  = sentence_status((int) $unit['id'], $uid);
         $known  = $stand['known'];
         $total  = $stand['total'];
 
@@ -110,12 +110,13 @@ switch (action()) {
         $card = q1(
             'SELECT v.id, COALESCE(p.streak, 0) AS streak
                FROM vocab v
-               LEFT JOIN progress p ON p.vocab_id = v.id AND p.mode = ?
+               LEFT JOIN progress p
+                      ON p.vocab_id = v.id AND p.mode = ? AND p.user_id = ?
               WHERE v.unit_id = ? AND p.known_at IS NULL
                 AND EXISTS (SELECT 1 FROM sentences s WHERE s.vocab_id = v.id)
               ORDER BY RAND()
               LIMIT 1',
-            [MODE_CLOZE, (int) $unit['id']],
+            [MODE_CLOZE, $uid, (int) $unit['id']],
         );
 
         if ($card === null) {
@@ -182,7 +183,7 @@ switch (action()) {
         $check = answer_check($typed, $expected);
         $stand = record_answer($uid, $vocabId, MODE_CLOZE, $check['correct']);
 
-        [$known, $total] = cloze_progress((int) $unit['id']);
+        [$known, $total] = cloze_progress((int) $unit['id'], $uid);
 
         json_out([
             'ok'           => true,

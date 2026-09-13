@@ -28,25 +28,27 @@ switch (action()) {
             "SELECT u.id, u.title, u.created_at,
                     (SELECT COUNT(*) FROM vocab v WHERE v.unit_id = u.id) AS total,
                     (SELECT COUNT(*) FROM vocab v
-                       JOIN progress p ON p.vocab_id = v.id AND p.mode = 'mc'
+                       JOIN progress p ON p.vocab_id = v.id
+                                      AND p.mode = 'mc' AND p.user_id = ?
                       WHERE v.unit_id = u.id AND p.known_at IS NOT NULL) AS known,
                     (SELECT COUNT(*) FROM vocab v
                       WHERE v.unit_id = u.id
                         AND EXISTS (SELECT 1 FROM sentences s WHERE s.vocab_id = v.id)
                     ) AS cloze_total,
                     (SELECT COUNT(*) FROM vocab v
-                       JOIN progress p ON p.vocab_id = v.id AND p.mode = 'cloze'
+                       JOIN progress p ON p.vocab_id = v.id
+                                      AND p.mode = 'cloze' AND p.user_id = ?
                       WHERE v.unit_id = u.id AND p.known_at IS NOT NULL) AS cloze_known,
                     (SELECT COALESCE(SUM(p.correct_count), 0) FROM vocab v
-                       JOIN progress p ON p.vocab_id = v.id
+                       JOIN progress p ON p.vocab_id = v.id AND p.user_id = ?
                       WHERE v.unit_id = u.id) AS correct,
                     (SELECT COALESCE(SUM(p.wrong_count), 0) FROM vocab v
-                       JOIN progress p ON p.vocab_id = v.id
+                       JOIN progress p ON p.vocab_id = v.id AND p.user_id = ?
                       WHERE v.unit_id = u.id) AS wrong
                FROM units u
               WHERE u.language_id = ? AND u.user_id = ?
               ORDER BY u.created_at DESC",
-            [(int) $lang['id'], $uid],
+            [$uid, $uid, $uid, $uid, (int) $lang['id'], $uid],
         );
         foreach ($rows as &$r) {
             $r['id']          = (int) $r['id'];
@@ -89,11 +91,13 @@ switch (action()) {
                     pc.known_at                   AS cl_known,
                     EXISTS (SELECT 1 FROM sentences s WHERE s.vocab_id = v.id) AS has_sentences
                FROM vocab v
-               LEFT JOIN progress pm ON pm.vocab_id = v.id AND pm.mode = ?
-               LEFT JOIN progress pc ON pc.vocab_id = v.id AND pc.mode = ?
+               LEFT JOIN progress pm
+                      ON pm.vocab_id = v.id AND pm.mode = ? AND pm.user_id = ?
+               LEFT JOIN progress pc
+                      ON pc.vocab_id = v.id AND pc.mode = ? AND pc.user_id = ?
               WHERE v.unit_id = ?
               ORDER BY v.position, v.id",
-            [MODE_CHOICE, MODE_CLOZE, (int) $unit['id']],
+            [MODE_CHOICE, $uid, MODE_CLOZE, $uid, (int) $unit['id']],
         );
 
         $liste = [];
@@ -127,8 +131,8 @@ switch (action()) {
 
         // Fortschritt je Übungsart. Der Lückentext zählt nur Vokabeln, zu denen
         // es einen Satz gibt - er wird beim ersten Start erst erzeugt.
-        [$mcKnown, $mcTotal] = unit_progress((int) $unit['id'], MODE_CHOICE);
-        $cloze = sentence_status((int) $unit['id']);
+        [$mcKnown, $mcTotal] = unit_progress((int) $unit['id'], $uid, MODE_CHOICE);
+        $cloze = sentence_status((int) $unit['id'], $uid);
 
         json_out(['ok' => true, 'unit' => [
             'id'          => (int) $unit['id'],
@@ -143,7 +147,7 @@ switch (action()) {
         // Schlank gehalten: Die Oberfläche fragt das im Sekundentakt ab,
         // solange die Sätze im Hintergrund entstehen.
         $unit = own_unit($uid, (int) ($_GET['id'] ?? 0));
-        json_out(['ok' => true, 'cloze' => sentence_status((int) $unit['id'])]);
+        json_out(['ok' => true, 'cloze' => sentence_status((int) $unit['id'], $uid)]);
 
     case 'rename':
         require_post();

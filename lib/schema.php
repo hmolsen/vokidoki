@@ -91,6 +91,66 @@ function schema_migrations(): array
                    REFERENCES users(id) ON DELETE CASCADE
              ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
         ],
+        /*
+         * Der Lernstand gehoert dem Kind - Teil 1 von 2.
+         *
+         * Vor dem Indexumbau die Daten geradeziehen: progress.user_id trug im
+         * UPDATE-Zweig des alten Upserts nicht mit, konnte also von der
+         * Unit abweichen. Danach ist (user_id, vocab_id, mode) garantiert
+         * eindeutig, weil (vocab_id, mode) es schon ist - der spaetere
+         * ADD UNIQUE kann damit nicht an einer Dublette scheitern.
+         *
+         * Ueber schema_was_applied() geschuetzt: Eine Datenreparatur laesst
+         * sich der Struktur nicht ansehen.
+         */
+        'progress.user_id.repair' => [
+            static fn (): bool => table_exists('progress')
+                && !schema_was_applied('progress.user_id.repair'),
+            'UPDATE progress p
+               JOIN vocab v ON v.id = p.vocab_id
+               JOIN units t ON t.id = v.unit_id
+                SET p.user_id = t.user_id
+              WHERE p.user_id <> t.user_id',
+        ],
+
+        /*
+         * Teil 2: den richtigen Schluessel danebenlegen. Rein additiv.
+         *
+         * idx_progress_vocab ist nicht optional. Der alte uq_progress deckt
+         * zugleich den Fremdschluessel fk_progress_vocab ab; faellt er ohne
+         * Ersatz, verweigert MySQL das DROP oder legt still selbst einen Index
+         * an. Beides zusammen in EINEM ALTER, damit es keinen Halbzustand gibt.
+         *
+         * Der alte Schluessel bleibt vorerst stehen. Sein Entfernen ist ein
+         * eigener Schritt in einem eigenen Deployment.
+         */
+        'progress.uq.add' => [
+            static fn (): bool => table_exists('progress')
+                && !index_exists('progress', 'uq_progress_user'),
+            'ALTER TABLE progress
+               ADD UNIQUE KEY uq_progress_user (user_id, vocab_id, mode),
+               ADD KEY idx_progress_vocab (vocab_id, mode)',
+        ],
+
+        /*
+         * Teil 3: den alten Schluessel abwerfen.
+         *
+         * Erst jetzt koennen zwei Kinder ueberhaupt eine eigene Zeile je
+         * Vokabel haben - vorher verbot (vocab_id, mode) die zweite.
+         *
+         * Die Bedingung verlangt ausdruecklich, dass BEIDE Ersatzindizes schon
+         * stehen. ensure_schema() verschluckt Fehler und protokolliert sie nur;
+         * waere der Schritt davor still misslungen, stuende die Tabelle sonst
+         * am Ende voellig ohne eindeutigen Schluessel da, und Dubletten
+         * sammelten sich unbemerkt an. So passiert in dem Fall schlicht nichts.
+         */
+        'progress.uq.drop' => [
+            static fn (): bool => index_exists('progress', 'uq_progress')
+                && index_exists('progress', 'uq_progress_user')
+                && index_exists('progress', 'idx_progress_vocab'),
+            'ALTER TABLE progress DROP INDEX uq_progress',
+        ],
+
         'sentences' => [
             static fn (): bool => !table_exists('sentences'),
             'CREATE TABLE sentences (
@@ -124,6 +184,23 @@ function column_exists(string $table, string $column): bool
         'SELECT COUNT(*) FROM information_schema.COLUMNS
           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
         [$table, $column],
+    );
+    return (int) $n > 0;
+}
+
+/**
+ * Gibt es diesen Index auf der Tabelle?
+ *
+ * Bisher liessen sich Änderungen nur an Tabellen und Spalten festmachen. Der
+ * Umbau von uq_progress braucht aber eine Prüfung auf den Index selbst - sonst
+ * liefe er bei jedem Aufruf erneut oder gar nicht.
+ */
+function index_exists(string $table, string $index): bool
+{
+    $n = qv(
+        'SELECT COUNT(*) FROM information_schema.STATISTICS
+          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?',
+        [$table, $index],
     );
     return (int) $n > 0;
 }

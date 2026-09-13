@@ -14,7 +14,7 @@ const OPTION_COUNT = 4;
 switch (action()) {
     case 'next':
         $unit = own_unit($uid, (int) ($_GET['unit_id'] ?? 0));
-        [$known, $total] = unit_progress((int) $unit['id'], QUIZ_MODE);
+        [$known, $total] = unit_progress((int) $unit['id'], $uid, QUIZ_MODE);
         $langName = (string) qv(
             'SELECT name FROM languages WHERE id = ?',
             [(int) $unit['language_id']],
@@ -29,11 +29,12 @@ switch (action()) {
         $card = q1(
             "SELECT v.id, v.term_foreign, v.term_native, COALESCE(p.streak, 0) AS streak
                FROM vocab v
-               LEFT JOIN progress p ON p.vocab_id = v.id AND p.mode = ?
+               LEFT JOIN progress p
+                      ON p.vocab_id = v.id AND p.mode = ? AND p.user_id = ?
               WHERE v.unit_id = ? AND p.known_at IS NULL
               ORDER BY RAND()
               LIMIT 1",
-            [QUIZ_MODE, (int) $unit['id']],
+            [QUIZ_MODE, $uid, (int) $unit['id']],
         );
 
         if ($card === null) {
@@ -133,7 +134,7 @@ switch (action()) {
 
         $stand = record_answer($uid, $vocabId, QUIZ_MODE, $isRight);
 
-        [$known, $total] = unit_progress((int) $unit['id'], QUIZ_MODE);
+        [$known, $total] = unit_progress((int) $unit['id'], $uid, QUIZ_MODE);
 
         json_out([
             'ok'            => true,
@@ -154,9 +155,10 @@ switch (action()) {
                     COALESCE(SUM(p.correct_count), 0) AS correct,
                     COALESCE(SUM(p.wrong_count), 0)   AS wrong
                FROM vocab v
-               LEFT JOIN progress p ON p.vocab_id = v.id AND p.mode = ?
+               LEFT JOIN progress p
+                      ON p.vocab_id = v.id AND p.mode = ? AND p.user_id = ?
               WHERE v.unit_id = ?",
-            [QUIZ_MODE, (int) $unit['id']],
+            [QUIZ_MODE, $uid, (int) $unit['id']],
         );
         json_out(['ok' => true, 'stats' => [
             'total'   => (int) $row['total'],

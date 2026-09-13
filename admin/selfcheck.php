@@ -118,6 +118,37 @@ check($checks, 'Kategorien der Vokabeln', static function (): array {
         : sprintf('%d von %d ohne Kategorie - unter "Vokabeln" nachtragen', $offen, $alle)];
 });
 
+check($checks, 'Lernstand je Kind', static function (): array {
+    if (!table_exists('progress')) {
+        return [false, 'Tabelle progress fehlt'];
+    }
+
+    $alt  = index_exists('progress', 'uq_progress');
+    $neu  = index_exists('progress', 'uq_progress_user');
+    $vocab = index_exists('progress', 'idx_progress_vocab');
+
+    /*
+     * Der alte Schlüssel (vocab_id, mode) lässt je Vokabel nur EINE Zeile zu -
+     * für alle Kinder zusammen. Solange jede Vokabel einem Kind gehört, fällt
+     * das nicht auf. Teilen sich mehrere Kinder einen Vokabelsatz, teilen sie
+     * sich damit auch den Lernstand.
+     *
+     * Der alte Schlüssel deckt zugleich den Fremdschlüssel auf vocab_id ab.
+     * Er darf deshalb erst fallen, wenn idx_progress_vocab steht.
+     */
+    if ($neu && !$alt && $vocab) {
+        return [true, 'je Kind getrennt (uq_progress_user)'];
+    }
+    if ($neu && $alt) {
+        return [true, 'umgestellt, alter Schlüssel noch da - kann entfernt werden'];
+    }
+    if ($neu && !$vocab) {
+        return [false, 'idx_progress_vocab fehlt - der Fremdschlüssel wäre ungedeckt'];
+    }
+
+    return [false, 'noch am alten Schlüssel (vocab_id, mode): ein Lernstand für alle Kinder'];
+});
+
 check($checks, 'Sprachkürzel', static function (): array {
     if (!column_exists('languages', 'code')) {
         return [false, 'Spalte languages.code fehlt'];

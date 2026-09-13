@@ -612,6 +612,71 @@ ok('Lernstand ist gelöscht',
 [$card] = apiCall('quiz', 'next', null, ['unit_id' => $unitId]);
 ok('Nach dem Zurücksetzen kommen wieder Fragen', !($card['done'] ?? true));
 
+section('Lernstand gehört dem Kind');
+
+/*
+ * Der Kern des Schulumbaus.
+ *
+ * Heute haengt der Lernstand an der Vokabel, nicht am Kind: progress traegt
+ * UNIQUE (vocab_id, mode) ohne user_id, und record_answer() liest ohne
+ * Benutzerfilter. Solange jede Vokabel genau einem Kind gehoert, faellt das
+ * nicht auf. Sobald eine Klasse denselben Vokabelsatz uebt, teilen sich 28
+ * Kinder eine Serie - sie sehen gegenseitig "gekonnt", und das Zuruecksetzen
+ * eines Kindes wirkt fuer die halbe Klasse.
+ *
+ * Diese Pruefungen gehen bewusst an der API vorbei direkt auf lib/progress.php,
+ * weil own_unit() zwei Kinder an derselben Vokabel heute noch gar nicht
+ * zulaesst. Sie beschreiben den Zielzustand.
+ */
+require_once __DIR__ . '/../lib/progress.php';
+
+$zweitname = 'testzweit_' . bin2hex(random_bytes(3));
+q('INSERT INTO users (username, display_name, password_hash, color) VALUES (?, ?, ?, ?)',
+  [$zweitname, 'Zweitkind', password_hash('geheim123', PASSWORD_DEFAULT), '#4f7cff']);
+$zweitId = (int) db()->lastInsertId();
+ok('Ein zweites Kind ist angelegt', $zweitId > 0 && $zweitId !== $userId);
+
+$gemeinsam = (int) qv('SELECT id FROM vocab WHERE unit_id = ? ORDER BY position LIMIT 1', [$unitId]);
+ok('Eine gemeinsame Vokabel ist da', $gemeinsam > 0);
+
+q('DELETE FROM progress WHERE vocab_id = ?', [$gemeinsam]);
+
+// Kind eins antwortet zweimal richtig, Kind zwei einmal falsch.
+record_answer($userId,  $gemeinsam, MODE_CHOICE, true);
+record_answer($userId,  $gemeinsam, MODE_CHOICE, true);
+record_answer($zweitId, $gemeinsam, MODE_CHOICE, false);
+
+$zeilen = (int) qv('SELECT COUNT(*) FROM progress WHERE vocab_id = ? AND mode = ?',
+                   [$gemeinsam, MODE_CHOICE]);
+ok('Beide Kinder bekommen eine eigene Zeile', $zeilen === 2, $zeilen . ' statt 2');
+
+$serieEins  = qv('SELECT streak FROM progress WHERE vocab_id = ? AND mode = ? AND user_id = ?',
+                 [$gemeinsam, MODE_CHOICE, $userId]);
+$serieZwei  = qv('SELECT streak FROM progress WHERE vocab_id = ? AND mode = ? AND user_id = ?',
+                 [$gemeinsam, MODE_CHOICE, $zweitId]);
+ok('Die Serie des ersten Kindes steht bei 2', (int) $serieEins === 2, var_export($serieEins, true));
+ok('Die des zweiten bei 0 - und ueberschreibt die erste nicht',
+   $serieZwei !== null && (int) $serieZwei === 0, var_export($serieZwei, true));
+
+// Und die Auswertung darf nur den eigenen Stand sehen.
+record_answer($userId, $gemeinsam, MODE_CHOICE, true);
+$eigen = qv('SELECT known_at FROM progress WHERE vocab_id = ? AND mode = ? AND user_id = ?',
+            [$gemeinsam, MODE_CHOICE, $userId]);
+$fremd = qv('SELECT known_at FROM progress WHERE vocab_id = ? AND mode = ? AND user_id = ?',
+            [$gemeinsam, MODE_CHOICE, $zweitId]);
+ok('Dreimal richtig gilt beim ersten Kind als gekonnt', $eigen !== null);
+ok('Beim zweiten aber nicht', $fremd === null, var_export($fremd, true));
+
+// Zuruecksetzen ist eine Sache des einzelnen Kindes.
+reset_unit_progress($unitId, $zweitId, null);
+$nachReset = (int) qv('SELECT COUNT(*) FROM progress WHERE vocab_id = ? AND user_id = ?',
+                      [$gemeinsam, $userId]);
+ok('Das Zuruecksetzen des einen laesst den anderen unberuehrt', $nachReset === 1,
+   $nachReset . ' Zeilen statt 1');
+
+q('DELETE FROM users WHERE id = ?', [$zweitId]);
+q('DELETE FROM progress WHERE vocab_id = ?', [$gemeinsam]);
+
 section('Sprache im Admin löschen');
 
 // Wegwerf-Sprache mit Einheit, Vokabeln und Lernstand anlegen.

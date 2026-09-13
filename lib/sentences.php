@@ -503,21 +503,42 @@ function vocab_without_sentences(int $unitId): int
 }
 
 /**
- * Fortschritt im Lückentext.
+ * Wie viele Vokabeln der Einheit haben ueberhaupt einen Satz?
+ *
+ * Eine Frage an den Inhalt, nicht an ein Kind - deshalb ohne Benutzer. Der
+ * Hintergrundlauf braucht genau das, um zu entscheiden, ob etwas Brauchbares
+ * entstanden ist.
+ */
+function cloze_sentence_count(int $unitId): int
+{
+    return (int) qv(
+        'SELECT COUNT(*) FROM vocab v
+          WHERE v.unit_id = ?
+            AND EXISTS (SELECT 1 FROM sentences s WHERE s.vocab_id = v.id)',
+        [$unitId],
+    );
+}
+
+/**
+ * Fortschritt eines Kindes im Lückentext.
  *
  * Zählt nur Vokabeln, die auch einen Satz haben - sonst wäre die Einheit nie
  * zu schaffen, wenn zu einer Vokabel kein brauchbarer Satz entstanden ist.
+ *
+ * Der Benutzerfilter ist nicht schmueckend: Ohne ihn zaehlt die Abfrage die
+ * Treffer aller Kinder zusammen, sobald sich mehrere einen Vokabelsatz teilen.
  */
-function cloze_progress(int $unitId): array
+function cloze_progress(int $unitId, int $userId): array
 {
     $row = q1(
         'SELECT COUNT(v.id) AS total,
                 SUM(CASE WHEN p.known_at IS NOT NULL THEN 1 ELSE 0 END) AS known
            FROM vocab v
-           LEFT JOIN progress p ON p.vocab_id = v.id AND p.mode = ?
+           LEFT JOIN progress p
+                  ON p.vocab_id = v.id AND p.mode = ? AND p.user_id = ?
           WHERE v.unit_id = ?
             AND EXISTS (SELECT 1 FROM sentences s WHERE s.vocab_id = v.id)',
-        [MODE_CLOZE, $unitId],
+        [MODE_CLOZE, $userId, $unitId],
     );
     return [(int) ($row['known'] ?? 0), (int) ($row['total'] ?? 0)];
 }
@@ -556,14 +577,14 @@ function sentence_status_set(int $unitId, string $status, ?string $error = null)
  *
  * @return array{status:string, error:?string, known:int, total:int}
  */
-function sentence_status(int $unitId): array
+function sentence_status(int $unitId, int $userId): array
 {
     $unit = q1(
         'SELECT sentences_status, sentences_error, sentences_started_at
            FROM units WHERE id = ?',
         [$unitId],
     );
-    [$known, $total] = cloze_progress($unitId);
+    [$known, $total] = cloze_progress($unitId, $userId);
 
     $status = (string) ($unit['sentences_status'] ?? '');
     $error  = $unit['sentences_error'] ?? null;
@@ -629,7 +650,7 @@ function generate_sentences_tracked(int $unitId): void
     }
 
     db_ensure();
-    [, $total] = cloze_progress($unitId);
+    $total = cloze_sentence_count($unitId);
 
     if ($total === 0) {
         sentence_status_set($unitId, SENTENCE_FAILED,
