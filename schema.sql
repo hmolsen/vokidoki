@@ -11,6 +11,9 @@ CREATE TABLE IF NOT EXISTS users (
   role          VARCHAR(16)  NOT NULL DEFAULT 'student',
   can_import    TINYINT(1)   NOT NULL DEFAULT 0,
   password_hash VARCHAR(255) NOT NULL,
+  -- Das erzeugte Anfangspasswort im Klartext, damit das Anschreiben
+  -- nachdruckbar bleibt. Wird geleert, sobald das Kind es aendert.
+  initial_password VARCHAR(64) NULL,
   color         CHAR(7)      NOT NULL DEFAULT '#4f7cff',
   active        TINYINT(1)   NOT NULL DEFAULT 1,
   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -226,6 +229,32 @@ CREATE TABLE IF NOT EXISTS ai_requests (
   KEY idx_ai_user (user_id),
   KEY idx_ai_school (school_id),
   CONSTRAINT fk_ai_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Bausteine der Anfangspasswoerter: Adjektiv (Stamm, ohne Endung) und Tier
+-- mit Geschlecht. In der Datenbank und nicht im Quelltext, damit sich ein
+-- Wort streichen laesst, ohne die Anwendung neu hochzuladen. Gefuellt wird
+-- die Tabelle von password_seed_sql() in lib/passwords.php.
+CREATE TABLE IF NOT EXISTS password_words (
+  id      INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  kind    VARCHAR(16)  NOT NULL,
+  word    VARCHAR(48)  NOT NULL,
+  gender  CHAR(1)      NULL,
+  active  TINYINT(1)   NOT NULL DEFAULT 1,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_password_words (kind, word),
+  KEY idx_password_words_pick (kind, active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Fehlversuche bei der Anmeldung, je Konto und je Adresse gezaehlt.
+CREATE TABLE IF NOT EXISTS login_attempts (
+  id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  username   VARCHAR(64)  NOT NULL,
+  ip         VARCHAR(45)  NOT NULL,
+  created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_login_attempts_user (username, created_at),
+  KEY idx_login_attempts_ip (ip, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS settings (

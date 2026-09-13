@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/languages.php';
 require_once __DIR__ . '/settings.php';
+require_once __DIR__ . '/passwords.php';
 
 /**
  * Nachträgliche Schemaänderungen.
@@ -426,6 +427,68 @@ function schema_migrations(): array
             static fn (): bool => column_exists('units', 'released_position')
                 && !schema_was_applied('family.released'),
             'UPDATE units SET released_position = 4294967295 WHERE released_position = 0',
+        ],
+
+        // ------------------------------------------------ Konten fuer Klassen
+
+        /*
+         * Die Bausteine der Initialpasswoerter. Sie stehen in der Datenbank
+         * und nicht im Quelltext, weil eine Lehrkraft ein Wort streichen
+         * koennen soll, das in ihrer Klasse zum Spitznamen wird - ohne dass
+         * dafuer jemand die Anwendung neu hochlaedt.
+         */
+        'password_words.table' => [
+            static fn (): bool => !table_exists('password_words'),
+            "CREATE TABLE password_words (
+                 id      INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                 kind    VARCHAR(16)  NOT NULL,
+                 word    VARCHAR(48)  NOT NULL,
+                 gender  CHAR(1)      NULL,
+                 active  TINYINT(1)   NOT NULL DEFAULT 1,
+                 PRIMARY KEY (id),
+                 UNIQUE KEY uq_password_words (kind, word),
+                 KEY idx_password_words_pick (kind, active)
+             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        ],
+
+        'password_words.seed' => [
+            static fn (): bool => table_exists('password_words')
+                && !schema_was_applied('password_words.seed'),
+            password_seed_sql(),
+        ],
+
+        /*
+         * Das erzeugte Passwort im Klartext, damit das Anschreiben eines
+         * Kindes nachdruckbar bleibt. Bewusste Abwaegung des Betreibers.
+         * Der Wert wird geleert, sobald das Kind sein Passwort aendert -
+         * dann ist er ohnehin wertlos, und der Bestand offener Passwoerter
+         * schrumpft mit der Zeit statt zu wachsen.
+         */
+        'users.initial_password' => [
+            static fn (): bool => !column_exists('users', 'initial_password'),
+            'ALTER TABLE users ADD COLUMN initial_password VARCHAR(64) NULL AFTER password_hash',
+        ],
+
+        /*
+         * Fehlversuche bei der Anmeldung.
+         *
+         * Zwei Woerter ergeben rund elftausend Kombinationen. Das reicht fuer
+         * ein Kind, das sein Passwort abtippt, und nicht gegen jemanden, der
+         * es durchprobiert - die Benutzernamen einer Klasse sind absehbar.
+         * Gezaehlt wird je Konto und je Adresse; die Wartezeit waechst mit
+         * der Zahl der Versuche.
+         */
+        'login_attempts.table' => [
+            static fn (): bool => !table_exists('login_attempts'),
+            "CREATE TABLE login_attempts (
+                 id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                 username   VARCHAR(64)  NOT NULL,
+                 ip         VARCHAR(45)  NOT NULL,
+                 created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                 PRIMARY KEY (id),
+                 KEY idx_login_attempts_user (username, created_at),
+                 KEY idx_login_attempts_ip (ip, created_at)
+             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         ],
     ];
 }

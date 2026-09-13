@@ -2039,6 +2039,92 @@ section('PWA-Hülle, Fortsetzung');
 ok('Der Service Worker haelt nur die Offline-Seite im Voraus vor',
    str_contains($sw, "const ASSETS = ['./offline.html']"));
 
+section('Anfangspasswörter');
+
+require_once __DIR__ . '/../lib/passwords.php';
+
+$adjektive = password_words(PW_ADJECTIVE);
+$tiere     = password_words(PW_ANIMAL);
+
+ok('Es gibt genug Adjektive', count($adjektive) >= 50, count($adjektive) . ' Stück');
+ok('Es gibt genug Tiere', count($tiere) >= 50, count($tiere) . ' Stück');
+ok('Zusammen reichen sie für eine Schule',
+   count($adjektive) * count($tiere) >= 5000,
+   count($adjektive) * count($tiere) . ' Kombinationen');
+
+ok('Jedes Tier hat ein Geschlecht',
+   array_filter($tiere, static fn ($t) => !in_array($t['gender'], ['m', 'f', 'n'], true)) === []);
+ok('Kein Adjektiv trägt schon eine Endung',
+   array_filter($adjektive, static fn ($a) => $a['gender'] !== null) === []);
+
+ok('Die Endung richtet sich nach dem Geschlecht',
+   password_ending('m') === 'er' && password_ending('f') === 'e' && password_ending('n') === 'es',
+   password_ending('m') . '/' . password_ending('f') . '/' . password_ending('n'));
+
+/*
+ * Der Kern: Ein Kind bekommt "müder Gepard", nicht "müde Gepard". Deshalb
+ * werden hier viele Passwörter erzeugt und jedes gegen seine Bausteine
+ * geprüft - ein einzelner Griff könnte zufällig richtig sein.
+ *
+ * Die erwartete Endung steht hier ausgeschrieben und wird NICHT bei
+ * password_ending() erfragt. Sonst prüfte der Test die Funktion gegen sich
+ * selbst und bliebe auch dann grün, wenn sie für jedes Geschlecht dasselbe
+ * lieferte - genau der Fehler, den er finden soll.
+ */
+$endung  = ['m' => 'er', 'f' => 'e', 'n' => 'es'];
+$stämme  = array_column($adjektive, 'word');
+$genus   = array_column($tiere, 'gender', 'word');
+$erzeugt = [];
+$falsch  = null;
+
+for ($i = 0; $i < 300; $i++) {
+    $pw = password_generate();
+    if ($pw === null || !str_contains($pw, ' ')) {
+        $falsch = var_export($pw, true);
+        break;
+    }
+    [$adj, $tier] = explode(' ', $pw, 2);
+    if (!isset($genus[$tier])) {
+        $falsch = $pw;
+        break;
+    }
+    if (!in_array($adj, array_map(
+            static fn ($s) => $s . $endung[$genus[$tier]], $stämme), true)) {
+        $falsch = $pw;
+        break;
+    }
+    $erzeugt[] = $pw;
+}
+
+ok('300 Passwörter sind grammatisch richtig gebeugt', $falsch === null, (string) $falsch);
+ok('Sie bestehen aus genau zwei Wörtern ohne Ziffern',
+   $erzeugt !== [] && array_filter($erzeugt,
+       static fn ($p) => preg_match('/^\p{L}+ \p{L}+$/u', $p) !== 1) === []);
+ok('Sie wiederholen sich nicht ständig',
+   count(array_unique($erzeugt)) > 250, count(array_unique($erzeugt)) . ' verschiedene');
+
+// Eine Klassenliste soll keine zwei gleichen Passwörter enthalten.
+$klasse = [];
+for ($i = 0; $i < 28; $i++) {
+    $klasse[] = password_generate($klasse);
+}
+ok('Innerhalb einer Klasse ist jedes Passwort verschieden',
+   count(array_unique($klasse)) === 28, count(array_unique($klasse)) . ' von 28');
+
+ok('Getippte Leerzeichen werden nachgesehen',
+   password_tidy("  müder   Gepard \u{00A0}") === 'müder Gepard',
+   '[' . password_tidy("  müder   Gepard \u{00A0}") . ']');
+ok('Die Grossschreibung bleibt, wie sie auf dem Blatt steht',
+   password_tidy('Müder Gepard') === 'Müder Gepard');
+
+// Abgeschaltete Wörter tauchen nicht mehr auf.
+$probe = 'zzprobe' . bin2hex(random_bytes(2));
+q('INSERT INTO password_words (kind, word, gender, active) VALUES (?, ?, NULL, 0)',
+  [PW_ADJECTIVE, $probe]);
+ok('Ein abgeschaltetes Wort wird nicht mehr vergeben',
+   !in_array($probe, array_column(password_words(PW_ADJECTIVE), 'word'), true));
+q('DELETE FROM password_words WHERE kind = ? AND word = ?', [PW_ADJECTIVE, $probe]);
+
 // ------------------------------------------------------------------ Abmelden
 
 section('Bereich für Lehrkräfte');
