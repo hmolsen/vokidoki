@@ -165,6 +165,266 @@ function schema_migrations(): array
                    REFERENCES vocab(id) ON DELETE CASCADE
              ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
         ],
+
+        /*
+         * Aufraeumen: idx_progress_user (user_id) ist seit uq_progress_user
+         * (user_id, vocab_id, mode) ueberfluessig - ein Index auf einem
+         * Praefix des anderen. Er kostet bei jedem Schreibvorgang Arbeit und
+         * bringt nichts. Bewusst getrennt vom eigentlichen Umbau: Das hier
+         * darf schiefgehen, ohne dass es jemanden stoert.
+         */
+        'progress.idx.cleanup' => [
+            static fn (): bool => index_exists('progress', 'idx_progress_user')
+                && index_exists('progress', 'uq_progress_user'),
+            'ALTER TABLE progress DROP INDEX idx_progress_user',
+        ],
+
+        /* ------------------------------------------------------------------
+         * Schule, Klasse, Kurs.
+         *
+         * Alles hier ist rein additiv: Die Tabellen entstehen, die Spalten
+         * kommen dazu, die Familiendaten wandern hinein - aber keine Zeile
+         * Code liest sie. Das ist Absicht. Ein Fehler ist in diesem Schritt am
+         * billigsten, weil noch nichts davon abhaengt. Erst der naechste
+         * Schritt schaltet lib/access.php darauf um, und dass die Pruefungen
+         * dabei gruen bleiben, ist dann der Beweis, dass die Ueberfuehrung
+         * vollstaendig war.
+         * --------------------------------------------------------------- */
+
+        'schools' => [
+            static fn (): bool => !table_exists('schools'),
+            'CREATE TABLE schools (
+               id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+               name       VARCHAR(128) NOT NULL,
+               active     TINYINT(1) NOT NULL DEFAULT 1,
+               monthly_cost_cap_usd DECIMAL(10,2) NULL,
+               created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               UNIQUE KEY uq_school_name (name)
+             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+        ],
+
+        'classes' => [
+            static fn (): bool => !table_exists('classes'),
+            'CREATE TABLE classes (
+               id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+               school_id  INT UNSIGNED NOT NULL,
+               name       VARCHAR(64) NOT NULL,
+               active     TINYINT(1) NOT NULL DEFAULT 1,
+               created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               UNIQUE KEY uq_class_name (school_id, name),
+               CONSTRAINT fk_class_school FOREIGN KEY (school_id)
+                   REFERENCES schools(id) ON DELETE CASCADE
+             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+        ],
+
+        'class_members' => [
+            static fn (): bool => !table_exists('class_members'),
+            'CREATE TABLE class_members (
+               id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+               class_id   INT UNSIGNED NOT NULL,
+               user_id    INT UNSIGNED NOT NULL,
+               created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               UNIQUE KEY uq_class_member (class_id, user_id),
+               KEY idx_class_member_user (user_id),
+               CONSTRAINT fk_cm_class FOREIGN KEY (class_id)
+                   REFERENCES classes(id) ON DELETE CASCADE,
+               CONSTRAINT fk_cm_user FOREIGN KEY (user_id)
+                   REFERENCES users(id) ON DELETE CASCADE
+             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+        ],
+
+        /*
+         * Kurs = Klasse + Sprache, etwa "Englisch 5B".
+         *
+         * Die Lerneinheiten haengen am Kurs, nicht an der Schule - so kann
+         * eine Lehrkraft mit denselben Unterlagen unabhaengig arbeiten. Das
+         * kostet: Zwei Lehrkraefte mit derselben Buchseite lesen zweimal ein
+         * und erzeugen zweimal Saetze. Bewusst so entschieden.
+         */
+        'courses' => [
+            static fn (): bool => !table_exists('courses'),
+            'CREATE TABLE courses (
+               id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+               school_id   INT UNSIGNED NOT NULL,
+               class_id    INT UNSIGNED NULL,
+               language_id INT UNSIGNED NOT NULL,
+               name        VARCHAR(128) NOT NULL,
+               created_by  INT UNSIGNED NULL,
+               active      TINYINT(1) NOT NULL DEFAULT 1,
+               created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               KEY idx_course_school (school_id),
+               KEY idx_course_class (class_id),
+               KEY idx_course_language (language_id),
+               CONSTRAINT fk_course_school FOREIGN KEY (school_id)
+                   REFERENCES schools(id) ON DELETE CASCADE,
+               CONSTRAINT fk_course_class FOREIGN KEY (class_id)
+                   REFERENCES classes(id) ON DELETE SET NULL,
+               CONSTRAINT fk_course_language FOREIGN KEY (language_id)
+                   REFERENCES languages(id) ON DELETE CASCADE,
+               CONSTRAINT fk_course_creator FOREIGN KEY (created_by)
+                   REFERENCES users(id) ON DELETE SET NULL
+             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+        ],
+
+        /*
+         * Mitgliedschaft ausdruecklich je Kurs, nicht aus der Klasse
+         * abgeleitet: Ab Jahrgang 6 teilt sich eine Klasse regelmaessig in
+         * Franzoesisch und Latein. Lehrkraft und Kind stehen in derselben
+         * Tabelle, damit Vertretung und Mehrfachmitgliedschaft von selbst
+         * anfallen.
+         */
+        'course_members' => [
+            static fn (): bool => !table_exists('course_members'),
+            "CREATE TABLE course_members (
+               id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+               course_id   INT UNSIGNED NOT NULL,
+               user_id     INT UNSIGNED NOT NULL,
+               member_role VARCHAR(16) NOT NULL DEFAULT 'student',
+               created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               UNIQUE KEY uq_course_member (course_id, user_id),
+               KEY idx_course_member_user (user_id, member_role),
+               CONSTRAINT fk_cmem_course FOREIGN KEY (course_id)
+                   REFERENCES courses(id) ON DELETE CASCADE,
+               CONSTRAINT fk_cmem_user FOREIGN KEY (user_id)
+                   REFERENCES users(id) ON DELETE CASCADE
+             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        ],
+
+        'users.school' => [
+            static fn (): bool => !column_exists('users', 'school_id'),
+            "ALTER TABLE users
+               ADD COLUMN school_id INT UNSIGNED NULL AFTER id,
+               ADD COLUMN role VARCHAR(16) NOT NULL DEFAULT 'student' AFTER display_name,
+               ADD COLUMN can_import TINYINT(1) NOT NULL DEFAULT 0 AFTER role,
+               ADD KEY idx_users_school (school_id)",
+        ],
+
+        'languages.school' => [
+            static fn (): bool => !column_exists('languages', 'school_id'),
+            'ALTER TABLE languages
+               ADD COLUMN school_id INT UNSIGNED NULL AFTER user_id,
+               ADD KEY idx_lang_school (school_id)',
+        ],
+
+        'units.course' => [
+            static fn (): bool => !column_exists('units', 'course_id'),
+            'ALTER TABLE units
+               ADD COLUMN course_id INT UNSIGNED NULL AFTER language_id,
+               ADD COLUMN released_position INT UNSIGNED NOT NULL DEFAULT 0 AFTER title,
+               ADD KEY idx_units_course (course_id)',
+        ],
+
+        'ai_requests.school' => [
+            static fn (): bool => !column_exists('ai_requests', 'school_id'),
+            'ALTER TABLE ai_requests
+               ADD COLUMN school_id INT UNSIGNED NULL AFTER user_id,
+               ADD KEY idx_ai_school (school_id)',
+        ],
+
+        /* ---- Ueberfuehrung des vorhandenen Bestandes -------------------- */
+
+        'family.school' => [
+            static fn (): bool => table_exists('schools')
+                && !schema_was_applied('family.school'),
+            "INSERT INTO schools (name)
+             SELECT 'Familie' FROM DUAL
+              WHERE NOT EXISTS (SELECT 1 FROM schools WHERE name = 'Familie')",
+        ],
+
+        'family.class' => [
+            static fn (): bool => table_exists('classes')
+                && !schema_was_applied('family.class'),
+            "INSERT INTO classes (school_id, name)
+             SELECT s.id, 'Familie' FROM schools s
+              WHERE s.name = 'Familie'
+                AND NOT EXISTS (SELECT 1 FROM classes c
+                                 WHERE c.school_id = s.id AND c.name = 'Familie')",
+        ],
+
+        /*
+         * Der Bestand behaelt seine heutigen Rechte: can_import = 1. Neue
+         * Schuelerkonten bekommen die Voreinstellung 0 - Einlesen kostet Geld
+         * und wird einzeln vergeben.
+         */
+        'family.users' => [
+            static fn (): bool => column_exists('users', 'school_id')
+                && !schema_was_applied('family.users'),
+            "UPDATE users
+                SET school_id  = (SELECT id FROM schools WHERE name = 'Familie'),
+                    can_import = 1
+              WHERE school_id IS NULL",
+        ],
+
+        'family.class_members' => [
+            static fn (): bool => table_exists('class_members')
+                && !schema_was_applied('family.class_members'),
+            "INSERT IGNORE INTO class_members (class_id, user_id)
+             SELECT c.id, u.id
+               FROM classes c
+               JOIN schools s ON s.id = c.school_id
+               JOIN users u   ON u.school_id = s.id
+              WHERE s.name = 'Familie' AND c.name = 'Familie'",
+        ],
+
+        'family.languages' => [
+            static fn (): bool => column_exists('languages', 'school_id')
+                && !schema_was_applied('family.languages'),
+            'UPDATE languages l
+               JOIN users u ON u.id = l.user_id
+                SET l.school_id = u.school_id
+              WHERE l.school_id IS NULL',
+        ],
+
+        /*
+         * Je vorhandener Sprache ein Kurs. Da eine Sprache heute genau einem
+         * Kind gehoert, ist die Zuordnung eindeutig - "Franzoesisch Lilli".
+         * Die doppelten Sprachnamen bleiben bestehen; sie zusammenzufuehren
+         * waere der gefaehrlichste Teil einer Migration und bringt nichts
+         * ausser Ordnung.
+         */
+        'family.courses' => [
+            static fn (): bool => table_exists('courses')
+                && !schema_was_applied('family.courses'),
+            "INSERT INTO courses (school_id, class_id, language_id, name, created_by)
+             SELECT l.school_id,
+                    (SELECT c.id FROM classes c
+                      WHERE c.school_id = l.school_id AND c.name = 'Familie' LIMIT 1),
+                    l.id,
+                    CONCAT(l.name, ' ', u.display_name),
+                    l.user_id
+               FROM languages l
+               JOIN users u ON u.id = l.user_id
+              WHERE l.school_id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM courses co WHERE co.language_id = l.id)",
+        ],
+
+        'family.course_members' => [
+            static fn (): bool => table_exists('course_members')
+                && !schema_was_applied('family.course_members'),
+            "INSERT IGNORE INTO course_members (course_id, user_id, member_role)
+             SELECT co.id, l.user_id, 'student'
+               FROM courses co
+               JOIN languages l ON l.id = co.language_id",
+        ],
+
+        'family.units' => [
+            static fn (): bool => column_exists('units', 'course_id')
+                && !schema_was_applied('family.units'),
+            'UPDATE units t
+               JOIN courses co ON co.language_id = t.language_id
+                SET t.course_id = co.id
+              WHERE t.course_id IS NULL',
+        ],
+
+        /*
+         * Altbestand gilt als vollstaendig aufgegeben - sonst saehe ein Kind
+         * seine bisherigen Vokabeln ploetzlich nicht mehr.
+         */
+        'family.released' => [
+            static fn (): bool => column_exists('units', 'released_position')
+                && !schema_was_applied('family.released'),
+            'UPDATE units SET released_position = 4294967295 WHERE released_position = 0',
+        ],
     ];
 }
 

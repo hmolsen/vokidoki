@@ -687,6 +687,149 @@ ok('Lernstand ist gelöscht',
 [$card] = apiCall('quiz', 'next', null, ['unit_id' => $unitId]);
 ok('Nach dem Zurücksetzen kommen wieder Fragen', !($card['done'] ?? true));
 
+section('Schule, Klasse, Kurs');
+
+/*
+ * Die Ueberfuehrung des vorhandenen Bestandes.
+ *
+ * Geprueft wird nicht das einmalige Ergebnis auf dieser Datenbank, sondern die
+ * Migration selbst: Ein Kind mit Sprache und Lerneinheit wird angelegt, wie es
+ * vor dem Umbau ausgesehen haette - ohne Schule, ohne Kurs. Dann laeuft die
+ * Schemapflege erneut und muss alles einsortieren.
+ */
+require_once __DIR__ . '/../lib/schema.php';
+
+foreach (['schools', 'classes', 'class_members', 'courses', 'course_members'] as $t) {
+    ok("Tabelle $t ist da", table_exists($t));
+}
+foreach ([['users', 'school_id'], ['users', 'role'], ['users', 'can_import'],
+          ['languages', 'school_id'], ['units', 'course_id'],
+          ['units', 'released_position'], ['ai_requests', 'school_id']] as [$t, $c]) {
+    ok("Spalte $t.$c ist da", column_exists($t, $c));
+}
+
+// Ein Kind, wie es vor dem Umbau ausgesehen haette.
+$altName = 'testalt_' . bin2hex(random_bytes(3));
+q('INSERT INTO users (username, display_name, password_hash, color, school_id, can_import)
+   VALUES (?, ?, ?, ?, NULL, 0)',
+  [$altName, 'Altkind', password_hash('geheim123', PASSWORD_DEFAULT), '#4f7cff']);
+$altUser = (int) db()->lastInsertId();
+
+q('INSERT INTO languages (user_id, name, flag_emoji, code) VALUES (?, ?, ?, ?)',
+  [$altUser, 'Altisch', '', 'de']);
+$altLang = (int) db()->lastInsertId();
+
+q('INSERT INTO units (user_id, language_id, title) VALUES (?, ?, ?)',
+  [$altUser, $altLang, 'Alte Einheit']);
+$altUnit = (int) db()->lastInsertId();
+
+ok('Ein Bestand ohne Schule und Kurs steht bereit',
+   qv('SELECT school_id FROM users WHERE id = ?', [$altUser]) === null
+   && qv('SELECT course_id FROM units WHERE id = ?', [$altUnit]) === null);
+
+$kurseVorher = (int) qv('SELECT COUNT(*) FROM courses');
+
+// Die Merker loeschen, damit die Ueberfuehrung erneut laeuft.
+q("DELETE FROM settings WHERE k LIKE 'schema_applied_family.%'");
+settings_reset_cache();
+ensure_schema();
+
+ok('Das Kind bekommt eine Schule',
+   (int) qv('SELECT school_id FROM users WHERE id = ?', [$altUser]) > 0);
+ok('Und landet in einer Klasse',
+   (int) qv('SELECT COUNT(*) FROM class_members WHERE user_id = ?', [$altUser]) === 1);
+ok('Seine Rechte bleiben, wie sie waren',
+   (int) qv('SELECT can_import FROM users WHERE id = ?', [$altUser]) === 1,
+   'der Bestand darf weiter einlesen');
+
+$kurs = q1('SELECT * FROM courses WHERE language_id = ?', [$altLang]);
+ok('Zur Sprache entsteht ein Kurs', $kurs !== null);
+ok('Der Kurs heisst nach Sprache und Kind',
+   ($kurs['name'] ?? '') === 'Altisch Altkind', $kurs['name'] ?? '-');
+ok('Das Kind ist Mitglied darin',
+   (int) qv('SELECT COUNT(*) FROM course_members WHERE course_id = ? AND user_id = ?',
+            [(int) $kurs['id'], $altUser]) === 1);
+ok('Und zwar als SchuelerIn',
+   qv('SELECT member_role FROM course_members WHERE course_id = ? AND user_id = ?',
+      [(int) $kurs['id'], $altUser]) === 'student');
+
+ok('Die Lerneinheit haengt am Kurs',
+   (int) qv('SELECT course_id FROM units WHERE id = ?', [$altUnit]) === (int) $kurs['id']);
+ok('Und gilt als vollstaendig freigegeben',
+   (int) qv('SELECT released_position FROM units WHERE id = ?', [$altUnit]) > 0,
+   'sonst saehe das Kind seine bisherigen Vokabeln nicht mehr');
+
+// Zweimal laufen darf nichts verdoppeln - sonst entstuenden bei jedem
+// Admin-Aufruf neue Kurse.
+$kurseNachher = (int) qv('SELECT COUNT(*) FROM courses');
+q("DELETE FROM settings WHERE k LIKE 'schema_applied_family.%'");
+settings_reset_cache();
+ensure_schema();
+ok('Ein zweiter Durchlauf legt nichts doppelt an',
+   (int) qv('SELECT COUNT(*) FROM courses') === $kurseNachher,
+   $kurseNachher . ' vorher, ' . qv('SELECT COUNT(*) FROM courses') . ' nachher');
+// Die Ueberfuehrung legt zu JEDER Sprache ohne Kurs einen an - im Testlauf
+// entstehen unterwegs mehrere. Die tragende Aussage ist deshalb nicht die
+// Anzahl, sondern die Zuordnung: genau ein Kurs je Sprache, keiner uebrig.
+$ohneKurs = (int) qv('SELECT COUNT(*) FROM languages l
+                       WHERE l.school_id IS NOT NULL
+                         AND NOT EXISTS (SELECT 1 FROM courses co WHERE co.language_id = l.id)');
+ok('Jede Sprache hat danach einen Kurs', $ohneKurs === 0, $ohneKurs . ' ohne');
+
+$doppelt = (int) qv('SELECT COUNT(*) FROM (
+                        SELECT language_id FROM courses
+                         GROUP BY language_id HAVING COUNT(*) > 1
+                     ) d');
+ok('Und keine Sprache zwei', $doppelt === 0, $doppelt . ' doppelt');
+
+// Noch liest kein Code die neuen Tabellen - das ist der Sinn dieser Etappe.
+$liest = [];
+foreach (array_merge(glob(__DIR__ . '/../api/*.php') ?: [],
+                     glob(__DIR__ . '/../lib/*.php') ?: []) as $datei) {
+    if (basename($datei) === 'schema.php') {
+        continue;
+    }
+    if (preg_match('/FROM\s+(courses|course_members|classes|class_members|schools)\b/i',
+                   (string) file_get_contents($datei)) === 1) {
+        $liest[] = basename($datei);
+    }
+}
+ok('Noch liest kein Endpunkt die neuen Tabellen',
+   $liest === [], implode(', ', $liest));
+
+/*
+ * Zwei Wege fuehren zum Schema: schema.sql bei einer Neuinstallation und die
+ * Migrationen bei einem Update. Laufen sie auseinander, faellt das erst bei
+ * der naechsten frischen Schule auf - und dann auf die unangenehme Art.
+ *
+ * Ein vollstaendiger Vergleich braeuchte eine zweite Datenbank und damit
+ * Rechte, die nicht jede Installation hat. Geprueft wird deshalb das, was
+ * tatsaechlich vergessen wird: eine Tabelle oder Spalte, die es per Migration
+ * gibt, in schema.sql aber nicht.
+ */
+$schemaSql = (string) file_get_contents(__DIR__ . '/../schema.sql');
+
+$fehlend = [];
+foreach (['schools', 'classes', 'class_members', 'courses', 'course_members',
+          'users', 'languages', 'units', 'vocab', 'sentences', 'sentence_flags',
+          'progress', 'ai_requests', 'settings', 'device_tokens'] as $t) {
+    if (!str_contains($schemaSql, 'CREATE TABLE IF NOT EXISTS ' . $t . ' (')) {
+        $fehlend[] = $t;
+    }
+}
+ok('Jede Tabelle steht auch in schema.sql', $fehlend === [], implode(', ', $fehlend));
+
+foreach ([['school_id', 'users'], ['role', 'users'], ['can_import', 'users'],
+          ['course_id', 'units'], ['released_position', 'units']] as [$spalte, $tabelle]) {
+    ok("schema.sql kennt $tabelle.$spalte", str_contains($schemaSql, $spalte));
+}
+
+ok('Und den neuen Schluessel auf progress',
+   str_contains($schemaSql, 'uq_progress_user (user_id, vocab_id, mode)')
+   && !str_contains($schemaSql, 'uq_progress (vocab_id, mode)'));
+
+q('DELETE FROM users WHERE id = ?', [$altUser]);
+
 section('Lernstand gehört dem Kind');
 
 /*

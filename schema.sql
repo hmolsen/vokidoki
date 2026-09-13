@@ -5,13 +5,17 @@ SET NAMES utf8mb4;
 
 CREATE TABLE IF NOT EXISTS users (
   id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  school_id     INT UNSIGNED NULL,
   username      VARCHAR(64)  NOT NULL,
   display_name  VARCHAR(64)  NOT NULL,
+  role          VARCHAR(16)  NOT NULL DEFAULT 'student',
+  can_import    TINYINT(1)   NOT NULL DEFAULT 0,
   password_hash VARCHAR(255) NOT NULL,
   color         CHAR(7)      NOT NULL DEFAULT '#4f7cff',
   active        TINYINT(1)   NOT NULL DEFAULT 1,
   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_users_username (username)
+  UNIQUE KEY uq_users_username (username),
+  KEY idx_users_school (school_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Ein Datensatz pro Homescreen-Icon. Gespeichert wird nur der SHA-256-Hash.
@@ -31,12 +35,14 @@ CREATE TABLE IF NOT EXISTS device_tokens (
 CREATE TABLE IF NOT EXISTS languages (
   id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id    INT UNSIGNED NOT NULL,
+  school_id  INT UNSIGNED NULL,
   name       VARCHAR(64)  NOT NULL,
   flag_emoji VARCHAR(16)  NOT NULL DEFAULT '',
   -- ISO-Kürzel (fr, en, la, da) als Tastaturhinweis im Lückentext; darf fehlen.
   code       VARCHAR(8)   NULL,
   created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_lang_user_name (user_id, name),
+  KEY idx_lang_school (school_id),
   CONSTRAINT fk_lang_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -45,7 +51,10 @@ CREATE TABLE IF NOT EXISTS units (
   id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id     INT UNSIGNED NOT NULL,
   language_id INT UNSIGNED NOT NULL,
+  course_id   INT UNSIGNED NULL,
   title       VARCHAR(128) NOT NULL,
+  -- Bis zu welcher vocab.position ist die Einheit aufgegeben? 0 = noch nichts.
+  released_position INT UNSIGNED NOT NULL DEFAULT 0,
   created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   -- Die Lueckensaetze entstehen im Hintergrund, gleich nach dem Einlesen.
   -- NULL = nie angestossen, sonst running / done / failed.
@@ -54,6 +63,7 @@ CREATE TABLE IF NOT EXISTS units (
   sentences_error      VARCHAR(255) NULL,
   KEY idx_units_user (user_id),
   KEY idx_units_lang (language_id),
+  KEY idx_units_course (course_id),
   CONSTRAINT fk_units_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_units_lang FOREIGN KEY (language_id) REFERENCES languages(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -89,6 +99,77 @@ CREATE TABLE IF NOT EXISTS sentences (
 -- Gemeldete Lückensätze: eine Zeile je Kind und Satz, damit niemand
 -- denselben Satz mehrfach meldet. Das Getippte kommt mit, weil es meist
 -- entscheidet, ob der Satz oder die erwartete Antwort daneben lag.
+-- Schule, Klasse, Kurs.
+--
+-- Eine Schule ist der Mandant: Klassen, Kurse und Konten haengen daran.
+
+CREATE TABLE IF NOT EXISTS schools (
+  id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name       VARCHAR(128) NOT NULL,
+  active     TINYINT(1) NOT NULL DEFAULT 1,
+  monthly_cost_cap_usd DECIMAL(10,2) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_school_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS classes (
+  id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  school_id  INT UNSIGNED NOT NULL,
+  name       VARCHAR(64) NOT NULL,
+  active     TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_class_name (school_id, name),
+  CONSTRAINT fk_class_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS class_members (
+  id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  class_id   INT UNSIGNED NOT NULL,
+  user_id    INT UNSIGNED NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_class_member (class_id, user_id),
+  KEY idx_class_member_user (user_id),
+  CONSTRAINT fk_cm_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+  CONSTRAINT fk_cm_user  FOREIGN KEY (user_id)  REFERENCES users(id)   ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Kurs = Klasse + Sprache, etwa "Englisch 5B". Die Lerneinheiten haengen am
+-- Kurs, damit Lehrkraefte mit denselben Unterlagen unabhaengig arbeiten
+-- koennen. Das kostet: zwei Kurse mit derselben Buchseite lesen zweimal ein.
+CREATE TABLE IF NOT EXISTS courses (
+  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  school_id   INT UNSIGNED NOT NULL,
+  class_id    INT UNSIGNED NULL,
+  language_id INT UNSIGNED NOT NULL,
+  name        VARCHAR(128) NOT NULL,
+  created_by  INT UNSIGNED NULL,
+  active      TINYINT(1) NOT NULL DEFAULT 1,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_course_school (school_id),
+  KEY idx_course_class (class_id),
+  KEY idx_course_language (language_id),
+  CONSTRAINT fk_course_school   FOREIGN KEY (school_id)   REFERENCES schools(id)   ON DELETE CASCADE,
+  CONSTRAINT fk_course_class    FOREIGN KEY (class_id)    REFERENCES classes(id)   ON DELETE SET NULL,
+  CONSTRAINT fk_course_language FOREIGN KEY (language_id) REFERENCES languages(id) ON DELETE CASCADE,
+  CONSTRAINT fk_course_creator  FOREIGN KEY (created_by)  REFERENCES users(id)     ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Mitgliedschaft ausdruecklich je Kurs, nicht aus der Klasse abgeleitet: Ab
+-- Jahrgang 6 teilt sich eine Klasse regelmaessig in Franzoesisch und Latein.
+-- Lehrkraft und Kind stehen in derselben Tabelle, damit Vertretung und
+-- Mehrfachmitgliedschaft von selbst anfallen.
+CREATE TABLE IF NOT EXISTS course_members (
+  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  course_id   INT UNSIGNED NOT NULL,
+  user_id     INT UNSIGNED NOT NULL,
+  member_role VARCHAR(16) NOT NULL DEFAULT 'student',
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_course_member (course_id, user_id),
+  KEY idx_course_member_user (user_id, member_role),
+  CONSTRAINT fk_cmem_course FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+  CONSTRAINT fk_cmem_user   FOREIGN KEY (user_id)   REFERENCES users(id)   ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS sentence_flags (
   id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   sentence_id INT UNSIGNED NOT NULL,
@@ -126,6 +207,7 @@ CREATE TABLE IF NOT EXISTS progress (
 CREATE TABLE IF NOT EXISTS ai_requests (
   id                BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id           INT UNSIGNED NULL,
+  school_id         INT UNSIGNED NULL,
   user_label        VARCHAR(64)   NOT NULL DEFAULT '',
   model             VARCHAR(64)   NOT NULL,
   purpose           VARCHAR(32)   NOT NULL DEFAULT 'vocab_ocr',
@@ -142,6 +224,7 @@ CREATE TABLE IF NOT EXISTS ai_requests (
   created_at        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_ai_created (created_at),
   KEY idx_ai_user (user_id),
+  KEY idx_ai_school (school_id),
   CONSTRAINT fk_ai_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
