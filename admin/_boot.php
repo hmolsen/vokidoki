@@ -18,8 +18,6 @@ boot_error_handling();
 
 session_boot();
 
-// Bringt das Schema auf den Stand des Codes, falls per FTP aktualisiert wurde.
-ensure_schema();
 
 function admin_url(string $file = 'index.php'): string
 {
@@ -238,6 +236,27 @@ function admin_head(string $title, string $active): void
     <main class="adminmain">
         <h1><?= h($title) ?></h1>
     <?php
+
+    /*
+     * Ein offener Schemastand darf nicht nur im Selbsttest stehen.
+     *
+     * Ausgefuehrt wird nur auf Knopfdruck - also muss man auch erfahren, dass
+     * es etwas zu druecken gibt. Ohne diesen Hinweis liefe die Anwendung nach
+     * einem Upload auf einem Schema, das nicht zum Code passt, und niemand
+     * wuesste warum.
+     */
+    if ($active !== 'selfcheck.php') {
+        $offen = schema_pending();
+        if ($offen !== []) {
+            printf(
+                '<div class="notice">Die Datenbank ist noch nicht auf dem Stand des Codes '
+                . '(%d Änderung%s ausstehend). <a href="%s">Im Selbsttest ausführen</a>.</div>',
+                count($offen),
+                count($offen) === 1 ? '' : 'en',
+                h(admin_url('selfcheck.php')),
+            );
+        }
+    }
 }
 
 function admin_foot(): void

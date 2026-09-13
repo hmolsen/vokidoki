@@ -732,6 +732,51 @@ ok('Lernstand ist gelöscht',
 [$card] = apiCall('quiz', 'next', null, ['unit_id' => $unitId]);
 ok('Nach dem Zurücksetzen kommen wieder Fragen', !($card['done'] ?? true));
 
+section('Schemaaenderungen nur auf Knopfdruck');
+
+/*
+ * Frueher lief ensure_schema() beim Aufruf jeder Admin-Seite von selbst.
+ * Bequem, aber blind: Ein Fehlschlag stand nur im Protokoll, und niemand
+ * wusste, ob und wann eine Aenderung gelaufen war. Jetzt ist es eine
+ * Entscheidung mit Knopf, Rueckmeldung und Abbruch beim ersten Fehler.
+ */
+require_once __DIR__ . '/../lib/schema.php';
+
+$adminBoot = (string) file_get_contents(__DIR__ . '/../admin/_boot.php');
+ok('Der Admin-Bereich migriert nicht mehr von selbst',
+   preg_match('/^ensure_schema\(\);/m', $adminBoot) !== 1);
+ok('Weist aber auf offene Aenderungen hin',
+   str_contains($adminBoot, 'schema_pending()'));
+
+$schemaQuelle = (string) file_get_contents(__DIR__ . '/../lib/schema.php');
+ok('Und beim ersten Fehlschlag wird abgebrochen',
+   preg_match('/catch \(Throwable \$e\) \{.*?break;/s', $schemaQuelle) === 1,
+   'sonst arbeitete sich der Lauf durch Folgefehler');
+
+// Einen offenen Stand herstellen und ueber die Oberflaeche ausfuehren.
+q("DELETE FROM settings WHERE k LIKE 'schema_applied_family.%'");
+settings_reset_cache();
+$offenVorher = count(schema_pending());
+ok('Es stehen Aenderungen aus', $offenVorher > 0, (string) $offenVorher);
+
+$seite = http($base . '/admin/selfcheck.php')['body'];
+ok('Der Selbsttest zeigt sie an',
+   str_contains($seite, 'ausstehende Schemaänderung'));
+ok('Und bietet einen Knopf an', str_contains($seite, 'name="run_migrations"'));
+ok('Er nennt sie beim Namen', str_contains($seite, 'family.courses'));
+
+$res = adminPost('selfcheck.php', ['run_migrations' => '1']);
+ok('Der Knopf fuehrt sie aus',
+   str_contains($res['body'], 'Änderung(en) ausgeführt'), 'keine Rueckmeldung');
+
+settings_reset_cache();
+ok('Danach steht nichts mehr aus', schema_pending() === [],
+   implode(', ', schema_pending()));
+
+$seite = http($base . '/admin/selfcheck.php')['body'];
+ok('Und die Karte ist verschwunden',
+   !str_contains($seite, 'ausstehende Schemaänderung'));
+
 section('Schule, Klasse, Kurs');
 
 /*
@@ -1028,8 +1073,11 @@ ok('Die Schemapflege erkennt, dass Kürzel fehlen',
    in_array('languages.code.backfill', schema_pending(), true),
    implode(', ', schema_pending()));
 
-// Ein Aufruf des Admin-Bereichs traegt nach, wie bei jeder Schemaaenderung.
-http($base . '/admin/');
+// Nachgetragen wird seit neuestem nur auf Knopfdruck. Hier geht es um die
+// Logik des Nachtragens, nicht um den Weg dorthin - der hat einen eigenen
+// Abschnitt -, deshalb direkt.
+settings_reset_cache();
+ensure_schema();
 
 ok('Französisch bekommt sein Kürzel - trotz Umlaut und großem Anfangsbuchstaben',
    qv('SELECT code FROM languages WHERE id = ?', [$frId]) === 'fr');

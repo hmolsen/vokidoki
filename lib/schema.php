@@ -9,12 +9,14 @@ require_once __DIR__ . '/settings.php';
  * Nachträgliche Schemaänderungen.
  *
  * Die App wird per FTP aktualisiert - es gibt keinen Schritt, der von sich aus
- * SQL ausführt. Deshalb prüft der Admin-Bereich beim Aufruf, ob das Schema zum
- * Code passt, und ergänzt fehlende Spalten selbst. Jede Änderung ist so
- * formuliert, dass sie nur hinzufügt und vorhandene Daten unangetastet lässt.
+ * SQL ausführt. Jede Änderung ist so formuliert, dass sie nur hinzufügt und
+ * vorhandene Daten unangetastet lässt.
  *
- * Bewusst nicht in den API-Endpunkten: Dort soll kein Seiteneffekt auf das
- * Schema möglich sein, und es kostet eine Abfrage pro Aufruf.
+ * Ausgeführt wird ausschliesslich auf Knopfdruck im Selbsttest des
+ * Admin-Bereichs. Früher lief das beim Aufruf jeder Admin-Seite von selbst -
+ * bequem, aber blind: Ein Fehlschlag stand nur im Protokoll, und niemand
+ * wusste, ob und wann eine Änderung gelaufen war. Eine Schemaänderung ist eine
+ * Entscheidung, kein Seiteneffekt.
  */
 
 /**
@@ -484,7 +486,8 @@ function schema_pending(): array
  */
 function ensure_schema(): array
 {
-    $applied = [];
+    $ergebnis = [];
+
     foreach (schema_migrations() as $name => [$isMissing, $sql]) {
         if (!$isMissing()) {
             continue;
@@ -492,12 +495,25 @@ function ensure_schema(): array
         try {
             db()->exec($sql);
             setting_set('schema_applied_' . $name, gmdate('c'));
-            $applied[] = $name;
+            $ergebnis[] = ['name' => $name, 'ok' => true, 'error' => null];
             error_log('[vokabeltrainer] Schema ergänzt: ' . $name);
         } catch (Throwable $e) {
+            $ergebnis[] = ['name' => $name, 'ok' => false, 'error' => $e->getMessage()];
             error_log('[vokabeltrainer] Schema konnte nicht ergänzt werden (' . $name . '): '
                 . $e->getMessage());
+
+            /*
+             * Nach dem ersten Fehlschlag abbrechen.
+             *
+             * Die Änderungen bauen aufeinander auf - eine Tabelle entsteht,
+             * dann werden Daten hineingeschrieben. Läuft der erste Schritt
+             * nicht, ist der zweite bestenfalls wirkungslos und schlimmstenfalls
+             * schädlich. Lieber mit einer klaren Meldung stehenbleiben, als
+             * sich durch eine Reihe von Folgefehlern zu arbeiten.
+             */
+            break;
         }
     }
-    return $applied;
+
+    return $ergebnis;
 }

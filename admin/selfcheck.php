@@ -12,6 +12,41 @@ require_once __DIR__ . '/../lib/sentences.php';
 
 admin_require();
 
+/*
+ * Schemaaenderungen laufen nur hier und nur auf Knopfdruck.
+ *
+ * Frueher geschah das beim Aufruf jeder Admin-Seite von selbst. Bequem, aber
+ * blind: Ein Fehlschlag stand nur im Protokoll, und niemand wusste, ob und
+ * wann eine Aenderung gelaufen war. Eine Schemaaenderung ist eine
+ * Entscheidung, kein Seiteneffekt - also mit Knopf, Rueckmeldung je Schritt
+ * und Abbruch beim ersten Fehler.
+ */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['run_migrations'])) {
+    csrf_check();
+    set_time_limit(300);
+
+    $ergebnis = ensure_schema();
+
+    if ($ergebnis === []) {
+        flash('Es stand nichts aus.');
+    } else {
+        $gelaufen  = array_filter($ergebnis, static fn (array $r): bool => $r['ok']);
+        $gescheitert = array_filter($ergebnis, static fn (array $r): bool => !$r['ok']);
+
+        $text = sprintf('%d Änderung(en) ausgeführt: %s.',
+            count($gelaufen),
+            implode(', ', array_column($gelaufen, 'name')) ?: 'keine');
+
+        if ($gescheitert !== []) {
+            $erste = reset($gescheitert);
+            flash($text . sprintf(' Abgebrochen bei "%s": %s', $erste['name'], $erste['error']), 'bad');
+        } else {
+            flash($text);
+        }
+    }
+    redirect('selfcheck.php');
+}
+
 $checks = [];
 
 /** @param callable():array{bool,string} $test */
@@ -99,12 +134,10 @@ check($checks, 'Schema vollständig', static function (): array {
 });
 
 check($checks, 'Schema auf dem Stand des Codes', static function (): array {
-    // ensure_schema() lief beim Aufruf dieser Seite bereits; steht hier noch
-    // etwas offen, ist die Änderung fehlgeschlagen (meist fehlende Rechte).
     $pending = schema_pending();
     return [$pending === [], $pending === []
         ? 'keine offenen Änderungen'
-        : 'fehlt: ' . implode(', ', $pending) . ' - Protokoll prüfen'];
+        : count($pending) . ' ausstehend: ' . implode(', ', $pending)];
 });
 
 check($checks, 'Kategorien der Vokabeln', static function (): array {
@@ -328,8 +361,35 @@ check($checks, 'Accounts angelegt', static function (): array {
 
 $failed = count(array_filter($checks, static fn ($c) => !$c['ok']));
 
-admin_head('Selbsttest', 'index.php');
+// Der zweite Parameter markiert den aktiven Punkt in der Navigation - hier
+// stand faelschlich 'index.php', wodurch "Kosten" hervorgehoben wurde.
+admin_head('Selbsttest', 'selfcheck.php');
+flash_render();
+
+$offen = schema_pending();
 ?>
+
+<?php if ($offen !== []): ?>
+<div class="card" style="border-left:4px solid var(--bad)">
+    <strong><?= count($offen) ?> ausstehende Schemaänderung<?= count($offen) === 1 ? '' : 'en' ?></strong>
+    <p class="tiny muted" style="margin:6px 0 10px">
+        Die Anwendung wurde aktualisiert, die Datenbank noch nicht. Bis das
+        erledigt ist, arbeitet der Bereich für Lehrkräfte nicht, und die App
+        kann sich unerwartet verhalten. Die Änderungen laufen nacheinander;
+        beim ersten Fehler wird abgebrochen, damit keine halbe Umstellung
+        entsteht.
+    </p>
+    <ol class="tiny muted" style="margin:0 0 12px 18px">
+        <?php foreach ($offen as $name): ?>
+            <li><code class="token"><?= h($name) ?></code></li>
+        <?php endforeach; ?>
+    </ol>
+    <form method="post">
+        <?= csrf_field() ?>
+        <button class="btn small" name="run_migrations" value="1">Jetzt ausführen</button>
+    </form>
+</div>
+<?php endif; ?>
 
 <?php if ($failed === 0): ?>
     <div class="notice good">Alle Prüfungen bestanden.</div>
