@@ -2125,6 +2125,226 @@ ok('Ein abgeschaltetes Wort wird nicht mehr vergeben',
    !in_array($probe, array_column(password_words(PW_ADJECTIVE), 'word'), true));
 q('DELETE FROM password_words WHERE kind = ? AND word = ?', [PW_ADJECTIVE, $probe]);
 
+section('QR-Code');
+
+require_once __DIR__ . '/../lib/qr.php';
+
+/**
+ * Liest einen fertigen Code wieder aus - bewusst als eigene Umsetzung und
+ * nicht mit den Hilfsmitteln der Bibliothek.
+ *
+ * Ein selbstgebauter Encoder wird still falsch: Das Muster sieht aus wie ein
+ * QR-Code, und ob es einer ist, merkt man erst mit dem Handy in der Hand.
+ * Deshalb wird hier der ganze Weg zurückgegangen - Formatinformation lesen,
+ * Maske abziehen, Zickzack ablaufen, Blöcke entflechten, Kopf auswerten - und
+ * am Ende muss derselbe Text herauskommen.
+ */
+function qrLesen(array $m): ?string
+{
+    $size    = count($m);
+    $version = (int) (($size - 17) / 4);
+
+    // 1. Formatinformation aus der ersten Kopie.
+    $bits = 0;
+    $holen = static function (int $r, int $c) use ($m): int {
+        return $m[$r][$c] ? 1 : 0;
+    };
+    for ($i = 0; $i <= 5; $i++) {
+        $bits |= $holen($i, 8) << $i;
+    }
+    $bits |= $holen(7, 8) << 6;
+    $bits |= $holen(8, 8) << 7;
+    $bits |= $holen(8, 7) << 8;
+    for ($i = 9; $i < 15; $i++) {
+        $bits |= $holen(8, 14 - $i) << $i;
+    }
+
+    $daten = (($bits ^ 0x5412) >> 10) & 0x1F;
+    $ecc   = ($daten >> 3) & 3;
+    $maske = $daten & 7;
+
+    if ($ecc !== QR_ECC_M) {
+        return null;
+    }
+
+    // 2. Belegte Stellen wiederherstellen und Maske abziehen.
+    $leer = array_fill(0, $size, array_fill(0, $size, false));
+    $fest = $leer;
+    $egal = $leer;
+    qr_draw_function_patterns($egal, $fest, $version, $size);
+
+    for ($r = 0; $r < $size; $r++) {
+        for ($c = 0; $c < $size; $c++) {
+            if (!$fest[$r][$c] && qr_mask_bit($maske, $r, $c)) {
+                $m[$r][$c] = !$m[$r][$c];
+            }
+        }
+    }
+
+    // 3. Zickzack ablaufen.
+    $folge = '';
+    $row   = $size - 1;
+    $dir   = -1;
+    for ($col = $size - 1; $col > 0; $col -= 2) {
+        if ($col === 6) {
+            $col--;
+        }
+        while (true) {
+            for ($s = 0; $s < 2; $s++) {
+                $c = $col - $s;
+                if (!$fest[$row][$c]) {
+                    $folge .= $m[$row][$c] ? '1' : '0';
+                }
+            }
+            $row += $dir;
+            if ($row < 0 || $row >= $size) {
+                $row -= $dir;
+                $dir = -$dir;
+                break;
+            }
+        }
+    }
+
+    [$eccProBlock, $bloecke, $datenProBlock] = QR_BLOCKS_M[$version];
+
+    $codewords = [];
+    foreach (str_split(substr($folge, 0, ($bloecke * ($datenProBlock + $eccProBlock)) * 8), 8) as $b) {
+        $codewords[] = bindec($b);
+    }
+
+    // 4. Blöcke entflechten - nur der Datenteil wird gebraucht.
+    $daten = [];
+    for ($i = 0; $i < $datenProBlock; $i++) {
+        for ($b = 0; $b < $bloecke; $b++) {
+            $daten[$b][$i] = $codewords[$i * $bloecke + $b];
+        }
+    }
+    $flach = [];
+    for ($b = 0; $b < $bloecke; $b++) {
+        foreach ($daten[$b] as $v) {
+            $flach[] = $v;
+        }
+    }
+
+    // 5. Kopf auswerten: Modus 0100, dann acht Bit Länge.
+    $strom = '';
+    foreach ($flach as $cw) {
+        $strom .= str_pad(decbin($cw), 8, '0', STR_PAD_LEFT);
+    }
+
+    if (substr($strom, 0, 4) !== '0100') {
+        return null;
+    }
+    $laenge = bindec(substr($strom, 4, 8));
+
+    $text = '';
+    for ($i = 0; $i < $laenge; $i++) {
+        $text .= chr(bindec(substr($strom, 12 + $i * 8, 8)));
+    }
+
+    return $text;
+}
+
+$qrFaelle = [
+    'a',
+    'https://cqrity.de/vokabeltrainer',
+    'https://cqrity.de/vokabeltrainer/?u=lilli.m',
+    'Müller & Söhne — ÄÖÜ ß',
+    str_repeat('x', 14),   // letzte Länge in Version 1
+    str_repeat('y', 15),   // erste in Version 2
+    str_repeat('z', 106),  // letzte in Version 6
+];
+
+$qrFehler = [];
+foreach ($qrFaelle as $t) {
+    $m = qr_matrix($t);
+    if ($m === null || qrLesen($m) !== $t) {
+        $qrFehler[] = mb_substr($t, 0, 24);
+    }
+}
+ok('Ein erzeugter QR-Code lässt sich wieder lesen', $qrFehler === [],
+   implode('; ', $qrFehler));
+
+// Die Versionsgrenzen: eine Länge mehr, und der Code muss wachsen.
+$grenzen = [14 => 21, 15 => 25, 26 => 25, 27 => 29, 42 => 29, 43 => 33,
+            62 => 33, 63 => 37, 84 => 37, 85 => 41, 106 => 41];
+$falsch = [];
+foreach ($grenzen as $len => $erwartet) {
+    $m = qr_matrix(str_repeat('a', $len));
+    if ($m === null || count($m) !== $erwartet) {
+        $falsch[] = $len . '=>' . ($m === null ? 'null' : count($m));
+    }
+}
+ok('Die Version wächst genau an den richtigen Stellen', $falsch === [],
+   implode(' ', $falsch));
+
+ok('Was nicht mehr passt, wird abgelehnt statt verstümmelt',
+   qr_matrix(str_repeat('a', 107)) === null);
+
+// Aufbau: die drei Sucher und die Taktlinien.
+$m    = qr_matrix('https://cqrity.de/vokabeltrainer');
+$size = count($m);
+
+$sucherOk = true;
+foreach ([[0, 0], [0, $size - 7], [$size - 7, 0]] as [$or, $oc]) {
+    for ($r = 0; $r < 7; $r++) {
+        for ($c = 0; $c < 7; $c++) {
+            $soll = max(abs($r - 3), abs($c - 3)) !== 2;
+            if ($m[$or + $r][$oc + $c] !== $soll) {
+                $sucherOk = false;
+            }
+        }
+    }
+}
+ok('Die drei Sucherquadrate stehen richtig', $sucherOk);
+
+$taktOk = true;
+for ($i = 8; $i < $size - 8; $i++) {
+    if ($m[6][$i] !== ($i % 2 === 0) || $m[$i][6] !== ($i % 2 === 0)) {
+        $taktOk = false;
+    }
+}
+ok('Die Taktlinien laufen durch', $taktOk,
+   'an der Kreuzung mit der Formatinformation verschluckt');
+
+ok('Das immer dunkle Modul ist dunkel', $m[$size - 8][8] === true);
+
+/*
+ * Feste Vergleichswerte. Erzeugt mit dieser Umsetzung und ausserhalb der
+ * Suite gegengeprüft: einmal gegen einen Decoder (jsQR), einmal Modul für
+ * Modul gegen einen fremden Encoder. Ändert sich hier etwas, war es entweder
+ * Absicht - dann gehören die Werte erneuert und erneut gegengeprüft - oder
+ * ein Fehler.
+ */
+$golden = [
+    'a'                                => '963343f04f9af434',
+    'bbbbbbbbbbbbbbb'                  => '03d5fb58ddb77eea',
+    'https://cqrity.de/vokabeltrainer' => '66a88a0ee3cd4f71',
+];
+$abweichung = [];
+foreach ($golden as $text => $soll) {
+    $zeilen = [];
+    foreach (qr_matrix($text) as $r) {
+        $zeilen[] = implode('', array_map(static fn ($b) => $b ? '1' : '0', $r));
+    }
+    $ist = substr(hash('sha256', implode('|', $zeilen)), 0, 16);
+    if ($ist !== $soll) {
+        $abweichung[] = sprintf('%s: %s statt %s', mb_substr($text, 0, 12), $ist, $soll);
+    }
+}
+ok('Die Codes sehen aus wie beim letzten gegengeprüften Stand',
+   $abweichung === [], implode('; ', $abweichung));
+
+$svg = qr_svg('https://cqrity.de/vokabeltrainer', 4, 'Adresse der App');
+ok('Als SVG kommt gültiges Markup heraus',
+   $svg !== null && str_starts_with($svg, '<svg ') && str_ends_with($svg, '</svg>'));
+ok('Mit dem hellen Rand, ohne den keine Kamera etwas findet',
+   $svg !== null && str_contains($svg, 'viewBox="0 0 37 37"'),
+   'Version 3 plus 2x4 Rand = 37');
+ok('Und ohne fremde Zeichen im Beschriftungstext',
+   qr_svg('x', 4, 'Anna & "Bö" <b>') !== null
+   && !str_contains((string) qr_svg('x', 4, 'Anna & "Bö" <b>'), '<b>'));
+
 section('Anmeldebremse');
 
 require_once __DIR__ . '/../lib/throttle.php';
