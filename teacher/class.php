@@ -57,6 +57,33 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_students'
     teacher_redirect($zurück);
 }
 
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['unlock'])) {
+    teacher_csrf_check();
+
+    $kindId = (int) $_POST['unlock'];
+
+    $gehoert = q1(
+        'SELECT u.id, u.username, u.display_name FROM class_members m
+           JOIN users u ON u.id = m.user_id
+          WHERE m.class_id = ? AND u.id = ?',
+        [$classId, $kindId],
+    );
+
+    if ($gehoert === null) {
+        teacher_flash('Dieses Kind ist nicht in dieser Klasse.', 'bad');
+        teacher_redirect($zurück);
+    }
+
+    /*
+     * Aufschliessen, ohne das Passwort anzufassen. Wer sich nur vertippt hat
+     * und sein Passwort kennt, soll nicht eine Viertelstunde warten und auch
+     * kein neues Passwort abtippen muessen.
+     */
+    login_attempts_reset((string) $gehoert['username']);
+    teacher_flash(sprintf('%s kann sich wieder anmelden.', $gehoert['display_name']));
+    teacher_redirect($zurück);
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['reset_password'])) {
     teacher_csrf_check();
 
@@ -88,8 +115,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['reset_passwor
     teacher_redirect($zurück);
 }
 
-$kinder = class_members_list($classId);
-$frisch = array_flip((array) ($_SESSION['teacher_fresh'] ?? []));
+$kinder    = class_members_list($classId);
+$gesperrt  = login_locked_usernames(array_column($kinder, 'username'));
+$frisch    = array_flip((array) ($_SESSION['teacher_fresh'] ?? []));
 unset($_SESSION['teacher_fresh']);
 
 teacher_head('Klasse ' . $klasse['name'], 'classes.php', $user);
@@ -109,7 +137,12 @@ teacher_flash_render();
     </tr>
     <?php foreach ($kinder as $k): ?>
         <tr<?= isset($frisch[(int) $k['id']]) ? ' class="hit"' : ($k['active'] ? '' : ' class="dim"') ?>>
-            <td><?= h($k['display_name']) ?></td>
+            <td>
+                <?= h($k['display_name']) ?>
+                <?php if (isset($gesperrt[$k['username']])): ?>
+                    <span class="tiny" style="color:var(--bad)">&nbsp;gesperrt</span>
+                <?php endif; ?>
+            </td>
             <td><code class="token"><?= h($k['username']) ?></code></td>
             <td>
                 <?php if (($k['initial_password'] ?? null) !== null && $k['initial_password'] !== ''): ?>
@@ -120,6 +153,16 @@ teacher_flash_render();
             </td>
             <td>
                 <?php if ($k['role'] !== 'teacher'): ?>
+                <?php if (isset($gesperrt[$k['username']])): ?>
+                <form method="post" class="compact">
+                    <?= teacher_csrf_field() ?>
+                    <input type="hidden" name="class_id" value="<?= $classId ?>">
+                    <button class="linkbtn" name="unlock" value="<?= (int) $k['id'] ?>">
+                        Entsperren
+                    </button>
+                </form>
+                &middot;
+                <?php endif; ?>
                 <form method="post" class="compact">
                     <?= teacher_csrf_field() ?>
                     <input type="hidden" name="class_id" value="<?= $classId ?>">

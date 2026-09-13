@@ -141,6 +141,37 @@ function login_lock_seconds_left(string $username): ?int
     return max(1, (int) $zeilen[LOGIN_ACCOUNT_LIMIT - 1]['rest']);
 }
 
+/**
+ * Welche dieser Konten sind gerade gesperrt?
+ *
+ * Für eine Klassenliste - je Kind einzeln zu fragen wären 28 Abfragen für
+ * eine Auskunft, die in eine passt.
+ *
+ * @param string[] $usernames
+ * @return array<string, true>
+ */
+function login_locked_usernames(array $usernames): array
+{
+    $usernames = array_values(array_unique(array_filter($usernames)));
+    if ($usernames === []) {
+        return [];
+    }
+
+    $fenster = (int) LOGIN_WINDOW_SECONDS;
+    $limit   = (int) LOGIN_ACCOUNT_LIMIT;
+    $platz   = implode(',', array_fill(0, count($usernames), '?'));
+
+    $zeilen = qa(
+        "SELECT username FROM login_attempts
+          WHERE username IN ($platz) AND created_at >= NOW() - INTERVAL $fenster SECOND
+          GROUP BY username
+         HAVING COUNT(*) >= $limit",
+        $usernames,
+    );
+
+    return array_fill_keys(array_column($zeilen, 'username'), true);
+}
+
 /** Einen Fehlversuch vermerken. */
 function login_attempt_record(string $username, string $ip): void
 {

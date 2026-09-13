@@ -2780,6 +2780,33 @@ ok('Die Liste ein zweites Mal legt niemanden doppelt an',
    count(class_members_list($klasseId)) . ' Kinder');
 ok('Und sagt, dass übersprungen wurde', str_contains($res['body'], 'übersprungen'));
 
+/*
+ * Ein gesperrtes Kind aufschliessen, ohne ihm ein neues Passwort zu geben.
+ * Wer sich nur vertippt hat, soll weder warten noch abtippen muessen.
+ */
+$lilliName = (string) $lilli['username'];
+for ($i = 0; $i < LOGIN_ACCOUNT_LIMIT; $i++) {
+    login_attempt_record($lilliName, '127.0.0.1');
+}
+ok('Ein Kind lässt sich aussperren',
+   isset(login_locked_usernames([$lilliName])[$lilliName]));
+
+$res = teacherGet('class.php?id=' . $klasseId);
+ok('Die Klassenliste zeigt die Sperre an', str_contains($res['body'], 'gesperrt'));
+ok('Und bietet das Entsperren an', str_contains($res['body'], 'Entsperren'));
+
+$hashVorher = (string) qv('SELECT password_hash FROM users WHERE id = ?', [(int) $lilli['id']]);
+teacherRequest($base . '/teacher/class.php?id=' . $klasseId, [
+    'unlock'   => (int) $lilli['id'],
+    'class_id' => $klasseId,
+    'csrf'     => $lehrerCsrf,
+]);
+ok('Nach dem Entsperren geht es wieder',
+   login_locked_usernames([$lilliName]) === []);
+ok('Und das Passwort ist dasselbe geblieben',
+   (string) qv('SELECT password_hash FROM users WHERE id = ?', [(int) $lilli['id']])
+   === $hashVorher);
+
 // Passwort zurücksetzen.
 $altesPasswort = (string) $lilli['initial_password'];
 $res = teacherRequest($base . '/teacher/class.php?id=' . $klasseId, [
