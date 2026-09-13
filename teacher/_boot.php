@@ -6,6 +6,7 @@ require_once __DIR__ . '/../lib/db.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/access.php';
 require_once __DIR__ . '/../lib/courses.php';
+require_once __DIR__ . '/../lib/throttle.php';
 require_once __DIR__ . '/../lib/settings.php';
 require_once __DIR__ . '/../lib/errors.php';
 require_once __DIR__ . '/../lib/schema.php';
@@ -89,15 +90,24 @@ function teacher_require(): array
         $username = strtolower(trim((string) ($_POST['username'] ?? '')));
         $password = (string) ($_POST['password'] ?? '');
 
+        $ip    = login_client_ip();
+        $sperr = login_guard($username, $ip);
+        if ($sperr !== null) {
+            teacher_login_page($sperr);
+        }
+
         $row = q1('SELECT * FROM users WHERE username = ? AND active = 1', [$username]);
 
         // password_verify auch ohne Treffer aufrufen, damit die Antwortzeit
         // nichts über vorhandene Konten verrät.
         $hash = $row['password_hash'] ?? '$2y$12$' . str_repeat('.', 53);
         if ($row === null || !password_verify($password, $hash) || !user_is_teacher($row)) {
+            login_attempt_record($username, $ip);
             usleep(random_int(200_000, 500_000));
             teacher_login_page('Benutzername oder Passwort stimmt nicht.');
         }
+
+        login_attempts_reset($username);
 
         login_user((int) $row['id']);
         teacher_redirect('index.php');

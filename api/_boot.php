@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../lib/json.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/access.php';
+require_once __DIR__ . '/../lib/throttle.php';
 
 json_boot();
 

@@ -2125,6 +2125,104 @@ ok('Ein abgeschaltetes Wort wird nicht mehr vergeben',
    !in_array($probe, array_column(password_words(PW_ADJECTIVE), 'word'), true));
 q('DELETE FROM password_words WHERE kind = ? AND word = ?', [PW_ADJECTIVE, $probe]);
 
+section('Anmeldebremse');
+
+require_once __DIR__ . '/../lib/throttle.php';
+
+// Erst die Kurve für sich - sie lässt sich prüfen, ohne Fehlversuche
+// erzeugen zu müssen.
+ok('Die ersten Fehlversuche kosten nichts',
+   login_delay_ms(1, 2) === 0 && login_delay_ms(2, 2) === 0);
+ok('Danach wächst die Wartezeit',
+   login_delay_ms(3, 2) > 0 && login_delay_ms(4, 2) > login_delay_ms(3, 2),
+   login_delay_ms(3, 2) . 'ms / ' . login_delay_ms(4, 2) . 'ms');
+ok('Und sie ist gedeckelt',
+   login_delay_ms(99, 2) === LOGIN_DELAY_CAP_MS, login_delay_ms(99, 2) . 'ms');
+
+ok('Gesperrt wird erst ab dem fünften Fehlversuch',
+   !login_penalty(4, 0)['locked'] && login_penalty(5, 0)['locked']);
+
+/*
+ * Der wichtigste Punkt: Eine ganze Schule sitzt hinter einer Adresse. Viele
+ * Fehlversuche von dort dürfen niemanden aussperren, sonst sperrt der erste
+ * vertippte Fünftklässler seine Klasse mit aus.
+ */
+ok('Eine vielbenutzte Adresse sperrt niemanden aus',
+   !login_penalty(0, 500)['locked']);
+ok('Sie wird aber spürbar gebremst',
+   login_penalty(0, 500)['delay_ms'] === LOGIN_DELAY_CAP_MS);
+ok('Eine Klasse voller Kinder bleibt unter der Schwelle',
+   login_penalty(0, 28)['delay_ms'] === 0);
+
+// Jetzt gegen die laufende Anwendung. Eigener Cookie-Topf, damit die
+// erfolgreiche Anmeldung am Ende nicht die Sitzung der Suite übernimmt.
+$bremsJar = tempnam(sys_get_temp_dir(), 'vtbrems');
+
+function bremsLogin(string $user, string $pass): array
+{
+    global $base, $bremsJar;
+    $ch = curl_init($base . '/api/auth.php?action=login');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_COOKIEJAR      => $bremsJar,
+        CURLOPT_COOKIEFILE     => $bremsJar,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode(['username' => $user, 'password' => $pass]),
+        CURLOPT_HTTPHEADER     => ['X-Vokabeltrainer: 1', 'Content-Type: application/json'],
+        CURLOPT_TIMEOUT        => 30,
+    ]);
+    $body   = (string) curl_exec($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return [json_decode($body, true), $status];
+}
+
+$opferA = 'brems_a_' . bin2hex(random_bytes(3));
+$opferB = 'brems_b_' . bin2hex(random_bytes(3));
+$opferAId = makeUser($opferA, 'Bremse A');
+$opferBId = makeUser($opferB, 'Bremse B');
+
+login_attempts_reset($opferA);
+login_attempts_reset($opferB);
+
+for ($i = 1; $i <= LOGIN_ACCOUNT_LIMIT; $i++) {
+    [$d, $s] = bremsLogin($opferA, 'bestimmt-falsch');
+    if ($i < LOGIN_ACCOUNT_LIMIT) {
+        // Solange nicht gesperrt, ist die Antwort die gewöhnliche Absage.
+        ok("Fehlversuch $i wird abgelehnt, aber nicht gesperrt", $s === 401, "Status $s");
+    }
+}
+
+[$d, $s] = bremsLogin($opferA, 'bestimmt-falsch');
+ok('Nach fünf Fehlversuchen ist das Konto gesperrt', $s === 429, "Status $s");
+ok('Und die Meldung sagt, wie lange',
+   preg_match('/\d+ Minute/', (string) ($d['error'] ?? '')) === 1, $d['error'] ?? '(keine)');
+
+// Der Kern der Sache: Das richtige Passwort hilft jetzt auch nicht mehr.
+[$d, $s] = bremsLogin($opferA, 'geheim123');
+ok('Auch das richtige Passwort kommt nicht durch', $s === 429, "Status $s");
+
+/*
+ * Und die Gegenprobe zur Schul-Adresse: Beide Konten kommen von 127.0.0.1.
+ * Wäre die Adresse gesperrt statt nur gebremst, käme B jetzt nicht mehr rein.
+ */
+[$d, $s] = bremsLogin($opferB, 'geheim123');
+ok('Ein anderes Kind an derselben Adresse kommt weiter rein',
+   $s === 200 && ($d['ok'] ?? false), "Status $s");
+
+ok('Die erfolgreiche Anmeldung löscht die eigenen Fehlversuche',
+   login_attempts_count($opferB, '127.0.0.1')['account'] === 0);
+
+// Die Lehrkraft schliesst auf.
+login_attempts_reset($opferA);
+[$d, $s] = bremsLogin($opferA, 'geheim123');
+ok('Nach dem Aufschliessen geht die Anmeldung wieder',
+   $s === 200 && ($d['ok'] ?? false), "Status $s");
+
+q('DELETE FROM login_attempts WHERE username IN (?, ?)', [$opferA, $opferB]);
+q('DELETE FROM users WHERE id IN (?, ?)', [$opferAId, $opferBId]);
+@unlink($bremsJar);
+
 // ------------------------------------------------------------------ Abmelden
 
 section('Bereich für Lehrkräfte');

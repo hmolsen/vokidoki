@@ -13,6 +13,7 @@ require_once __DIR__ . '/../lib/errors.php';
 require_once __DIR__ . '/../lib/keyvault.php';
 require_once __DIR__ . '/../lib/schema.php';
 require_once __DIR__ . '/../lib/wordtypes.php';
+require_once __DIR__ . '/../lib/throttle.php';
 
 boot_error_handling();
 
@@ -72,7 +73,19 @@ function admin_require(): void
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['admin_password'])) {
         csrf_check();
         $password = (string) $_POST['admin_password'];
-        $hash     = setting('admin_password_hash', '');
+
+        /*
+         * Auch der Betreiber wird gebremst. Der Schlüssel "#admin" kann mit
+         * keinem Benutzernamen kollidieren - Konten werden kleingeschrieben
+         * und enthalten keine Rautezeichen.
+         */
+        $ip    = login_client_ip();
+        $sperr = login_guard('#admin', $ip);
+        if ($sperr !== null) {
+            admin_login_page($sperr);
+        }
+
+        $hash = setting('admin_password_hash', '');
 
         if ($hash === '') {
             $bootstrap = (string) cfg('admin_bootstrap_password', '');
@@ -83,12 +96,14 @@ function admin_require(): void
         }
 
         if ($hash !== '' && password_verify($password, $hash)) {
+            login_attempts_reset('#admin');
             session_regenerate_id(true);
             $_SESSION['is_admin'] = true;
             header('Location: ' . admin_url());
             exit;
         }
 
+        login_attempt_record('#admin', $ip);
         usleep(random_int(200_000, 500_000));
         $error = 'Passwort stimmt nicht.';
     }
