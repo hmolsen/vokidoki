@@ -2339,6 +2339,179 @@ ok('Der Lehrkraft-Bereich migriert nicht selbst',
 ok('Merkt aber, wenn das Schema aussteht',
    str_contains($boot, 'schema_pending()'));
 
+// ---------------------------------------------- Klassen und Klassenlisten
+
+section('Klasse anlegen und füllen');
+
+require_once __DIR__ . '/../lib/roster.php';
+
+// Erst das Einlesen der Namen für sich - ohne Datenbank, ohne Konten.
+$geparst = roster_parse_names(
+    "Lilli Molsen\n"
+    . "Schmidt, Anna-Lena\n"
+    . "   \n"
+    . "Max\n"
+    . "Jürgen Öztürk\n"
+);
+
+ok('Aus der Liste werden vier Namen', count($geparst) === 4, count($geparst) . ' Namen');
+ok('"Vorname Nachname" wird verstanden',
+   roster_display_name($geparst[0]['first'], $geparst[0]['initial']) === 'Lilli M.',
+   roster_display_name($geparst[0]['first'], $geparst[0]['initial']));
+ok('"Nachname, Vorname" auch',
+   roster_display_name($geparst[1]['first'], $geparst[1]['initial']) === 'Anna-Lena S.',
+   roster_display_name($geparst[1]['first'], $geparst[1]['initial']));
+ok('Ein Name ohne Nachnamen bleibt für sich',
+   roster_display_name($geparst[2]['first'], $geparst[2]['initial']) === 'Max');
+ok('Leere Zeilen fallen weg',
+   array_filter($geparst, static fn ($n) => trim($n['first']) === '') === []);
+
+/*
+ * Der eigentliche Punkt der ganzen Übung: Der Nachname darf gar nicht erst
+ * in die Datenbank. Was hier herauskommt, ist alles, was gespeichert wird.
+ */
+$alleFelder = '';
+foreach ($geparst as $n) {
+    $alleFelder .= $n['first'] . '|' . $n['initial'] . '|';
+}
+ok('Der Nachname überlebt das Einlesen nicht',
+   !str_contains(mb_strtolower($alleFelder), 'molsen')
+   && !str_contains(mb_strtolower($alleFelder), 'schmidt')
+   && !str_contains(mb_strtolower($alleFelder), 'öztürk'),
+   $alleFelder);
+
+ok('Umlaute werden im Benutzernamen ausgeschrieben',
+   roster_username_base('Jürgen', 'Ö') === 'juergen.oe',
+   roster_username_base('Jürgen', 'Ö'));
+ok('Der Bindestrich im Doppelnamen bleibt',
+   roster_username_base('Anna-Lena', 'S') === 'anna-lena.s',
+   roster_username_base('Anna-Lena', 'S'));
+ok('Ein Name ganz ohne brauchbare Zeichen kippt nicht um',
+   roster_username_base('???', '') !== '', roster_username_base('???', ''));
+
+// Jetzt durch die Oberfläche, so wie es eine Lehrkraft tut.
+$klassenName = '9Z-' . bin2hex(random_bytes(2));
+
+$res  = teacherGet('classes.php');
+ok('Die Klassenübersicht öffnet sich', $res['status'] === 200);
+preg_match('/name="csrf" value="([a-f0-9]+)"/', $res['body'], $cm);
+$lehrerCsrf = $cm[1] ?? '';
+
+$res = teacherRequest($base . '/teacher/classes.php', [
+    'create_class' => '1',
+    'name'         => $klassenName,
+    'csrf'         => $lehrerCsrf,
+]);
+ok('Eine Klasse lässt sich anlegen', str_contains($res['body'], 'angelegt'));
+
+$klasseId = (int) qv('SELECT id FROM classes WHERE school_id = ? AND name = ?',
+                     [(int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]),
+                      $klassenName]);
+ok('Und steht in der Datenbank', $klasseId > 0);
+
+$res = teacherRequest($base . '/teacher/classes.php', [
+    'create_class' => '1',
+    'name'         => $klassenName,
+    'csrf'         => $lehrerCsrf,
+]);
+ok('Dieselbe Klasse zweimal geht nicht', str_contains($res['body'], 'gibt es schon'));
+
+// Die Klassenliste hineinkopieren.
+$res = teacherRequest($base . '/teacher/class.php?id=' . $klasseId, [
+    'add_students' => '1',
+    'class_id'     => $klasseId,
+    'names'        => "Lilli Molsen\nSchmidt, Anna-Lena\nMax\nJürgen Öztürk",
+    'csrf'         => $lehrerCsrf,
+]);
+ok('Vier Konten auf einmal', str_contains($res['body'], '4 Konten angelegt'),
+   'Meldung fehlt');
+
+$neueKinder = class_members_list($klasseId);
+ok('Sie stehen in der Klasse', count($neueKinder) === 4, count($neueKinder) . ' Kinder');
+
+$namen = array_column($neueKinder, 'display_name');
+sort($namen);
+ok('Und heissen Vorname plus Anfangsbuchstabe',
+   $namen === ['Anna-Lena S.', 'Jürgen Ö.', 'Lilli M.', 'Max'], implode(', ', $namen));
+
+ok('Jedes hat ein Anfangspasswort',
+   array_filter($neueKinder, static fn ($k) => (string) $k['initial_password'] === '') === []);
+ok('Und die Passwörter sind untereinander verschieden',
+   count(array_unique(array_column($neueKinder, 'initial_password'))) === 4);
+ok('Sie sind alle Kinder, keine Lehrkräfte',
+   array_filter($neueKinder, static fn ($k) => $k['role'] !== 'student') === []);
+
+// Das Anfangspasswort muss auch wirklich das Passwort sein.
+$lilli = q1("SELECT * FROM users WHERE display_name = 'Lilli M.' AND id IN (
+                 SELECT user_id FROM class_members WHERE class_id = ?)", [$klasseId]);
+ok('Das gezeigte Passwort öffnet das Konto',
+   password_verify((string) $lilli['initial_password'], (string) $lilli['password_hash']));
+
+ok('Der Benutzername ist zum Abtippen gebaut',
+   preg_match('/^[a-z0-9.\-]+$/', (string) $lilli['username']) === 1, $lilli['username']);
+ok('Das Kind gehört zur Schule der Lehrkraft',
+   (int) $lilli['school_id'] === (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]));
+
+// Dieselbe Liste noch einmal - eine unsichere Lehrkraft darf keine
+// Karteileichen erzeugen.
+$res = teacherRequest($base . '/teacher/class.php?id=' . $klasseId, [
+    'add_students' => '1',
+    'class_id'     => $klasseId,
+    'names'        => "Lilli Molsen\nSchmidt, Anna-Lena\nMax\nJürgen Öztürk",
+    'csrf'         => $lehrerCsrf,
+]);
+ok('Die Liste ein zweites Mal legt niemanden doppelt an',
+   count(class_members_list($klasseId)) === 4,
+   count(class_members_list($klasseId)) . ' Kinder');
+ok('Und sagt, dass übersprungen wurde', str_contains($res['body'], 'übersprungen'));
+
+// Passwort zurücksetzen.
+$altesPasswort = (string) $lilli['initial_password'];
+$res = teacherRequest($base . '/teacher/class.php?id=' . $klasseId, [
+    'reset_password' => (int) $lilli['id'],
+    'class_id'       => $klasseId,
+    'csrf'           => $lehrerCsrf,
+]);
+$lilliNeu = q1('SELECT * FROM users WHERE id = ?', [(int) $lilli['id']]);
+ok('Ein neues Anfangspasswort lässt sich setzen',
+   (string) $lilliNeu['initial_password'] !== $altesPasswort);
+ok('Und öffnet das Konto',
+   password_verify((string) $lilliNeu['initial_password'], (string) $lilliNeu['password_hash']));
+ok('Das alte tut es nicht mehr',
+   !password_verify($altesPasswort, (string) $lilliNeu['password_hash']));
+
+/*
+ * Und die Grenze: Über ein untergeschobenes Formular darf sich kein Konto
+ * ausserhalb dieser Klasse zurücksetzen lassen.
+ */
+$fremdesHash = (string) qv('SELECT password_hash FROM users WHERE id = ?', [$userId]);
+teacherRequest($base . '/teacher/class.php?id=' . $klasseId, [
+    'reset_password' => $userId,
+    'class_id'       => $klasseId,
+    'csrf'           => $lehrerCsrf,
+]);
+ok('Ein Kind aus einer anderen Klasse bleibt unberührt',
+   (string) qv('SELECT password_hash FROM users WHERE id = ?', [$userId]) === $fremdesHash);
+
+// Eine Klasse einer anderen Schule geht niemanden etwas an.
+q("INSERT IGNORE INTO schools (name) VALUES ('Fremde Schule 2')");
+$fremdeSchule2 = (int) qv("SELECT id FROM schools WHERE name = 'Fremde Schule 2'");
+q('INSERT INTO classes (school_id, name) VALUES (?, ?)', [$fremdeSchule2, 'Fremde 5A']);
+$fremdeKlasse = (int) db()->lastInsertId();
+
+$res = teacherGet('class.php?id=' . $fremdeKlasse);
+ok('Eine Klasse einer anderen Schule bleibt verschlossen',
+   !str_contains($res['body'], 'Fremde 5A'), 'fremde Klasse war sichtbar');
+
+q('DELETE FROM classes WHERE id = ?', [$fremdeKlasse]);
+q('DELETE FROM schools WHERE id = ?', [$fremdeSchule2]);
+
+// Aufraeumen: erst die Kinder, dann die Klasse.
+foreach ($neueKinder as $k) {
+    q('DELETE FROM users WHERE id = ?', [(int) $k['id']]);
+}
+q('DELETE FROM classes WHERE id = ?', [$klasseId]);
+
 $res = teacherRequest($base . '/teacher/index.php',
     ['teacher_logout' => '1', 'csrf' => (function () use ($base): string {
         $s = teacherRequest($base . '/teacher/index.php', null);

@@ -76,6 +76,14 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 table.data input[type=text] { margin: 0; min-height: 40px; padding: 7px 10px; font-size: 15px; }
 table.data tr.dim td { color: var(--text-soft); }
 
+/*
+ * Gerade eben entstanden. Nach dem Anlegen einer Klassenliste stehen 28
+ * Zeilen auf der Seite, und die Lehrkraft muss auf einen Blick sehen, welche
+ * davon neu sind - sonst sucht sie die Passwörter zusammen.
+ */
+table.data tr.hit td { background: var(--good-bg); }
+table.data tr.hit td:first-child { box-shadow: inset 3px 0 0 var(--good); }
+
 /* Kennzahlen */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 8px; }
 .stat  { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 15px 17px; }

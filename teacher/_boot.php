@@ -6,6 +6,7 @@ require_once __DIR__ . '/../lib/db.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/access.php';
 require_once __DIR__ . '/../lib/courses.php';
+require_once __DIR__ . '/../lib/roster.php';
 require_once __DIR__ . '/../lib/throttle.php';
 require_once __DIR__ . '/../lib/settings.php';
 require_once __DIR__ . '/../lib/errors.php';
@@ -191,7 +192,10 @@ function teacher_head(string $title, string $active, array $user): void
 <div class="adminbar">
     <nav>
         <?php
-        $nav = ['index.php' => 'Meine Kurse'];
+        $nav = [
+            'index.php'   => 'Meine Kurse',
+            'classes.php' => 'Klassen',
+        ];
         foreach ($nav as $datei => $label) {
             printf('<a href="%s"%s>%s</a>',
                 h(teacher_url($datei)), $datei === $active ? ' class="on"' : '', h($label));
