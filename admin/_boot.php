@@ -14,6 +14,7 @@ require_once __DIR__ . '/../lib/keyvault.php';
 require_once __DIR__ . '/../lib/schema.php';
 require_once __DIR__ . '/../lib/wordtypes.php';
 require_once __DIR__ . '/../lib/throttle.php';
+require_once __DIR__ . '/../lib/courses.php';
 require_once __DIR__ . '/../lib/letter.php';
 require_once __DIR__ . '/../lib/passwords.php';
 

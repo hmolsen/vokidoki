@@ -151,9 +151,9 @@ switch (action()) {
             // nach der Umstellung der Zugriffsregeln fuer niemanden sichtbar.
             $kurs = course_for_language((int) $lang['id']);
             q(
-                'INSERT INTO units (user_id, language_id, course_id, title, released_position)
-                 VALUES (?, ?, ?, ?, ?)',
-                [$uid, (int) $lang['id'], $kurs === null ? null : (int) $kurs['id'], $title,
+                'INSERT INTO units (language_id, course_id, title, released_position)
+                 VALUES (?, ?, ?, ?)',
+                [(int) $lang['id'], $kurs === null ? null : (int) $kurs['id'], $title,
                  initial_released_position($user)],
             );
             $unitId = (int) $pdo->lastInsertId();

@@ -37,9 +37,6 @@ CREATE TABLE IF NOT EXISTS device_tokens (
 
 CREATE TABLE IF NOT EXISTS languages (
   id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  -- Wer sie angelegt hat. Sagt nichts mehr darueber aus, wer sie sehen darf -
-  -- das entscheidet der Kurs. Faellt im naechsten Schritt ganz weg.
-  user_id    INT UNSIGNED NULL,
   school_id  INT UNSIGNED NULL,
   name       VARCHAR(64)  NOT NULL,
   flag_emoji VARCHAR(16)  NOT NULL DEFAULT '',
@@ -52,9 +49,6 @@ CREATE TABLE IF NOT EXISTS languages (
 -- Lerneinheit ("Unit 1", "Lektion 3")
 CREATE TABLE IF NOT EXISTS units (
   id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  -- Wer sie eingelesen hat. Wer sie sehen darf, entscheidet der Kurs;
-  -- diese Spalte faellt im naechsten Schritt weg.
-  user_id     INT UNSIGNED NULL,
   language_id INT UNSIGNED NOT NULL,
   course_id   INT UNSIGNED NULL,
   title       VARCHAR(128) NOT NULL,
@@ -66,7 +60,6 @@ CREATE TABLE IF NOT EXISTS units (
   sentences_status     VARCHAR(16)  NULL,
   sentences_started_at DATETIME     NULL,
   sentences_error      VARCHAR(255) NULL,
-  KEY idx_units_user (user_id),
   KEY idx_units_lang (language_id),
   KEY idx_units_course (course_id),
   CONSTRAINT fk_units_lang FOREIGN KEY (language_id) REFERENCES languages(id) ON DELETE CASCADE

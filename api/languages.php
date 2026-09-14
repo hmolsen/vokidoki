@@ -73,9 +73,9 @@ switch (action()) {
         }
 
         q(
-            'INSERT INTO languages (user_id, school_id, name, flag_emoji, code)
-             VALUES (?, ?, ?, ?, ?)',
-            [$uid, $user['school_id'] ?? null, $name, $flag, $code],
+            'INSERT INTO languages (school_id, name, flag_emoji, code)
+             VALUES (?, ?, ?, ?)',
+            [$user['school_id'] ?? null, $name, $flag, $code],
         );
         $languageId = (int) db()->lastInsertId();
 

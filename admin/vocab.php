@@ -116,7 +116,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
 
         set_time_limit(300);
-        $owner = q1('SELECT id, display_name FROM users WHERE id = ?', [(int) $target['user_id']]);
+
+        // Auf wessen Rechnung. Siehe course_billing_user().
+        $owner = course_billing_user(
+            $target['course_id'] === null ? null : (int) $target['course_id'],
+        );
+        if ($owner === null) {
+            flash('Diese Lerneinheit gehört zu keinem Kurs - kein Konto, das dafür geradesteht.',
+                  'bad');
+            back_to_filter($userId, $langId, $unitId);
+        }
 
         $blocked = budget_block_reason((int) $owner['id']);
         if ($blocked !== null) {
@@ -360,19 +369,31 @@ $units = $langId > 0
       )
     : [];
 
-$unit  = $unitId > 0 ? q1('SELECT * FROM units WHERE id = ?', [$unitId]) : null;
+$unit = $unitId > 0 ? q1('SELECT * FROM units WHERE id = ?', [$unitId]) : null;
+
+/*
+ * Wessen Lernstand hier steht.
+ *
+ * Frueher der Besitzer der Einheit. Den gibt es nicht mehr - eine Einheit
+ * gehoert einem Kurs mit womoeglich 28 Mitgliedern. Gezeigt wird deshalb der
+ * Stand des Kontos, das ohnehin fuer den Kurs geradesteht; ohne einen
+ * einzelnen Filter zaehlte die Abfrage die Treffer aller Kinder zusammen und
+ * ergaebe gar nichts.
+ */
+$unitUser = $unit === null ? null : course_billing_user(
+    $unit['course_id'] === null ? null : (int) $unit['course_id'],
+);
+$unitUserId = (int) ($unitUser['id'] ?? 0);
+
 $vocab = $unit !== null
     ? qa(
-        // Der Lernstand gehoert einem Kind - hier dem Besitzer der Einheit.
-        // Ohne den Filter zaehlte die Abfrage die Treffer aller Kinder
-        // zusammen, sobald sich mehrere einen Vokabelsatz teilen.
         "SELECT v.*, p.streak, p.correct_count, p.wrong_count, p.known_at
            FROM vocab v
            LEFT JOIN progress p
                   ON p.vocab_id = v.id AND p.mode = 'mc' AND p.user_id = ?
           WHERE v.unit_id = ?
           ORDER BY v.position, v.id",
-        [(int) $unit['user_id'], $unitId],
+        [$unitUserId, $unitId],
       )
     : [];
 
@@ -585,7 +606,7 @@ foreach ($languages as $l) {
 <h2>Lückensätze (<?= count($sentences) ?>)</h2>
 
 <div class="card">
-    <?php $zustand = sentence_status($unitId, (int) $unit['user_id']); ?>
+    <?php $zustand = sentence_status($unitId, $unitUserId); ?>
     <?php if ($zustand['status'] === SENTENCE_RUNNING): ?>
         <div class="notice info">Die Sätze entstehen gerade im Hintergrund.</div>
     <?php elseif ($zustand['status'] === SENTENCE_FAILED): ?>

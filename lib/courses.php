@@ -147,6 +147,36 @@ function courses_for_school(int $schoolId): array
     );
 }
 
+/**
+ * Wessen Konto steht für einen Kurs gerade.
+ *
+ * Gebraucht an drei Stellen, die einen Menschen brauchen, wo es nur noch
+ * einen Kurs gibt: das Kostenprotokoll, die Budgetprüfung, und der
+ * Lernstand, den der Admin zu einer Lerneinheit anzeigt. Früher stand dort
+ * units.user_id - der Besitzer, den es nicht mehr gibt.
+ *
+ * Bevorzugt die Lehrkraft: Sie hat den Kurs zu verantworten, und wenn eine
+ * Anfrage Geld kostet, gehört sie in ihre Abrechnung und nicht in die eines
+ * Kindes. Gibt es keine, tut es irgendein Mitglied - dann ist es ein
+ * Familienkurs mit genau einem.
+ */
+function course_billing_user(?int $courseId): ?array
+{
+    if ($courseId === null) {
+        return null;
+    }
+
+    return q1(
+        "SELECT u.*
+           FROM course_members m
+           JOIN users u ON u.id = m.user_id
+          WHERE m.course_id = ?
+          ORDER BY m.member_role = 'student', m.id
+          LIMIT 1",
+        [$courseId],
+    );
+}
+
 /** Ein Kurs, aber nur wenn er zur Schule dieser Lehrkraft gehört. */
 function course_in_school(int $courseId, int $schoolId): ?array
 {

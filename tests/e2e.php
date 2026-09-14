@@ -161,9 +161,9 @@ function makeUser(string $username, string $display, string $color = '#e0559a'):
  */
 function makeLanguage(int $userId, string $name, ?string $code = null): int
 {
-    q('INSERT INTO languages (user_id, school_id, name, flag_emoji, code)
-       VALUES (?, (SELECT school_id FROM users WHERE id = ?), ?, ?, ?)',
-      [$userId, $userId, $name, '', $code]);
+    $schoolId = qv('SELECT school_id FROM users WHERE id = ?', [$userId]);
+    q('INSERT INTO languages (school_id, name, flag_emoji, code) VALUES (?, ?, ?, ?)',
+      [$schoolId, $name, '', $code]);
     $langId = (int) db()->lastInsertId();
 
     $user = q1('SELECT * FROM users WHERE id = ?', [$userId]);
@@ -187,10 +187,10 @@ function makeUnit(int $userId, int $langId, string $title, string $extraCols = '
     $kurs = course_for_language($langId);
     $user = q1('SELECT * FROM users WHERE id = ?', [$userId]);
 
-    q('INSERT INTO units (user_id, language_id, course_id, title, released_position'
+    q('INSERT INTO units (language_id, course_id, title, released_position'
       . $extraCols . ')
-       VALUES (?, ?, ?, ?, ?' . str_repeat(', ?', count($extraVals)) . ')',
-      array_merge([$userId, $langId, $kurs === null ? null : (int) $kurs['id'], $title,
+       VALUES (?, ?, ?, ?' . str_repeat(', ?', count($extraVals)) . ')',
+      array_merge([$langId, $kurs === null ? null : (int) $kurs['id'], $title,
                    initial_released_position($user ?? [])],
                   $extraVals));
     return (int) db()->lastInsertId();
@@ -784,14 +784,20 @@ ok('Und beim ersten Fehlschlag wird abgebrochen',
 // Einen offenen Stand herstellen und ueber die Oberflaeche ausfuehren.
 q("DELETE FROM settings WHERE k LIKE 'schema_applied_family.%'");
 settings_reset_cache();
-$offenVorher = count(schema_pending());
+$offen       = schema_pending();
+$offenVorher = count($offen);
 ok('Es stehen Aenderungen aus', $offenVorher > 0, (string) $offenVorher);
 
 $seite = http($base . '/admin/selfcheck.php')['body'];
 ok('Der Selbsttest zeigt sie an',
    str_contains($seite, 'ausstehende Schemaänderung'));
 ok('Und bietet einen Knopf an', str_contains($seite, 'name="run_migrations"'));
-ok('Er nennt sie beim Namen', str_contains($seite, 'family.courses'));
+
+// Gegen die Liste selbst statt gegen einen festen Namen: Welche Migration
+// gerade aussteht, haengt davon ab, wie weit diese Datenbank schon ist.
+$fehlend = array_values(array_filter($offen,
+    static fn (string $n): bool => !str_contains($seite, $n)));
+ok('Er nennt sie beim Namen', $fehlend === [], implode(', ', $fehlend));
 
 $res = adminPost('selfcheck.php', ['run_migrations' => '1']);
 ok('Der Knopf fuehrt sie aus',
@@ -825,6 +831,31 @@ foreach ([['users', 'school_id'], ['users', 'role'], ['users', 'can_import'],
           ['units', 'released_position'], ['ai_requests', 'school_id']] as [$t, $c]) {
     ok("Spalte $t.$c ist da", column_exists($t, $c));
 }
+
+/*
+ * Der Rest dieses Abschnitts stellt den Bestand VOR dem Umbau nach - und
+ * dafuer braucht es languages.user_id. Die Spalte faellt in Etappe 9; auf
+ * einer Datenbank, die schon dort ist, laesst sich die Ausgangslage nicht
+ * mehr herstellen, und die family-Migrationen sind zu Recht stillgelegt.
+ *
+ * Uebersprungen statt geloescht: Gegen eine Installation, die noch nicht
+ * migriert ist, sind genau diese Pruefungen die wichtigsten der ganzen
+ * Suite - und die Suite laesst sich gegen die echte Installation fahren.
+ */
+$altbestandMoeglich = column_exists('languages', 'user_id');
+
+if (!$altbestandMoeglich) {
+    ok('Die Ueberfuehrung des Altbestands ist abgeschlossen',
+       !column_exists('units', 'user_id'),
+       'languages.user_id ist weg, units.user_id aber noch da');
+
+    $offenFamily = array_filter(schema_pending(),
+        static fn (string $n): bool => str_starts_with($n, 'family.'));
+    ok('Und ihre Migrationen melden sich nicht mehr',
+       $offenFamily === [], implode(', ', $offenFamily));
+}
+
+if ($altbestandMoeglich):
 
 // Ein Kind, wie es vor dem Umbau ausgesehen haette.
 $altName = 'testalt_' . bin2hex(random_bytes(3));
@@ -900,6 +931,8 @@ $doppelt = (int) qv('SELECT COUNT(*) FROM (
                      ) d');
 ok('Und keine Sprache zwei', $doppelt === 0, $doppelt . ' doppelt');
 
+endif;
+
 /*
  * Der Zugriff haengt jetzt an der Kurszugehoerigkeit statt an units.user_id.
  * Dass die uebrigen Pruefungen dieser Suite davon unberuehrt bleiben, ist der
@@ -961,7 +994,10 @@ ok('Und den neuen Schluessel auf progress',
    str_contains($schemaSql, 'uq_progress_user (user_id, vocab_id, mode)')
    && !str_contains($schemaSql, 'uq_progress (vocab_id, mode)'));
 
-q('DELETE FROM users WHERE id = ?', [$altUser]);
+if ($altbestandMoeglich) {
+    q('DELETE FROM languages WHERE id = ?', [$altLang]);
+    q('DELETE FROM users WHERE id = ?', [$altUser]);
+}
 
 section('Lernstand gehört dem Kind');
 
@@ -1560,11 +1596,15 @@ ok('Zweimal melden zaehlt nur einmal',
 ok('Der letzte Versuch wird aber vermerkt',
    qv('SELECT typed FROM sentence_flags WHERE sentence_id = ?', [$flagSatz]) === 'zweiter Versuch');
 
-// Ein fremder Satz geht niemanden etwas an.
+// Ein fremder Satz geht niemanden etwas an. "Fremd" heisst jetzt: aus einem
+// Kurs, in dem dieses Kind nicht ist.
 $fremderSatz = (int) qv('SELECT s.id FROM sentences s
                           JOIN vocab v ON v.id = s.vocab_id
                           JOIN units t ON t.id = v.unit_id
-                         WHERE t.user_id <> ? LIMIT 1', [$userId]);
+                         WHERE NOT EXISTS (SELECT 1 FROM course_members m
+                                            WHERE m.course_id = t.course_id
+                                              AND m.user_id = ?)
+                         LIMIT 1', [$userId]);
 if ($fremderSatz > 0) {
     [$res, $code] = apiCall('cloze', 'flag', ['sentence_id' => $fremderSatz, 'text' => 'x']);
     ok('Ein fremder Satz laesst sich nicht melden', $code === 404,

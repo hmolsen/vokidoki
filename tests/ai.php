@@ -150,11 +150,11 @@ ok('Dauer wurde gemessen', (int) $log['duration_ms'] > 0);
 section('Kategorien nachtragen');
 
 // Zwei Vokabeln ohne Wortart anlegen, wie sie vor dieser Funktion entstanden.
-q('INSERT INTO languages (user_id, name, flag_emoji) VALUES (?, ?, ?)',
-  [(int) $user['id'], 'Testisch-AI', '']);
+q('INSERT INTO languages (name, flag_emoji) VALUES (?, ?)',
+  ['Testisch-AI', '']);
 $wtLang = (int) db()->lastInsertId();
-q('INSERT INTO units (user_id, language_id, title, released_position) VALUES (?, ?, ?, ?)',
-  [(int) $user['id'], $wtLang, 'Alt', RELEASED_ALL]);
+q('INSERT INTO units (language_id, title, released_position) VALUES (?, ?, ?)',
+  [$wtLang, 'Alt', RELEASED_ALL]);
 $wtUnit = (int) db()->lastInsertId();
 $altbestand = [
     ['to run', 'rennen'],
@@ -197,11 +197,11 @@ require_once __DIR__ . '/../lib/sentences.php';
 // 25 Vokabeln: mehr als SENTENCE_BATCH, also zwei Aufrufe. Genau daran ist es
 // auf dem Server gescheitert - ein einziger Aufruf über eine grosse Einheit
 // lief so lange, dass die Datenbankverbindung dazwischen wegfiel.
-q('INSERT INTO languages (user_id, name, flag_emoji, code) VALUES (?, ?, ?, ?)',
-  [(int) $user['id'], 'Blockisch', '', 'fr']);
+q('INSERT INTO languages (name, flag_emoji, code) VALUES (?, ?, ?)',
+  ['Blockisch', '', 'fr']);
 $bLang = (int) db()->lastInsertId();
-q('INSERT INTO units (user_id, language_id, title, released_position) VALUES (?, ?, ?, ?)',
-  [(int) $user['id'], $bLang, 'Grosse Einheit', RELEASED_ALL]);
+q('INSERT INTO units (language_id, title, released_position) VALUES (?, ?, ?)',
+  [$bLang, 'Grosse Einheit', RELEASED_ALL]);
 $bUnit = (int) db()->lastInsertId();
 for ($i = 0; $i < 25; $i++) {
     q('INSERT INTO vocab (unit_id, term_foreign, term_native, word_type, position)
@@ -239,11 +239,11 @@ section('Fehlerfall: abgeschnittene Antwort');
 // Wird die Antwort am Ausgabelimit gekappt, ist das JSON unlesbar. Ohne die
 // Prüfung von stop_reason stünde im Protokoll "ok" mit null Einträgen - der
 // bezahlte Aufruf sähe aus wie ein Erfolg.
-q('INSERT INTO languages (user_id, name, flag_emoji) VALUES (?, ?, ?)',
-  [(int) $user['id'], 'Abgeschnitten', '']);
+q('INSERT INTO languages (name, flag_emoji) VALUES (?, ?)',
+  ['Abgeschnitten', '']);
 $cLang = (int) db()->lastInsertId();
-q('INSERT INTO units (user_id, language_id, title, released_position) VALUES (?, ?, ?, ?)',
-  [(int) $user['id'], $cLang, 'Zu lang', RELEASED_ALL]);
+q('INSERT INTO units (language_id, title, released_position) VALUES (?, ?, ?)',
+  [$cLang, 'Zu lang', RELEASED_ALL]);
 $cUnit = (int) db()->lastInsertId();
 q('INSERT INTO vocab (unit_id, term_foreign, term_native, word_type, position)
    VALUES (?, ?, ?, ?, 0)', [$cUnit, 'mot', 'Wort', 'substantiv']);

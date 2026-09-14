@@ -107,7 +107,13 @@ function schema_migrations(): array
          * sich der Struktur nicht ansehen.
          */
         'progress.user_id.repair' => [
+            // Auch diese Reparatur ist Geschichte: Sie liest units.user_id,
+            // und die Spalte gibt es nur noch auf Datenbanken, die den Umbau
+            // vor sich haben. Ohne die Bedingung scheiterte auf einer frischen
+            // Installation gleich die erste Aenderung - und weil beim ersten
+            // Fehler abgebrochen wird, liefe danach gar nichts mehr.
             static fn (): bool => table_exists('progress')
+                && column_exists('units', 'user_id')
                 && !schema_was_applied('progress.user_id.repair'),
             'UPDATE progress p
                JOIN vocab v ON v.id = p.vocab_id
@@ -497,6 +503,30 @@ function schema_migrations(): array
                MODIFY user_id INT UNSIGNED NULL',
         ],
 
+        /* ---- Der Besitzer verschwindet, Schritt 2 von 2 ----------------- */
+
+        /*
+         * Jetzt darf die Spalte fallen. Diese Version schreibt sie nicht
+         * mehr - deshalb die Bedingung auf NULL erlaubt: Ist der erste
+         * Schritt nicht gelaufen, wird hier nichts angefasst, und der
+         * Selbsttest zeigt beide Schritte als offen an. Ein Fallenlassen
+         * ohne den ersten Schritt waere kein Fortschritt, sondern ein
+         * Zeitfenster, in dem jedes Einfuegen scheitert.
+         */
+        'units.user_id.drop' => [
+            static fn (): bool => column_exists('units', 'user_id')
+                && column_is_nullable('units', 'user_id'),
+            'ALTER TABLE units
+               DROP INDEX idx_units_user,
+               DROP COLUMN user_id',
+        ],
+
+        'languages.user_id.drop' => [
+            static fn (): bool => column_exists('languages', 'user_id')
+                && column_is_nullable('languages', 'user_id'),
+            'ALTER TABLE languages DROP COLUMN user_id',
+        ],
+
         'password_words.table' => [
             static fn (): bool => !table_exists('password_words'),
             "CREATE TABLE password_words (
@@ -571,6 +601,25 @@ function column_exists(string $table, string $column): bool
         [$table, $column],
     );
     return (int) $n > 0;
+}
+
+/**
+ * Darf diese Spalte NULL sein?
+ *
+ * Gebraucht als Sicherung vor dem Fallenlassen von units.user_id: Diese
+ * Version schreibt die Spalte nicht mehr, also muss sie NULL erlauben, bevor
+ * irgendetwas passiert. Ist sie noch NOT NULL, wurde der erste Schritt nicht
+ * ausgeführt - dann ist Nichtstun richtig, und der Selbsttest zeigt, was
+ * fehlt.
+ */
+function column_is_nullable(string $table, string $column): bool
+{
+    $v = qv(
+        'SELECT IS_NULLABLE FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+        [$table, $column],
+    );
+    return $v === 'YES';
 }
 
 /**

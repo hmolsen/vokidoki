@@ -5,6 +5,7 @@ require_once __DIR__ . '/punctuation.php';
 require_once __DIR__ . '/ai.php';
 require_once __DIR__ . '/wordtypes.php';
 require_once __DIR__ . '/progress.php';
+require_once __DIR__ . '/courses.php';
 
 // use gilt je Datei - die Anweisungen aus lib/ai.php reichen hier nicht.
 use Anthropic\Messages\JSONOutputFormat;
@@ -707,8 +708,16 @@ function generate_sentences_tracked(int $unitId): void
     if ($unit === null) {
         return;
     }
-    $user = q1('SELECT id, display_name FROM users WHERE id = ?', [(int) $unit['user_id']]);
+    // Wer die Anfrage zu verantworten hat - die Lehrkraft des Kurses, sonst
+    // das einzige Mitglied. Frueher stand hier units.user_id.
+    $user = course_billing_user(
+        $unit['course_id'] === null ? null : (int) $unit['course_id'],
+    );
     if ($user === null) {
+        error_log('[vokabeltrainer] Saetze: Lerneinheit ' . $unitId
+                  . ' hat keinen Kurs mit Mitgliedern - kein Lauf.');
+        sentence_status_set($unitId, SENTENCE_FAILED,
+            'Diese Lerneinheit gehoert zu keinem Kurs.');
         return;
     }
 
