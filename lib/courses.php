@@ -222,6 +222,82 @@ function course_remove_member(int $courseId, int $userId): void
       [$courseId, $userId]);
 }
 
+/**
+ * Was ein Löschen kosten würde - in Zahlen.
+ *
+ * Für die Rückfrage vor dem Löschen. Eine Warnung, die nur "sind Sie
+ * sicher?" fragt, liest niemand; eine, die "28 Kinder, 140 Vokabeln und
+ * 312 Lernstände" nennt, schon.
+ *
+ * @return array{students:int, teachers:int, units:int, vocab:int,
+ *               sentences:int, progress:int}
+ */
+function course_delete_preview(int $courseId): array
+{
+    $zahl = static fn (string $sql): int => (int) qv($sql, [$courseId]);
+
+    return [
+        'students' => $zahl("SELECT COUNT(*) FROM course_members
+                              WHERE course_id = ? AND member_role = 'student'"),
+        'teachers' => $zahl("SELECT COUNT(*) FROM course_members
+                              WHERE course_id = ? AND member_role = 'teacher'"),
+        'units'    => $zahl('SELECT COUNT(*) FROM units WHERE course_id = ?'),
+        'vocab'    => $zahl('SELECT COUNT(*) FROM vocab v
+                               JOIN units t ON t.id = v.unit_id
+                              WHERE t.course_id = ?'),
+        'sentences' => $zahl('SELECT COUNT(*) FROM sentences s
+                                JOIN vocab v ON v.id = s.vocab_id
+                                JOIN units t ON t.id = v.unit_id
+                               WHERE t.course_id = ?'),
+        'progress' => $zahl('SELECT COUNT(*) FROM progress p
+                               JOIN vocab v ON v.id = p.vocab_id
+                               JOIN units t ON t.id = v.unit_id
+                              WHERE t.course_id = ?'),
+    ];
+}
+
+/**
+ * Einen Kurs samt Unterlagen löschen.
+ *
+ * units.course_id trägt keinen Fremdschlüssel - die Spalte kam per Migration
+ * dazu -, also nimmt das Löschen des Kurses die Lerneinheiten nicht mit.
+ * Deshalb werden sie ausdrücklich gelöscht; über ihre Fremdschlüssel fallen
+ * Vokabeln, Sätze und Lernstände mit.
+ *
+ * Im Regelfall wäre das gar nicht nötig: Die Sprache gehört zum Kurs,
+ * course_create() legt für jeden eine eigene an, und ihr Löschen nimmt die
+ * Einheiten über units.language_id ohnehin mit. Die Zeile trägt den anderen
+ * Fall - hinge doch einmal ein zweiter Kurs an derselben Sprache, bliebe sie
+ * stehen, und die Einheiten des gelöschten Kurses lägen als Waisen herum:
+ * unsichtbar, weil Sichtbarkeit am Kurs hängt, aber weiter in der Datenbank.
+ * Genau dafür ist sie da, und nur so ist diese Funktion unabhängig davon
+ * richtig, ob die Zuordnung eins zu eins bleibt.
+ */
+function course_delete(int $courseId): void
+{
+    db()->beginTransaction();
+    try {
+        q('DELETE FROM units WHERE course_id = ?', [$courseId]);
+
+        $languageId = (int) (qv('SELECT language_id FROM courses WHERE id = ?',
+                                [$courseId]) ?? 0);
+
+        // Nimmt course_members mit, das haengt am Fremdschluessel.
+        q('DELETE FROM courses WHERE id = ?', [$courseId]);
+
+        if ($languageId > 0
+            && (int) qv('SELECT COUNT(*) FROM courses WHERE language_id = ?',
+                        [$languageId]) === 0) {
+            q('DELETE FROM languages WHERE id = ?', [$languageId]);
+        }
+
+        db()->commit();
+    } catch (Throwable $e) {
+        db()->rollBack();
+        throw $e;
+    }
+}
+
 /** Konten der Schule, die in diesem Kurs noch fehlen. */
 function course_candidates(int $courseId, int $schoolId): array
 {

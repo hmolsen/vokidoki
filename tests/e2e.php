@@ -3627,6 +3627,161 @@ ok('Ein Kind einer anderen Schule kommt nicht in den Kurs',
 q('DELETE FROM users WHERE id = ?', [$fremdesKind]);
 q('DELETE FROM schools WHERE id = ?', [$fremdeSchule4]);
 
+// ---- Einen Kurs loeschen.
+
+/*
+ * Der Kurs bekommt erst etwas zu verlieren: eine Lerneinheit mit Vokabeln,
+ * einen Lueckensatz und einen Lernstand. Sonst prueft der Abschnitt das
+ * Loeschen einer leeren Huelle, und genau die gefaehrlichen Faelle - haengen
+ * die Lernstaende mit dran, bleiben Waisen liegen? - blieben ungeprueft.
+ */
+$loeschUnit = makeUnit($freiLehrerId ?? $lehrerId, (int) $neuerKurs['language_id'], 'Zu löschen');
+q('UPDATE units SET course_id = ? WHERE id = ?', [$neuerKursId, $loeschUnit]);
+foreach (['un', 'deux'] as $i => $w) {
+    q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, ?)',
+      [$loeschUnit, $w, 'de-' . $w, $i]);
+}
+$loeschVokabel = (int) qv('SELECT id FROM vocab WHERE unit_id = ? ORDER BY position LIMIT 1',
+                          [$loeschUnit]);
+q('INSERT INTO sentences (vocab_id, native_text, foreign_text, answer)
+   VALUES (?, ?, ?, ?)', [$loeschVokabel, 'Eins.', '{} .', 'un']);
+record_answer($ida, $loeschVokabel, MODE_CHOICE, true);
+
+$vorschau = course_delete_preview($neuerKursId);
+ok('Die Vorschau zaehlt, was verloren ginge',
+   $vorschau['units'] === 1 && $vorschau['vocab'] === 2
+   && $vorschau['sentences'] === 1 && $vorschau['progress'] === 1
+   && $vorschau['students'] >= 1,
+   json_encode($vorschau));
+
+$res = teacherGet('course.php?id=' . $neuerKursId);
+ok('Die Seite bietet das Loeschen an', str_contains($res['body'], 'name="delete_course"'));
+ok('Und nennt die Folgen in Zahlen',
+   str_contains($res['body'], 'Gespeicherte Lernstände')
+   && str_contains($res['body'], 'Kinder verlieren den Zugang'));
+ok('Sie verlangt das eigene Passwort',
+   str_contains($res['body'], 'name="password"'));
+
+// Ohne Passwort passiert nichts.
+teacherRequest($base . '/teacher/course.php?id=' . $neuerKursId, [
+    'delete_course' => '1', 'course_id' => $neuerKursId, 'csrf' => $lehrerCsrf,
+]);
+ok('Ohne Passwort wird nicht geloescht',
+   q1('SELECT id FROM courses WHERE id = ?', [$neuerKursId]) !== null);
+
+// Mit falschem auch nicht.
+$res = teacherRequest($base . '/teacher/course.php?id=' . $neuerKursId, [
+    'delete_course' => '1', 'course_id' => $neuerKursId,
+    'password'      => 'bestimmt-falsch', 'csrf' => $lehrerCsrf,
+]);
+ok('Mit falschem Passwort auch nicht',
+   q1('SELECT id FROM courses WHERE id = ?', [$neuerKursId]) !== null
+   && str_contains($res['body'], 'Passwort stimmt nicht'));
+
+// Und mit dem richtigen.
+$res = teacherRequest($base . '/teacher/course.php?id=' . $neuerKursId, [
+    'delete_course' => '1', 'course_id' => $neuerKursId,
+    'password'      => 'lehrerin123', 'csrf' => $lehrerCsrf,
+]);
+ok('Mit dem richtigen Passwort ist der Kurs weg',
+   q1('SELECT id FROM courses WHERE id = ?', [$neuerKursId]) === null);
+ok('Die Meldung sagt, was mitgegangen ist',
+   str_contains($res['body'], 'geloescht') || str_contains($res['body'], 'gelöscht'));
+
+/*
+ * Der Kern: Es darf nichts liegenbleiben. units.course_id traegt keinen
+ * Fremdschluessel - ohne ausdrueckliches Loeschen blieben die Einheiten als
+ * Waisen zurueck, unsichtbar, aber weiter in jeder Kostenrechnung.
+ */
+ok('Die Lerneinheit ist mitgegangen',
+   q1('SELECT id FROM units WHERE id = ?', [$loeschUnit]) === null);
+ok('Die Vokabeln auch',
+   (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$loeschUnit]) === 0);
+ok('Die Lueckensaetze auch',
+   (int) qv('SELECT COUNT(*) FROM sentences WHERE vocab_id = ?', [$loeschVokabel]) === 0);
+ok('Und die Lernstaende der Kinder',
+   (int) qv('SELECT COUNT(*) FROM progress WHERE vocab_id = ?', [$loeschVokabel]) === 0);
+ok('Die Kursmitgliedschaften sind aufgeloest',
+   (int) qv('SELECT COUNT(*) FROM course_members WHERE course_id = ?', [$neuerKursId]) === 0);
+ok('Die Sprache des Kurses ist mitgegangen',
+   q1('SELECT id FROM languages WHERE id = ?', [(int) $neuerKurs['language_id']]) === null);
+
+$waisen = (int) qv('SELECT COUNT(*) FROM units t
+                     WHERE t.course_id IS NOT NULL
+                       AND NOT EXISTS (SELECT 1 FROM courses co WHERE co.id = t.course_id)');
+ok('Und nirgends bleibt eine Lerneinheit ohne Kurs zurueck',
+   $waisen === 0, $waisen . ' Waisen');
+
+// Die Kinder selbst bleiben natuerlich.
+ok('Die Kinder gibt es weiterhin',
+   q1('SELECT id FROM users WHERE id = ?', [$ida]) !== null);
+
+/*
+ * Der Fall, auf den es beim ausdruecklichen Loeschen der Einheiten ankommt:
+ * zwei Kurse an einer Sprache.
+ *
+ * Im Regelfall gibt es den nicht - course_create() legt je Kurs eine eigene
+ * Sprache an, und ihr Loeschen nimmt die Einheiten ohnehin mit. Deshalb
+ * faellt ein Entfernen der Zeile "DELETE FROM units" in den Pruefungen
+ * darueber gar nicht auf. Hier wird die Ausnahme absichtlich hergestellt:
+ * Bleibt die Sprache stehen, weil ein zweiter Kurs an ihr haengt, muessen
+ * die Einheiten des geloeschten trotzdem verschwinden.
+ */
+$geteilteSprache = makeLanguage($lehrerId, 'Geteiltisch');
+$kursA = (int) course_for_language($geteilteSprache)['id'];
+q('INSERT INTO courses (school_id, language_id, name, created_by) VALUES (?, ?, ?, ?)',
+  [(int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]),
+   $geteilteSprache, 'Zweiter an derselben Sprache', $lehrerId]);
+$kursB = (int) db()->lastInsertId();
+
+$unitA = makeUnit($lehrerId, $geteilteSprache, 'Einheit A');
+q('UPDATE units SET course_id = ? WHERE id = ?', [$kursA, $unitA]);
+$unitB = makeUnit($lehrerId, $geteilteSprache, 'Einheit B');
+q('UPDATE units SET course_id = ? WHERE id = ?', [$kursB, $unitB]);
+
+course_delete($kursA);
+
+ok('Bei geteilter Sprache geht die Einheit des geloeschten Kurses mit',
+   q1('SELECT id FROM units WHERE id = ?', [$unitA]) === null,
+   'sie waere als Waise liegengeblieben');
+ok('Die des anderen Kurses bleibt',
+   q1('SELECT id FROM units WHERE id = ?', [$unitB]) !== null);
+ok('Und die geteilte Sprache bleibt auch',
+   q1('SELECT id FROM languages WHERE id = ?', [$geteilteSprache]) !== null);
+
+course_delete($kursB);
+ok('Erst der letzte Kurs nimmt die Sprache mit',
+   q1('SELECT id FROM languages WHERE id = ?', [$geteilteSprache]) === null);
+
+/*
+ * Und die Grenze: Ein Kurs einer ANDEREN Schule laesst sich auch mit
+ * richtigem Passwort nicht loeschen.
+ *
+ * Innerhalb der eigenen Schule darf jede Lehrkraft loeschen, auch fremde
+ * Kurse - eine Schule ist eine Vertrauensgemeinschaft, und wer vertritt,
+ * muss aufraeumen koennen. Ueber die Schulgrenze hinweg nicht.
+ */
+q("INSERT IGNORE INTO schools (name) VALUES ('Fremde Schule 5')");
+$fremdeSchule5 = (int) qv("SELECT id FROM schools WHERE name = 'Fremde Schule 5'");
+q('INSERT INTO languages (school_id, name, flag_emoji, code) VALUES (?, ?, ?, ?)',
+  [$fremdeSchule5, 'Fremdsprachisch', '', 'xx']);
+$fremdLangId = (int) db()->lastInsertId();
+q('INSERT INTO courses (school_id, language_id, name) VALUES (?, ?, ?)',
+  [$fremdeSchule5, $fremdLangId, 'Fremder Kurs 5']);
+$fremdKursId = (int) db()->lastInsertId();
+
+$res = teacherRequest($base . '/teacher/course.php?id=' . $fremdKursId, [
+    'delete_course' => '1', 'course_id' => $fremdKursId,
+    'password'      => 'lehrerin123', 'csrf' => $lehrerCsrf,
+]);
+ok('Ein Kurs einer anderen Schule bleibt unberuehrt',
+   q1('SELECT id FROM courses WHERE id = ?', [$fremdKursId]) !== null);
+ok('Und seine Sprache auch',
+   q1('SELECT id FROM languages WHERE id = ?', [$fremdLangId]) !== null);
+
+q('DELETE FROM languages WHERE id = ?', [$fremdLangId]);
+q('DELETE FROM schools WHERE id = ?', [$fremdeSchule5]);
+
 // Aufraeumen: Kurse, Sprachen, Kinder, Klasse.
 foreach (class_members_list($kursKlasseId) as $m) {
     q('DELETE FROM users WHERE id = ?', [(int) $m['id']]);

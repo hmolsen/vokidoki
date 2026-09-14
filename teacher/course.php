@@ -79,9 +79,52 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['remove_member
     teacher_redirect($zurueck);
 }
 
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['delete_course'])) {
+    teacher_csrf_check();
+
+    /*
+     * Mit dem eigenen Passwort bestaetigen.
+     *
+     * Nicht, weil jemand Fremdes an der Tastatur sitzen koennte - die
+     * Sitzung ist ohnehin angemeldet -, sondern als Zaesur: Zwischen dem
+     * Lesen der Warnung und dem Loeschen soll eine Handlung liegen, die
+     * man nicht aus Versehen ausfuehrt. Ein Haekchen setzt man im
+     * Vorbeigehen, ein Passwort tippt man nicht.
+     *
+     * Ausdruecklich OHNE die Anmeldebremse: Ein Vertipper hier duerfte die
+     * Lehrkraft nicht aus der ganzen Anwendung aussperren.
+     */
+    $passwort = (string) ($_POST['password'] ?? '');
+
+    if (!password_verify($passwort, (string) $user['password_hash'])) {
+        usleep(random_int(200_000, 500_000));
+        teacher_flash('Das Passwort stimmt nicht. Der Kurs ist unveraendert.', 'bad');
+        teacher_redirect($zurueck);
+    }
+
+    $verlust = course_delete_preview($courseId);
+    $name    = (string) $kurs['name'];
+
+    try {
+        course_delete($courseId);
+    } catch (Throwable $e) {
+        error_log('[vokabeltrainer] Kurs loeschen: ' . $e->getMessage());
+        teacher_flash('Der Kurs liess sich nicht loeschen. Es wurde nichts veraendert.', 'bad');
+        teacher_redirect($zurueck);
+    }
+
+    teacher_flash(sprintf(
+        'Kurs "%s" geloescht - mit %d Lerneinheiten, %d Vokabeln und den '
+        . 'Lernstaenden von %d Kindern.',
+        $name, $verlust['units'], $verlust['vocab'], $verlust['students'],
+    ));
+    teacher_redirect('index.php');
+}
+
 $mitglieder = course_members_list($courseId);
 $einheiten  = course_units_list($courseId);
 $offene     = course_candidates($courseId, $schoolId);
+$verlust    = course_delete_preview($courseId);
 
 teacher_head($kurs['name'], 'index.php', $user);
 teacher_flash_render();
@@ -231,6 +274,70 @@ $appQr      = qr_svg($appAdresse, 3, 'Adresse der App');
     Kursliste die maßgebliche. Jemanden zu entfernen löscht keinen Lernstand:
     Kommt er zurück, ist der Stand wieder da.
 </p>
+
+<h2>Kurs löschen</h2>
+
+<?php
+/*
+ * Zugeklappt, und das ist der Punkt: Loeschen ist nichts, worueber man
+ * stolpert. Wer es sucht, findet es; wer die Seite ueberfliegt, nicht.
+ */
+?>
+<details class="card">
+    <summary style="cursor:pointer;font-weight:600">
+        Diesen Kurs endgültig löschen
+    </summary>
+
+    <div class="notice bad" style="margin-top:14px">
+        <strong>Das lässt sich nicht rückgängig machen.</strong>
+        Gelöscht werden nicht nur der Kurs, sondern auch seine Unterlagen und
+        alles, was die Kinder darin gelernt haben:
+    </div>
+
+    <table class="data">
+        <tr><th>Was</th><th class="num">Anzahl</th></tr>
+        <tr>
+            <td>Kinder verlieren den Zugang</td>
+            <td class="num"><strong><?= $verlust['students'] ?></strong></td>
+        </tr>
+        <tr>
+            <td>Lerneinheiten</td>
+            <td class="num"><?= $verlust['units'] ?></td>
+        </tr>
+        <tr>
+            <td>Vokabeln</td>
+            <td class="num"><?= $verlust['vocab'] ?></td>
+        </tr>
+        <tr>
+            <td>Lückensätze <span class="tiny muted">(erzeugt und bezahlt)</span></td>
+            <td class="num"><?= $verlust['sentences'] ?></td>
+        </tr>
+        <tr>
+            <td><strong>Gespeicherte Lernstände</strong>
+                <span class="tiny muted">Serien, Fehler, „gekonnt"</span></td>
+            <td class="num"><strong><?= $verlust['progress'] ?></strong></td>
+        </tr>
+    </table>
+
+    <p class="tiny muted">
+        Soll die Klasse nur aufhören, damit zu arbeiten, ist das Zurücknehmen
+        der Freigabe das mildere Mittel: Die Lerneinheit verschwindet aus der
+        App, Unterlagen und Lernstände bleiben. Und wer nur einzelne Kinder
+        herausnehmen will, tut das oben unter „Wer im Kurs ist".
+    </p>
+
+    <form method="post" style="max-width:360px">
+        <?= teacher_csrf_field() ?>
+        <input type="hidden" name="course_id" value="<?= $courseId ?>">
+        <label for="pw_delete">Zum Bestätigen dein eigenes Passwort</label>
+        <input type="password" id="pw_delete" name="password"
+               autocomplete="current-password" required>
+        <button class="btn danger small" name="delete_course" value="1"
+                data-confirm="Kurs &quot;<?= h($kurs['name']) ?>&quot; mit allen Unterlagen und Lernständen endgültig löschen?">
+            Endgültig löschen
+        </button>
+    </form>
+</details>
 
 <script>
 document.addEventListener('click', (e) => {
