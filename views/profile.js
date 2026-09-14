@@ -45,7 +45,7 @@ export async function profileView() {
         <h2 class="section">Passwort ändern</h2>
 
         ${profile.initial ? `
-            <div class="notice">
+            <div class="notice" id="initialhint">
                 Du hast noch dein Anfangspasswort. Denk dir eins aus, das nur du
                 kennst - dann steht es nirgends mehr auf einem Zettel.
             </div>` : ''}
@@ -122,6 +122,19 @@ export async function profileView() {
             $('#current').value = '';
             $('#pw1').value = '';
             $('#pw2').value = '';
+
+            /*
+             * Der Hinweis auf das Anfangspasswort verschwindet sofort.
+             *
+             * Er steht nur da, solange in der Datenbank noch das erzeugte
+             * Passwort liegt - und das ist ab jetzt geloescht. Bliebe er
+             * stehen, forderte die Seite zu etwas auf, das gerade erledigt
+             * wurde, und man fragte sich, ob es geklappt hat.
+             */
+            profile.initial = false;
+            const hinweis = $('#initialhint');
+            if (hinweis) hinweis.remove();
+
             showError('Passwort geändert. Merk es dir gut!', 'good');
         } catch (err) {
             showError(err.message);

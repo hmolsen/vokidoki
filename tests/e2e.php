@@ -3541,6 +3541,25 @@ ok('Und das Anfangspasswort ist aus der Datenbank verschwunden',
    $nachher['initial_password'] === null,
    var_export($nachher['initial_password'], true));
 
+/*
+ * Und der Hinweis darauf verschwindet sofort - nicht erst beim naechsten
+ * Laden. Er fordert zu etwas auf, das gerade erledigt wurde; bliebe er
+ * stehen, fragte man sich, ob es geklappt hat.
+ */
+$profilQuelle = (string) file_get_contents(__DIR__ . '/../views/profile.js');
+ok('Der Hinweis auf das Anfangspasswort ist ansprechbar',
+   str_contains($profilQuelle, 'id="initialhint"'));
+ok('Und wird nach dem Aendern sofort entfernt',
+   preg_match('/hinweis\.remove\(\)/', $profilQuelle) === 1
+   && str_contains($profilQuelle, 'profile.initial = false'),
+   'sonst bleibt er bis zum naechsten Laden stehen');
+
+// Und die API sagt beim naechsten Abruf dasselbe.
+$nochmal = apiAls($kontoJar, fn () => apiCall('profile', 'get')[0]);
+ok('Auch die API meldet das Anfangspasswort nicht mehr',
+   ($nochmal['profile']['initial'] ?? null) === false,
+   var_export($nochmal['profile']['initial'] ?? null, true));
+
 // Ohne Anmeldung geht gar nichts.
 $fremdJar = tempnam(sys_get_temp_dir(), 'vtfremd');
 [$d, $s] = apiAls($fremdJar, fn () => apiCall('profile', 'get'));
