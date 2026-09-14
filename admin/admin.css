@@ -556,3 +556,57 @@ table.courses tr.newrow select,
 table.courses tr.newrow input[type=text] { margin: 0; min-height: 38px; width: auto; max-width: 190px; }
 table.courses tr.newrow .coursename { margin: 0; }
 table.courses tr.newrow .picker { margin: 0; min-width: 190px; }
+
+/* ------------------------------------------------------ Freigabe-Balken
+ *
+ * Ein Balken zwischen der letzten freigegebenen und der ersten gesperrten
+ * Vokabel. Alles darueber ist auf, alles darunter zu - und beim Ziehen
+ * schlagen die Zeilen um, damit man sieht, was der Griff bewirkt, bevor
+ * man ihn loslaesst.
+ */
+table.release tr.locked td {
+    color: var(--text-soft);
+    background: var(--surface-2);
+}
+/* Deutlicher als ein blasses Grau: Die gesperrten Zeilen sind zurueckgesetzt,
+   nicht nur etwas heller. */
+table.release tr.locked td strong { font-weight: 500; color: var(--text-soft); }
+table.release tr.locked td:first-child { box-shadow: inset 3px 0 0 var(--border); }
+
+table.release tr.released td:first-child { box-shadow: inset 3px 0 0 var(--good); }
+
+table.release.draggable tr[data-pos] { cursor: pointer; }
+table.release.draggable tr[data-pos]:hover td { outline: 1px solid var(--border); }
+
+/* Das Umschlagen beim Ziehen. Kurz und klein - es soll zeigen, dass sich
+   etwas geaendert hat, und nicht die Aufmerksamkeit auf sich ziehen. */
+@keyframes releaseflip {
+    from { transform: translateX(-6px); opacity: .55; }
+    to   { transform: none;             opacity: 1; }
+}
+table.release tr.flip td { animation: releaseflip .18s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+    table.release tr.flip td { animation: none; }
+}
+
+tr.releasebar td { padding: 0 !important; background: none !important; border: 0 !important; }
+
+.releasebar .bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px;
+    margin: 2px 0;
+    background: var(--accent);
+    color: var(--accent-text);
+    border-radius: 8px;
+    font-size: .82rem;
+    font-weight: 600;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;   /* sonst scrollt das Handy beim Ziehen */
+}
+.releasebar.dragging .bar { cursor: grabbing; filter: brightness(1.08); }
+.releasebar .bar:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.releasebar .grip { letter-spacing: -3px; opacity: .8; }

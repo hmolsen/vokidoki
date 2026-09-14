@@ -220,19 +220,23 @@ function sentence_schema(): array
 function sentence_candidates(int $unitId): array
 {
     /*
-     * Nur bis zur Freigabemarke.
+     * Alle Vokabeln der Einheit, nicht nur die freigegebenen.
      *
-     * Saetze kosten Geld, und genau dafuer gibt es die Marke: Die Lehrkraft
-     * liest eine ganze Unit ein, gibt aber "bis stressed" frei - fuer den
-     * Rest soll nichts erzeugt werden, solange er nicht dran ist. Gebunden
-     * wird an die Einheit, nicht an den Aufrufer: Erzeugt wird, was die
-     * Klasse sehen darf, auch wenn eine Lehrkraft den Lauf anstoesst.
+     * Das war eine Weile anders: Saetze entstanden erst beim Freigeben, um
+     * fuer noch Gesperrtes nichts zu bezahlen. In der Anwendung fuehlte sich
+     * das falsch an - eine Lehrkraft gibt eine Portion frei und wartet erst
+     * einmal eine halbe Minute, und bis dahin ist die Lektion fuer die
+     * Klasse halb da. Einmal beim Einlesen alles erzeugen kostet dasselbe,
+     * sobald die Unit ohnehin ganz drankommt, und es kostet es zu einem
+     * Zeitpunkt, an dem niemand wartet.
+     *
+     * Die Freigabe steuert weiterhin, was die Klasse SIEHT - nur nicht mehr,
+     * was erzeugt wird.
      */
     return qa(
         'SELECT v.id, v.term_foreign, v.term_native, v.word_type
            FROM vocab v
-           JOIN units t ON t.id = v.unit_id
-          WHERE v.unit_id = ? AND v.position < t.released_position
+          WHERE v.unit_id = ?
           ORDER BY v.position, v.id',
         [$unitId],
     );
@@ -262,7 +266,6 @@ function known_vocabulary(?int $courseId, int $exceptUnitId): array
            FROM vocab v
            JOIN units t ON t.id = v.unit_id
           WHERE t.course_id = ? AND t.id <> ?
-            AND v.position < t.released_position
           ORDER BY t.created_at DESC, v.position
           LIMIT ' . KNOWN_VOCAB_LIMIT,
         [$courseId, $exceptUnitId],
@@ -357,21 +360,16 @@ function generate_sentences(array $unit, array $user): array
     $lang = q1('SELECT name, code FROM languages WHERE id = ?', [(int) $unit['language_id']]);
 
     /*
-     * Nur freigegebene Vokabeln ohne Sätze.
-     *
-     * Zwei Bedingungen, die zusammen die portionsweise Freigabe tragen: Der
-     * Knopf im Admin trägt gezielt nach, was fehlt, und die Marke sorgt
-     * dafür, dass für den noch gesperrten Rest gar nichts erst entsteht.
-     * Beim nächsten Freigeben läuft dieselbe Abfrage und findet genau die
-     * neu aufgemachten - eine Bereichsangabe braucht es dafür nicht.
+     * Alle Vokabeln ohne Sätze - der Knopf im Admin trägt damit gezielt
+     * nach, was fehlt, und ein zweiter Lauf erzeugt nichts doppelt.
      */
     $rows = qa(
         'SELECT v.id, v.term_foreign, v.term_native, v.word_type
            FROM vocab v
-          WHERE v.unit_id = ? AND v.position < ?
+          WHERE v.unit_id = ?
             AND NOT EXISTS (SELECT 1 FROM sentences s WHERE s.vocab_id = v.id)
           ORDER BY v.position, v.id',
-        [$unitId, (int) ($unit['released_position'] ?? 0)],
+        [$unitId],
     );
 
     if ($rows === []) {
@@ -551,8 +549,7 @@ function cloze_sentence_count(int $unitId): int
 {
     return (int) qv(
         'SELECT COUNT(*) FROM vocab v
-           JOIN units t ON t.id = v.unit_id
-          WHERE v.unit_id = ? AND v.position < t.released_position
+          WHERE v.unit_id = ?
             AND EXISTS (SELECT 1 FROM sentences s WHERE s.vocab_id = v.id)',
         [$unitId],
     );

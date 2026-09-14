@@ -100,10 +100,9 @@ switch (action()) {
                 JOIN units u          ON u.id = v.unit_id
                 JOIN course_members m ON m.course_id = u.course_id AND m.user_id = ?
                WHERE u.language_id = ? AND v.{$col} <> ?
-                 AND (? = 1 OR v.position < u.released_position)
+                 AND v.position < u.released_position
                ORDER BY RAND() LIMIT {$need}",
-             [$uid, (int) $unit['language_id'], $answer,
-              user_is_teacher($user) ? 1 : 0]],
+             [$uid, (int) $unit['language_id'], $answer]],
         ];
 
         foreach ($pools as [$sql, $params]) {

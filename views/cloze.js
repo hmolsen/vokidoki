@@ -1,5 +1,5 @@
 import {
-    api, render, esc, $, go, topbar, wireBack, progressBar, showError,
+    VT, api, render, esc, $, go, topbar, wireBack, progressBar, showError,
 } from '../core.js';
 
 const NEXT_DELAY_CORRECT = 900;
@@ -76,9 +76,24 @@ async function nextQuestion(unitId) {
         return;
     }
 
-    // Lerneinheiten von vor dem Hintergrundlauf: jetzt erzeugen.
+    /*
+     * Es fehlen Saetze. Wer einlesen darf, darf sie auch nachholen - fuer
+     * alle anderen waere das ein bezahlter Aufruf auf Knopfdruck, und die
+     * API lehnt ihn ohnehin ab. Dann lieber sagen, woran es liegt.
+     */
     if (data.needs_preparation) {
-        await prepare(unitId);
+        if (VT.user.canImport) {
+            await prepare(unitId);
+        } else {
+            render(`
+                ${topbar('Lückentext', { backTo: `/unit/${unitId}` })}
+                <div class="empty">
+                    <span class="big">\u{23F3}</span>
+                    Für diese Lektion gibt es noch keine Lückensätze.<br>
+                    Deine Lehrkraft holt das nach.
+                </div>`);
+            wireBack();
+        }
         return;
     }
 

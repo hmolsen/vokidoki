@@ -91,14 +91,20 @@ function load_language_for_view(array $user, int $languageId): ?array
  * Sprache zum Ändern laden, oder null.
  *
  * "Ändern" schließt das Anlegen von Lerneinheiten darin ein - wer eine Lektion
- * in eine Sprache einliest, verändert deren Inhalt.
+ * in eine Sprache einliest, verändert deren Inhalt - und ebenso das Löschen.
  *
- * Heute darf jedes Mitglied ändern. Sobald es Lehrkräfte gibt, wird hier auf
- * member_role eingeschränkt - und weil alle Endpunkte durch diese Funktion
- * gehen, ist das dann eine Zeile.
+ * Mitgliedschaft allein genügt dafür nicht, und das war ein Loch: Ein Kind im
+ * Kurs konnte die Sprache seiner Klasse löschen und damit die Unterlagen von
+ * siebenundzwanzig anderen. Wer Inhalte anlegen darf, darf sie auch ändern -
+ * das ist dieselbe Befugnis, und sie heisst CAP_IMPORT. In einer Schule hat
+ * sie die Lehrkraft, in einer Familie das Kind, das für sich selbst einliest.
  */
 function load_language_for_edit(array $user, int $languageId): ?array
 {
+    if (!user_can($user, CAP_IMPORT)) {
+        return null;
+    }
+
     return q1(
         'SELECT l.*
            FROM languages l
@@ -132,9 +138,21 @@ function load_unit_for_view(array $user, int $unitId): ?array
     );
 }
 
-/** Lerneinheit zum Ändern laden, oder null. Umbenennen, löschen, Vokabeln. */
+/**
+ * Lerneinheit zum Ändern laden, oder null. Umbenennen, löschen, Vokabeln.
+ *
+ * Wie bei den Sprachen: Mitgliedschaft heisst üben dürfen, nicht ändern
+ * dürfen. Eine Schülerin konnte hierüber die Lerneinheit ihrer Klasse
+ * löschen - mit allen Vokabeln, Sätzen und den Lernständen aller anderen.
+ * Verlangt wird deshalb CAP_IMPORT: dieselbe Befugnis, die zum Anlegen
+ * berechtigt.
+ */
 function load_unit_for_edit(array $user, int $unitId): ?array
 {
+    if (!user_can($user, CAP_IMPORT)) {
+        return null;
+    }
+
     return q1(
         'SELECT t.*
            FROM units t
@@ -167,25 +185,26 @@ const POSITION_ALL = PHP_INT_MAX;
 const RELEASED_ALL = 4294967295;
 
 /**
- * Bis zu welcher vocab.position darf dieses Konto in diese Lerneinheit sehen?
- *
- * Das ist absichtlich kein Ja/Nein. Eine Lehrkraft liest eine ganze Unit ein
- * und gibt sie portionsweise frei - "Unit 1 bis 'stressed'". Für die Klasse
- * endet die Einheit dann dort, für die Lehrkraft nicht.
+ * Bis zu welcher vocab.position reicht die Freigabe dieser Lerneinheit?
  *
  * Gemeint ist "so viele Vokabeln sind auf": Freigegeben ist, was
  * `v.position < released_position` erfüllt. Damit ist 0 = noch nichts, und
  * der Altbestand steht auf dem Höchstwert.
  *
- * Jede schülerseitige Vokabelabfrage muss das anwenden - einschliesslich des
+ * Jede Vokabelabfrage der App muss das anwenden - einschliesslich des
  * Ablenkerpools im Quiz, der sonst nicht freigegebene Wörter als falsche
  * Antworten ausplaudert.
+ *
+ * Die Grenze gilt für ALLE, auch für die Lehrkraft. Das war einmal anders,
+ * und es war ein Fehler: In der App sah sie beim Auswählen alle Vokabeln,
+ * im Lückentext aber nur die, für die schon Sätze da waren - zwei
+ * verschiedene Zahlen für dieselbe Einheit, und keine davon die, die ihre
+ * Klasse sieht. Wer prüfen will, was die Klasse vor sich hat, muss genau
+ * das vor sich haben. Alles zu sehen ist Sache des Lehrkraft-Bereichs; der
+ * fragt die Vokabeln ohne diese Grenze ab.
  */
 function visible_position(array $user, array $unit): int
 {
-    if (user_is_teacher($user)) {
-        return POSITION_ALL;
-    }
     return (int) ($unit['released_position'] ?? 0);
 }
 

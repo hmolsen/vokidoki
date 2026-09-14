@@ -1,5 +1,5 @@
 import {
-    api, render, esc, $, go, topbar, loading, wireBack, progressBar,
+    VT, api, render, esc, $, go, topbar, loading, wireBack, progressBar,
     showError, clearError,
 } from '../core.js';
 
@@ -67,10 +67,12 @@ export async function unitView(unitId) {
 
         <h2>Verwalten</h2>
         <div class="btn-row" style="margin-bottom:10px">
-            <button class="btn secondary small" id="rename">Umbenennen</button>
+            ${VT.user.canImport
+                ? '<button class="btn secondary small" id="rename">Umbenennen</button>' : ''}
             <button class="btn secondary small" id="reset">Fortschritt zurücksetzen</button>
         </div>
-        <button class="btn ghost" id="delete">Lerneinheit löschen</button>
+        ${VT.user.canImport
+            ? '<button class="btn ghost" id="delete">Lerneinheit löschen</button>' : ''}
     `);
 
     wireBack();
@@ -79,7 +81,16 @@ export async function unitView(unitId) {
     watchSentences(unit.id, modes);
 
 
-    $('#rename').addEventListener('click', async () => {
+    /*
+     * Umbenennen und Loeschen gibt es nur mit der Befugnis, Inhalte
+     * anzulegen - dieselbe, die zum Einlesen berechtigt. Fuer ein Kind in
+     * einer Klasse waeren es Knoepfe, die nur eine Absage holen; die API
+     * lehnt beides ohnehin ab.
+     *
+     * Das Zuruecksetzen bleibt: Der Lernstand gehoert dem Kind.
+     */
+    const rename = $('#rename');
+    if (rename) rename.addEventListener('click', async () => {
         const title = prompt('Neuer Titel der Lerneinheit:', unit.title);
         if (title === null) return;
         clearError();
@@ -101,7 +112,8 @@ export async function unitView(unitId) {
         }
     });
 
-    $('#delete').addEventListener('click', async () => {
+    const del = $('#delete');
+    if (del) del.addEventListener('click', async () => {
         if (!confirm(`"${unit.title}" mit allen Vokabeln endgültig löschen?`)) return;
         try {
             await api('units', 'delete', { body: { id: unit.id } });

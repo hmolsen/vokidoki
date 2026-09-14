@@ -2264,9 +2264,16 @@ ok('Ein Kind sieht nur bis zur Freigabemarke',
    visible_position($kindRow, $freiUnitRow) === 3,
    (string) visible_position($kindRow, $freiUnitRow));
 
+/*
+ * Auch fuer die Lehrkraft. In der App soll sie genau das sehen, was ihre
+ * Klasse sieht - vorher sah sie beim Auswaehlen alle Vokabeln und im
+ * Lueckentext nur die mit Saetzen, also zwei Zahlen fuer dieselbe Einheit
+ * und keine davon die der Klasse. Alles zu sehen ist Sache des
+ * Lehrkraft-Bereichs, und der fragt ohne diese Grenze ab.
+ */
 $lehrRow = ['id' => 0, 'role' => ROLE_TEACHER];
-ok('Eine Lehrkraft sieht alles',
-   visible_position($lehrRow, $freiUnitRow) >= 10,
+ok('Auch eine Lehrkraft sieht nur bis zur Marke',
+   visible_position($lehrRow, $freiUnitRow) === 3,
    (string) visible_position($lehrRow, $freiUnitRow));
 
 $freiUnitRow['released_position'] = 0;
@@ -2337,8 +2344,8 @@ $gesehen = apiAls($lehrJar, function () use ($freiLehrer, $freiUnit) {
     [$d, $s] = apiCall('units', 'get', null, ['id' => $freiUnit]);
     return array_column($d['vocab'] ?? [], 'term_foreign');
 });
-ok('Die Lehrkraft sieht die ganze Einheit',
-   count($gesehen) === 10, count($gesehen) . ' von 10');
+ok('Die Lehrkraft sieht in der App dasselbe wie ihre Klasse',
+   count($gesehen) === 3, count($gesehen) . ' statt 3');
 
 // ---- Der Altbestand bleibt unberuehrt.
 
@@ -2377,15 +2384,24 @@ q('DELETE FROM units WHERE id = ?', [$leereUnit]);
 
 require_once __DIR__ . '/../lib/sentences.php';
 
+/*
+ * Saetze entstehen fuer die ganze Einheit, unabhaengig von der Freigabe.
+ *
+ * Das war eine Weile anders. In der Anwendung fuehlte es sich falsch an:
+ * Die Lehrkraft gibt eine Portion frei und wartet erst einmal eine halbe
+ * Minute, waehrend die Lektion fuer die Klasse halb da ist. Einmal beim
+ * Einlesen alles zu erzeugen kostet dasselbe, sobald die Unit ohnehin ganz
+ * drankommt - nur zu einem Zeitpunkt, an dem niemand davorsitzt.
+ */
 q('UPDATE units SET released_position = 4 WHERE id = ?', [$freiUnit]);
-$kandidaten = array_column(sentence_candidates($freiUnit), 'term_foreign');
-sort($kandidaten);
-ok('Saetze entstehen nur fuer Freigegebenes',
-   $kandidaten === ['alpha', 'bravo', 'charlie', 'delta'], implode(', ', $kandidaten));
+ok('Saetze entstehen fuer die ganze Einheit, nicht nur fuer Freigegebenes',
+   count(sentence_candidates($freiUnit)) === 10,
+   count(sentence_candidates($freiUnit)) . ' von 10');
 
 q('UPDATE units SET released_position = 0 WHERE id = ?', [$freiUnit]);
-ok('Ohne Freigabe gibt es nichts zu erzeugen - und nichts zu bezahlen',
-   sentence_candidates($freiUnit) === []);
+ok('Auch wenn noch gar nichts freigegeben ist',
+   count(sentence_candidates($freiUnit)) === 10,
+   count(sentence_candidates($freiUnit)) . ' von 10');
 
 /*
  * Der Wortschatz-Vorspann fuer den Prompt: andere Einheiten desselben
@@ -2410,8 +2426,8 @@ $bekannt = array_column(known_vocabulary((int) $kurs['id'], $freiUnit), 'term_fo
 
 ok('Als bekannt gilt der Nachbar im selben Kurs',
    in_array('kilo', $bekannt, true), implode(', ', $bekannt));
-ok('Aber nicht, was dort noch gesperrt ist',
-   !in_array('lima', $bekannt, true), implode(', ', $bekannt));
+ok('Und zwar auch das dort noch Gesperrte - Saetze entstehen fuer alles',
+   in_array('lima', $bekannt, true), implode(', ', $bekannt));
 ok('Und nichts aus einem anderen Kurs',
    !in_array('zulu', $bekannt, true), implode(', ', $bekannt));
 ok('Die eigene Einheit zaehlt nicht als bekannt',
@@ -3431,6 +3447,104 @@ ok('Und die App bekommt das auch gesagt', $dasDarf === false, var_export($dasDar
 q('DELETE FROM users WHERE id = ?', [$ohneRecht]);
 @unlink($rechtJar);
 
+/*
+ * Aendern ist nicht Ueben - das Berechtigungskonzept.
+ *
+ * Mitglied in einem Kurs zu sein hiess bisher auch, seine Lerneinheiten
+ * aendern und loeschen zu duerfen. Ein Kind im Kurs konnte damit die
+ * Lerneinheit seiner Klasse loeschen - mit allen Vokabeln, Saetzen und den
+ * Lernstaenden aller anderen -, und sogar die ganze Sprache. Das war ein
+ * echtes Loch, und es sass an der Naht, die genau dafuer gebaut wurde.
+ *
+ * Die Regel lautet jetzt: Wer Inhalte anlegen darf, darf sie auch aendern.
+ * Das ist dieselbe Befugnis und heisst CAP_IMPORT - in einer Schule hat sie
+ * die Lehrkraft, in einer Familie das Kind, das fuer sich selbst einliest.
+ */
+$schuelerKonto = makeUser('e2e_darfnicht', 'Darf Nicht');
+q('UPDATE users SET can_import = 0 WHERE id = ?', [$schuelerKonto]);
+course_add_member((int) course_for_language($languageId)['id'], $schuelerKonto, 'student');
+
+$schuelerRow = q1('SELECT * FROM users WHERE id = ?', [$schuelerKonto]);
+$lehrRow2    = q1('SELECT * FROM users WHERE id = ?', [$lehrerId]);
+
+ok('Ein Kind ohne Recht darf die Lerneinheit ansehen',
+   load_unit_for_view($schuelerRow, $unitId) !== null);
+ok('Aber nicht aendern',
+   load_unit_for_edit($schuelerRow, $unitId) === null,
+   'es koennte sie loeschen');
+ok('Und die Sprache auch nicht',
+   load_language_for_edit($schuelerRow, $languageId) === null);
+
+ok('Eine Lehrkraft darf beides',
+   load_unit_for_view($lehrRow2, $unitId) !== null
+   || load_unit_for_edit($lehrRow2, $unitId) === null);
+
+// Und durch die API, nicht nur an der Naht vorbei.
+$darfJar = tempnam(sys_get_temp_dir(), 'vtdarf');
+$vorherUnits = (int) qv('SELECT COUNT(*) FROM units WHERE id = ?', [$unitId]);
+
+$ergebnis = apiAls($darfJar, function () use ($unitId, $languageId) {
+    apiCall('auth', 'login', ['username' => 'e2e_darfnicht', 'password' => 'geheim123']);
+    return [
+        'loeschen'  => apiCall('units', 'delete', ['id' => $unitId]),
+        'umbenennen' => apiCall('units', 'rename', ['id' => $unitId, 'title' => 'Gekapert']),
+        'sprache'   => apiCall('languages', 'delete', ['id' => $languageId]),
+        'einlesen'  => apiCall('import', 'analyze', ['language_id' => $languageId, 'images' => []]),
+    ];
+});
+
+ok('Die API laesst ein Kind die Lerneinheit nicht loeschen',
+   $ergebnis['loeschen'][1] === 404, 'Status ' . $ergebnis['loeschen'][1]);
+ok('Und sie steht auch wirklich noch da',
+   (int) qv('SELECT COUNT(*) FROM units WHERE id = ?', [$unitId]) === $vorherUnits);
+ok('Umbenennen geht ebenso wenig',
+   $ergebnis['umbenennen'][1] === 404
+   && qv('SELECT title FROM units WHERE id = ?', [$unitId]) !== 'Gekapert',
+   'Status ' . $ergebnis['umbenennen'][1]);
+ok('Die Sprache zu loeschen auch nicht',
+   $ergebnis['sprache'][1] === 404
+   && q1('SELECT id FROM languages WHERE id = ?', [$languageId]) !== null,
+   'Status ' . $ergebnis['sprache'][1]);
+ok('Und einlesen erst recht nicht',
+   $ergebnis['einlesen'][1] === 403, 'Status ' . $ergebnis['einlesen'][1]);
+
+/*
+ * Was ein Kind sehr wohl darf: ueben und seinen eigenen Lernstand
+ * zuruecksetzen. Das ist seine Sache und niemandes sonst.
+ */
+$eigenes = apiAls($darfJar, fn () => apiCall('units', 'reset', ['id' => $unitId]));
+ok('Seinen eigenen Lernstand darf es zuruecksetzen', $eigenes[1] === 200,
+   'Status ' . $eigenes[1]);
+
+q('DELETE FROM users WHERE id = ?', [$schuelerKonto]);
+@unlink($darfJar);
+
+/*
+ * Und die Gegenprobe an der Quelle: Beide Ladefunktionen fragen wirklich
+ * nach der Befugnis, statt sich auf die Aufrufer zu verlassen.
+ */
+$zugriffQuelle = (string) file_get_contents(__DIR__ . '/../lib/access.php');
+ok('Beide Aenderungswege pruefen die Befugnis',
+   substr_count($zugriffQuelle, 'if (!user_can($user, CAP_IMPORT)) {') === 2,
+   substr_count($zugriffQuelle, 'if (!user_can($user, CAP_IMPORT)) {') . ' von 2');
+
+/*
+ * Und die Oberflaeche bietet nichts an, was die API ablehnt.
+ */
+$unitUi  = (string) file_get_contents(__DIR__ . '/../views/unit.js');
+$clozeUi = (string) file_get_contents(__DIR__ . '/../views/cloze.js');
+
+ok('Loeschen und Umbenennen erscheinen nur mit Befugnis',
+   substr_count($unitUi, 'VT.user.canImport') >= 2,
+   'sonst holt ein Kind sich dort nur Absagen');
+ok('Das Zuruecksetzen bleibt fuer alle',
+   preg_match('/canImport[^
+]*id="reset"/', $unitUi) !== 1,
+   'der Lernstand gehoert dem Kind');
+ok('Und ohne Befugnis erzeugt niemand Saetze auf Knopfdruck',
+   str_contains($clozeUi, 'if (VT.user.canImport) {'),
+   'sonst loest ein Kind einen bezahlten Aufruf aus');
+
 // ---- Die Sprachliste fuer das Auswahlfeld.
 
 $auswahl = language_choices();
@@ -4232,34 +4346,55 @@ foreach (['alpha', 'beta'] as $i => $w) {
       [$leerUnit, $w, 'de-' . $w, $i]);
 }
 
-ok('Ohne Freigabe gibt es nichts zu erzeugen',
-   vocab_without_sentences($leerUnit) === 0);
+/*
+ * Saetze entstehen auch ohne Freigabe - beim Einlesen, fuer die ganze
+ * Einheit. Die Freigabe steuert danach nur noch, was die Klasse sieht.
+ */
+ok('Auch ohne Freigabe gibt es etwas zu erzeugen',
+   vocab_without_sentences($leerUnit) === 2,
+   vocab_without_sentences($leerUnit) . ' von 2');
 
 sentence_claim($leerUnit);
 generate_sentences_tracked($leerUnit);
 
+$stand  = q1('SELECT sentences_status, sentences_error FROM units WHERE id = ?', [$leerUnit]);
+$anzahl = (int) qv('SELECT COUNT(*) FROM sentences s
+                      JOIN vocab v ON v.id = s.vocab_id
+                     WHERE v.unit_id = ?', [$leerUnit]);
+ok('Und danach sind sie da', $anzahl > 0, $anzahl . ' Saetze');
+ok('Die Einheit gilt als fertig',
+   $stand['sentences_status'] === SENTENCE_DONE, (string) $stand['sentences_status']);
+ok('Ohne Fehlermeldung', $stand['sentences_error'] === null,
+   var_export($stand['sentences_error'], true));
+
+/*
+ * Und der Fall, an dem es gehakt hatte: ein Lauf, fuer den es nichts mehr
+ * zu tun gibt. "Nichts zu tun" ist kein Fehlschlag - frueher stand danach
+ * "Es entstand kein brauchbarer Satz" an einer Einheit, die vollstaendig
+ * war.
+ */
+sentence_claim($leerUnit);
+generate_sentences_tracked($leerUnit);
 $stand = q1('SELECT sentences_status, sentences_error FROM units WHERE id = ?', [$leerUnit]);
-ok('Ein Lauf ohne Arbeit meldet keinen Fehlschlag',
+ok('Ein zweiter Lauf ohne Arbeit meldet keinen Fehlschlag',
    $stand['sentences_status'] !== SENTENCE_FAILED,
    (string) $stand['sentences_status'] . ' / ' . var_export($stand['sentences_error'], true));
 ok('Und hinterlaesst keine Fehlermeldung',
    $stand['sentences_error'] === null, var_export($stand['sentences_error'], true));
-ok('Die Einheit wartet stattdessen auf die Freigabe',
-   $stand['sentences_status'] === SENTENCE_PENDING,
-   (string) $stand['sentences_status']);
 
-// Mit Freigabe muss dagegen wirklich etwas entstehen.
+// Die Kinder sehen davon trotzdem nur das Freigegebene.
+$kindRow2 = q1('SELECT * FROM users WHERE id = ?', [$userId]);
+$unitRow2 = q1('SELECT * FROM units WHERE id = ?', [$leerUnit]);
+ok('Gesehen wird davon nur das Freigegebene',
+   visible_position($kindRow2, $unitRow2) === 0,
+   (string) visible_position($kindRow2, $unitRow2));
+[$clozeKnown, $clozeTotal] = cloze_progress($leerUnit, $userId);
+ok('Und im Lueckentext kommt ohne Freigabe nichts an',
+   $clozeTotal === 0, $clozeTotal . ' Saetze sichtbar');
+
 q('UPDATE units SET released_position = 2 WHERE id = ?', [$leerUnit]);
-sentence_claim($leerUnit);
-generate_sentences_tracked($leerUnit);
-
-$stand = q1('SELECT sentences_status FROM units WHERE id = ?', [$leerUnit]);
-$anzahl = (int) qv('SELECT COUNT(*) FROM sentences s
-                      JOIN vocab v ON v.id = s.vocab_id
-                     WHERE v.unit_id = ?', [$leerUnit]);
-ok('Nach der Freigabe entstehen Saetze', $anzahl > 0, $anzahl . ' Saetze');
-ok('Und die Einheit gilt als fertig',
-   $stand['sentences_status'] === SENTENCE_DONE, (string) $stand['sentences_status']);
+[$clozeKnown, $clozeTotal] = cloze_progress($leerUnit, $userId);
+ok('Nach der Freigabe schon', $clozeTotal === 2, $clozeTotal . ' von 2');
 
 /*
  * Die Oberflaeche muss den laufenden Zustand zeigen koennen: Spinner statt

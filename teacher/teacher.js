@@ -440,3 +440,156 @@ function initStudentAdd() {
 }
 
 initStudentAdd();
+
+// ------------------------------------------------------- Freigabe-Balken
+
+/**
+ * Die Freigabe als ein Balken, den man verschiebt.
+ *
+ * Vorher stand neben jeder Zeile ein Knopf "bis hier freigeben" - bei
+ * hundert Vokabeln hundert Knoepfe, und keiner verriet vorher, was er
+ * bewirkt. Jetzt liegt ein Balken zwischen der letzten freigegebenen und
+ * der ersten gesperrten Vokabel. Wer ihn anfasst, schiebt ihn hoch oder
+ * runter und sieht die Zeilen dabei umschlagen; beim Loslassen wird
+ * gespeichert.
+ *
+ * Ohne JavaScript passiert hier nichts, und die Knoepfe je Zeile bleiben
+ * stehen - dieselbe Seite, nur umstaendlicher.
+ */
+function initReleaseBar() {
+    const tabelle = document.getElementById('freigabe');
+    const form    = document.getElementById('releaseform');
+    if (!tabelle || !form) return;
+
+    const zeilen = Array.from(tabelle.querySelectorAll('tr[data-pos]'));
+    if (zeilen.length === 0) return;
+
+    // Die Knoepfe je Zeile sind jetzt der Rueckfallweg und verschwinden.
+    tabelle.querySelectorAll('.js-hide').forEach((b) => b.remove());
+    tabelle.classList.add('draggable');
+
+    const start = Number(tabelle.dataset.released || 0);
+    let stand   = Math.min(start, zeilen.length);   // 0 .. Anzahl
+    let zieht   = false;
+
+    // Der Balken ist eine eigene Zeile, damit er sich in der Tabelle
+    // zwischen zwei Vokabeln schieben laesst und nichts ueberdeckt.
+    const balken = document.createElement('tr');
+    balken.className = 'releasebar';
+    balken.innerHTML = `
+        <td colspan="5">
+            <div class="bar" tabindex="0" role="slider" aria-valuemin="0"
+                 aria-label="Freigabe bis hierhin">
+                <span class="grip" aria-hidden="true">&#8942;&#8942;</span>
+                <span class="barlabel"></span>
+            </div>
+        </td>`;
+    const griff = balken.querySelector('.bar');
+    const text  = balken.querySelector('.barlabel');
+
+    const setzen = (n, weich) => {
+        stand = Math.max(0, Math.min(zeilen.length, n));
+
+        zeilen.forEach((tr, i) => {
+            const frei = i < stand;
+            tr.classList.toggle('released', frei);
+            tr.classList.toggle('locked', !frei);
+            // Beim Ziehen umschlagen lassen; beim Aufbau nicht, sonst
+            // flackert die ganze Tabelle beim Laden.
+            if (weich) {
+                tr.classList.remove('flip');
+                void tr.offsetWidth;          // Neustart der Abfolge erzwingen
+                tr.classList.add('flip');
+            }
+        });
+
+        // Der Balken wandert an die Stelle, an der er steht.
+        if (stand === 0) {
+            tabelle.tBodies[0].insertBefore(balken, zeilen[0]);
+        } else if (stand >= zeilen.length) {
+            zeilen[zeilen.length - 1].after(balken);
+        } else {
+            zeilen[stand].before(balken);
+        }
+
+        griff.setAttribute('aria-valuemax', String(zeilen.length));
+        griff.setAttribute('aria-valuenow', String(stand));
+        text.textContent = stand === 0
+            ? 'Nichts freigegeben - hier anfassen und nach unten ziehen'
+            : stand >= zeilen.length
+                ? `Alle ${zeilen.length} freigegeben`
+                : `${stand} von ${zeilen.length} freigegeben`;
+    };
+
+    /** Zu welcher Stelle gehoert diese Bildschirmhoehe? */
+    const standBeiY = (y) => {
+        for (let i = 0; i < zeilen.length; i++) {
+            const r = zeilen[i].getBoundingClientRect();
+            if (y < r.top + r.height / 2) return i;
+        }
+        return zeilen.length;
+    };
+
+    const speichern = () => {
+        if (stand === Math.min(start, zeilen.length)) return;   // nichts geaendert
+
+        const feld = document.createElement('input');
+        feld.type  = 'hidden';
+        feld.name  = 'release';
+        feld.value = String(stand);
+        form.appendChild(feld);
+        form.submit();
+    };
+
+    griff.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        zieht = true;
+        griff.setPointerCapture(e.pointerId);
+        balken.classList.add('dragging');
+    });
+
+    griff.addEventListener('pointermove', (e) => {
+        if (!zieht) return;
+        const neu = standBeiY(e.clientY);
+        if (neu !== stand) setzen(neu, true);
+    });
+
+    const loslassen = () => {
+        if (!zieht) return;
+        zieht = false;
+        balken.classList.remove('dragging');
+        speichern();
+    };
+
+    griff.addEventListener('pointerup', loslassen);
+    griff.addEventListener('pointercancel', loslassen);
+
+    // Mit der Tastatur: hoch, runter, Anfang, Ende - und Enter speichert.
+    griff.addEventListener('keydown', (e) => {
+        const schritt = { ArrowUp: -1, ArrowDown: 1, PageUp: -10, PageDown: 10 }[e.key];
+        if (schritt !== undefined) {
+            e.preventDefault();
+            setzen(stand + schritt, true);
+        } else if (e.key === 'Home') {
+            e.preventDefault(); setzen(0, true);
+        } else if (e.key === 'End') {
+            e.preventDefault(); setzen(zeilen.length, true);
+        } else if (e.key === 'Enter') {
+            e.preventDefault(); speichern();
+        }
+    });
+
+    // Ein Klick auf eine gesperrte Zeile setzt den Balken dorthin - der
+    // kurze Weg, wenn man schon weiss, wohin.
+    zeilen.forEach((tr, i) => {
+        tr.addEventListener('click', () => {
+            if (zieht) return;
+            setzen(i + 1, true);
+            speichern();
+        });
+    });
+
+    setzen(stand, false);
+}
+
+initReleaseBar();

@@ -72,6 +72,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['release'])) {
 
     q('UPDATE units SET released_position = ? WHERE id = ?', [$bis, $unitId]);
 
+    /*
+     * Die Freigabe setzt nur noch die Marke.
+     *
+     * Die Saetze entstehen beim Einlesen fuer die ganze Einheit - einmal,
+     * zu einem Zeitpunkt, an dem niemand davorsitzt. Frueher haengte die
+     * Erzeugung an dieser Stelle, und dann wartete die Lehrkraft nach jeder
+     * Portion eine halbe Minute, waehrend die Lektion fuer die Klasse halb
+     * da war.
+     *
+     * Fehlt trotzdem etwas - ein abgebrochener Lauf, ein aufgebrauchtes
+     * Budget -, sagt es die Seite und der Knopf "Saetze nachtragen" holt es.
+     */
     if ($bis <= $vorher) {
         teacher_flash($bis === 0
             ? 'Die Freigabe ist zurückgenommen. Gelernt bleibt gelernt - '
@@ -80,44 +92,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['release'])) {
         teacher_redirect($zurueck);
     }
 
-    // Ab hier ist etwas dazugekommen, und dafuer braucht es Saetze.
-    $offen = vocab_without_sentences($unitId);
-    if ($offen === 0) {
-        teacher_flash(sprintf('%d Vokabeln freigegeben. Sätze waren schon da.', $bis));
-        teacher_redirect($zurueck);
-    }
-
-    $blocked = budget_block_reason((int) $user['id']);
-    if ($blocked !== null) {
-        teacher_flash('Freigegeben, aber ohne Sätze: ' . $blocked, 'bad');
-        teacher_redirect($zurueck);
-    }
-
-    /*
-     * Laeuft schon einer, wird nicht ein zweiter gestartet. Die eben
-     * freigegebenen Vokabeln bekommt der laufende aber nicht mehr mit - er
-     * hat seine Liste beim Start geholt. Das wird hier gesagt, statt es zu
-     * beschoenigen; nachtragen laesst es sich unten mit einem Knopf.
-     */
-    if (!sentence_claim($unitId)) {
-        teacher_flash(sprintf(
-            '%d Vokabeln freigegeben. Es läuft schon ein Satzlauf - die neuen '
-            . 'sind noch nicht dabei. Wenn er durch ist, "Sätze nachtragen".',
-            $bis,
-        ));
-        teacher_redirect($zurueck);
-    }
-
-    teacher_flash(sprintf(
-        '%d Vokabeln freigegeben. Die Lückensätze für %d neue entstehen gerade.',
-        $bis, $offen,
-    ));
-
-    teacher_redirect_and_continue($zurueck);
-
-    set_time_limit(900);
-    generate_sentences_tracked($unitId);
-    exit;
+    $fehlen = vocab_without_sentences($unitId);
+    teacher_flash($fehlen === 0
+        ? sprintf('%d Vokabeln freigegeben.', $bis)
+        : sprintf('%d Vokabeln freigegeben. Für %d fehlen noch Lückensätze - '
+                  . 'mit "Sätze nachtragen" unten.', $bis, $fehlen));
+    teacher_redirect($zurueck);
 }
 
 /*
@@ -217,7 +197,7 @@ teacher_flash_render();
     <input type="hidden" name="unit_id" value="<?= $unitId ?>">
     <?php if (!$alles): ?>
         <button class="btn small" name="release" value="<?= $gesamt ?>"
-                data-confirm="Alle <?= $gesamt ?> Vokabeln freigeben? Für die noch offenen entstehen dann Lückensätze, und die kosten.">
+                data-confirm="Alle <?= $gesamt ?> Vokabeln freigeben? Die Klasse sieht dann die ganze Lektion.">
             Alles freigeben
         </button>
     <?php endif; ?>
@@ -235,53 +215,67 @@ teacher_flash_render();
     <?= teacher_csrf_field() ?>
     <input type="hidden" name="unit_id" value="<?= $unitId ?>">
     <button class="btn small" name="catch_up" value="1"
-            data-confirm="Für <?= $fehlen ?> freigegebene Vokabeln fehlen noch Lückensätze. Jetzt erzeugen? Das kostet.">
+            data-confirm="Für <?= $fehlen ?> Vokabeln fehlen noch Lückensätze. Jetzt nachholen? Das kostet.">
         Sätze nachtragen (<?= $fehlen ?>)
     </button>
 </form>
 <?php endif; ?>
 
-<table class="data">
+<?php
+/*
+ * Die Freigabe als verschiebbarer Balken.
+ *
+ * Vorher stand neben jeder Zeile ein Knopf "bis hier freigeben" - bei
+ * hundert Vokabeln hundert Knoepfe, und keiner sagte, was er bewirkt,
+ * bevor man ihn gedrueckt hatte. Jetzt gibt es einen Balken: Alles
+ * darueber ist auf, alles darunter zu. Wer ihn anfasst und verschiebt,
+ * sieht die Zeilen beim Ziehen umschlagen und laesst ihn los, wo er hin
+ * soll.
+ *
+ * Ohne JavaScript bleibt er eine gewoehnliche Tabelle mit einem Knopf je
+ * Zeile - das Formular darunter ist dasselbe.
+ */
+?>
+<table class="data release" id="freigabe" data-released="<?= $frei ?>">
     <tr>
-        <th class="num">#</th><th>Fremdsprache</th><th>Deutsch</th>
-        <th class="num">Sätze</th><th class="actions"></th>
+        <th class="num">#</th>
+        <th>Fremdsprache</th>
+        <th>Deutsch</th>
+        <th class="num">Sätze</th>
+        <th class="actions"></th>
     </tr>
     <?php foreach ($vokabeln as $i => $v): ?>
         <?php $istFrei = $i < $frei; ?>
-        <tr<?= $istFrei ? '' : ' class="dim"' ?>>
+        <tr class="<?= $istFrei ? 'released' : 'locked' ?>" data-pos="<?= $i + 1 ?>">
             <td class="num"><?= $i + 1 ?></td>
             <td><strong><?= h($v['term_foreign']) ?></strong></td>
             <td><?= h($v['term_native']) ?></td>
             <td class="num">
                 <?= (int) $v['saetze'] > 0
                     ? (int) $v['saetze']
-                    : '<span class="muted">&ndash;</span>' ?>
+                    : '<span class="muted" title="Für diese Vokabel gibt es noch keinen Lückensatz">&ndash;</span>' ?>
             </td>
-            <td>
-                <?php if (!$istFrei): ?>
-                <form method="post" class="compact">
-                    <?= teacher_csrf_field() ?>
-                    <input type="hidden" name="unit_id" value="<?= $unitId ?>">
-                    <button class="iconaction quiet" name="release" value="<?= $i + 1 ?>"
-                            title="Bis hier freigeben"
-                            data-confirm="Bis einschliesslich „<?= h($v['term_foreign']) ?>" freigeben? Für die neuen Vokabeln entstehen Lückensätze, und die kosten.">
-                        <span aria-hidden="true">&#128275;</span> bis hier
-                    </button>
-                </form>
-                <?php elseif ($i + 1 === $frei): ?>
-                    <span class="tiny muted">Freigabe endet hier</span>
-                <?php endif; ?>
+            <td class="actions">
+                <button class="iconaction quiet js-hide" name="release" value="<?= $i + 1 ?>"
+                        form="releaseform" title="Bis hier freigeben">
+                    <span aria-hidden="true">&#128275;</span> bis hier
+                </button>
             </td>
         </tr>
     <?php endforeach; ?>
 </table>
 
+<form method="post" id="releaseform">
+    <?= teacher_csrf_field() ?>
+    <input type="hidden" name="unit_id" value="<?= $unitId ?>">
+</form>
+
 <p class="tiny muted">
-    Lückensätze entstehen nur für Freigegebenes - das ist der Grund für die
-    Stufen. Eine ganze Unit auf einmal aufzumachen kostet nichts anderes als
-    sie in Portionen aufzumachen, nur alles sofort. Zurücknehmen kostet gar
-    nichts: Bereits erzeugte Sätze bleiben erhalten, und beim nächsten
-    Freigeben ist der Lernstand der Kinder wieder da.
+    Die Lückensätze entstehen schon beim Einlesen, für die ganze Einheit.
+    Die Freigabe entscheidet also nicht, wofür bezahlt wird, sondern nur,
+    was die Klasse zu sehen bekommt &ndash; Vokabeln wie Lückensätze.
+    Zurücknehmen kostet nichts: Die Sätze bleiben, und der Lernstand der
+    Kinder ist beim nächsten Freigeben wieder da.
 </p>
 
 <?php endif; ?>

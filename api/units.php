@@ -30,10 +30,13 @@ switch (action()) {
          * Hier wird je Lerneinheit gezaehlt, und die Marke steht in der Zeile
          * der Einheit selbst - ein gebundener Wert koennte das nicht
          * ausdruecken, es braucht den Spaltenvergleich auf die aeussere
-         * Zeile. Der Baustein kommt aus einem Ja/Nein und niemals aus einer
-         * Eingabe.
+         * Zeile.
+         *
+         * Ohne Ausnahme fuer Lehrkraefte: In der App sollen sie genau das
+         * sehen, was ihre Klasse sieht. Alles zu sehen ist Sache des
+         * Lehrkraft-Bereichs.
          */
-        $frei = user_is_teacher($user) ? '' : ' AND v.position < u.released_position';
+        $frei = ' AND v.position < u.released_position';
 
         /*
          * Und der Kurs statt u.user_id.
