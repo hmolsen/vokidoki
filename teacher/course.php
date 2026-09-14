@@ -176,7 +176,7 @@ $appQr      = qr_svg($appAdresse, 3, 'Adresse der App');
 <table class="data">
     <tr>
         <th>Titel</th><th class="num">Vokabeln</th><th>Freigegeben</th>
-        <th>Angelegt</th><th></th>
+        <th>Angelegt</th><th class="actions"></th>
     </tr>
     <?php foreach ($einheiten as $e): ?>
         <tr>
@@ -198,9 +198,10 @@ $appQr      = qr_svg($appAdresse, 3, 'Adresse der App');
                 ?>
             </td>
             <td class="tiny muted"><?= h(substr((string) $e['created_at'], 0, 10)) ?></td>
-            <td>
-                <a href="<?= h(teacher_url('unit.php') . '?id=' . (int) $e['id']) ?>">
-                    freigeben
+            <td class="actions">
+                <a class="iconaction" title="Vokabeln freigeben"
+                   href="<?= h(teacher_url('unit.php') . '?id=' . (int) $e['id']) ?>">
+                    <span aria-hidden="true">&#128275;</span> Freigeben
                 </a>
             </td>
         </tr>
@@ -222,19 +223,20 @@ $appQr      = qr_svg($appAdresse, 3, 'Adresse der App');
     <p class="muted">Noch niemand.</p>
 <?php else: ?>
 <table class="data">
-    <tr><th>Name</th><th>Benutzername</th><th>Rolle</th><th></th></tr>
+    <tr><th>Name</th><th>Benutzername</th><th>Rolle</th><th class="actions"></th></tr>
     <?php foreach ($mitglieder as $m): ?>
         <tr<?= $m['active'] ? '' : ' class="dim"' ?>>
             <td><?= h($m['display_name']) ?></td>
             <td><code class="token"><?= h($m['username']) ?></code></td>
             <td><?= $m['member_role'] === 'teacher' ? 'Lehrkraft' : 'SchülerIn' ?></td>
-            <td>
+            <td class="actions">
                 <form method="post" class="compact">
                     <?= teacher_csrf_field() ?>
                     <input type="hidden" name="course_id" value="<?= $courseId ?>">
-                    <button class="linkbtn" name="remove_member" value="<?= (int) $m['id'] ?>"
+                    <button class="iconaction danger" name="remove_member"
+                            value="<?= (int) $m['id'] ?>" title="Aus dem Kurs nehmen"
                             data-confirm="<?= h($m['display_name']) ?> aus dem Kurs nehmen? Der Lernstand bleibt erhalten.">
-                        entfernen
+                        <span aria-hidden="true">&#10005;</span> Entfernen
                     </button>
                 </form>
             </td>

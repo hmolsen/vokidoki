@@ -10,6 +10,7 @@ import { importView } from './views/import.js';
 import { unitView } from './views/unit.js';
 import { quizView } from './views/quiz.js';
 import { clozeView } from './views/cloze.js';
+import { profileView } from './views/profile.js';
 
 const ROUTES = [
     [/^\/login$/,                 loginView,     { anonymous: true }],
@@ -23,6 +24,7 @@ const ROUTES = [
     [/^\/unit\/(\d+)$/,           unitView],
     [/^\/quiz\/(\d+)$/,           quizView],
     [/^\/cloze\/(\d+)$/,          clozeView],
+    [/^\/konto$/,                 profileView],
 ];
 
 function currentPath() {

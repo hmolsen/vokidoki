@@ -48,7 +48,7 @@ $schule  = $schoolId > 0 ? q1('SELECT * FROM schools WHERE id = ?', [$schoolId])
 $kurse   = $schoolId > 0 ? courses_for_school($schoolId) : [];
 $klassen = $schoolId > 0 ? classes_for_school($schoolId) : [];
 
-teacher_head('Meine Kurse', 'index.php', $user);
+teacher_head('Kurse', 'index.php', $user);
 teacher_flash_render();
 ?>
 
@@ -61,105 +61,130 @@ teacher_flash_render();
 
 <p class="muted"><?= h($schule['name']) ?></p>
 
-<?php if ($kurse === []): ?>
-    <p class="muted">
-        In dieser Schule gibt es noch keinen Kurs. Der erste steht gleich unten.
-    </p>
-<?php else: ?>
-
-<table class="data">
+<?php
+/*
+ * Alles in einer Tabelle - auch das Anlegen.
+ *
+ * Vorher standen Liste und Anlegeformular als zwei getrennte Bloecke
+ * untereinander, das Formular in einer eigenen Karte. Fuer eine Sache, die
+ * zur Liste gehoert, ist das ein Bruch: Man legt einen Kurs an, um ihn in
+ * der Liste zu haben. Jetzt ist die letzte Zeile die neue Zeile.
+ */
+?>
+<table class="data courses">
     <tr>
-        <th>Kurs</th><th>Klasse</th><th>Sprache</th>
-        <th class="num">SuS</th><th class="num">Lerneinheiten</th><th></th>
+        <th>Kurs</th>
+        <th>Klasse</th>
+        <th class="num">Kinder</th>
+        <th class="num">Lerneinheiten</th>
+        <th class="num">Freigegeben</th>
+        <th class="actions"></th>
     </tr>
+
     <?php foreach ($kurse as $k): ?>
         <tr<?= $k['active'] ? '' : ' class="dim"' ?>>
-            <td><strong><?= h($k['name']) ?></strong></td>
-            <td><?= h($k['class_name'] ?? '-') ?></td>
-            <td><?= h(trim($k['flag_emoji'] . ' ' . $k['language_name'])) ?></td>
+            <td>
+                <span class="coursetitle">
+                    <span class="cflag"><?= h($k['flag_emoji'] ?: "\u{1F310}") ?></span>
+                    <span>
+                        <strong><?= h($k['name']) ?></strong>
+                        <span class="tiny muted"><?= h($k['language_name']) ?></span>
+                    </span>
+                </span>
+            </td>
+            <td><?= $k['class_name'] === null
+                    ? '<span class="muted">&ndash;</span>' : h($k['class_name']) ?></td>
             <td class="num"><?= (int) $k['students'] ?></td>
             <td class="num"><?= (int) $k['units'] ?></td>
-            <td>
-                <a href="<?= h(teacher_url('course.php') . '?id=' . (int) $k['id']) ?>">ansehen</a>
+            <td class="num">
+                <?php
+                $frei   = (int) $k['released'];
+                $gesamt = (int) $k['vocab'];
+                if ($gesamt === 0) {
+                    echo '<span class="muted">&ndash;</span>';
+                } elseif ($frei >= $gesamt) {
+                    printf('<span class="pill good">alle %d</span>', $gesamt);
+                } else {
+                    printf('<span class="pill">%d von %d</span>', $frei, $gesamt);
+                }
+                ?>
+            </td>
+            <td class="actions">
+                <a class="iconaction" title="Kurs oeffnen"
+                   href="<?= h(teacher_url('course.php') . '?id=' . (int) $k['id']) ?>">
+                    <span aria-hidden="true">&#128214;</span> Öffnen
+                </a>
             </td>
         </tr>
     <?php endforeach; ?>
-</table>
 
-<p class="tiny muted">
-    Hier stehen alle Kurse dieser Schule, nicht nur die eigenen. Eine Schule
-    ist eine Vertrauensgemeinschaft: Wer eine Kollegin vertritt, kommt so ohne
-    Umweg an die Unterlagen.
-</p>
-
-<?php endif; ?>
-
-<h2>Neuer Kurs</h2>
-
-<?php if ($klassen === []): ?>
-    <div class="notice">
-        Es gibt noch keine Klasse. Ein Kurs ohne Klasse ist möglich, aber dann
-        musst du die Teilnehmenden einzeln eintragen -
-        <a href="<?= h(teacher_url('classes.php')) ?>">erst eine Klasse anlegen</a>
-        ist meistens schneller.
-    </div>
-<?php endif; ?>
-
-<form method="post" class="card" style="max-width:560px" data-coursform>
-    <?= teacher_csrf_field() ?>
-    <div class="formgrid">
-        <div>
-            <label for="language">Sprache</label>
-            <?php
-            /*
-             * Die Liste steht als gewoehnliches <select> im HTML und wird erst
-             * von teacher.js zum durchsuchbaren Feld gemacht. Ohne JavaScript
-             * bleibt sie damit bedienbar - hundert Eintraege sind unbequem,
-             * aber unbequem ist besser als gar nicht.
-             */
-            ?>
-            <select id="language" name="language" data-picker required>
-                <?php foreach (language_choices() as $s): ?>
-                    <option value="<?= h($s['name']) ?>"
-                            data-flag="<?= h($s['flag']) ?>"
-                            data-top="<?= $s['top'] ? '1' : '0' ?>">
-                        <?= h($s['flag'] . ' ' . $s['name']) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <div>
-            <label for="class_id">Klasse</label>
-            <select id="class_id" name="class_id">
+    <?php
+    /*
+     * Die Anlegezeile. Ein Formular ueber mehrere Zellen geht in HTML nicht -
+     * deshalb liegt es ausserhalb der Tabelle, und die Felder verweisen
+     * ueber form="..." darauf. So bleibt die Zeile eine Zeile.
+     */
+    ?>
+    <tr class="newrow">
+        <td>
+            <span class="coursetitle">
+                <span class="cflag plus">+</span>
+                <select name="language" form="newcourse" data-picker required>
+                    <?php foreach (language_choices() as $s): ?>
+                        <option value="<?= h($s['name']) ?>"
+                                data-flag="<?= h($s['flag']) ?>"
+                                data-top="<?= $s['top'] ? '1' : '0' ?>">
+                            <?= h($s['flag'] . ' ' . $s['name']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </span>
+        </td>
+        <td>
+            <select name="class_id" form="newcourse">
                 <?php foreach ($klassen as $k): ?>
                     <option value="<?= (int) $k['id'] ?>" data-name="<?= h($k['name']) ?>">
-                        <?= h($k['name']) ?> (<?= (int) $k['students'] ?>)
+                        <?= h($k['name']) ?>
                     </option>
                 <?php endforeach; ?>
-                <option value="0" data-name="">- ohne Klasse -</option>
+                <option value="0" data-name="">ohne Klasse</option>
             </select>
-        </div>
-    </div>
+        </td>
+        <td colspan="2">
+            <div class="coursename">
+                <strong data-coursename></strong>
+                <button type="button" class="iconbtn" data-editname
+                        title="Namen selbst waehlen" aria-label="Namen selbst waehlen">&#9998;</button>
+                <input type="text" name="name" form="newcourse" maxlength="128" hidden>
+            </div>
+        </td>
+        <td></td>
+        <td class="actions">
+            <button class="iconaction primary" form="newcourse"
+                    name="create_course" value="1" title="Kurs anlegen">
+                <span aria-hidden="true">+</span> Anlegen
+            </button>
+        </td>
+    </tr>
+</table>
 
-    <label>Name des Kurses</label>
-    <div class="coursename">
-        <strong data-coursename></strong>
-        <button type="button" class="iconbtn" data-editname
-                title="Namen selbst wählen" aria-label="Namen selbst wählen">&#9998;</button>
-        <input type="text" name="name" maxlength="128" hidden>
-    </div>
-
-    <button class="btn small" name="create_course" value="1">Kurs anlegen</button>
+<form method="post" id="newcourse" data-coursform hidden>
+    <?= teacher_csrf_field() ?>
 </form>
 
 <p class="tiny muted">
-    Der Name ergibt sich aus Sprache und Klasse. Auf den Stift tippen, wenn er
-    anders heissen soll. Die Kinder der Klasse kommen gleich mit in den Kurs;
-    wer später dazukommt oder wegfällt, wird im Kurs selbst nachgetragen.
-    <strong>Jeder Kurs hat seine eigenen Unterlagen:</strong> „Englisch - 5B" und
-    „Englisch - 6A" teilen sich nichts, auch wenn beide Englisch unterrichten. Das
-    kostet beim Einlesen doppelt und ist so gewollt - so kann jede Lehrkraft
-    unabhängig arbeiten.
+    <?php if ($klassen === []): ?>
+        <strong>Es gibt noch keine Klasse.</strong> Ein Kurs ohne Klasse geht,
+        dann traegst du die Teilnehmenden einzeln ein -
+        <a href="<?= h(teacher_url('classes.php')) ?>">erst eine Klasse anlegen</a>
+        ist meistens schneller.<br>
+    <?php endif; ?>
+    Der Name ergibt sich aus Sprache und Klasse; der Stift macht ihn frei
+    waehlbar. Die Kinder der Klasse kommen gleich mit in den Kurs.
+    Hier stehen alle Kurse dieser Schule, nicht nur die eigenen - wer eine
+    Kollegin vertritt, kommt so ohne Umweg an die Unterlagen.
+    <strong>Jeder Kurs hat seine eigenen Unterlagen:</strong> „Englisch - 5B"
+    und „Englisch - 6A" teilen sich nichts.
 </p>
 
 <?php endif; ?>

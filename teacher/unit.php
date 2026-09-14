@@ -222,9 +222,9 @@ teacher_flash_render();
         </button>
     <?php endif; ?>
     <?php if ($frei > 0): ?>
-        <button class="linkbtn" name="release" value="0"
+        <button class="iconaction danger" name="release" value="0"
                 data-confirm="Die ganze Lerneinheit wieder zumachen? Die Klasse sieht sie dann als leer. Gelernt bleibt gelernt.">
-            Freigabe zurücknehmen
+            <span aria-hidden="true">&#128274;</span> Freigabe zurücknehmen
         </button>
     <?php endif; ?>
 </form>
@@ -244,7 +244,7 @@ teacher_flash_render();
 <table class="data">
     <tr>
         <th class="num">#</th><th>Fremdsprache</th><th>Deutsch</th>
-        <th class="num">Sätze</th><th></th>
+        <th class="num">Sätze</th><th class="actions"></th>
     </tr>
     <?php foreach ($vokabeln as $i => $v): ?>
         <?php $istFrei = $i < $frei; ?>
@@ -262,9 +262,10 @@ teacher_flash_render();
                 <form method="post" class="compact">
                     <?= teacher_csrf_field() ?>
                     <input type="hidden" name="unit_id" value="<?= $unitId ?>">
-                    <button class="linkbtn" name="release" value="<?= $i + 1 ?>"
+                    <button class="iconaction quiet" name="release" value="<?= $i + 1 ?>"
+                            title="Bis hier freigeben"
                             data-confirm="Bis einschliesslich „<?= h($v['term_foreign']) ?>" freigeben? Für die neuen Vokabeln entstehen Lückensätze, und die kosten.">
-                        bis hier freigeben
+                        <span aria-hidden="true">&#128275;</span> bis hier
                     </button>
                 </form>
                 <?php elseif ($i + 1 === $frei): ?>

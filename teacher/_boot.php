@@ -239,9 +239,11 @@ function teacher_head(string $title, string $active, array $user): void
 <div class="adminbar">
     <nav>
         <?php
+        // Klassen zuerst: Sie entstehen zuerst, und ohne sie ist ein Kurs
+        // eine Huelle ohne Kinder.
         $nav = [
-            'index.php'   => 'Meine Kurse',
             'classes.php' => 'Klassen',
+            'index.php'   => 'Kurse',
         ];
         foreach ($nav as $datei => $label) {
             printf('<a href="%s"%s>%s</a>',

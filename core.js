@@ -132,10 +132,17 @@ export function progressBar(known, total) {
 }
 
 /** Zeigt einen Fehler oben im aktuellen View an. */
-export function showError(message, root = document) {
+/**
+ * Eine Meldung in den Kasten oben.
+ *
+ * Mit einer Art, weil nicht jede Rueckmeldung eine Absage ist: Ein
+ * geaendertes Passwort ist eine gute Nachricht und soll nicht rot
+ * erscheinen.
+ */
+export function showError(message, kind = '', root = document) {
     const box = $('#msg', root);
     if (box) {
-        box.innerHTML = notice(message);
+        box.innerHTML = notice(message, kind);
         box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     } else {
         alert(message);

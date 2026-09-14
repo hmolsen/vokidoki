@@ -48,12 +48,17 @@ teacher_flash_render();
     <p class="muted">Noch keine Klasse. Die erste steht gleich unten.</p>
 <?php else: ?>
 <table class="data">
-    <tr><th>Klasse</th><th class="num">Kinder</th><th></th></tr>
+    <tr><th>Klasse</th><th class="num">Kinder</th><th class="actions"></th></tr>
     <?php foreach ($klassen as $k): ?>
         <tr<?= $k['active'] ? '' : ' class="dim"' ?>>
             <td><strong><?= h($k['name']) ?></strong></td>
             <td class="num"><?= (int) $k['students'] ?></td>
-            <td><a href="<?= h(teacher_url('class.php') . '?id=' . (int) $k['id']) ?>">öffnen</a></td>
+            <td class="actions">
+                <a class="iconaction" title="Klasse öffnen"
+                   href="<?= h(teacher_url('class.php') . '?id=' . (int) $k['id']) ?>">
+                    <span aria-hidden="true">&#128101;</span> Öffnen
+                </a>
+            </td>
         </tr>
     <?php endforeach; ?>
 </table>

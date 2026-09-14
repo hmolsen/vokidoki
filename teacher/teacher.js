@@ -220,7 +220,15 @@ function escapeHtml(s) {
     }[c]));
 }
 
-document.querySelectorAll('[data-coursform]').forEach((f) => {
-    initLanguagePicker(f);
-    initCourseName(f);
-});
+/*
+ * Gesucht wird im ganzen Dokument, nicht im Formular.
+ *
+ * Die Felder stehen in der Tabellenzeile und gehoeren ueber form="newcourse"
+ * dazu - ein Formular kann sich in HTML nicht ueber mehrere Zellen spannen.
+ * Das Formular selbst ist damit leer, und ein querySelector darin faende
+ * nichts.
+ */
+if (document.querySelector('[data-coursform]')) {
+    initLanguagePicker(document);
+    initCourseName(document);
+}

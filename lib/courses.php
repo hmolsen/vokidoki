@@ -366,7 +366,14 @@ function courses_for_school(int $schoolId): array
                   WHERE m.course_id = co.id AND m.member_role = 'student') AS students,
                 (SELECT COUNT(*) FROM course_members m
                   WHERE m.course_id = co.id AND m.member_role = 'teacher') AS teachers,
-                (SELECT COUNT(*) FROM units t WHERE t.course_id = co.id) AS units
+                (SELECT COUNT(*) FROM units t WHERE t.course_id = co.id) AS units,
+                (SELECT COUNT(*) FROM vocab v
+                   JOIN units t ON t.id = v.unit_id
+                  WHERE t.course_id = co.id) AS vocab,
+                (SELECT COUNT(*) FROM vocab v
+                   JOIN units t ON t.id = v.unit_id
+                  WHERE t.course_id = co.id
+                    AND v.position < t.released_position) AS released
            FROM courses co
            JOIN languages l ON l.id = co.language_id
            LEFT JOIN classes c ON c.id = co.class_id

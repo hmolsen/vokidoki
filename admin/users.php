@@ -7,18 +7,6 @@ require_once __DIR__ . '/../lib/access.php';
 
 admin_require();
 
-/**
- * Prüft nur das Format, nicht die Zugehörigkeit zur aktuellen Palette.
- * Sonst liesse sich eine früher gesetzte Farbe beim Speichern nicht halten,
- * wenn die Palette einmal wechselt.
- */
-function valid_color(string $color): string
-{
-    return preg_match('/^#[0-9a-f]{6}$/i', $color) === 1
-        ? strtolower($color)
-        : color_palette()[27];   // ein kräftiges Blau als Rückfall
-}
-
 function valid_username(string $name): bool
 {
     return (bool) preg_match('/^[a-z0-9._-]{3,64}$/', $name);

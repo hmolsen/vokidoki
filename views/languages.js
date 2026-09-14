@@ -28,22 +28,24 @@ export async function languagesView() {
     render(`
         ${topbar(VT.user.appName, { action: cornerButton() })}
         <div id="msg"></div>
+        ${teacherLink()}
         ${languages.length === 0 ? `
             <div class="empty">
                 <span class="big">\u{1F310}</span>
-                ${VT.user.canImport
+                ${darfAnlegen()
                     ? 'Noch keine Sprache angelegt.<br>Leg unten deine erste an.'
-                    : 'Hier ist noch nichts für dich freigegeben.<br>Deine Lehrkraft macht den ersten Kurs auf.'}
+                    : VT.user.isTeacher
+                        ? 'Noch kein Kurs, in dem du drin bist.<br>Leg ihn in der Verwaltung an.'
+                        : 'Hier ist noch nichts für dich freigegeben.<br>Deine Lehrkraft macht den ersten Kurs auf.'}
             </div>` : ''}
         <div class="grid">
             ${tiles}
-            ${VT.user.canImport ? `
+            ${darfAnlegen() ? `
                 <button class="tile add" id="add">
                     <span class="flag">+</span>
                     <span class="name">Sprache</span>
                 </button>` : ''}
         </div>
-        ${teacherLink()}
         ${installHint()}
     `);
 
@@ -61,12 +63,19 @@ export async function languagesView() {
  * neue Fassung zu holen: keine Adresszeile, kein Neu-Laden.
  */
 function cornerButton() {
-    return VT.standalone
+    // Das eigene Konto steht immer daneben - Name, Farbe und vor allem das
+    // Passwort waren bisher nur ueber den Betreiber zu aendern.
+    const konto = '<button class="iconbtn" id="konto" aria-label="Mein Konto">&#9881;</button>';
+
+    return konto + (VT.standalone
         ? '<button class="iconbtn" id="refresh" aria-label="App aktualisieren">&#8635;</button>'
-        : '<button class="iconbtn" id="logout" aria-label="Abmelden">&#9099;</button>';
+        : '<button class="iconbtn" id="logout" aria-label="Abmelden">&#9099;</button>');
 }
 
 function wireCornerButton() {
+    const konto = $('#konto');
+    if (konto) konto.addEventListener('click', () => go('/konto'));
+
     const refresh = $('#refresh');
     if (refresh) {
         refresh.addEventListener('click', async () => {
@@ -86,6 +95,21 @@ function wireCornerButton() {
         } catch { /* auch bei Fehler zum Login */ }
         window.location.href = `${VT.base}/`;
     });
+}
+
+/**
+ * Wer darf hier eine Sprache anlegen?
+ *
+ * Eine Lehrkraft nicht - für sie heisst das Ding Kurs, gehört zu einer
+ * Klasse und entsteht in der Verwaltung. Eine hier angelegte Sprache
+ * bekäme einen Kurs ohne Klasse und mit dem falschen Namen; zwei Wege zum
+ * selben Ergebnis, von denen einer schlechter ist, sind ein Weg zu viel.
+ *
+ * Für ein Kind mit Einlese-Recht bleibt es: In einer Familie ist genau das
+ * der Weg, und es gibt dort niemanden, der Kurse verwaltet.
+ */
+function darfAnlegen() {
+    return VT.user.canImport && !VT.user.isTeacher;
 }
 
 /**

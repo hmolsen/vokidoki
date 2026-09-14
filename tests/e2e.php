@@ -3334,7 +3334,7 @@ ok('Und erfaehrt nicht, woran es lag',
 
 $res = teacherLogin($lehrerName, 'lehrerin123');
 ok('Die Lehrkraft kommt hinein',
-   $res['status'] === 200 && str_contains($res['body'], 'Meine Kurse'), "Status {$res['status']}");
+   $res['status'] === 200 && str_contains($res['body'], 'Kurse'), "Status {$res['status']}");
 ok('Und sieht ihre Schule', str_contains($res['body'], 'Familie'));
 ok('Sowie die Kurse der Schule',
    preg_match('/course\.php\?id=(\d+)/', $res['body'], $km) === 1);
@@ -3387,8 +3387,16 @@ ok('Einlesen erscheint nur mit Berechtigung',
    preg_match('/VT\.user\.canImport \?\s*`\s*<button class="row" data-go="\/lang\/\$\{language\.id\}\/import"/s',
               $uiQuelle) === 1,
    'der Knopf haengt an keiner Bedingung');
+/*
+ * Und das Anlegen einer Sprache: nur mit Einlese-Recht UND nicht als
+ * Lehrkraft. Fuer sie heisst das Ding Kurs und entsteht in der Verwaltung -
+ * zwei Wege zum selben Ergebnis, von denen einer schlechter ist, sind einer
+ * zu viel.
+ */
 ok('Und das Anlegen einer Sprache ebenso',
-   str_contains($listeQuelle, 'VT.user.canImport ?'));
+   str_contains($listeQuelle, 'darfAnlegen()')
+   && preg_match('/canImport && !VT\.user\.isTeacher/', $listeQuelle) === 1,
+   'die Bedingung fehlt');
 ok('Die Lehrkraft findet die Verwaltung aus der App heraus',
    str_contains($listeQuelle, 'VT.user.isTeacher') && str_contains($listeQuelle, '/teacher/'));
 
@@ -3448,6 +3456,111 @@ ok('Das Kuerzel kommt aus derselben Liste',
    language_code('', 'Schwedisch') === 'sv' && language_code('', 'Latein') === 'la');
 ok('Auch ohne Umlaute geschrieben',
    language_code('', 'Franzoesisch') === 'fr' && language_code('', 'Daenisch') === 'da');
+
+section('Mein Konto');
+
+/*
+ * Name, Farbe und vor allem das Passwort konnte bisher nur der Betreiber
+ * aendern. Fuer eine Familie ging das - Papa sass daneben. In einer Schule
+ * nicht: Ein Kind, das sein Anfangspasswort behalten muss, weil niemand es
+ * aendern kann, hat ein Passwort, das auf einem Zettel steht.
+ */
+$kontoKind = makeUser('e2e_konto', 'Kontokind');
+q('UPDATE users SET initial_password = ? WHERE id = ?', ['müder Gepard', $kontoKind]);
+
+$kontoJar = tempnam(sys_get_temp_dir(), 'vtkonto');
+
+[$d, $s] = apiAls($kontoJar, function () {
+    apiCall('auth', 'login', ['username' => 'e2e_konto', 'password' => 'geheim123']);
+    return apiCall('profile', 'get');
+});
+ok('Das eigene Konto laesst sich abrufen', $s === 200 && ($d['ok'] ?? false));
+ok('Mit Name, Benutzername und Farbe',
+   ($d['profile']['name'] ?? '') === 'Kontokind'
+   && ($d['profile']['username'] ?? '') === 'e2e_konto'
+   && preg_match('/^#[0-9a-f]{6}$/', (string) ($d['profile']['color'] ?? '')) === 1,
+   json_encode($d['profile'] ?? null));
+ok('Und der Auskunft, dass noch das Anfangspasswort gilt',
+   ($d['profile']['initial'] ?? null) === true);
+ok('Dazu die Farbpalette zur Auswahl', count($d['palette'] ?? []) === 64);
+
+// Name und Farbe aendern.
+[$d, $s] = apiAls($kontoJar, fn () => apiCall('profile', 'save',
+    ['name' => 'Kontokind Neu', 'color' => '#123456']));
+ok('Name und Farbe lassen sich aendern', $s === 200);
+$frisch = q1('SELECT display_name, color FROM users WHERE id = ?', [$kontoKind]);
+ok('Und stehen in der Datenbank',
+   $frisch['display_name'] === 'Kontokind Neu' && $frisch['color'] === '#123456',
+   json_encode($frisch));
+ok('Die Antwort traegt den neuen App-Namen',
+   ($d['user']['appName'] ?? '') === 'Kontokind Neus Vokabeln',
+   (string) ($d['user']['appName'] ?? ''));
+
+// Unsinn als Farbe darf nicht durchrutschen.
+apiAls($kontoJar, fn () => apiCall('profile', 'save',
+    ['name' => 'Kontokind Neu', 'color' => 'rot; drop table']));
+ok('Eine unsinnige Farbe wird abgefangen',
+   preg_match('/^#[0-9a-f]{6}$/',
+              (string) qv('SELECT color FROM users WHERE id = ?', [$kontoKind])) === 1);
+
+// Ein leerer Name wird abgelehnt statt gespeichert.
+apiAls($kontoJar, fn () => apiCall('profile', 'save', ['name' => '  ', 'color' => '#123456']));
+ok('Ein leerer Name wird abgelehnt',
+   qv('SELECT display_name FROM users WHERE id = ?', [$kontoKind]) === 'Kontokind Neu');
+
+// ---- Das Passwort.
+
+[$d, $s] = apiAls($kontoJar, fn () => apiCall('profile', 'password',
+    ['current' => 'falsch', 'password' => 'neuespasswort']));
+ok('Ohne das bisherige Passwort geht nichts', $s === 403, 'Status ' . $s);
+
+[$d, $s] = apiAls($kontoJar, fn () => apiCall('profile', 'password',
+    ['current' => 'geheim123', 'password' => 'kurz']));
+ok('Ein zu kurzes neues Passwort wird abgelehnt', $s === 400, 'Status ' . $s);
+
+[$d, $s] = apiAls($kontoJar, fn () => apiCall('profile', 'password',
+    ['current' => 'geheim123', 'password' => 'geheim123']));
+ok('Dasselbe noch einmal auch', $s === 400, 'Status ' . $s);
+
+[$d, $s] = apiAls($kontoJar, fn () => apiCall('profile', 'password',
+    ['current' => 'geheim123', 'password' => 'ganzneuespasswort']));
+ok('Mit dem richtigen bisherigen geht es', $s === 200, 'Status ' . $s);
+
+$nachher = q1('SELECT password_hash, initial_password FROM users WHERE id = ?', [$kontoKind]);
+ok('Das neue Passwort gilt', password_verify('ganzneuespasswort', $nachher['password_hash']));
+ok('Das alte nicht mehr', !password_verify('geheim123', $nachher['password_hash']));
+
+/*
+ * Und der Punkt, auf den es ankommt: Das Anfangspasswort verschwindet aus
+ * der Datenbank. Es steht dort im Klartext, damit das Anschreiben
+ * nachdruckbar bleibt - sobald das Kind sein eigenes gewaehlt hat, ist der
+ * Wert wertlos, und der Bestand offener Passwoerter schrumpft mit der Zeit
+ * statt zu wachsen.
+ */
+ok('Und das Anfangspasswort ist aus der Datenbank verschwunden',
+   $nachher['initial_password'] === null,
+   var_export($nachher['initial_password'], true));
+
+// Ohne Anmeldung geht gar nichts.
+$fremdJar = tempnam(sys_get_temp_dir(), 'vtfremd');
+[$d, $s] = apiAls($fremdJar, fn () => apiCall('profile', 'get'));
+ok('Ohne Anmeldung bleibt das Konto verschlossen', $s === 401, 'Status ' . $s);
+
+q('DELETE FROM users WHERE id = ?', [$kontoKind]);
+@unlink($kontoJar);
+@unlink($fremdJar);
+
+// ---- Der Weg dorthin in der Oberflaeche.
+
+$listeQuelle2 = (string) file_get_contents(__DIR__ . '/../views/languages.js');
+ok('Die App fuehrt zum eigenen Konto',
+   str_contains($listeQuelle2, "go('/konto')"));
+ok('Und die Verwaltung steht ueber den Sprachen',
+   strpos($listeQuelle2, '${teacherLink()}') < strpos($listeQuelle2, '<div class="grid">'),
+   'der Link steht noch darunter');
+
+$routen = (string) file_get_contents(__DIR__ . '/../app.js');
+ok('Die Route dorthin gibt es', str_contains($routen, 'profileView'));
 
 section('Kurs anlegen');
 
@@ -3845,6 +3958,13 @@ $klassenName = '9Z-' . bin2hex(random_bytes(2));
 
 $res  = teacherGet('classes.php');
 ok('Die Klassenübersicht öffnet sich', $res['status'] === 200);
+ok('Auch dort sind die Aktionen Knoepfe',
+   !preg_match('/>\s*öffnen\s*</u', $res['body']));
+
+$navQuelle = (string) file_get_contents(__DIR__ . '/../teacher/_boot.php');
+ok('Klassen stehen links von Kursen',
+   strpos($navQuelle, "'classes.php' => 'Klassen'") < strpos($navQuelle, "'index.php'   => 'Kurse'"),
+   'die Reihenfolge stimmt nicht');
 preg_match('/name="csrf" value="([a-f0-9]+)"/', $res['body'], $cm);
 $lehrerCsrf = $cm[1] ?? '';
 

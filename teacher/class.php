@@ -133,7 +133,7 @@ teacher_flash_render();
 <?php else: ?>
 <table class="data">
     <tr>
-        <th>Name</th><th>Benutzername</th><th>Anfangspasswort</th><th></th>
+        <th>Name</th><th>Benutzername</th><th>Anfangspasswort</th><th class="actions"></th>
     </tr>
     <?php foreach ($kinder as $k): ?>
         <tr<?= isset($frisch[(int) $k['id']]) ? ' class="hit"' : ($k['active'] ? '' : ' class="dim"') ?>>
@@ -151,17 +151,17 @@ teacher_flash_render();
                     <span class="tiny muted">selbst geändert</span>
                 <?php endif; ?>
             </td>
-            <td>
+            <td class="actions">
                 <?php if ($k['role'] !== 'teacher'): ?>
                 <?php if (isset($gesperrt[$k['username']])): ?>
                 <form method="post" class="compact">
                     <?= teacher_csrf_field() ?>
                     <input type="hidden" name="class_id" value="<?= $classId ?>">
-                    <button class="linkbtn" name="unlock" value="<?= (int) $k['id'] ?>">
-                        Entsperren
+                    <button class="iconaction" name="unlock"
+                            value="<?= (int) $k['id'] ?>" title="Konto wieder freigeben">
+                        <span aria-hidden="true">&#128275;</span> Entsperren
                     </button>
                 </form>
-                &middot;
                 <?php endif; ?>
                 <form method="post" class="compact">
                     <?= teacher_csrf_field() ?>
@@ -175,14 +175,17 @@ teacher_flash_render();
                      * auf. h() allein genügt für ein Attribut.
                      */
                     ?>
-                    <button class="linkbtn" name="reset_password" value="<?= (int) $k['id'] ?>"
+                    <button class="iconaction quiet" name="reset_password"
+                            value="<?= (int) $k['id'] ?>" title="Neues Anfangspasswort"
                             data-confirm="Neues Anfangspasswort für <?= h($k['display_name']) ?>? Das alte gilt dann nicht mehr.">
-                        Passwort neu
+                        <span aria-hidden="true">&#128273;</span> Passwort
                     </button>
                 </form>
-                &middot;
-                <a href="<?= h(teacher_url('print.php') . '?class=' . $classId . '&user=' . (int) $k['id']) ?>"
-                   target="_blank" rel="noopener">Zettel</a>
+                <a class="iconaction quiet" title="Zettel für dieses Kind drucken"
+                   href="<?= h(teacher_url('print.php') . '?class=' . $classId . '&user=' . (int) $k['id']) ?>"
+                   target="_blank" rel="noopener">
+                    <span aria-hidden="true">&#128424;</span> Zettel
+                </a>
                 <?php endif; ?>
             </td>
         </tr>

@@ -38,6 +38,22 @@ function color_palette(): array
     return $farben;
 }
 
+/**
+ * Prüft nur das Format, nicht die Zugehörigkeit zur aktuellen Palette.
+ * Sonst liesse sich eine früher gesetzte Farbe beim Speichern nicht halten,
+ * wenn die Palette einmal wechselt.
+ *
+ * Lag früher in admin/users.php. Seit auch die App die Farbe ändern lässt,
+ * brauchen zwei sehr verschiedene Stellen dieselbe Regel - und eine Regel,
+ * die es zweimal gibt, ist bald zwei verschiedene Regeln.
+ */
+function valid_color(string $color): string
+{
+    return preg_match('/^#[0-9a-f]{6}$/i', $color) === 1
+        ? strtolower($color)
+        : color_palette()[27];   // ein kräftiges Blau als Rückfall
+}
+
 function hsl_to_hex(float $h, float $s, float $l): string
 {
     $c = (1 - abs(2 * $l - 1)) * $s;
