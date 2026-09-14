@@ -1081,15 +1081,12 @@ require_once __DIR__ . '/../lib/schema.php';
 // Genau dieser Zustand wird hier nachgestellt.
 $vorher = qa('SELECT id, code FROM languages');
 
-q('INSERT INTO languages (user_id, name, flag_emoji, code) VALUES (?, ?, ?, NULL)',
-  [$userId, 'Französisch', '']);
-$frId = (int) db()->lastInsertId();
-q('INSERT INTO languages (user_id, name, flag_emoji, code) VALUES (?, ?, ?, NULL)',
-  [$userId, 'daenisch', '']);
-$daId = (int) db()->lastInsertId();
-q('INSERT INTO languages (user_id, name, flag_emoji, code) VALUES (?, ?, ?, NULL)',
-  [$userId, 'Klingonisch', '']);
-$klId = (int) db()->lastInsertId();
+// Ueber makeLanguage(), damit auch der Kurs entsteht. Ohne ihn faende der
+// Admin die Sprache nicht mehr: Er fragt seit dem Wegfall von
+// languages.user_id ueber die Kursmitgliedschaft.
+$frId = makeLanguage($userId, 'Französisch');
+$daId = makeLanguage($userId, 'daenisch');
+$klId = makeLanguage($userId, 'Klingonisch');
 
 q('UPDATE languages SET code = NULL');
 
@@ -2540,6 +2537,76 @@ q('DELETE FROM languages WHERE id IN (?, ?)', [$freiLang, $fremdLang]);
 q('DELETE FROM schools WHERE id = ?', [$fremdeSchule3]);
 @unlink($lehrJar);
 @unlink($freiJar);
+
+section('Die Unterlagen gehoeren dem Kurs, nicht einem Konto');
+
+/*
+ * Der Sinn davon, units.user_id und languages.user_id loszuwerden.
+ *
+ * Solange eine Sprache einem Konto gehoerte, war der Fall "die Lehrkraft
+ * legt an, die Klasse lernt" gar nicht ausdrueckbar - und am
+ * Fremdschluessel hing ON DELETE CASCADE: Ein Kind aus der Schule nehmen
+ * haette die Unterlagen von 27 anderen mitgenommen.
+ */
+
+$besSchule = (int) qv('SELECT school_id FROM users WHERE id = ?', [$userId]);
+
+$besLehrer = 'beslehr_' . bin2hex(random_bytes(3));
+q('INSERT INTO users (school_id, username, display_name, password_hash, color, role, can_import)
+   VALUES (?, ?, ?, ?, ?, ?, 1)',
+  [$besSchule, $besLehrer, 'Herr Besitz',
+   password_hash('lehrerin123', PASSWORD_DEFAULT), '#4f7cff', ROLE_TEACHER]);
+$besLehrerId = (int) db()->lastInsertId();
+
+// Die Lehrkraft legt an, das Kind lernt.
+$besLang = makeLanguage($besLehrerId, 'Besitzisch');
+$besUnit = makeUnit($besLehrerId, $besLang, 'Lehrer-Einheit');
+q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, 0)',
+  [$besUnit, 'mine', 'meins']);
+q('UPDATE units SET released_position = 1 WHERE id = ?', [$besUnit]);
+
+$besKurs = (int) course_for_language($besLang)['id'];
+
+$besKind = makeUser('e2e_besitz', 'Besitzkind');
+course_add_member($besKurs, $besKind, 'student');
+
+// Das Kind meldet sich mit eigenem Topf an und sieht die fremde Sprache.
+$besJar = tempnam(sys_get_temp_dir(), 'vtbes');
+$gesehen = apiAls($besJar, function () {
+    apiCall('auth', 'login', ['username' => 'e2e_besitz', 'password' => 'geheim123']);
+    [$d, $s] = apiCall('languages', 'list');
+    return array_column($d['languages'] ?? [], 'name');
+});
+ok('Ein Kind sieht die Sprache, die seine Lehrkraft angelegt hat',
+   in_array('Besitzisch', $gesehen, true), implode(', ', $gesehen));
+
+/*
+ * Und der Kern: Das Kind verlaesst die Schule. Frueher nahm der
+ * Fremdschluessel die Sprache samt allem mit.
+ */
+q('DELETE FROM users WHERE id = ?', [$besKind]);
+
+ok('Sein Weggang laesst die Sprache stehen',
+   q1('SELECT id FROM languages WHERE id = ?', [$besLang]) !== null);
+ok('Und die Lerneinheit',
+   q1('SELECT id FROM units WHERE id = ?', [$besUnit]) !== null);
+ok('Und die Vokabeln darin',
+   (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$besUnit]) === 1);
+ok('Seine Kursmitgliedschaft ist dagegen weg',
+   (int) qv('SELECT COUNT(*) FROM course_members WHERE user_id = ?', [$besKind]) === 0);
+
+// Dasselbe fuer die Lehrkraft, die alles angelegt hat.
+q('DELETE FROM users WHERE id = ?', [$besLehrerId]);
+ok('Auch der Weggang der Lehrkraft nimmt die Unterlagen nicht mit',
+   q1('SELECT id FROM units WHERE id = ?', [$besUnit]) !== null
+   && (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$besUnit]) === 1);
+
+q('DELETE FROM languages WHERE id = ?', [$besLang]);
+ok('Die Sprache zu loeschen raeumt dann aber wirklich auf',
+   (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$besUnit]) === 0,
+   'vocab blieb stehen - fk_units_lang oder fk_vocab_unit fehlt');
+
+@unlink($besJar);
 
 section('Kosten je Schule');
 

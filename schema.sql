@@ -37,22 +37,24 @@ CREATE TABLE IF NOT EXISTS device_tokens (
 
 CREATE TABLE IF NOT EXISTS languages (
   id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_id    INT UNSIGNED NOT NULL,
+  -- Wer sie angelegt hat. Sagt nichts mehr darueber aus, wer sie sehen darf -
+  -- das entscheidet der Kurs. Faellt im naechsten Schritt ganz weg.
+  user_id    INT UNSIGNED NULL,
   school_id  INT UNSIGNED NULL,
   name       VARCHAR(64)  NOT NULL,
   flag_emoji VARCHAR(16)  NOT NULL DEFAULT '',
   -- ISO-Kürzel (fr, en, la, da) als Tastaturhinweis im Lückentext; darf fehlen.
   code       VARCHAR(8)   NULL,
   created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_lang_user_name (user_id, name),
-  KEY idx_lang_school (school_id),
-  CONSTRAINT fk_lang_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  KEY idx_lang_school (school_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Lerneinheit ("Unit 1", "Lektion 3")
 CREATE TABLE IF NOT EXISTS units (
   id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_id     INT UNSIGNED NOT NULL,
+  -- Wer sie eingelesen hat. Wer sie sehen darf, entscheidet der Kurs;
+  -- diese Spalte faellt im naechsten Schritt weg.
+  user_id     INT UNSIGNED NULL,
   language_id INT UNSIGNED NOT NULL,
   course_id   INT UNSIGNED NULL,
   title       VARCHAR(128) NOT NULL,
@@ -67,7 +69,6 @@ CREATE TABLE IF NOT EXISTS units (
   KEY idx_units_user (user_id),
   KEY idx_units_lang (language_id),
   KEY idx_units_course (course_id),
-  CONSTRAINT fk_units_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_units_lang FOREIGN KEY (language_id) REFERENCES languages(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

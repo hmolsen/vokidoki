@@ -371,6 +371,7 @@ function schema_migrations(): array
 
         'family.languages' => [
             static fn (): bool => column_exists('languages', 'school_id')
+                && column_exists('languages', 'user_id')
                 && !schema_was_applied('family.languages'),
             'UPDATE languages l
                JOIN users u ON u.id = l.user_id
@@ -387,6 +388,7 @@ function schema_migrations(): array
          */
         'family.courses' => [
             static fn (): bool => table_exists('courses')
+                && column_exists('languages', 'user_id')
                 && !schema_was_applied('family.courses'),
             "INSERT INTO courses (school_id, class_id, language_id, name, created_by)
              SELECT l.school_id,
@@ -403,6 +405,7 @@ function schema_migrations(): array
 
         'family.course_members' => [
             static fn (): bool => table_exists('course_members')
+                && column_exists('languages', 'user_id')
                 && !schema_was_applied('family.course_members'),
             "INSERT IGNORE INTO course_members (course_id, user_id, member_role)
              SELECT co.id, l.user_id, 'student'
@@ -450,6 +453,48 @@ function schema_migrations(): array
                JOIN users u ON u.id = a.user_id
                 SET a.school_id = u.school_id
               WHERE a.school_id IS NULL AND u.school_id IS NOT NULL',
+        ],
+
+        /* ---- Der Besitzer verschwindet, Schritt 1 von 2 ----------------- */
+
+        /*
+         * units.user_id und languages.user_id sagen "das gehoert genau einem
+         * Kind". Das stimmt seit der Umstellung auf Kurse nicht mehr, und
+         * eine Spalte, die etwas Falsches behauptet, wird frueher oder
+         * spaeter wieder benutzt. Sie muessen weg.
+         *
+         * Weg in zwei Deployments, aus demselben Grund wie beim Umbau von
+         * uq_progress: Der Code geht per FTP sofort live, die Migration
+         * laeuft erst beim naechsten Knopfdruck. Wuerde die Spalte hier
+         * fallen, waehrend der Code sie noch schreibt, brechen alle
+         * Einfuegungen. Und umgekehrt: Wuerde der Code sie nicht mehr
+         * schreiben, bevor sie NULL erlaubt, brechen sie genauso.
+         *
+         * Also erst locker machen, dann in einem spaeteren Deployment
+         * fallen lassen. Dazwischen ist beides gleichzeitig richtig.
+         *
+         * Der Fremdschluessel geht mit, und das ist die eigentliche
+         * Aenderung im Verhalten: fk_lang_user loeschte mit einem Konto
+         * dessen Sprachen samt Lerneinheiten, Vokabeln und Saetzen. In einer
+         * Familie war das gewollt. In einer Klasse waere es eine
+         * Katastrophe - ein Kind wechselt die Schule, und die Unterlagen von
+         * 27 anderen sind weg.
+         */
+        'units.user_id.loosen' => [
+            static fn (): bool => column_exists('units', 'user_id')
+                && !schema_was_applied('units.user_id.loosen'),
+            'ALTER TABLE units
+               DROP FOREIGN KEY fk_units_user,
+               MODIFY user_id INT UNSIGNED NULL',
+        ],
+
+        'languages.user_id.loosen' => [
+            static fn (): bool => column_exists('languages', 'user_id')
+                && !schema_was_applied('languages.user_id.loosen'),
+            'ALTER TABLE languages
+               DROP FOREIGN KEY fk_lang_user,
+               DROP INDEX uq_lang_user_name,
+               MODIFY user_id INT UNSIGNED NULL',
         ],
 
         'password_words.table' => [

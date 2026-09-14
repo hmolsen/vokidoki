@@ -12,15 +12,27 @@ $uid  = (int) $user['id'];
 switch (action()) {
     case 'list':
         $rows = qa(
+            /*
+             * Die Sprachen, in deren Kurs dieses Konto ist - nicht die, die
+             * es angelegt hat. Fuer eine Familie ist das dasselbe, in einer
+             * Klasse hat die Lehrkraft angelegt und die Kinder lernen.
+             *
+             * Gezaehlt wird nur Freigegebenes. Sonst stuende hier "20
+             * Vokabeln", waehrend die Lerneinheit drei zeigt.
+             */
             'SELECT l.id, l.name, l.flag_emoji, l.code,
-                    (SELECT COUNT(*) FROM units u WHERE u.language_id = l.id) AS unit_count,
+                    (SELECT COUNT(*) FROM units u
+                      WHERE u.course_id = co.id) AS unit_count,
                     (SELECT COUNT(*) FROM vocab v
                        JOIN units u2 ON u2.id = v.unit_id
-                      WHERE u2.language_id = l.id) AS vocab_count
+                      WHERE u2.course_id = co.id
+                        AND (? = 1 OR v.position < u2.released_position)) AS vocab_count
                FROM languages l
-              WHERE l.user_id = ?
+               JOIN courses co        ON co.language_id = l.id
+               JOIN course_members m  ON m.course_id = co.id
+              WHERE m.user_id = ?
               ORDER BY l.name',
-            [$uid],
+            [user_is_teacher($user) ? 1 : 0, $uid],
         );
         foreach ($rows as &$r) {
             $r['id']          = (int) $r['id'];
@@ -39,8 +51,21 @@ switch (action()) {
             json_fail('Bitte einen Namen für die Sprache angeben.');
         }
 
+        /*
+         * Gibt es diese Sprache fuer dieses Konto schon?
+         *
+         * Gefragt wird ueber die Kurse, nicht ueber languages.user_id. Zwei
+         * Klassen derselben Schule duerfen beide "Englisch" haben - verboten
+         * ist nur, dass dasselbe Kind zweimal dieselbe Sprache anlegt und
+         * danach nicht mehr weiss, in welcher seiner beiden es war.
+         */
         $exists = q1(
-            'SELECT id FROM languages WHERE user_id = ? AND name = ?',
+            'SELECT l.id
+               FROM languages l
+               JOIN courses co       ON co.language_id = l.id
+               JOIN course_members m ON m.course_id = co.id
+              WHERE m.user_id = ? AND l.name = ?
+              LIMIT 1',
             [$uid, $name],
         );
         if ($exists !== null) {

@@ -105,8 +105,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
 $users = qa('SELECT id, display_name FROM users ORDER BY display_name');
 
+/*
+ * "Kind" bleibt als Blickwinkel, meint aber nicht mehr Besitz.
+ *
+ * Frueher gehoerte eine Sprache genau einem Konto. Jetzt gehoert sie einem
+ * Kurs, und ein Kind ist darin Mitglied - oft zusammen mit 27 anderen. Der
+ * Filter beantwortet deshalb nicht mehr "was hat Lilli angelegt", sondern
+ * "womit arbeitet Lilli". Fuer eine Familie ist das dieselbe Liste, fuer
+ * eine Klasse die einzig sinnvolle.
+ */
 $languages = $userId > 0
-    ? qa('SELECT id, name, flag_emoji FROM languages WHERE user_id = ? ORDER BY name', [$userId])
+    ? qa('SELECT DISTINCT l.id, l.name, l.flag_emoji
+            FROM languages l
+            JOIN courses co       ON co.language_id = l.id
+            JOIN course_members m ON m.course_id = co.id
+           WHERE m.user_id = ?
+           ORDER BY l.name', [$userId])
     : [];
 
 $units = $langId > 0
@@ -116,7 +130,8 @@ $units = $langId > 0
 $where  = [];
 $params = [];
 if ($userId > 0) {
-    $where[]  = 't.user_id = ?';
+    $where[]  = 't.course_id IN (SELECT m2.course_id FROM course_members m2
+                                  WHERE m2.user_id = ?)';
     $params[] = $userId;
 }
 if ($langId > 0) {
@@ -157,15 +172,18 @@ $offset = ($seite - 1) * PER_PAGE;
  * verlangt.
  */
 $rows = qa(
+    // Statt "wem gehoert der Satz" steht hier jetzt der Kurs. Ein Satz hat
+    // keinen Besitzer mehr - er gehoert zu Unterlagen, mit denen eine ganze
+    // Gruppe arbeitet.
     'SELECT s.*, v.term_foreign, v.term_native, t.title AS unit_title,
-            l.name AS language, u.display_name,
+            l.name AS language, co.name AS display_name,
             (SELECT COUNT(*) FROM sentence_flags f WHERE f.sentence_id = s.id) AS flags
        FROM sentences s
        JOIN vocab v ON v.id = s.vocab_id
        JOIN units t ON t.id = v.unit_id
        JOIN languages l ON l.id = t.language_id
-       JOIN users u ON u.id = t.user_id' . $sql . '
-      ORDER BY flags DESC, u.display_name, l.name, t.created_at DESC, v.position, s.id
+       LEFT JOIN courses co ON co.id = t.course_id' . $sql . '
+      ORDER BY flags DESC, co.name, l.name, t.created_at DESC, v.position, s.id
       LIMIT ' . PER_PAGE . ' OFFSET ' . $offset,
     $params,
 );
@@ -278,7 +296,7 @@ flash_render();
         <?php foreach ($rows as $s): ?>
             <tr<?= (int) $s['flags'] > 0 ? ' class="flagged"' : '' ?>>
                 <td class="tiny muted">
-                    <?= h($s['display_name']) ?><br>
+                    <?= h((string) ($s['display_name'] ?? '&ndash;')) ?><br>
                     <?= h($s['language']) ?> &middot; <?= h($s['unit_title']) ?>
                 </td>
                 <td class="tiny">

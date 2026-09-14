@@ -171,12 +171,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
         for ($i = 0; $i < $maxBatch; $i++) {
             $rows = qa(
+                /*
+                 * Wer die Anfrage bezahlt: die Lehrkraft des Kurses, sonst
+                 * irgendein Mitglied. Frueher stand hier units.user_id -
+                 * ein Besitzer, den es nicht mehr gibt. Gebraucht wird das
+                 * Konto nur fuers Kostenprotokoll und das Budget.
+                 */
                 "SELECT v.id, v.term_foreign, v.term_native,
-                        l.name AS language, u.id AS user_id, u.display_name
+                        l.name AS language,
+                        (SELECT m.user_id FROM course_members m
+                          WHERE m.course_id = t.course_id
+                          ORDER BY m.member_role = 'student', m.id
+                          LIMIT 1) AS user_id,
+                        co.name AS display_name
                    FROM vocab v
-                   JOIN units t   ON t.id = v.unit_id
+                   JOIN units t     ON t.id = v.unit_id
                    JOIN languages l ON l.id = t.language_id
-                   JOIN users u   ON u.id = t.user_id
+                   LEFT JOIN courses co ON co.id = t.course_id
                   WHERE v.word_type IS NULL
                   ORDER BY l.id, v.id
                   LIMIT {$perBatch}",
@@ -257,8 +268,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if (isset($_POST['delete_language'])) {
         $id   = (int) $_POST['delete_language'];
         $lang = q1(
-            'SELECT l.name, l.flag_emoji, u.display_name
-               FROM languages l JOIN users u ON u.id = l.user_id
+            'SELECT l.name, l.flag_emoji,
+                    COALESCE(co.name, l.name) AS display_name
+               FROM languages l
+               LEFT JOIN courses co ON co.language_id = l.id
               WHERE l.id = ?',
             [$id],
         );
@@ -320,13 +333,17 @@ $users = qa('SELECT id, display_name, color FROM users ORDER BY display_name');
 
 $languages = $userId > 0
     ? qa(
-        'SELECT l.id, l.name, l.flag_emoji, l.code,
+        // Wie in admin/sentences.php: "Kind" meint jetzt Mitgliedschaft,
+        // nicht Besitz.
+        'SELECT DISTINCT l.id, l.name, l.flag_emoji, l.code,
                 (SELECT COUNT(*) FROM units t WHERE t.language_id = l.id) AS units,
                 (SELECT COUNT(*) FROM vocab v
                    JOIN units t2 ON t2.id = v.unit_id
                   WHERE t2.language_id = l.id) AS words
            FROM languages l
-          WHERE l.user_id = ?
+           JOIN courses co       ON co.language_id = l.id
+           JOIN course_members m ON m.course_id = co.id
+          WHERE m.user_id = ?
           ORDER BY l.name',
         [$userId],
       )

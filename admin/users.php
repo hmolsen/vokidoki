@@ -117,10 +117,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
 }
 
+/*
+ * Sprachen und Vokabeln je Konto - gezaehlt ueber die Kurse, in denen es ist.
+ *
+ * Frueher zaehlte hier, was das Konto angelegt hat. In einer Klasse hat die
+ * Lehrkraft alles angelegt: Sie stuende mit 2.800 Vokabeln da und die 28
+ * Kinder mit null, obwohl alle dasselbe lernen. Gezaehlt wird deshalb, womit
+ * ein Konto arbeitet.
+ */
 $users = qa(
     "SELECT u.*,
-            (SELECT COUNT(*) FROM languages l WHERE l.user_id = u.id) AS langs,
-            (SELECT COUNT(*) FROM vocab v JOIN units t ON t.id = v.unit_id WHERE t.user_id = u.id) AS words
+            (SELECT COUNT(DISTINCT co.language_id)
+               FROM course_members m
+               JOIN courses co ON co.id = m.course_id
+              WHERE m.user_id = u.id) AS langs,
+            (SELECT COUNT(*)
+               FROM course_members m
+               JOIN units t  ON t.course_id = m.course_id
+               JOIN vocab v  ON v.unit_id = t.id
+              WHERE m.user_id = u.id) AS words
        FROM users u
       ORDER BY u.display_name"
 );
