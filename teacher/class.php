@@ -313,8 +313,18 @@ teacher_flash_render();
     </tr>
 </table>
 
+<?php
+/*
+ * Das Formular traegt alles, was die frisch eingehaengte Zeile braucht:
+ * das CSRF-Feld, die Klasse und die Adresse fuer den Zettel. So baut das
+ * Skript nichts nach, was hier schon steht - und eine Aenderung an der
+ * Adresse muss nicht an zwei Stellen gepflegt werden.
+ */
+?>
 <form method="post" id="newstudent" data-addstudent
-      action="<?= h(teacher_url('class.php') . '?id=' . $classId) ?>" hidden>
+      action="<?= h(teacher_url('class.php') . '?id=' . $classId) ?>"
+      data-print-user="<?= h(teacher_url('print.php') . '?class=' . $classId . '&user=') ?>"
+      hidden>
     <?= teacher_csrf_field() ?>
     <input type="hidden" name="class_id" value="<?= $classId ?>">
 </form>

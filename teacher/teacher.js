@@ -321,6 +321,15 @@ function initStudentAdd() {
         box.textContent = text;
     };
 
+    /*
+     * Die Zeile bekommt dieselben Knoepfe wie die gewachsenen daneben.
+     *
+     * Vorher blieb die Aktionsspalte leer, und "Passwort" und "Zettel"
+     * tauchten erst nach einem Neuladen auf - man trug fuenf Kinder ein und
+     * hatte fuenf halbe Zeilen vor sich. Die Vorlagen stehen im HTML der
+     * Seite, damit hier nichts nachgebaut wird, was dort schon steht: das
+     * CSRF-Feld, die Adressen, die Beschriftungen.
+     */
     const einhaengen = (kind) => {
         const tr = document.createElement('tr');
         tr.className = 'hit';
@@ -333,13 +342,44 @@ function initStudentAdd() {
             </td>
             <td><code class="token"></code></td>
             <td><code class="token"></code></td>
-            <td class="actions"></td>`;
-        // Die Werte als Text setzen, nicht als Markup - ein Name wie
-        // "N'Diaye <3" darf die Tabelle nicht zerlegen.
+            <td class="actions">${aktionen(kind)}</td>`;
+
+        // Name, Benutzername und Passwort als Text setzen, nicht als Markup -
+        // ein Kind namens "N'Diaye <3" darf die Tabelle nicht zerlegen.
         tr.querySelector('strong').textContent = kind.name;
         tr.querySelectorAll('code')[0].textContent = kind.username;
         tr.querySelectorAll('code')[1].textContent = kind.password;
+
+        // Die Rueckfrage traegt den Namen - ebenfalls als Eigenschaft, nicht
+        // in den Text hineingeschrieben.
+        const pw = tr.querySelector('[name="reset_password"]');
+        if (pw) pw.dataset.confirm =
+            `Neues Anfangspasswort für ${kind.name}? Das alte gilt dann nicht mehr.`;
+
         tabelle.insertBefore(tr, zeile);
+    };
+
+    /** Die Knoepfe einer Zeile, aus den Vorlagen der Seite gebaut. */
+    const aktionen = (kind) => {
+        const csrf     = form.querySelector('input[name="csrf"]').value;
+        const klasse   = form.querySelector('input[name="class_id"]').value;
+        const zettelJe = form.dataset.printUser;
+
+        const feld = (name, wert) =>
+            `<input type="hidden" name="${name}" value="${escapeHtml(wert)}">`;
+
+        return `
+            <form method="post" class="compact">
+                ${feld('csrf', csrf)}${feld('class_id', klasse)}
+                <button class="iconaction quiet" name="reset_password"
+                        value="${kind.id}" title="Neues Anfangspasswort">
+                    <span aria-hidden="true">&#128273;</span> Passwort
+                </button>
+            </form>
+            <a class="iconaction quiet" title="Zettel für dieses Kind drucken"
+               href="${escapeHtml(zettelJe)}${kind.id}" target="_blank" rel="noopener">
+                <span aria-hidden="true">&#128424;</span> Zettel
+            </a>`;
     };
 
     const senden = async () => {

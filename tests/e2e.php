@@ -4187,6 +4187,76 @@ ok('Das Skript kennt den Enter-Weg',
 ok('Und setzt die Werte als Text, nicht als Markup',
    str_contains($skriptK['body'], 'textContent = kind.name'),
    'sonst zerlegt ein Name mit spitzer Klammer die Tabelle');
+ok('Die frische Zeile traegt gleich ihre Knoepfe',
+   str_contains($skriptK['body'], 'reset_password')
+   && str_contains($skriptK['body'], 'printUser'),
+   'sonst fehlen Passwort und Zettel bis zum naechsten Laden');
+
+$res = teacherGet('class.php?id=' . $klasseId);
+ok('Und das Formular traegt die Adresse dafuer',
+   str_contains($res['body'], 'data-print-user="'));
+
+// ---- Ein Lauf ohne Arbeit ist kein Fehlschlag.
+
+/*
+ * Der Fall, an dem es gehakt hat: Eine Lehrkraft liest eine Unit ein,
+ * freigegeben ist noch nichts - also gibt es keine Vokabel, fuer die ein
+ * Satz entstehen koennte. Die Einheit trug danach "Es entstand kein
+ * brauchbarer Satz". Das war gelogen und liess eine frisch eingelesene
+ * Lektion kaputt aussehen.
+ */
+$leerLang = makeLanguage($lehrerId, 'Leerlaufisch');
+$leerUnit = makeUnit($lehrerId, $leerLang, 'Nichts freigegeben');
+q('UPDATE units SET released_position = 0 WHERE id = ?', [$leerUnit]);
+foreach (['alpha', 'beta'] as $i => $w) {
+    q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, ?)',
+      [$leerUnit, $w, 'de-' . $w, $i]);
+}
+
+ok('Ohne Freigabe gibt es nichts zu erzeugen',
+   vocab_without_sentences($leerUnit) === 0);
+
+sentence_claim($leerUnit);
+generate_sentences_tracked($leerUnit);
+
+$stand = q1('SELECT sentences_status, sentences_error FROM units WHERE id = ?', [$leerUnit]);
+ok('Ein Lauf ohne Arbeit meldet keinen Fehlschlag',
+   $stand['sentences_status'] !== SENTENCE_FAILED,
+   (string) $stand['sentences_status'] . ' / ' . var_export($stand['sentences_error'], true));
+ok('Und hinterlaesst keine Fehlermeldung',
+   $stand['sentences_error'] === null, var_export($stand['sentences_error'], true));
+ok('Die Einheit wartet stattdessen auf die Freigabe',
+   $stand['sentences_status'] === SENTENCE_PENDING,
+   (string) $stand['sentences_status']);
+
+// Mit Freigabe muss dagegen wirklich etwas entstehen.
+q('UPDATE units SET released_position = 2 WHERE id = ?', [$leerUnit]);
+sentence_claim($leerUnit);
+generate_sentences_tracked($leerUnit);
+
+$stand = q1('SELECT sentences_status FROM units WHERE id = ?', [$leerUnit]);
+$anzahl = (int) qv('SELECT COUNT(*) FROM sentences s
+                      JOIN vocab v ON v.id = s.vocab_id
+                     WHERE v.unit_id = ?', [$leerUnit]);
+ok('Nach der Freigabe entstehen Saetze', $anzahl > 0, $anzahl . ' Saetze');
+ok('Und die Einheit gilt als fertig',
+   $stand['sentences_status'] === SENTENCE_DONE, (string) $stand['sentences_status']);
+
+/*
+ * Die Oberflaeche muss den laufenden Zustand zeigen koennen: Spinner statt
+ * Symbol, Zeile nicht anklickbar, und erst danach wieder klickbar.
+ */
+$unitQuelle = (string) file_get_contents(__DIR__ . '/../views/unit.js');
+ok('Waehrend der Erzeugung dreht sich ein Spinner',
+   str_contains($unitQuelle, "info.status === 'running'")
+   && str_contains($unitQuelle, 'spinner inline'));
+ok('Und die Zeile ist solange nicht anklickbar',
+   preg_match('/\$\{wartet \? .disabled./', $unitQuelle) === 1);
+ok('Danach fragt die App nach, bis es fertig ist',
+   str_contains($unitQuelle, 'sentence_status') && str_contains($unitQuelle, 'setTimeout(tick'));
+
+q('DELETE FROM languages WHERE id = ?', [$leerLang]);
+q('DELETE FROM ai_requests WHERE user_id IS NULL');
 
 /*
  * Ein gesperrtes Kind aufschliessen, ohne ihm ein neues Passwort zu geben.

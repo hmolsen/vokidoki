@@ -721,6 +721,26 @@ function generate_sentences_tracked(int $unitId): void
         return;
     }
 
+    /*
+     * Gibt es ueberhaupt etwas zu tun?
+     *
+     * "Nichts zu tun" ist kein Fehlschlag, und genau das stand hier: Eine
+     * Lehrkraft liest eine Unit ein, freigegeben ist noch nichts, also gibt
+     * es auch keine Vokabel, fuer die ein Satz entstehen koennte - und die
+     * Einheit trug danach "Es entstand kein brauchbarer Satz". Das war
+     * gelogen und liess eine frisch eingelesene Lektion kaputt aussehen.
+     *
+     * Der Zustand richtet sich danach, ob schon Saetze da sind: Sind welche
+     * da, ist die Einheit fertig; sonst wartet sie auf die Freigabe.
+     */
+    if (vocab_without_sentences($unitId) === 0) {
+        sentence_status_set(
+            $unitId,
+            cloze_sentence_count($unitId) > 0 ? SENTENCE_DONE : SENTENCE_PENDING,
+        );
+        return;
+    }
+
     $blocked = budget_block_reason((int) $user['id']);
     if ($blocked !== null) {
         sentence_status_set($unitId, SENTENCE_FAILED, $blocked);

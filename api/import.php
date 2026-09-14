@@ -171,6 +171,25 @@ switch (action()) {
             throw $e;
         }
 
+        /*
+         * Sätze entstehen nur für Freigegebenes - und eine Lehrkraft gibt
+         * erst später frei. Für sie ist hier also nichts zu tun, und ein
+         * Lauf, der nichts zu tun hat, darf nicht angestossen werden: Die
+         * Einheit stünde sonst gleich nach dem Einlesen auf "fehlgeschlagen".
+         *
+         * Wer für sich selbst einliest, hat sich damit freigegeben; dort
+         * geht es wie bisher sofort los.
+         */
+        $zuTun = vocab_without_sentences($unitId);
+
+        if ($zuTun === 0) {
+            json_out([
+                'ok'      => true,
+                'unit_id' => $unitId,
+                'count'   => count($clean),
+            ]);
+        }
+
         // Vor der Antwort auf "läuft" setzen: Das Kind landet gleich in der
         // Lerneinheit und soll dort sofort den Spinner sehen, nicht erst beim
         // zweiten Abfragen. Bei einer frisch angelegten Einheit kann der
