@@ -3370,6 +3370,156 @@ ok('Der Lehrkraft-Bereich migriert nicht selbst',
 ok('Merkt aber, wenn das Schema aussteht',
    str_contains($boot, 'schema_pending()'));
 
+section('Kurs anlegen');
+
+/*
+ * Der Kurs war lange der blinde Fleck: Er entstand nur als Nebenwirkung,
+ * wenn jemand in der App eine Sprache anlegte - mit dem Namen des Kontos
+ * statt der Klasse, der Lehrkraft als Schuelerin und einer geratenen Klasse.
+ * Eine Lehrkraft hatte gar keinen Weg, einen anzulegen.
+ */
+
+require_once __DIR__ . '/../lib/roster.php';
+
+$res = teacherGet('classes.php');
+preg_match('/name="csrf" value="([a-f0-9]+)"/', $res['body'], $km);
+$lehrerCsrf = $km[1] ?? '';
+ok('Die Lehrkraft hat ein Formular-Token', $lehrerCsrf !== '');
+
+$kursKlasse = 'Kurs7' . bin2hex(random_bytes(2));
+$res = teacherRequest($base . '/teacher/classes.php', [
+    'create_class' => '1', 'name' => $kursKlasse, 'csrf' => $lehrerCsrf,
+]);
+$kursKlasseId = (int) qv('SELECT id FROM classes WHERE school_id = ? AND name = ?',
+    [(int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]), $kursKlasse]);
+ok('Eine Klasse fuer den Kurs steht bereit', $kursKlasseId > 0);
+
+teacherRequest($base . '/teacher/class.php?id=' . $kursKlasseId, [
+    'add_students' => '1', 'class_id' => $kursKlasseId,
+    'names'        => "Ida Berger\nTom Fischer",
+    'csrf'         => $lehrerCsrf,
+]);
+ok('Mit zwei Kindern darin',
+   count(class_members_list($kursKlasseId)) === 2);
+
+$res = teacherGet('index.php');
+ok('Die Uebersicht bietet das Anlegen an', str_contains($res['body'], 'name="create_course"'));
+
+$res = teacherRequest($base . '/teacher/index.php', [
+    'create_course' => '1',
+    'language'      => 'Englisch',
+    'flag'          => '🇬🇧',
+    'class_id'      => $kursKlasseId,
+    'csrf'          => $lehrerCsrf,
+]);
+$neuerKurs = q1('SELECT * FROM courses WHERE name = ?', ['Englisch ' . $kursKlasse]);
+ok('Der Kurs heisst nach Sprache und Klasse', $neuerKurs !== null,
+   'Englisch ' . $kursKlasse . ' nicht gefunden');
+
+$neuerKursId = (int) ($neuerKurs['id'] ?? 0);
+ok('Er haengt an der Klasse',
+   (int) ($neuerKurs['class_id'] ?? 0) === $kursKlasseId);
+ok('Und an der Schule der Lehrkraft',
+   (int) ($neuerKurs['school_id'] ?? 0)
+   === (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]));
+
+$eigeneSprache = q1('SELECT * FROM languages WHERE id = ?',
+                    [(int) ($neuerKurs['language_id'] ?? 0)]);
+ok('Zum Kurs gehoert eine eigene Sprache',
+   ($eigeneSprache['name'] ?? '') === 'Englisch');
+ok('Mit Flagge und automatischem Kuerzel',
+   ($eigeneSprache['flag_emoji'] ?? '') === '🇬🇧' && ($eigeneSprache['code'] ?? '') === 'en',
+   ($eigeneSprache['code'] ?? '-'));
+
+/*
+ * Die Besetzung: Lehrkraft als Lehrkraft, die Kinder der Klasse als
+ * SchuelerInnen. Frueher stand die Lehrkraft im eigenen Kurs als Schuelerin.
+ */
+$besetzung = course_members_list($neuerKursId);
+$rollen    = [];
+foreach ($besetzung as $m) {
+    $rollen[$m['display_name']] = $m['member_role'];
+}
+ok('Die Lehrkraft ist als Lehrkraft drin',
+   ($rollen['Frau Meier'] ?? '') === 'teacher', json_encode($rollen));
+ok('Und die Kinder der Klasse als SchuelerInnen',
+   ($rollen['Ida B.'] ?? '') === 'student' && ($rollen['Tom F.'] ?? '') === 'student',
+   json_encode($rollen));
+
+// Zweimal derselbe Kurs geht nicht.
+$vorher = (int) qv('SELECT COUNT(*) FROM courses');
+$res = teacherRequest($base . '/teacher/index.php', [
+    'create_course' => '1', 'language' => 'Englisch',
+    'class_id'      => $kursKlasseId, 'csrf' => $lehrerCsrf,
+]);
+ok('Denselben Kurs zweimal anzulegen wird abgelehnt',
+   (int) qv('SELECT COUNT(*) FROM courses') === $vorher
+   && str_contains($res['body'], 'gibt es an dieser Schule schon'));
+
+// Eine zweite Klasse darf dieselbe Sprache haben - mit eigenen Unterlagen.
+$res = teacherRequest($base . '/teacher/index.php', [
+    'create_course' => '1', 'language' => 'Englisch',
+    'class_id'      => 0, 'csrf' => $lehrerCsrf,
+]);
+$zweiter = q1('SELECT * FROM courses WHERE name = ?', ['Englisch']);
+ok('Eine zweite Gruppe darf dieselbe Sprache lernen', $zweiter !== null);
+ok('Und bekommt dafuer eine eigene Sprachzeile',
+   $zweiter !== null
+   && (int) $zweiter['language_id'] !== (int) ($neuerKurs['language_id'] ?? 0));
+
+// ---- Mitglieder im Kurs pflegen.
+
+/*
+ * Ida ueber die Klasse holen, nicht ueber den Anzeigenamen: Den kann es
+ * mehrfach geben, und dann prueft der Abschnitt an einem fremden Konto
+ * herum - die erste Zusicherung waere sogar gruen, weil ein Unbeteiligter
+ * erst recht nicht im Kurs ist.
+ */
+$ida = (int) qv(
+    "SELECT u.id FROM class_members m
+       JOIN users u ON u.id = m.user_id
+      WHERE m.class_id = ? AND u.display_name = 'Ida B.'",
+    [$kursKlasseId],
+);
+ok('Ida ist eindeutig bestimmt', $ida > 0);
+teacherRequest($base . '/teacher/course.php?id=' . $neuerKursId, [
+    'remove_member' => $ida, 'course_id' => $neuerKursId, 'csrf' => $lehrerCsrf,
+]);
+ok('Jemand laesst sich aus dem Kurs nehmen',
+   course_role($ida, $neuerKursId) === null);
+
+teacherRequest($base . '/teacher/course.php?id=' . $neuerKursId, [
+    'sync_class' => '1', 'course_id' => $neuerKursId, 'csrf' => $lehrerCsrf,
+]);
+ok('Und die Klasse laesst sich nachtragen',
+   course_role($ida, $neuerKursId) === 'student');
+
+/*
+ * Die Grenze: Ein Konto einer anderen Schule kommt nicht in den Kurs, auch
+ * nicht ueber ein untergeschobenes Formular.
+ */
+q("INSERT IGNORE INTO schools (name) VALUES ('Fremde Schule 4')");
+$fremdeSchule4 = (int) qv("SELECT id FROM schools WHERE name = 'Fremde Schule 4'");
+$fremdesKind   = makeUser('e2e_fremdkind', 'Fremdkind');
+q('UPDATE users SET school_id = ? WHERE id = ?', [$fremdeSchule4, $fremdesKind]);
+
+teacherRequest($base . '/teacher/course.php?id=' . $neuerKursId, [
+    'add_member' => $fremdesKind, 'course_id' => $neuerKursId, 'csrf' => $lehrerCsrf,
+]);
+ok('Ein Kind einer anderen Schule kommt nicht in den Kurs',
+   course_role($fremdesKind, $neuerKursId) === null);
+
+q('DELETE FROM users WHERE id = ?', [$fremdesKind]);
+q('DELETE FROM schools WHERE id = ?', [$fremdeSchule4]);
+
+// Aufraeumen: Kurse, Sprachen, Kinder, Klasse.
+foreach (class_members_list($kursKlasseId) as $m) {
+    q('DELETE FROM users WHERE id = ?', [(int) $m['id']]);
+}
+q('DELETE FROM languages WHERE id IN (?, ?)',
+  [(int) ($neuerKurs['language_id'] ?? 0), (int) ($zweiter['language_id'] ?? 0)]);
+q('DELETE FROM classes WHERE id = ?', [$kursKlasseId]);
+
 // ---------------------------------------------- Klassen und Klassenlisten
 
 section('Klasse anlegen und füllen');

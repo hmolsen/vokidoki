@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/languages.php';
 
 /**
  * Kurse: Klasse plus Sprache, etwa "Englisch 5B".
@@ -78,9 +79,159 @@ function course_create_for_language(array $language, array $user): ?array
     );
 
     $courseId = (int) db()->lastInsertId();
-    course_add_member($courseId, (int) $user['id'], COURSE_ROLE_STUDENT);
+
+    // Mit der Rolle, die das Konto wirklich hat. Stand hier fest "student",
+    // fuehrte eine Lehrkraft, die in der App eine Sprache anlegt, ihren
+    // eigenen Kurs als Schuelerin - und die Uebersicht meldete null
+    // Lehrkraefte.
+    course_add_member(
+        $courseId,
+        (int) $user['id'],
+        ($user['role'] ?? '') === COURSE_ROLE_TEACHER
+            ? COURSE_ROLE_TEACHER : COURSE_ROLE_STUDENT,
+    );
 
     return q1('SELECT * FROM courses WHERE id = ?', [$courseId]);
+}
+
+/**
+ * Einen Kurs anlegen - der Weg, den eine Lehrkraft geht.
+ *
+ * Ein Kurs ist Klasse plus Sprache: "Englisch 5B". Dazu gehört immer eine
+ * eigene Zeile in languages, auch wenn die Schule schon Englisch führt -
+ * eine Sprache trägt Flagge und Kürzel für genau einen Kurs, und
+ * course_for_language() verlässt sich darauf, dass die Zuordnung eindeutig
+ * ist. Zwei Kurse "Englisch 5B" und "Englisch 6A" haben deshalb zwei
+ * Zeilen desselben Namens. Das ist keine Unsauberkeit, sondern der Preis
+ * dafür, dass jede Lerngruppe ihre eigenen Unterlagen hat.
+ *
+ * Die Kinder der Klasse kommen gleich mit hinein - so war es gedacht:
+ * ausdrücklich je Kurs, aber mit der Klasse vorbelegt. Wer später dazukommt
+ * oder wegfällt, wird im Kurs selbst nachgetragen.
+ *
+ * @return array|string Der angelegte Kurs, oder eine Meldung im Klartext.
+ */
+function course_create(
+    array $teacher,
+    string $languageName,
+    string $flag,
+    ?int $classId,
+    string $courseName = '',
+): array|string {
+    $schoolId = (int) ($teacher['school_id'] ?? 0);
+    if ($schoolId === 0) {
+        return 'Dieses Konto gehört zu keiner Schule.';
+    }
+
+    $languageName = trim(preg_replace('/\s+/u', ' ', $languageName) ?? $languageName);
+    if ($languageName === '') {
+        return 'Der Kurs braucht eine Sprache.';
+    }
+    if (mb_strlen($languageName) > 64) {
+        return 'Der Name der Sprache ist zu lang.';
+    }
+
+    $klasse = null;
+    if ($classId !== null && $classId > 0) {
+        $klasse = q1('SELECT * FROM classes WHERE id = ? AND school_id = ?',
+                     [$classId, $schoolId]);
+        if ($klasse === null) {
+            return 'Diese Klasse gibt es in dieser Schule nicht.';
+        }
+    }
+
+    $name = trim(preg_replace('/\s+/u', ' ', $courseName) ?? $courseName);
+    if ($name === '') {
+        $name = trim($languageName . ' ' . (string) ($klasse['name'] ?? ''));
+    }
+    $name = mb_substr($name, 0, 128);
+
+    if (q1('SELECT id FROM courses WHERE school_id = ? AND name = ?',
+           [$schoolId, $name]) !== null) {
+        return sprintf('Einen Kurs "%s" gibt es an dieser Schule schon.', $name);
+    }
+
+    db()->beginTransaction();
+    try {
+        q(
+            'INSERT INTO languages (school_id, name, flag_emoji, code) VALUES (?, ?, ?, ?)',
+            [$schoolId, $languageName, mb_substr(trim($flag), 0, 16),
+             language_code('', $languageName)],
+        );
+        $languageId = (int) db()->lastInsertId();
+
+        q(
+            'INSERT INTO courses (school_id, class_id, language_id, name, created_by)
+             VALUES (?, ?, ?, ?, ?)',
+            [$schoolId, $klasse === null ? null : (int) $klasse['id'],
+             $languageId, $name, (int) $teacher['id']],
+        );
+        $courseId = (int) db()->lastInsertId();
+
+        course_add_member($courseId, (int) $teacher['id'], COURSE_ROLE_TEACHER);
+
+        if ($klasse !== null) {
+            q(
+                "INSERT IGNORE INTO course_members (course_id, user_id, member_role)
+                 SELECT ?, m.user_id, 'student'
+                   FROM class_members m
+                   JOIN users u ON u.id = m.user_id
+                  WHERE m.class_id = ? AND u.role <> 'teacher'",
+                [$courseId, (int) $klasse['id']],
+            );
+        }
+
+        db()->commit();
+    } catch (Throwable $e) {
+        db()->rollBack();
+        return 'Der Kurs liess sich nicht anlegen: ' . $e->getMessage();
+    }
+
+    return q1('SELECT * FROM courses WHERE id = ?', [$courseId]);
+}
+
+/**
+ * Die Kinder der Klasse in den Kurs nachtragen.
+ *
+ * Für den Fall, dass nach dem Anlegen des Kurses noch jemand in die Klasse
+ * gekommen ist. Wer schon drin ist, bleibt unberührt.
+ */
+function course_sync_class(int $courseId): int
+{
+    $kurs = q1('SELECT class_id FROM courses WHERE id = ?', [$courseId]);
+    if ($kurs === null || $kurs['class_id'] === null) {
+        return 0;
+    }
+
+    return q(
+        "INSERT IGNORE INTO course_members (course_id, user_id, member_role)
+         SELECT ?, m.user_id, 'student'
+           FROM class_members m
+           JOIN users u ON u.id = m.user_id
+          WHERE m.class_id = ? AND u.role <> 'teacher'",
+        [$courseId, (int) $kurs['class_id']],
+    )->rowCount();
+}
+
+/** Jemanden aus einem Kurs nehmen. Der Lernstand bleibt, falls er zurückkommt. */
+function course_remove_member(int $courseId, int $userId): void
+{
+    q('DELETE FROM course_members WHERE course_id = ? AND user_id = ?',
+      [$courseId, $userId]);
+}
+
+/** Konten der Schule, die in diesem Kurs noch fehlen. */
+function course_candidates(int $courseId, int $schoolId): array
+{
+    return qa(
+        'SELECT u.id, u.display_name, u.username, u.role
+           FROM users u
+          WHERE u.school_id = ? AND u.active = 1
+            AND NOT EXISTS (SELECT 1 FROM course_members m
+                             WHERE m.course_id = ? AND m.user_id = u.id)
+          ORDER BY u.role = ?, u.display_name',
+        [$schoolId, $courseId, COURSE_ROLE_STUDENT],
+    );
 }
 
 /**
