@@ -49,7 +49,9 @@ $kinder = array_values(array_filter(
 
 $schule   = q1('SELECT name FROM schools WHERE id = ?', [$schoolId]);
 $vorlage  = letter_template();
-$adresse  = rtrim(url('/'), '/') . '/';
+// Mit Schema und Host: Der Zettel verlaesst die Anwendung, und ein QR-Code
+// mit einem blossen Pfad darin ist kein Link, sondern eine Zeichenkette.
+$adresse  = public_url('/');
 $qrSvg    = qr_svg($adresse, 4, 'Adresse der App');
 ?><!doctype html>
 <html lang="de"><head>

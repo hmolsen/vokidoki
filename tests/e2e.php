@@ -3731,8 +3731,55 @@ ok('Ein unbekannter Platzhalter bleibt stehen',
    str_contains(letter_render('Hallo {name}, dein {passwrot}', ['name' => 'Max']),
                 '{passwrot}'));
 
+/*
+ * Die Adresse auf dem Zettel muss eine Adresse sein.
+ *
+ * Hier stand url('/') - und das liefert einen Pfad, "/vokabeltrainer/".
+ * Auf dem Papier ist das wertlos: Ein QR-Code mit einem Pfad darin ist kein
+ * Link, sondern eine Zeichenkette, und ein Kind, das "/vokabeltrainer/" in
+ * die Adresszeile tippt, landet nirgends. Aufgefallen ist es nur, weil ich
+ * den erzeugten Code einmal wirklich ausgelesen habe.
+ */
+require_once __DIR__ . '/../lib/qr.php';
+
+ok('Die oeffentliche Adresse traegt Schema und Host',
+   preg_match('~^https?://[^/]+~', public_url('/')) === 1, public_url('/'));
+
 $res = teacherGet('print.php?class=' . $klasseId);
 ok('Die Druckansicht öffnet sich', $res['status'] === 200, 'Status ' . $res['status']);
+
+// Den QR-Code aus der Seite holen und zurueckrechnen - steht dort wirklich
+// eine aufrufbare Adresse?
+preg_match('~<path d="([^"]+)"~', $res['body'], $pm);
+preg_match('~viewBox="0 0 (\d+) ~', $res['body'], $vm);
+$qrGelesen = null;
+if (($pm[1] ?? '') !== '' && ($vm[1] ?? '') !== '') {
+    $seite  = (int) $vm[1] - 8;          // ohne den hellen Rand von je 4
+    $felder = array_fill(0, $seite, array_fill(0, $seite, false));
+    preg_match_all('~M(\d+) (\d+)h~', $pm[1], $mm, PREG_SET_ORDER);
+    foreach ($mm as $t) {
+        $c = (int) $t[1] - 4;
+        $r = (int) $t[2] - 4;
+        if ($r >= 0 && $r < $seite && $c >= 0 && $c < $seite) {
+            $felder[$r][$c] = true;
+        }
+    }
+    $qrGelesen = qrLesen($felder);
+}
+ok('Im QR-Code auf dem Zettel steht eine aufrufbare Adresse',
+   $qrGelesen !== null && preg_match('~^https?://~', $qrGelesen) === 1,
+   var_export($qrGelesen, true));
+/*
+ * Verglichen wird mit der Adresse, unter der dieser Test laeuft - nicht mit
+ * public_url() aus diesem Prozess. Hier auf der Kommandozeile gibt es keine
+ * Anfrage, aus der sich ein Host ableiten liesse; der Server kennt ihn.
+ */
+$erwarteteAdresse = $base . '/';
+ok('Und zwar die der App',
+   $qrGelesen === $erwarteteAdresse,
+   var_export($qrGelesen, true) . ' statt ' . $erwarteteAdresse);
+ok('Dieselbe Adresse steht auch zum Abtippen darauf',
+   str_contains($res['body'], h($erwarteteAdresse)));
 ok('Sie zeigt ein Blatt je Kind',
    substr_count($res['body'], 'class="blatt"') === 4,
    substr_count($res['body'], 'class="blatt"') . ' Blätter');

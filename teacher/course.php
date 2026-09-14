@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
+require_once __DIR__ . '/../lib/qr.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['teacher_logout'])) {
     teacher_csrf_check();
@@ -96,8 +97,38 @@ teacher_flash_render();
 
 <h2>Lerneinheiten</h2>
 
+<?php
+/*
+ * Eingelesen wird in der App, nicht hier - dafuer braucht es die Kamera.
+ * Das stand bisher nur als Randnotiz unter der Tabelle und war damit
+ * unsichtbar, solange es noch keine Lerneinheit gab. Genau dann braucht man
+ * es aber: Der Kurs ist angelegt, und die Seite sagte nur, dass nichts da
+ * ist - ohne zu verraten, wie etwas hinkommt.
+ */
+$appAdresse = public_url('/');
+$appQr      = qr_svg($appAdresse, 3, 'Adresse der App');
+?>
+
 <?php if ($einheiten === []): ?>
-    <p class="muted">In diesem Kurs gibt es noch keine Lerneinheit.</p>
+<div class="card" style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">
+    <?php if ($appQr !== null): ?>
+        <div style="flex:none;width:120px"><?= $appQr ?></div>
+    <?php endif; ?>
+    <div style="flex:1 1 260px">
+        <h3 style="margin:0 0 6px">Noch keine Lerneinheit</h3>
+        <p style="margin:0 0 10px">
+            Eingelesen wird <strong>in der App am Handy</strong> - dort ist die
+            Kamera. Buchseite fotografieren, das Modell erkennt die Vokabeln,
+            und die Lektion landet in diesem Kurs.
+        </p>
+        <p class="tiny muted" style="margin:0">
+            Code scannen oder <a href="<?= h(url('/')) ?>" target="_blank" rel="noopener">die
+            App hier öffnen</a> und mit demselben Konto anmelden. Die Lektion
+            erscheint danach in dieser Liste, und du gibst sie portionsweise frei -
+            Lückensätze entstehen nur für Freigegebenes.
+        </p>
+    </div>
+</div>
 <?php else: ?>
 <table class="data">
     <tr>
@@ -136,8 +167,9 @@ teacher_flash_render();
     Freigegeben wird portionsweise, und das hat einen Grund: Zu jeder
     freigegebenen Vokabel entstehen Lückensätze, und die kosten. Eine ganze
     Unit einlesen und nur das aufmachen, was dran ist, spart den Rest -
-    solange er nicht dran ist. Fotografiert wird in der App auf dem Handy;
-    dafür braucht es die Kamera.
+    solange er nicht dran ist. Eine weitere Lektion liest du
+    <a href="<?= h(url('/')) ?>" target="_blank" rel="noopener">in der App</a>
+    am Handy ein; dafür braucht es die Kamera.
 </p>
 <?php endif; ?>
 

@@ -35,6 +35,13 @@ return [
     // Domain liegt; sonst z. B. '/vokabeln' (ohne Slash am Ende).
     'base_path' => '',
 
+    // Die vollständige Adresse, unter der die App erreichbar ist - für den
+    // QR-Code und die Adresse auf den Zetteln der Kinder. Leer lassen ist in
+    // Ordnung: Dann wird sie aus der Anfrage gebaut. Eintragen, wenn die App
+    // hinter einem Proxy liegt oder unter mehreren Namen erreichbar ist.
+    // Beispiel: 'https://cqrity.de/vokabeltrainer'
+    'public_url' => '',
+
     // true blendet PHP-Fehler im Browser ein - nur lokal verwenden.
     'dev' => false,
 ];
