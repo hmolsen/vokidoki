@@ -1,4 +1,4 @@
-import { api, render, esc, on, go, topbar, loading, wireBack, progressBar } from '../core.js';
+import { VT, api, render, esc, on, go, topbar, loading, wireBack, progressBar } from '../core.js';
 
 /**
  * Startseite einer Sprache: einlesen und üben auf einer Ebene.
@@ -57,19 +57,22 @@ export async function languageView(languageId) {
                 </div>
             </div>` : ''}
 
-        <button class="row" data-go="/lang/${language.id}/import">
-            <span class="lead">\u{1F4F7}</span>
-            <span class="body">
-                <span class="title">Vokabeln einlesen</span>
-                <span class="tiny muted">Buchseite fotografieren und automatisch erfassen</span>
-            </span>
-            <span class="chev">&#8250;</span>
-        </button>
+        ${VT.user.canImport ? `
+            <button class="row" data-go="/lang/${language.id}/import">
+                <span class="lead">\u{1F4F7}</span>
+                <span class="body">
+                    <span class="title">Vokabeln einlesen</span>
+                    <span class="tiny muted">Buchseite fotografieren und automatisch erfassen</span>
+                </span>
+                <span class="chev">&#8250;</span>
+            </button>` : ''}
 
         ${units.length === 0 ? `
             <div class="empty">
                 <span class="big">\u{1F4D6}</span>
-                Fotografiere deine erste Vokabelseite,<br>dann kann es losgehen.
+                ${VT.user.canImport
+                    ? 'Fotografiere deine erste Vokabelseite,<br>dann kann es losgehen.'
+                    : 'Hier ist noch nichts freigegeben.<br>Deine Lehrkraft macht die erste Lektion auf.'}
             </div>
         ` : `
             <h2 class="section">Lerneinheiten</h2>

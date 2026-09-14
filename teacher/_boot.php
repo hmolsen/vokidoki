@@ -7,10 +7,12 @@ require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/access.php';
 require_once __DIR__ . '/../lib/courses.php';
 require_once __DIR__ . '/../lib/roster.php';
+require_once __DIR__ . '/../lib/worldlanguages.php';
 require_once __DIR__ . '/../lib/throttle.php';
 require_once __DIR__ . '/../lib/settings.php';
 require_once __DIR__ . '/../lib/errors.php';
 require_once __DIR__ . '/../lib/schema.php';
+require_once __DIR__ . '/../lib/version.php';
 
 boot_error_handling();
 session_boot();
@@ -262,5 +264,9 @@ function teacher_head(string $title, string $active, array $user): void
 
 function teacher_foot(): void
 {
+    // Der Versionsstempel in der Adresse: Sonst liefert der Browser nach
+    // einer Aenderung noch tagelang die alte Fassung aus.
+    printf("<script src=\"%s\"></script>\n",
+        h(url('/teacher/teacher.js?v=' . app_version())));
     echo "</main></body></html>\n";
 }

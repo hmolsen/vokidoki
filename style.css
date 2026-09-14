@@ -252,6 +252,8 @@ input:focus, select:focus {
     cursor: pointer;
 }
 .row:active   { transform: scale(.99); }
+/* Als <a> gebaut - fuer den Weg in die Verwaltung, der die App verlaesst. */
+a.row { text-decoration: none; }
 .row .lead    { font-size: 1.7rem; flex: none; width: 34px; text-align: center; }
 .row .body    { flex: 1; min-width: 0; }
 .row .title   { font-weight: 600; }

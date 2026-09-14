@@ -31,20 +31,25 @@ export async function languagesView() {
         ${languages.length === 0 ? `
             <div class="empty">
                 <span class="big">\u{1F310}</span>
-                Noch keine Sprache angelegt.<br>Leg unten deine erste an.
+                ${VT.user.canImport
+                    ? 'Noch keine Sprache angelegt.<br>Leg unten deine erste an.'
+                    : 'Hier ist noch nichts für dich freigegeben.<br>Deine Lehrkraft macht den ersten Kurs auf.'}
             </div>` : ''}
         <div class="grid">
             ${tiles}
-            <button class="tile add" id="add">
-                <span class="flag">+</span>
-                <span class="name">Sprache</span>
-            </button>
+            ${VT.user.canImport ? `
+                <button class="tile add" id="add">
+                    <span class="flag">+</span>
+                    <span class="name">Sprache</span>
+                </button>` : ''}
         </div>
+        ${teacherLink()}
         ${installHint()}
     `);
 
     on('[data-lang]', 'click', (e) => go(`/lang/${e.currentTarget.dataset.lang}`));
-    $('#add').addEventListener('click', showAddForm);
+    const add = $('#add');
+    if (add) add.addEventListener('click', showAddForm);
     wireCornerButton();
 }
 
@@ -81,6 +86,31 @@ function wireCornerButton() {
         } catch { /* auch bei Fehler zum Login */ }
         window.location.href = `${VT.base}/`;
     });
+}
+
+/**
+ * Für Lehrkräfte der Weg in die Verwaltung.
+ *
+ * Sie soll nicht wissen müssen, dass es unter /teacher/ etwas gibt - sie
+ * meldet sich normal an und findet den Weg dort, wo sie ohnehin ist. Eine
+ * echte Seitennavigation statt eines Wechsels innerhalb der App: Der
+ * Lehrkraft-Bereich wird vom Server gebaut und ist kein Teil der PWA.
+ *
+ * Nur in der Browser-Ansicht. Die installierte App gehört einem Gerät und
+ * einem Zweck - dort zu verwalten, ginge auf einem Handy-Bildschirm ohnehin
+ * schlecht.
+ */
+function teacherLink() {
+    if (!VT.user.isTeacher || VT.standalone) return '';
+    return `
+        <a class="row" href="${VT.base}/teacher/">
+            <span class="lead">\u{1F5C2}\u{FE0F}</span>
+            <span class="body">
+                <span class="title">Verwaltung</span>
+                <span class="tiny muted">Klassen, Kurse, Zugangsdaten und Freigaben</span>
+            </span>
+            <span class="chev">&#8250;</span>
+        </a>`;
 }
 
 /**

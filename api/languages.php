@@ -43,6 +43,16 @@ switch (action()) {
 
     case 'create':
         require_post();
+
+        /*
+         * Eine Sprache anlegen heisst einen Kurs anlegen - und das ist
+         * dieselbe Befugnis wie das Einlesen. Ein Kind ohne dieses Recht
+         * uebt, was seine Lehrkraft freigegeben hat; es legt keine eigenen
+         * Kurse an. In einer Familie aendert sich dadurch nichts, dort
+         * tragen die Kinder das Recht.
+         */
+        require_cap($user, CAP_IMPORT);
+
         $b    = json_body();
         $name = body_str($b, 'name', 64);
         $flag = body_str($b, 'flag', 16);

@@ -11,10 +11,12 @@ switch (action()) {
         json_out([
             'ok'   => true,
             'user' => $u === null ? null : [
-                'id'      => (int) $u['id'],
-                'name'    => $u['display_name'],
-                'color'   => $u['color'],
-                'appName' => app_name_for($u),
+                'id'        => (int) $u['id'],
+                'name'      => $u['display_name'],
+                'color'     => $u['color'],
+                'appName'   => app_name_for($u),
+                'canImport' => user_can($u, CAP_IMPORT),
+                'isTeacher' => user_is_teacher($u),
             ],
         ]);
         // no break - json_out beendet den Request
@@ -63,10 +65,12 @@ switch (action()) {
             'ok'       => true,
             'redirect' => url('/?t=' . urlencode($token)),
             'user'     => [
-                'id'      => (int) $user['id'],
-                'name'    => $user['display_name'],
-                'color'   => $user['color'],
-                'appName' => app_name_for($user),
+                'id'        => (int) $user['id'],
+                'name'      => $user['display_name'],
+                'color'     => $user['color'],
+                'appName'   => app_name_for($user),
+                'canImport' => user_can($user, CAP_IMPORT),
+                'isTeacher' => user_is_teacher($user),
             ],
         ]);
 

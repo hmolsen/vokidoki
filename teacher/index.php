@@ -17,10 +17,16 @@ $schoolId = (int) ($user['school_id'] ?? 0);
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['create_course'])) {
     teacher_csrf_check();
 
+    /*
+     * Die Flagge kommt aus der Sprachliste, nicht aus einem Feld. Sie ist
+     * eine Eigenschaft der Sprache und keine Entscheidung, die eine
+     * Lehrkraft treffen soll.
+     */
+    $sprache  = (string) ($_POST['language'] ?? '');
     $ergebnis = course_create(
         $user,
-        (string) ($_POST['language'] ?? ''),
-        (string) ($_POST['flag'] ?? ''),
+        $sprache,
+        language_flag($sprache),
         (int) ($_POST['class_id'] ?? 0) ?: null,
         (string) ($_POST['name'] ?? ''),
     );
@@ -99,44 +105,59 @@ teacher_flash_render();
     </div>
 <?php endif; ?>
 
-<form method="post" class="card" style="max-width:560px">
+<form method="post" class="card" style="max-width:560px" data-coursform>
     <?= teacher_csrf_field() ?>
     <div class="formgrid">
         <div>
             <label for="language">Sprache</label>
-            <input type="text" id="language" name="language" placeholder="Englisch"
-                   maxlength="64" required autofocus>
+            <?php
+            /*
+             * Die Liste steht als gewoehnliches <select> im HTML und wird erst
+             * von teacher.js zum durchsuchbaren Feld gemacht. Ohne JavaScript
+             * bleibt sie damit bedienbar - hundert Eintraege sind unbequem,
+             * aber unbequem ist besser als gar nicht.
+             */
+            ?>
+            <select id="language" name="language" data-picker required>
+                <?php foreach (language_choices() as $s): ?>
+                    <option value="<?= h($s['name']) ?>"
+                            data-flag="<?= h($s['flag']) ?>"
+                            data-top="<?= $s['top'] ? '1' : '0' ?>">
+                        <?= h($s['flag'] . ' ' . $s['name']) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
         </div>
         <div>
             <label for="class_id">Klasse</label>
             <select id="class_id" name="class_id">
                 <?php foreach ($klassen as $k): ?>
-                    <option value="<?= (int) $k['id'] ?>">
+                    <option value="<?= (int) $k['id'] ?>" data-name="<?= h($k['name']) ?>">
                         <?= h($k['name']) ?> (<?= (int) $k['students'] ?>)
                     </option>
                 <?php endforeach; ?>
-                <option value="0">- ohne Klasse -</option>
+                <option value="0" data-name="">- ohne Klasse -</option>
             </select>
         </div>
-        <div>
-            <label for="flag">Flagge</label>
-            <input type="text" id="flag" name="flag" placeholder="🇬🇧" maxlength="16">
-        </div>
-        <div>
-            <label for="name">Name des Kurses</label>
-            <input type="text" id="name" name="name" placeholder="(Sprache + Klasse)"
-                   maxlength="128">
-        </div>
     </div>
+
+    <label>Name des Kurses</label>
+    <div class="coursename">
+        <strong data-coursename></strong>
+        <button type="button" class="iconbtn" data-editname
+                title="Namen selbst wählen" aria-label="Namen selbst wählen">&#9998;</button>
+        <input type="text" name="name" maxlength="128" hidden>
+    </div>
+
     <button class="btn small" name="create_course" value="1">Kurs anlegen</button>
 </form>
 
 <p class="tiny muted">
-    Der Name entsteht von selbst aus Sprache und Klasse - „Englisch 5B" -, lässt
-    sich aber überschreiben. Die Kinder der Klasse kommen gleich mit in den Kurs;
+    Der Name ergibt sich aus Sprache und Klasse. Auf den Stift tippen, wenn er
+    anders heissen soll. Die Kinder der Klasse kommen gleich mit in den Kurs;
     wer später dazukommt oder wegfällt, wird im Kurs selbst nachgetragen.
-    <strong>Jeder Kurs hat seine eigenen Unterlagen:</strong> „Englisch 5B" und
-    „Englisch 6A" teilen sich nichts, auch wenn beide Englisch unterrichten. Das
+    <strong>Jeder Kurs hat seine eigenen Unterlagen:</strong> „Englisch - 5B" und
+    „Englisch - 6A" teilen sich nichts, auch wenn beide Englisch unterrichten. Das
     kostet beim Einlesen doppelt und ist so gewollt - so kann jede Lehrkraft
     unabhängig arbeiten.
 </p>

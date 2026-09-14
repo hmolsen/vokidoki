@@ -12,6 +12,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/lib/auth.php';
+require_once __DIR__ . '/lib/access.php';
 require_once __DIR__ . '/lib/errors.php';
 require_once __DIR__ . '/lib/version.php';
 
@@ -91,10 +92,14 @@ header('Cache-Control: no-store, must-revalidate');
 window.VT = {
     base: <?= json_encode(base_path(), JSON_UNESCAPED_SLASHES) ?>,
     user: <?= $user === null ? 'null' : json_encode([
-        'id'       => (int) $user['id'],
-        'name'     => $user['display_name'],
-        'color'    => $user['color'],
-        'appName'  => $appName,
+        'id'        => (int) $user['id'],
+        'name'      => $user['display_name'],
+        'color'     => $user['color'],
+        'appName'   => $appName,
+        // Was das Konto darf - damit die Oberflaeche nichts anbietet, was
+        // die API hinterher ablehnt.
+        'canImport' => user_can($user, CAP_IMPORT),
+        'isTeacher' => user_is_teacher($user),
     ], JSON_UNESCAPED_UNICODE) ?>,
     standalone: false,
     version: <?= json_encode($appVersion) ?>,

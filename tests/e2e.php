@@ -3370,6 +3370,85 @@ ok('Der Lehrkraft-Bereich migriert nicht selbst',
 ok('Merkt aber, wenn das Schema aussteht',
    str_contains($boot, 'schema_pending()'));
 
+section('Was die Oberflaeche anbietet');
+
+require_once __DIR__ . '/../lib/worldlanguages.php';
+
+/*
+ * Ein Kind ohne Einlese-Recht bekam "Vokabeln einlesen" weiterhin angeboten
+ * und erst beim Tippen ein "Dafuer fehlt dir die Berechtigung". Eine
+ * Schaltflaeche, die nur dazu da ist, eine Absage zu holen, ist keine
+ * Schaltflaeche.
+ */
+$uiQuelle    = (string) file_get_contents(__DIR__ . '/../views/language.js');
+$listeQuelle = (string) file_get_contents(__DIR__ . '/../views/languages.js');
+
+ok('Einlesen erscheint nur mit Berechtigung',
+   preg_match('/VT\.user\.canImport \?\s*`\s*<button class="row" data-go="\/lang\/\$\{language\.id\}\/import"/s',
+              $uiQuelle) === 1,
+   'der Knopf haengt an keiner Bedingung');
+ok('Und das Anlegen einer Sprache ebenso',
+   str_contains($listeQuelle, 'VT.user.canImport ?'));
+ok('Die Lehrkraft findet die Verwaltung aus der App heraus',
+   str_contains($listeQuelle, 'VT.user.isTeacher') && str_contains($listeQuelle, '/teacher/'));
+
+// Was die App ueberhaupt erfaehrt.
+[$d, $s] = apiCall('auth', 'me');
+ok('Die App erfaehrt, was das Konto darf',
+   array_key_exists('canImport', $d['user'] ?? []) && array_key_exists('isTeacher', $d['user'] ?? []),
+   json_encode($d['user'] ?? null));
+
+$startseite = http($base . '/')['body'];
+ok('Und zwar schon beim Ausliefern der Huelle',
+   str_contains($startseite, '"canImport"') && str_contains($startseite, '"isTeacher"'));
+
+/*
+ * Und die Absage bleibt trotzdem, wo sie hingehoert: in der API. Die
+ * Oberflaeche versteckt, sie schuetzt nicht.
+ */
+$ohneRecht = makeUser('e2e_ohnerecht', 'Ohne Recht');
+q('UPDATE users SET can_import = 0 WHERE id = ?', [$ohneRecht]);
+
+$rechtJar = tempnam(sys_get_temp_dir(), 'vtrecht');
+[$abgelehnt, $status] = apiAls($rechtJar, function () {
+    apiCall('auth', 'login', ['username' => 'e2e_ohnerecht', 'password' => 'geheim123']);
+    return apiCall('languages', 'create', ['name' => 'Heimlich', 'flag' => '']);
+});
+ok('Ohne Recht laesst sich auch per API keine Sprache anlegen',
+   $status === 403, 'Status ' . $status . ' ' . json_encode($abgelehnt));
+
+$dasDarf = apiAls($rechtJar, fn () => apiCall('auth', 'me')[0]['user']['canImport'] ?? null);
+ok('Und die App bekommt das auch gesagt', $dasDarf === false, var_export($dasDarf, true));
+
+q('DELETE FROM users WHERE id = ?', [$ohneRecht]);
+@unlink($rechtJar);
+
+// ---- Die Sprachliste fuer das Auswahlfeld.
+
+$auswahl = language_choices();
+ok('Es gibt reichlich Sprachen zur Auswahl', count($auswahl) > 80, (string) count($auswahl));
+
+$oben = array_values(array_filter($auswahl, static fn ($x) => $x['top']));
+ok('Die fuenf Schulsprachen stehen oben',
+   array_column($oben, 'name') === ['Englisch', 'Französisch', 'Latein', 'Spanisch', 'Dänisch'],
+   implode(', ', array_column($oben, 'name')));
+ok('Und stehen am Anfang der Liste',
+   array_slice(array_column($auswahl, 'top'), 0, 5) === [true, true, true, true, true]);
+ok('Danach kommt keine mehr doppelt',
+   count(array_unique(array_column($auswahl, 'name'))) === count($auswahl));
+ok('Jede traegt ein Sinnbild',
+   array_filter($auswahl, static fn ($x) => $x['flag'] === '') === []);
+
+/*
+ * Die Kuerzel steuern im Lueckentext die Sonderzeichenreihe. Sie kommen aus
+ * derselben Liste - sonst haette eine Sprache im Auswahlfeld gestanden und
+ * im Lueckentext keine Tastaturhilfe gehabt.
+ */
+ok('Das Kuerzel kommt aus derselben Liste',
+   language_code('', 'Schwedisch') === 'sv' && language_code('', 'Latein') === 'la');
+ok('Auch ohne Umlaute geschrieben',
+   language_code('', 'Franzoesisch') === 'fr' && language_code('', 'Daenisch') === 'da');
+
 section('Kurs anlegen');
 
 /*
@@ -3380,6 +3459,7 @@ section('Kurs anlegen');
  */
 
 require_once __DIR__ . '/../lib/roster.php';
+require_once __DIR__ . '/../lib/worldlanguages.php';
 
 $res = teacherGet('classes.php');
 preg_match('/name="csrf" value="([a-f0-9]+)"/', $res['body'], $km);
@@ -3405,16 +3485,50 @@ ok('Mit zwei Kindern darin',
 $res = teacherGet('index.php');
 ok('Die Uebersicht bietet das Anlegen an', str_contains($res['body'], 'name="create_course"'));
 
+/*
+ * Das Formular selbst. Was das Skript daraus macht - ein durchsuchbares
+ * Feld, der Name als Text mit Stift - laesst sich von hier aus nicht
+ * ausfuehren; geprueft wird, dass die Bausteine da sind, auf denen es
+ * aufsetzt. Ohne sie faellt es auf ein gewoehnliches Auswahlfeld zurueck,
+ * und auch das muss bedienbar bleiben.
+ */
+ok('Die Sprachen stehen als Auswahlfeld im HTML',
+   substr_count($res['body'], 'data-flag=') > 80,
+   substr_count($res['body'], 'data-flag=') . ' Eintraege');
+ok('Die fuenf Schulsprachen sind als solche gekennzeichnet',
+   substr_count($res['body'], 'data-top="1"') === 5,
+   substr_count($res['body'], 'data-top="1"') . ' statt 5');
+ok('Es gibt kein Feld fuer die Flagge mehr',
+   !str_contains($res['body'], 'name="flag"'));
+ok('Der Kursname steht als Text da',
+   str_contains($res['body'], 'data-coursename'));
+ok('Mit einem Stift daneben', str_contains($res['body'], 'data-editname'));
+ok('Und das Namensfeld ist zunaechst verborgen',
+   preg_match('/<input type="text" name="name"[^>]*hidden/', $res['body']) === 1);
+ok('Die Klassen tragen ihren Namen fuer den Vorschlag mit',
+   preg_match('/<option value="\d+" data-name="/', $res['body']) === 1);
+ok('Das Skript wird geladen', str_contains($res['body'], 'teacher.js?v='));
+
+$skript = http($base . '/teacher/teacher.js');
+ok('Und ist abrufbar', $skript['status'] === 200, 'Status ' . $skript['status']);
+ok('Es kennt beide Schreibweisen ohne Umlaute',
+   str_contains($skript['body'], 'ohnePunkte') && str_contains($skript['body'], 'ausgeschrieben'),
+   'sonst findet "danisch" kein Daenisch');
+
+/*
+ * Ohne Flagge im Formular: Die kommt aus der Sprachliste. Eine Flagge ist
+ * eine Eigenschaft der Sprache und keine Entscheidung, die eine Lehrkraft
+ * treffen soll.
+ */
 $res = teacherRequest($base . '/teacher/index.php', [
     'create_course' => '1',
     'language'      => 'Englisch',
-    'flag'          => '🇬🇧',
     'class_id'      => $kursKlasseId,
     'csrf'          => $lehrerCsrf,
 ]);
-$neuerKurs = q1('SELECT * FROM courses WHERE name = ?', ['Englisch ' . $kursKlasse]);
-ok('Der Kurs heisst nach Sprache und Klasse', $neuerKurs !== null,
-   'Englisch ' . $kursKlasse . ' nicht gefunden');
+$neuerKurs = q1('SELECT * FROM courses WHERE name = ?', ['Englisch - ' . $kursKlasse]);
+ok('Der Kurs heisst "Sprache - Klasse"', $neuerKurs !== null,
+   'Englisch - ' . $kursKlasse . ' nicht gefunden');
 
 $neuerKursId = (int) ($neuerKurs['id'] ?? 0);
 ok('Er haengt an der Klasse',
@@ -3427,9 +3541,10 @@ $eigeneSprache = q1('SELECT * FROM languages WHERE id = ?',
                     [(int) ($neuerKurs['language_id'] ?? 0)]);
 ok('Zum Kurs gehoert eine eigene Sprache',
    ($eigeneSprache['name'] ?? '') === 'Englisch');
-ok('Mit Flagge und automatischem Kuerzel',
-   ($eigeneSprache['flag_emoji'] ?? '') === '🇬🇧' && ($eigeneSprache['code'] ?? '') === 'en',
-   ($eigeneSprache['code'] ?? '-'));
+ok('Flagge und Kuerzel kommen aus der Sprachliste',
+   ($eigeneSprache['flag_emoji'] ?? '') === language_flag('Englisch')
+   && ($eigeneSprache['code'] ?? '') === 'en',
+   ($eigeneSprache['flag_emoji'] ?? '-') . ' / ' . ($eigeneSprache['code'] ?? '-'));
 
 /*
  * Die Besetzung: Lehrkraft als Lehrkraft, die Kinder der Klasse als

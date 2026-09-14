@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/worldlanguages.php';
 
 /**
  * Sprachkürzel (fr, en, la, da ...).
@@ -15,15 +16,36 @@ require_once __DIR__ . '/db.php';
  * API-Endpunkt laden.
  */
 
-/** Name der Sprache (klein geschrieben) => Kürzel. */
-const LANGUAGE_CODES = [
-    'englisch' => 'en', 'französisch' => 'fr', 'franzoesisch' => 'fr',
-    'latein' => 'la', 'dänisch' => 'da', 'daenisch' => 'da',
-    'spanisch' => 'es', 'italienisch' => 'it', 'niederländisch' => 'nl',
-    'niederlaendisch' => 'nl', 'schwedisch' => 'sv', 'norwegisch' => 'no',
-    'türkisch' => 'tr', 'tuerkisch' => 'tr', 'russisch' => 'ru',
-    'polnisch' => 'pl', 'portugiesisch' => 'pt', 'griechisch' => 'el',
-];
+/**
+ * Name der Sprache (klein geschrieben) => Kürzel.
+ *
+ * Abgeleitet aus lib/worldlanguages.php, damit beide Listen nicht
+ * auseinanderlaufen: Was im Auswahlfeld steht, bekommt auch sein Kürzel und
+ * damit die Sonderzeichenreihe im Lückentext.
+ *
+ * Dazu je eine Schreibweise ohne Umlaute. Wer "Franzoesisch" eintippt, meint
+ * dasselbe, und die Datenbank soll darüber nicht nachdenken müssen.
+ */
+function language_codes(): array
+{
+    static $karte = null;
+    if ($karte !== null) {
+        return $karte;
+    }
+
+    $karte = [];
+    foreach (world_languages() as $name => [$code, $_flag]) {
+        $klein = mb_strtolower($name);
+        $karte[$klein] = $code;
+
+        $ascii = strtr($klein, ['ä' => 'ae', 'ö' => 'oe', 'ü' => 'ue', 'ß' => 'ss']);
+        if ($ascii !== $klein) {
+            $karte[$ascii] = $code;
+        }
+    }
+
+    return $karte;
+}
 
 /**
  * Kürzel aus dem Namen ableiten, wenn die App keines mitschickt.
@@ -35,14 +57,14 @@ function language_code(string $sent, string $name): ?string
     if (preg_match('/^[a-z]{2,3}$/', $code) === 1) {
         return $code;
     }
-    return LANGUAGE_CODES[mb_strtolower(trim($name))] ?? null;
+    return language_codes()[mb_strtolower(trim($name))] ?? null;
 }
 
 /** Kürzel => Liste der Namen, die darauf führen. */
 function language_codes_by_code(): array
 {
     $nach = [];
-    foreach (LANGUAGE_CODES as $name => $code) {
+    foreach (language_codes() as $name => $code) {
         $nach[$code][] = $name;
     }
     return $nach;
@@ -84,7 +106,7 @@ function language_code_backfill_pending(): bool
 {
     $namen = implode(', ', array_map(
         static fn (string $n): string => "'" . str_replace("'", "''", $n) . "'",
-        array_keys(LANGUAGE_CODES),
+        array_keys(language_codes()),
     ));
 
     return (int) qv(

@@ -398,3 +398,62 @@ tr.flagged > td {
     font-weight: 600;
     white-space: nowrap;
 }
+
+/* ---------------------------------------------------------- Sprachauswahl
+ *
+ * Ein durchsuchbares Auswahlfeld. Ein <select> mit hundert Eintraegen laesst
+ * sich nicht durchsuchen, und die fuenf Sprachen, die an einer Schule
+ * tatsaechlich vorkommen, sollen oben stehen und nicht zwischen Abchasisch
+ * und Zulu liegen.
+ */
+.picker { position: relative; margin-bottom: 14px; }
+
+.pickbtn {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%; min-height: 44px;
+    padding: 8px 12px;
+    font: inherit; text-align: left;
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+.pickbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pickbtn .picklabel { flex: 1 1 auto; }
+.pickbtn .pickchev  { color: var(--text-soft); }
+.pickflag { font-size: 1.15em; line-height: 1; }
+
+.pickpanel {
+    position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px);
+    background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+.picksearch {
+    width: 100%; margin: 0; border: 0; border-bottom: 1px solid var(--border);
+    border-radius: 0; min-height: 42px;
+}
+.picksearch:focus { outline: none; }
+
+.picklist { list-style: none; margin: 0; padding: 4px 0; max-height: 320px; overflow-y: auto; }
+.picklist li {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 12px; cursor: pointer;
+}
+.picklist li.on { background: var(--accent); color: var(--accent-text); }
+.picklist li.picksep {
+    padding: 0; margin: 4px 0; height: 1px; background: var(--border); cursor: default;
+}
+.picklist li.pickempty {
+    color: var(--text-soft); font-size: .88rem; cursor: default; display: block;
+}
+
+/* Der Kursname steht als Text da und wird erst auf Wunsch zum Feld. */
+.coursename { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.coursename strong { font-size: 1.05rem; }
+.coursename input { margin: 0; flex: 1 1 auto; }
+.coursename .iconbtn {
+    background: none; border: 0; cursor: pointer; padding: 4px 6px;
+    font-size: 1rem; color: var(--text-soft); line-height: 1;
+}
+.coursename .iconbtn:hover { color: var(--accent); }

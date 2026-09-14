@@ -142,7 +142,9 @@ function course_create(
 
     $name = trim(preg_replace('/\s+/u', ' ', $courseName) ?? $courseName);
     if ($name === '') {
-        $name = trim($languageName . ' ' . (string) ($klasse['name'] ?? ''));
+        $name = $klasse === null
+            ? $languageName
+            : $languageName . ' - ' . (string) $klasse['name'];
     }
     $name = mb_substr($name, 0, 128);
 
