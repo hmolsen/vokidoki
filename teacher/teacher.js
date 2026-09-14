@@ -104,6 +104,7 @@ function initLanguagePicker(root) {
         if (gefiltert.length === 0) {
             list.innerHTML = '<li class="pickempty">Nichts gefunden - '
                 + 'der Name lässt sich auch frei eintragen.</li>';
+            if (!panel.hidden) platzieren();
             return;
         }
 
@@ -122,6 +123,49 @@ function initLanguagePicker(root) {
 
         const el = list.querySelector('.on');
         if (el) el.scrollIntoView({ block: 'nearest' });
+
+        // Beim Filtern schrumpft die Liste - dann muss das Panel neu sitzen,
+        // sonst klebt es mit einem Eintrag darin noch in voller Hoehe da.
+        if (!panel.hidden) platzieren();
+    };
+
+    /*
+     * Das Panel liegt fest im Fenster, nicht im Fluss der Seite.
+     *
+     * Der Grund ist die Tabelle: Sie traegt overflow: hidden fuer ihre
+     * runden Ecken, und das schneidet jedes Kind ab, das darueber
+     * hinausragt. In der letzten Zeile - genau dort steht das Feld - war
+     * die Liste damit halb weg. Ein festes Panel kennt keinen Vorfahren,
+     * der es kappen koennte; dafuer muss die Lage von Hand nachgefuehrt
+     * werden.
+     */
+    const platzieren = () => {
+        const r     = btn.getBoundingClientRect();
+        const rand  = 8;
+        const breit = Math.max(r.width, 240);
+
+        // Erst die Breite, dann messen: Die Hoehe haengt daran, wie viele
+        // Eintraege umbrechen.
+        panel.style.width = `${breit}px`;
+        panel.style.left  = `${Math.max(rand, Math.min(r.left, window.innerWidth - breit - rand))}px`;
+
+        const hoch = panel.offsetHeight || 300;
+
+        // Passt es nach unten? Sonst darueber. Ein Feld am unteren Rand
+        // klappt sonst aus dem Fenster heraus.
+        const unten    = window.innerHeight - r.bottom;
+        const nachOben = unten < hoch + rand && r.top > unten;
+
+        if (nachOben) {
+            panel.style.top = `${Math.max(rand, r.top - hoch - 4)}px`;
+        } else {
+            panel.style.top = `${r.bottom + 4}px`;
+        }
+
+        // Nie hoeher als der Platz, der da ist - sonst laeuft die Liste
+        // unten aus dem Fenster.
+        const platz = nachOben ? r.top - rand - 4 : unten - rand - 4;
+        list.style.maxHeight = `${Math.max(120, Math.min(320, platz - 46))}px`;
     };
 
     const oeffnen = () => {
@@ -130,12 +174,20 @@ function initLanguagePicker(root) {
         search.value = '';
         aktiv = Math.max(0, options.findIndex((o) => o.name === select.value));
         zeichnen();
+        platzieren();
         search.focus();
+
+        // Beim Scrollen mitgehen. Das dritte Argument faengt auch Scrollen
+        // in einem Kasten innerhalb der Seite ab, nicht nur am Fenster.
+        window.addEventListener('scroll', platzieren, true);
+        window.addEventListener('resize', platzieren);
     };
 
     const schliessen = () => {
         panel.hidden = true;
         btn.setAttribute('aria-expanded', 'false');
+        window.removeEventListener('scroll', platzieren, true);
+        window.removeEventListener('resize', platzieren);
     };
 
     const waehlen = (i) => {

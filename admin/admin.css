@@ -422,8 +422,20 @@ tr.flagged > td {
 .pickbtn .pickchev  { color: var(--text-soft); }
 .pickflag { font-size: 1.15em; line-height: 1; }
 
+/*
+ * Das Panel haengt an keinem Vorfahren mehr - position: fixed.
+ *
+ * Mit "absolute" schnitt es die Tabelle ab: table.data traegt
+ * overflow: hidden fuer die runden Ecken, und ein Kind, das darueber
+ * hinausragt, wird dort gekappt. In der letzten Zeile - genau dort, wo
+ * das Auswahlfeld steht - war die Liste damit halb verschwunden.
+ *
+ * Ort und Breite setzt teacher.js beim Oeffnen aus der Lage des Knopfes.
+ * Ohne JavaScript klappt das Feld ohnehin nicht auf; dann bleibt das
+ * gewoehnliche <select> stehen.
+ */
 .pickpanel {
-    position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px);
+    position: fixed; z-index: 200;
     background: var(--surface);
     border: 1px solid var(--border); border-radius: var(--radius-sm);
     box-shadow: var(--shadow);

@@ -3629,6 +3629,23 @@ ok('Es kennt beide Schreibweisen ohne Umlaute',
    'sonst findet "danisch" kein Daenisch');
 
 /*
+ * Die aufgeklappte Liste darf die Tabelle nicht abschneiden.
+ *
+ * table.data traegt overflow: hidden fuer die runden Ecken - ein Kind mit
+ * position: absolute wird dort gekappt, und das Auswahlfeld steht
+ * ausgerechnet in der letzten Zeile. Mit position: fixed haengt das Panel
+ * an keinem Vorfahren mehr; dafuer muss seine Lage von Hand gesetzt werden.
+ */
+$pickerCss = (string) file_get_contents(__DIR__ . '/../admin/admin.css');
+ok('Die aufgeklappte Liste haengt nicht in der Tabelle',
+   preg_match('/\.pickpanel\s*\{[^}]*position:\s*fixed/s', $pickerCss) === 1,
+   'mit position: absolute schneidet die Tabelle sie ab');
+ok('Und das Skript setzt ihre Lage',
+   str_contains($skript['body'], 'getBoundingClientRect')
+   && str_contains($skript['body'], "addEventListener('scroll'"),
+   'ein festes Panel muss beim Scrollen mitgefuehrt werden');
+
+/*
  * Ohne Flagge im Formular: Die kommt aus der Sprachliste. Eine Flagge ist
  * eine Eigenschaft der Sprache und keine Entscheidung, die eine Lehrkraft
  * treffen soll.
