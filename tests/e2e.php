@@ -265,14 +265,20 @@ $res = http($base . '/admin/selfcheck.php');
 ok('Selbsttest meldet keine Fehler bei DB und Schema',
    str_contains($res['body'], 'Tabellen vorhanden'));
 
-// Zweites Kind anlegen - damit prüft der Test weiter unten die Trennung der Accounts.
+/*
+ * Zweites Kind anlegen - damit prüft der Test weiter unten die Trennung der
+ * Accounts. Die Schule ist beim Anlegen Pflicht: Ohne sie sieht das Konto
+ * nichts, weil Sichtbarkeit über die Kursmitgliedschaft läuft.
+ */
 q("DELETE FROM users WHERE username = 'e2e_other'");
+$testSchule = (int) qv('SELECT school_id FROM users WHERE id = ?', [$userId]);
 $res = adminPost('users.php', [
     'create'       => '1',
     'username'     => 'e2e_other',
     'display_name' => 'Zweitkind',
     'password'     => 'geheim123',
     'color'        => '#4f7cff',
+    'school_id'    => $testSchule,
 ]);
 $otherId = (int) qv("SELECT id FROM users WHERE username = 'e2e_other'");
 ok('Admin legt einen zweiten Account an', $otherId > 0);
@@ -781,8 +787,16 @@ ok('Und beim ersten Fehlschlag wird abgebrochen',
    preg_match('/catch \(Throwable \$e\) \{.*?break;/s', $schemaQuelle) === 1,
    'sonst arbeitete sich der Lauf durch Folgefehler');
 
-// Einen offenen Stand herstellen und ueber die Oberflaeche ausfuehren.
-q("DELETE FROM settings WHERE k LIKE 'schema_applied_family.%'");
+/*
+ * Einen offenen Stand herstellen und ueber die Oberflaeche ausfuehren.
+ *
+ * Genommen wird dafuer die Saat der Passwortwoerter: Sie steht auf jeder
+ * Installation aus, sobald man ihren Merker entfernt, und ein zweiter Lauf
+ * schadet nicht (INSERT IGNORE). Die family-Aenderungen taugen dafuer nicht
+ * mehr - die melden sich nur noch, wenn wirklich Altbestand da ist, und auf
+ * einer sauberen Installation waere dieser Abschnitt sonst grundlos rot.
+ */
+q("DELETE FROM settings WHERE k = 'schema_applied_password_words.seed'");
 settings_reset_cache();
 $offen       = schema_pending();
 $offenVorher = count($offen);
@@ -1897,7 +1911,7 @@ ok('Und ist zugeklappt', !preg_match('/<details class="colorpick" open/', $res['
 
 // Eine Farbe aus dem Feld setzen.
 $farbe = color_palette()[40];
-adminPost('users.php', ['update' => '1', 'id' => $userId,
+adminPost('users.php', ['update' => '1', 'id' => $userId, 'school_id' => $testSchule,
                         'display_name' => 'Testkind', 'color' => $farbe, 'active' => '1']);
 ok('Gewählte Farbe wird gespeichert',
    qv('SELECT color FROM users WHERE id = ?', [$userId]) === $farbe,
@@ -1908,7 +1922,7 @@ ok('Und ist im Feld als gewählt markiert',
    str_contains($res['body'], 'value="' . $farbe . '" checked'));
 
 // Unsinn darf nicht durchrutschen.
-adminPost('users.php', ['update' => '1', 'id' => $userId,
+adminPost('users.php', ['update' => '1', 'id' => $userId, 'school_id' => $testSchule,
                         'display_name' => 'Testkind', 'color' => 'rot; drop table', 'active' => '1']);
 ok('Ungültige Farbe wird abgefangen',
    preg_match('/^#[0-9a-f]{6}$/', (string) qv('SELECT color FROM users WHERE id = ?', [$userId])) === 1,
@@ -2577,6 +2591,185 @@ q('DELETE FROM languages WHERE id IN (?, ?)', [$freiLang, $fremdLang]);
 q('DELETE FROM schools WHERE id = ?', [$fremdeSchule3]);
 @unlink($lehrJar);
 @unlink($freiJar);
+
+section('Schulen im Admin');
+
+/*
+ * Die Schule ist der erste Schritt einer Installation, nicht der letzte.
+ * Ohne sie sieht ein Konto nichts: Lerneinheiten haengen an Kursen, Kurse an
+ * Schulen.
+ */
+
+$schulQuelle = (string) file_get_contents(__DIR__ . '/../admin/_boot.php');
+ok('Die Schulen stehen im Admin-Menue',
+   str_contains($schulQuelle, "'schools.php'   => 'Schulen'"));
+
+/*
+ * "Familie" ist ein Rettungsweg, kein Bestandteil des Modells.
+ *
+ * Frueher legte die Schemapflege sie immer an - auch auf einer frischen
+ * Installation, wo sie nichts zu retten hatte und nur ein Posten war, den
+ * jemand wieder wegraeumen muss. Sie entsteht nur noch, wo wirklich Bestand
+ * aus der Zeit vor den Kursen liegt, und das Kennzeichen dafuer ist eine
+ * Sprache ohne Kurs.
+ */
+require_once __DIR__ . '/../lib/schema.php';
+
+$schemaQuelle2 = (string) file_get_contents(__DIR__ . '/../lib/schema.php');
+ok('Die Ueberfuehrung haengt an echtem Altbestand',
+   preg_match("/'family\.school' => \[.*?schema_has_legacy_data\(\)/s", $schemaQuelle2) === 1,
+   'family.school laeuft unbedingt');
+
+$familyGates = preg_match_all("/'family\.(?!school')[a-z_]+' => \[/", $schemaQuelle2);
+// Ohne das vorangestellte "!" - das steht in der Bedingung von family.school
+// selbst und meint das Gegenteil.
+$familyKette = preg_match_all("/(?<!!)schema_was_applied\('family\.school'\)/", $schemaQuelle2);
+ok('Und die uebrigen Schritte haengen an ihr',
+   $familyGates > 0 && $familyKette === $familyGates,
+   $familyKette . ' von ' . $familyGates . ' abgesichert');
+
+// Auf einer Datenbank ohne verwaiste Sprachen darf nichts davon anspringen.
+$verwaist = (int) qv('SELECT COUNT(*) FROM languages l
+                       WHERE NOT EXISTS (SELECT 1 FROM courses co WHERE co.language_id = l.id)');
+if ($verwaist === 0) {
+    ok('Ohne Altbestand meldet sich die Ueberfuehrung gar nicht',
+       !schema_has_legacy_data());
+} else {
+    // Die Entwicklungsdatenbank traegt Reste frueherer Laeufe. Dann wird
+    // wenigstens die Aussage selbst geprueft, statt sie zu ueberspringen.
+    ok('Der Altbestand wird an verwaisten Sprachen erkannt',
+       schema_has_legacy_data(), $verwaist . ' verwaiste Sprachen');
+}
+
+$seite = http($base . '/admin/schools.php')['body'];
+ok('Die Seite laedt', str_contains($seite, 'Schule anlegen'));
+
+$schulName = 'Testschule ' . bin2hex(random_bytes(3));
+$res = adminPost('schools.php', ['create' => '1', 'name' => $schulName]);
+ok('Eine Schule laesst sich anlegen', str_contains($res['body'], 'angelegt'));
+
+$neueSchule = (int) qv('SELECT id FROM schools WHERE name = ?', [$schulName]);
+ok('Und steht in der Datenbank', $neueSchule > 0);
+
+$res = adminPost('schools.php', ['create' => '1', 'name' => $schulName]);
+ok('Zweimal derselbe Name geht nicht', str_contains($res['body'], 'gibt es schon'));
+
+// Umbenennen und ein eigenes Monatslimit setzen.
+$res = adminPost('schools.php', [
+    'update' => '1', 'id' => $neueSchule,
+    'name'   => $schulName . ' II', 'cap' => '3,50', 'active' => '1',
+]);
+ok('Der Name laesst sich aendern',
+   qv('SELECT name FROM schools WHERE id = ?', [$neueSchule]) === $schulName . ' II');
+ok('Und ein eigenes Monatslimit setzen',
+   abs((float) qv('SELECT monthly_cost_cap_usd FROM schools WHERE id = ?', [$neueSchule]) - 3.5)
+   < 0.001,
+   (string) qv('SELECT monthly_cost_cap_usd FROM schools WHERE id = ?', [$neueSchule]));
+
+/*
+ * Leeres Feld heisst "kein eigenes Limit" und nicht "null Dollar". Der
+ * Unterschied ist erheblich: NULL laesst nur das Budget des Betreibers
+ * greifen, 0.00 sperrte die Schule sofort aus.
+ */
+adminPost('schools.php', [
+    'update' => '1', 'id' => $neueSchule,
+    'name'   => $schulName . ' II', 'cap' => '', 'active' => '1',
+]);
+ok('Ein leeres Limit bedeutet "keines", nicht "null"',
+   qv('SELECT monthly_cost_cap_usd FROM schools WHERE id = ?', [$neueSchule]) === null);
+
+// Ein Konto haengt dran - dann wird nicht geloescht.
+$schulKind = makeUser('e2e_schulkind', 'Schulkind');
+q('UPDATE users SET school_id = ? WHERE id = ?', [$neueSchule, $schulKind]);
+
+$res = adminPost('schools.php', ['delete' => $neueSchule]);
+ok('Eine Schule mit Konten wird nicht geloescht',
+   q1('SELECT id FROM schools WHERE id = ?', [$neueSchule]) !== null
+   && str_contains($res['body'], 'Nicht gelöscht'));
+
+q('DELETE FROM users WHERE id = ?', [$schulKind]);
+$res = adminPost('schools.php', ['delete' => $neueSchule]);
+ok('Eine leere Schule dagegen schon',
+   q1('SELECT id FROM schools WHERE id = ?', [$neueSchule]) === null);
+
+// ---- Konten werden beim Anlegen einer Schule zugeordnet.
+
+$zuordSchule = 'Zuordnung ' . bin2hex(random_bytes(3));
+adminPost('schools.php', ['create' => '1', 'name' => $zuordSchule]);
+$zuordId = (int) qv('SELECT id FROM schools WHERE name = ?', [$zuordSchule]);
+
+$lehrName = 'e2e_lehr_' . bin2hex(random_bytes(3));
+$res = adminPost('users.php', [
+    'create'       => '1',
+    'username'     => $lehrName,
+    'display_name' => 'Frau Zuordnung',
+    'password'     => 'start12345',
+    'color'        => '#4f7cff',
+    'school_id'    => $zuordId,
+    'role'         => 'teacher',
+]);
+$neuerLehrer = q1('SELECT * FROM users WHERE username = ?', [$lehrName]);
+ok('Eine Lehrkraft laesst sich mit Schule anlegen',
+   $neuerLehrer !== null && (int) $neuerLehrer['school_id'] === $zuordId,
+   var_export($neuerLehrer['school_id'] ?? null, true));
+ok('Und zwar gleich als Lehrkraft', ($neuerLehrer['role'] ?? '') === 'teacher');
+ok('Lehrkraefte duerfen einlesen, ohne dass jemand daran denkt',
+   (int) ($neuerLehrer['can_import'] ?? 0) === 1);
+
+// Ohne Schule wird abgelehnt statt ein Konto anzulegen, das nichts sieht.
+$ohneName = 'e2e_ohne_' . bin2hex(random_bytes(3));
+$res = adminPost('users.php', [
+    'create'       => '1',
+    'username'     => $ohneName,
+    'display_name' => 'Ohne Schule',
+    'password'     => 'start12345',
+    'color'        => '#4f7cff',
+    'school_id'    => '0',
+]);
+ok('Ein Konto ohne Schule wird abgelehnt',
+   q1('SELECT id FROM users WHERE username = ?', [$ohneName]) === null
+   && str_contains($res['body'], 'Schule'));
+
+/*
+ * Und die Abschottung: Eine Lehrkraft sieht ausschliesslich ihre Schule.
+ */
+$fremdKurs = (int) course_for_language($languageId)['id'];
+$fremdSchuleId = (int) qv('SELECT school_id FROM courses WHERE id = ?', [$fremdKurs]);
+ok('Der Testkurs gehoert einer anderen Schule', $fremdSchuleId !== $zuordId);
+
+$absJar = tempnam(sys_get_temp_dir(), 'vtabs');
+$absBody = (function () use ($base, $absJar, $lehrName, $fremdKurs): string {
+    $ch = curl_init($base . '/teacher/');
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_COOKIEJAR => $absJar,
+                            CURLOPT_COOKIEFILE => $absJar, CURLOPT_TIMEOUT => 30]);
+    $seite = (string) curl_exec($ch);
+    curl_close($ch);
+    preg_match('/name="csrf" value="([a-f0-9]+)"/', $seite, $m);
+
+    foreach ([['teacher_login' => '1', 'username' => $lehrName,
+               'password' => 'start12345', 'csrf' => $m[1] ?? ''], null] as $post) {
+        $ch = curl_init($base . ($post === null
+            ? '/teacher/course.php?id=' . $fremdKurs : '/teacher/index.php'));
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_COOKIEJAR => $absJar,
+                                CURLOPT_COOKIEFILE => $absJar, CURLOPT_FOLLOWLOCATION => true,
+                                CURLOPT_TIMEOUT => 30]);
+        if ($post !== null) {
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post));
+        }
+        $antwort = (string) curl_exec($ch);
+        curl_close($ch);
+    }
+    return $antwort;
+})();
+
+ok('Ein Kurs einer fremden Schule bleibt der Lehrkraft verschlossen',
+   !str_contains($absBody, 'Wer im Kurs ist'),
+   'die Kursansicht war sichtbar');
+
+q('DELETE FROM users WHERE id = ?', [(int) $neuerLehrer['id']]);
+q('DELETE FROM schools WHERE id = ?', [$zuordId]);
+@unlink($absJar);
 
 section('Die Unterlagen gehoeren dem Kurs, nicht einem Konto');
 

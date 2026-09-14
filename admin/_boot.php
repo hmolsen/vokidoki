@@ -221,6 +221,7 @@ function admin_head(string $title, string $active): void
 {
     $nav = [
         'index.php'     => 'Kosten',
+        'schools.php'   => 'Schulen',
         'users.php'     => 'Accounts',
         'vocab.php'     => 'Vokabeln',
         'sentences.php' => 'Lückensätze',

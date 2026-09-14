@@ -36,6 +36,33 @@ function schema_was_applied(string $name): bool
 }
 
 /**
+ * Liegt hier noch Bestand aus der Zeit vor den Kursen?
+ *
+ * Die family-Änderungen sind ein Rettungsweg, kein Bestandteil des Modells:
+ * Sie überführen die Daten der alten Familien-App in eine Schule "Familie".
+ * Eine Neuinstallation hat davon nichts - dort legt der Betreiber seine
+ * Schule unter Admin > Schulen an, und eine still erzeugte "Familie" wäre
+ * nur ein Posten, den jemand wieder wegräumen muss.
+ *
+ * Das Kennzeichen ist eine Sprache ohne Kurs. Im neuen Modell entsteht der
+ * Kurs zusammen mit der Sprache; eine Sprache ohne ihn kann also nur aus der
+ * Zeit davor stammen. Die Frage "gibt es überhaupt Konten" taugt dafür
+ * nicht: Auf einer frischen Installation legt der Betreiber sein erstes
+ * Konto womöglich an, bevor er die Änderungen ausführt.
+ */
+function schema_has_legacy_data(): bool
+{
+    if (!table_exists('languages') || !table_exists('courses')) {
+        return false;
+    }
+
+    return (int) qv(
+        'SELECT COUNT(*) FROM languages l
+          WHERE NOT EXISTS (SELECT 1 FROM courses co WHERE co.language_id = l.id)'
+    ) > 0;
+}
+
+/**
  * Liste der Änderungen: Name => [Prüfung, SQL].
  * Die Prüfung liefert true, wenn die Änderung noch fehlt.
  */
@@ -334,6 +361,7 @@ function schema_migrations(): array
 
         'family.school' => [
             static fn (): bool => table_exists('schools')
+                && schema_has_legacy_data()
                 && !schema_was_applied('family.school'),
             "INSERT INTO schools (name)
              SELECT 'Familie' FROM DUAL
@@ -342,6 +370,7 @@ function schema_migrations(): array
 
         'family.class' => [
             static fn (): bool => table_exists('classes')
+                && schema_was_applied('family.school')
                 && !schema_was_applied('family.class'),
             "INSERT INTO classes (school_id, name)
              SELECT s.id, 'Familie' FROM schools s
@@ -357,6 +386,7 @@ function schema_migrations(): array
          */
         'family.users' => [
             static fn (): bool => column_exists('users', 'school_id')
+                && schema_was_applied('family.school')
                 && !schema_was_applied('family.users'),
             "UPDATE users
                 SET school_id  = (SELECT id FROM schools WHERE name = 'Familie'),
@@ -366,6 +396,7 @@ function schema_migrations(): array
 
         'family.class_members' => [
             static fn (): bool => table_exists('class_members')
+                && schema_was_applied('family.school')
                 && !schema_was_applied('family.class_members'),
             "INSERT IGNORE INTO class_members (class_id, user_id)
              SELECT c.id, u.id
@@ -378,6 +409,7 @@ function schema_migrations(): array
         'family.languages' => [
             static fn (): bool => column_exists('languages', 'school_id')
                 && column_exists('languages', 'user_id')
+                && schema_was_applied('family.school')
                 && !schema_was_applied('family.languages'),
             'UPDATE languages l
                JOIN users u ON u.id = l.user_id
@@ -395,6 +427,7 @@ function schema_migrations(): array
         'family.courses' => [
             static fn (): bool => table_exists('courses')
                 && column_exists('languages', 'user_id')
+                && schema_was_applied('family.school')
                 && !schema_was_applied('family.courses'),
             "INSERT INTO courses (school_id, class_id, language_id, name, created_by)
              SELECT l.school_id,
@@ -412,6 +445,7 @@ function schema_migrations(): array
         'family.course_members' => [
             static fn (): bool => table_exists('course_members')
                 && column_exists('languages', 'user_id')
+                && schema_was_applied('family.school')
                 && !schema_was_applied('family.course_members'),
             "INSERT IGNORE INTO course_members (course_id, user_id, member_role)
              SELECT co.id, l.user_id, 'student'
@@ -421,6 +455,7 @@ function schema_migrations(): array
 
         'family.units' => [
             static fn (): bool => column_exists('units', 'course_id')
+                && schema_was_applied('family.school')
                 && !schema_was_applied('family.units'),
             'UPDATE units t
                JOIN courses co ON co.language_id = t.language_id
@@ -434,6 +469,7 @@ function schema_migrations(): array
          */
         'family.released' => [
             static fn (): bool => column_exists('units', 'released_position')
+                && schema_was_applied('family.school')
                 && !schema_was_applied('family.released'),
             'UPDATE units SET released_position = 4294967295 WHERE released_position = 0',
         ],
@@ -454,6 +490,7 @@ function schema_migrations(): array
          */
         'family.ai_requests' => [
             static fn (): bool => column_exists('ai_requests', 'school_id')
+                && schema_was_applied('family.school')
                 && !schema_was_applied('family.ai_requests'),
             'UPDATE ai_requests a
                JOIN users u ON u.id = a.user_id

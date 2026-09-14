@@ -52,6 +52,23 @@ switch (action()) {
         }
 
         /*
+         * Ohne Schule geht es nicht weiter.
+         *
+         * Zur Sprache gehoert ein Kurs, und der haengt an der Schule.
+         * Entstuende die Sprache trotzdem, waere sie sofort eine Waise: fuer
+         * ihren eigenen Urheber unsichtbar, weil Sichtbarkeit ueber die
+         * Kursmitgliedschaft laeuft. Lieber hier abbrechen als eine Zeile
+         * anlegen, die niemand je wiedersieht.
+         */
+        if ((int) ($user['school_id'] ?? 0) === 0) {
+            json_fail(
+                'Dieses Konto gehört zu keiner Schule. Das muss im Admin-Bereich '
+                . 'zugeordnet werden, dann geht es weiter.',
+                409,
+            );
+        }
+
+        /*
          * Gibt es diese Sprache fuer dieses Konto schon?
          *
          * Gefragt wird ueber die Kurse, nicht ueber languages.user_id. Zwei
