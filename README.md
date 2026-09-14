@@ -386,10 +386,12 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-124 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Account-Anlage,
-Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon, Zugriffstrennung
-zwischen den Accounts, die komplette Quiz-Logik samt „dreimal hintereinander",
-Zurücksetzen und Token-Widerruf.
+664 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
+Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
+hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
+mit Klassen, Kursen, Massenanlage, Anfangspasswörtern, Anmeldebremse, QR-Code
+und Druckblatt, und die gestufte Freigabe.
 
 Der Test lässt sich auch gegen die fertige Installation fahren — er ist dafür
 gebaut, nichts zu hinterlassen, und der Abschnitt zur Bilderkennung überspringt
