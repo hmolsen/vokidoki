@@ -284,3 +284,119 @@ if (document.querySelector('[data-coursform]')) {
     initLanguagePicker(document);
     initCourseName(document);
 }
+
+// ------------------------------------------------------ Kinder nachtragen
+
+/**
+ * Ein Kind je Enter, ohne die Seite neu zu laden.
+ *
+ * Gedacht fuer den Fall, dass jemand mit einer Liste auf Papier davorsitzt:
+ * Namen tippen, Enter, naechster Name. Die neue Zeile kommt vom Server -
+ * Benutzername und Anfangspasswort entstehen dort, nicht hier -, wird
+ * eingehaengt, und der Fokus bleibt im Feld.
+ *
+ * Ohne JavaScript schickt dasselbe Formular ganz gewoehnlich ab: Die Seite
+ * laedt neu, die Zeile steht da, das Feld hat den Fokus. Dasselbe Ergebnis,
+ * nur langsamer.
+ */
+function initStudentAdd() {
+    const form = document.querySelector('form[data-addstudent]');
+    const zeile = document.getElementById('neuesKind');
+    if (!form || !zeile) return;
+
+    const feld = document.querySelector('input[name="student"][form="newstudent"]');
+    if (!feld) return;
+
+    const tabelle = zeile.parentNode;
+    let laeuft = false;
+
+    const melden = (text, art) => {
+        let box = document.getElementById('addmsg');
+        if (!box) {
+            box = document.createElement('div');
+            box.id = 'addmsg';
+            zeile.parentNode.parentNode.after(box);
+        }
+        box.className = text === '' ? '' : `notice ${art || ''}`;
+        box.textContent = text;
+    };
+
+    const einhaengen = (kind) => {
+        const tr = document.createElement('tr');
+        tr.className = 'hit';
+        tr.innerHTML = `
+            <td>
+                <span class="coursetitle">
+                    <span class="cflag">&#128100;</span>
+                    <span><strong></strong></span>
+                </span>
+            </td>
+            <td><code class="token"></code></td>
+            <td><code class="token"></code></td>
+            <td class="actions"></td>`;
+        // Die Werte als Text setzen, nicht als Markup - ein Name wie
+        // "N'Diaye <3" darf die Tabelle nicht zerlegen.
+        tr.querySelector('strong').textContent = kind.name;
+        tr.querySelectorAll('code')[0].textContent = kind.username;
+        tr.querySelectorAll('code')[1].textContent = kind.password;
+        tabelle.insertBefore(tr, zeile);
+    };
+
+    const senden = async () => {
+        const wert = feld.value.trim();
+        if (wert === '' || laeuft) return;
+
+        laeuft = true;
+        feld.disabled = true;
+        melden('');
+
+        try {
+            const daten = new FormData(form);
+            daten.set('student', wert);
+            daten.set('add_student', '1');
+
+            const res = await fetch(form.action, {
+                method: 'POST',
+                body: daten,
+                headers: { 'X-Requested-With': 'fetch' },
+                credentials: 'same-origin',
+            });
+            const json = await res.json();
+
+            if (!json.ok) {
+                melden(json.error || 'Das hat nicht geklappt.', 'bad');
+            } else {
+                einhaengen(json.kind);
+                feld.value = '';
+            }
+        } catch {
+            // Bei einem Netzfehler lieber der gewoehnliche Weg als eine
+            // Meldung, mit der niemand etwas anfangen kann.
+            melden('Keine Verbindung - die Seite wird neu geladen.', 'bad');
+            form.submit();
+            return;
+        } finally {
+            laeuft = false;
+            feld.disabled = false;
+            feld.focus();
+        }
+    };
+
+    // Enter im Feld schickt ab, ohne die Seite zu verlassen.
+    feld.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            senden();
+        }
+    });
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        senden();
+    });
+
+    // Der Knopf gehoert ueber form= zum Formular und loest damit submit aus.
+    feld.focus();
+}
+
+initStudentAdd();

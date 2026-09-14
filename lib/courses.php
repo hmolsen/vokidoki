@@ -413,6 +413,36 @@ function course_billing_user(?int $courseId): ?array
     );
 }
 
+/**
+ * Die Kurse einer Klasse.
+ *
+ * Klasse und Kurs sind zwei Seiten derselben Sache: Die Klasse sagt, wer
+ * zusammengehört, der Kurs, was sie lernen. Wer eine Klasse ansieht, will
+ * beides sehen und nicht dafür die Seite wechseln.
+ */
+function courses_for_class(int $classId): array
+{
+    return qa(
+        "SELECT co.*,
+                l.name AS language_name, l.flag_emoji,
+                (SELECT COUNT(*) FROM course_members m
+                  WHERE m.course_id = co.id AND m.member_role = 'student') AS students,
+                (SELECT COUNT(*) FROM units t WHERE t.course_id = co.id) AS units,
+                (SELECT COUNT(*) FROM vocab v
+                   JOIN units t ON t.id = v.unit_id
+                  WHERE t.course_id = co.id) AS vocab,
+                (SELECT COUNT(*) FROM vocab v
+                   JOIN units t ON t.id = v.unit_id
+                  WHERE t.course_id = co.id
+                    AND v.position < t.released_position) AS released
+           FROM courses co
+           JOIN languages l ON l.id = co.language_id
+          WHERE co.class_id = ?
+          ORDER BY co.name",
+        [$classId],
+    );
+}
+
 /** Ein Kurs, aber nur wenn er zur Schule dieser Lehrkraft gehört. */
 function course_in_school(int $courseId, int $schoolId): ?array
 {

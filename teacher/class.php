@@ -24,6 +24,86 @@ if ($klasse === null) {
 
 $zurück = 'class.php?id=' . $classId;
 
+/**
+ * Will der Aufrufer eine Zeile statt einer Seite?
+ *
+ * Das Formular funktioniert ohne JavaScript ganz gewöhnlich: abschicken,
+ * weiterleiten, neue Seite. Mit JavaScript wird daraus ein Zug - Namen
+ * tippen, Enter, nächster Name -, und dafür braucht es die frische Zeile
+ * als Antwort statt einer ganzen Seite.
+ */
+function will_json(): bool
+{
+    return ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'fetch';
+}
+
+function json_antwort(array $daten, int $status = 200): never
+{
+    http_response_code($status);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+    echo json_encode($daten, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+/*
+ * Ein Kind, einzeln. Der Weg für alles nach dem ersten Mal: Es kommt
+ * jemand dazu, und niemand will dafür eine Liste einfügen.
+ */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_student'])) {
+    teacher_csrf_check();
+
+    $eingabe = (string) ($_POST['student'] ?? '');
+    $namen   = roster_parse_names($eingabe);
+
+    if ($namen === []) {
+        if (will_json()) {
+            json_antwort(['ok' => false, 'error' => 'Da steht kein Name.'], 422);
+        }
+        teacher_flash('Da steht kein Name.', 'bad');
+        teacher_redirect($zurück);
+    }
+
+    $n       = $namen[0];
+    $anzeige = roster_display_name($n['first'], $n['initial']);
+
+    // Wer schon in der Klasse ist, wird nicht doppelt angelegt.
+    foreach (class_members_list($classId) as $m) {
+        if (mb_strtolower($m['display_name']) === mb_strtolower($anzeige)) {
+            if (will_json()) {
+                json_antwort(['ok' => false,
+                    'error' => sprintf('%s ist schon in der Klasse.', $anzeige)], 409);
+            }
+            teacher_flash(sprintf('%s ist schon in der Klasse.', $anzeige), 'bad');
+            teacher_redirect($zurück);
+        }
+    }
+
+    $konto = student_create($schoolId, $classId, $n['first'], $n['initial']);
+
+    if ($konto === null) {
+        if (will_json()) {
+            json_antwort(['ok' => false,
+                'error' => 'Das Konto liess sich nicht anlegen.'], 500);
+        }
+        teacher_flash('Das Konto liess sich nicht anlegen.', 'bad');
+        teacher_redirect($zurück);
+    }
+
+    if (will_json()) {
+        json_antwort(['ok' => true, 'kind' => [
+            'id'       => (int) $konto['id'],
+            'name'     => $konto['display_name'],
+            'username' => $konto['username'],
+            'password' => (string) $konto['initial_password'],
+        ]]);
+    }
+
+    $_SESSION['teacher_fresh'] = [(int) $konto['id']];
+    teacher_flash(sprintf('%s ist dabei.', $konto['display_name']));
+    teacher_redirect($zurück);
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_students'])) {
     teacher_csrf_check();
 
@@ -115,7 +195,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['reset_passwor
     teacher_redirect($zurück);
 }
 
-$kinder    = class_members_list($classId);
+$kinder    = array_values(array_filter(
+    class_members_list($classId),
+    static fn (array $m): bool => $m['role'] !== 'teacher',
+));
+$kurse     = courses_for_class($classId);
 $gesperrt  = login_locked_usernames(array_column($kinder, 'username'));
 $frisch    = array_flip((array) ($_SESSION['teacher_fresh'] ?? []));
 unset($_SESSION['teacher_fresh']);
@@ -128,20 +212,28 @@ teacher_flash_render();
     <a href="<?= h(teacher_url('classes.php')) ?>">zurück zu den Klassen</a>
 </p>
 
-<?php if ($kinder === []): ?>
-    <p class="muted">Noch niemand in dieser Klasse.</p>
-<?php else: ?>
-<table class="data">
+<h2>Kinder</h2>
+
+<table class="data courses" id="kinder">
     <tr>
-        <th>Name</th><th>Benutzername</th><th>Anfangspasswort</th><th class="actions"></th>
+        <th>Name</th>
+        <th>Benutzername</th>
+        <th>Anfangspasswort</th>
+        <th class="actions"></th>
     </tr>
+
     <?php foreach ($kinder as $k): ?>
         <tr<?= isset($frisch[(int) $k['id']]) ? ' class="hit"' : ($k['active'] ? '' : ' class="dim"') ?>>
             <td>
-                <?= h($k['display_name']) ?>
-                <?php if (isset($gesperrt[$k['username']])): ?>
-                    <span class="tiny" style="color:var(--bad)">&nbsp;gesperrt</span>
-                <?php endif; ?>
+                <span class="coursetitle">
+                    <span class="cflag">&#128100;</span>
+                    <span>
+                        <strong><?= h($k['display_name']) ?></strong>
+                        <?php if (isset($gesperrt[$k['username']])): ?>
+                            <span class="tiny" style="color:var(--bad)">gesperrt</span>
+                        <?php endif; ?>
+                    </span>
+                </span>
             </td>
             <td><code class="token"><?= h($k['username']) ?></code></td>
             <td>
@@ -152,7 +244,6 @@ teacher_flash_render();
                 <?php endif; ?>
             </td>
             <td class="actions">
-                <?php if ($k['role'] !== 'teacher'): ?>
                 <?php if (isset($gesperrt[$k['username']])): ?>
                 <form method="post" class="compact">
                     <?= teacher_csrf_field() ?>
@@ -169,10 +260,10 @@ teacher_flash_render();
                     <?php
                     /*
                      * Der Name steht in einem data-Attribut statt im
-                     * onclick-Text. Dort müsste er zugleich für JavaScript
-                     * und für HTML maskiert werden, und ein Kind namens
-                     * "N'Diaye" bricht so eine Verschachtelung zuverlässig
-                     * auf. h() allein genügt für ein Attribut.
+                     * onclick-Text. Dort muesste er zugleich fuer JavaScript
+                     * und fuer HTML maskiert werden, und ein Kind namens
+                     * "N'Diaye" bricht so eine Verschachtelung zuverlaessig
+                     * auf. h() allein genuegt fuer ein Attribut.
                      */
                     ?>
                     <button class="iconaction quiet" name="reset_password"
@@ -186,52 +277,157 @@ teacher_flash_render();
                    target="_blank" rel="noopener">
                     <span aria-hidden="true">&#128424;</span> Zettel
                 </a>
-                <?php endif; ?>
             </td>
         </tr>
     <?php endforeach; ?>
+
+    <?php
+    /*
+     * Die Zeile zum Hinzufuegen. Mit JavaScript wird daraus ein Zug: Namen
+     * tippen, Enter, naechster Name - die neue Zeile kommt als Antwort
+     * zurueck und wird eingehaengt, der Fokus bleibt im Feld. Ohne
+     * JavaScript schickt dasselbe Formular ganz gewoehnlich ab und die
+     * Seite laedt neu; das Ergebnis ist dasselbe, nur langsamer.
+     */
+    ?>
+    <tr class="newrow" id="neuesKind">
+        <td>
+            <span class="coursetitle">
+                <span class="cflag plus">+</span>
+                <input type="text" name="student" form="newstudent"
+                       placeholder="Fritz Brinkmann" maxlength="80" required
+                       aria-label="Name des Kindes"
+                       <?= $kinder === [] ? '' : 'autofocus' ?>>
+            </span>
+        </td>
+        <td colspan="2" class="tiny muted">
+            Name eintippen und Enter &ndash; Benutzername und Passwort
+            entstehen von selbst.
+        </td>
+        <td class="actions">
+            <button class="iconaction primary" form="newstudent"
+                    name="add_student" value="1" title="Kind hinzufügen">
+                <span aria-hidden="true">+</span> Hinzufügen
+            </button>
+        </td>
+    </tr>
 </table>
 
-<p>
-    <a class="btn" href="<?= h(teacher_url('print.php') . '?class=' . $classId) ?>"
-       target="_blank" rel="noopener">Zettel für die ganze Klasse</a>
-</p>
+<form method="post" id="newstudent" data-addstudent
+      action="<?= h(teacher_url('class.php') . '?id=' . $classId) ?>" hidden>
+    <?= teacher_csrf_field() ?>
+    <input type="hidden" name="class_id" value="<?= $classId ?>">
+</form>
 
 <p class="tiny muted">
-    Das Anfangspasswort steht hier im Klartext, damit sich das Anschreiben
+    <strong>Nachnamen werden nicht gespeichert.</strong> Du kannst „Fritz
+    Brinkmann" eintippen oder eine ganze Klassenliste einfügen &ndash;
+    gespeichert wird daraus nur „Fritz B.". Den Nachnamen wirft die Anwendung
+    beim Einlesen weg; er steht in keiner Tabelle und auf keinem Zettel. Ein
+    Vokabeltrainer muss die Kinder auseinanderhalten können, nicht wissen, wer
+    sie sind.
+</p>
+
+<?php if ($kinder !== []): ?>
+<p>
+    <a class="iconaction" href="<?= h(teacher_url('print.php') . '?class=' . $classId) ?>"
+       target="_blank" rel="noopener">
+        <span aria-hidden="true">&#128424;</span> Zettel für die ganze Klasse
+    </a>
+</p>
+<p class="tiny muted">
+    Das Anfangspasswort steht im Klartext, damit sich das Anschreiben
     nachdrucken lässt. Sobald ein Kind sein Passwort selbst ändert,
-    verschwindet es aus dieser Spalte. Den Text des Anschreibens legt der
-    Betreiber im Admin-Bereich fest.
+    verschwindet es aus der Spalte.
 </p>
 <?php endif; ?>
 
-<h2>Kinder hinzufügen</h2>
+<?php
+/*
+ * Die Liste am Stueck gibt es nur, solange die Klasse leer ist.
+ *
+ * Beim ersten Mal hat die Lehrkraft die Klassenliste vor sich und will sie
+ * in einem Zug hineinkopieren. Danach kommt jemand einzeln dazu, und dafuer
+ * ist die Zeile oben der kuerzere Weg - ein Textfeld mit 28 Namen darin
+ * waere dann nur noch im Weg.
+ */
+?>
+<?php if ($kinder === []): ?>
+<h2>Die ganze Klassenliste auf einmal</h2>
 
 <form method="post" class="card" style="max-width:560px">
     <?= teacher_csrf_field() ?>
     <input type="hidden" name="class_id" value="<?= $classId ?>">
-    <label for="names">Klassenliste, ein Name je Zeile</label>
+    <label for="names">Ein Name je Zeile</label>
     <textarea id="names" name="names" rows="12"
               placeholder="Lilli Molsen&#10;Schmidt, Anna-Lena&#10;Max"></textarea>
-    <button class="btn" name="add_students" value="1">Konten anlegen</button>
+    <button class="btn small" name="add_students" value="1">Konten anlegen</button>
+    <p class="tiny muted">
+        Einfach die Liste hineinkopieren, wie sie vorliegt &ndash; „Lilli
+        Molsen" und „Molsen, Lilli" werden beide verstanden. Wer schon in der
+        Klasse ist, wird übersprungen; die Liste lässt sich also gefahrlos ein
+        zweites Mal einfügen.
+    </p>
 </form>
+<?php endif; ?>
 
+<h2>Kurse dieser Klasse</h2>
+
+<?php if ($kurse === []): ?>
+    <p class="muted">
+        Diese Klasse lernt noch nichts. Einen Kurs legst du unter
+        <a href="<?= h(teacher_url('index.php')) ?>">Kurse</a> an &ndash; die
+        Kinder von hier kommen dann gleich mit hinein.
+    </p>
+<?php else: ?>
+<table class="data courses">
+    <tr>
+        <th>Kurs</th>
+        <th class="num">Kinder</th>
+        <th class="num">Lerneinheiten</th>
+        <th class="num">Freigegeben</th>
+        <th class="actions"></th>
+    </tr>
+    <?php foreach ($kurse as $c): ?>
+        <tr<?= $c['active'] ? '' : ' class="dim"' ?>>
+            <td>
+                <span class="coursetitle">
+                    <span class="cflag"><?= h($c['flag_emoji'] ?: "\u{1F310}") ?></span>
+                    <span>
+                        <strong><?= h($c['name']) ?></strong>
+                        <span class="tiny muted"><?= h($c['language_name']) ?></span>
+                    </span>
+                </span>
+            </td>
+            <td class="num"><?= (int) $c['students'] ?></td>
+            <td class="num"><?= (int) $c['units'] ?></td>
+            <td class="num">
+                <?php
+                $frei   = (int) $c['released'];
+                $gesamt = (int) $c['vocab'];
+                if ($gesamt === 0) {
+                    echo '<span class="muted">&ndash;</span>';
+                } elseif ($frei >= $gesamt) {
+                    printf('<span class="pill good">alle %d</span>', $gesamt);
+                } else {
+                    printf('<span class="pill">%d von %d</span>', $frei, $gesamt);
+                }
+                ?>
+            </td>
+            <td class="actions">
+                <a class="iconaction" title="Kurs öffnen"
+                   href="<?= h(teacher_url('course.php') . '?id=' . (int) $c['id']) ?>">
+                    <span aria-hidden="true">&#128214;</span> Öffnen
+                </a>
+            </td>
+        </tr>
+    <?php endforeach; ?>
+</table>
 <p class="tiny muted">
-    Einfach die Liste hineinkopieren, wie sie vorliegt - "Lilli Molsen" und
-    "Molsen, Lilli" werden beide verstanden. <strong>Der Nachname wird dabei
-    weggeworfen</strong> und gar nicht erst gespeichert; übrig bleibt
-    "Lilli M.". Benutzername und Anfangspasswort entstehen von selbst. Wer
-    schon in der Klasse ist, wird übersprungen - die Liste lässt sich also
-    gefahrlos ein zweites Mal einfügen.
+    Ein Kind ist in einem Kurs, weil es dort eingetragen ist &ndash; nicht,
+    weil es in dieser Klasse steht. Beim Anlegen eines Kurses wird die Klasse
+    übernommen; wer später dazukommt, wird im Kurs nachgetragen.
 </p>
-
-<script>
-// Rückfrage für alles, was ein data-confirm trägt. Ohne Zeilenweise-
-// onclick-Attribute, in denen ein Name mit Apostroph den Code zerlegt.
-document.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-confirm]');
-    if (b && !confirm(b.dataset.confirm)) e.preventDefault();
-});
-</script>
+<?php endif; ?>
 
 <?php teacher_foot(); ?>

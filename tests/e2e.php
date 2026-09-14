@@ -4069,6 +4069,126 @@ ok('Die Liste ein zweites Mal legt niemanden doppelt an',
 ok('Und sagt, dass übersprungen wurde', str_contains($res['body'], 'übersprungen'));
 
 /*
+ * Einzeln nachtragen - der Weg fuer alles nach dem ersten Mal.
+ *
+ * Mit JavaScript wird daraus ein Zug: Namen tippen, Enter, naechster Name.
+ * Dafuer antwortet der Endpunkt mit der frischen Zeile statt mit einer
+ * ganzen Seite. Ohne JavaScript schickt dasselbe Formular gewoehnlich ab;
+ * beide Wege werden hier gefahren.
+ */
+function kindAnlegen(int $klasseId, string $name, bool $alsJson): array
+{
+    global $base, $lehrerJar, $lehrerCsrf;
+
+    $ch = curl_init($base . '/teacher/class.php?id=' . $klasseId);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_COOKIEJAR      => $lehrerJar,
+        CURLOPT_COOKIEFILE     => $lehrerJar,
+        CURLOPT_FOLLOWLOCATION => !$alsJson,
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => http_build_query([
+            'add_student' => '1',
+            'class_id'    => $klasseId,
+            'student'     => $name,
+            'csrf'        => $lehrerCsrf,
+        ]),
+    ]);
+    if ($alsJson) {
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['X-Requested-With: fetch']);
+    }
+    $body   = (string) curl_exec($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    return ['status' => $status, 'body' => $body, 'json' => json_decode($body, true)];
+}
+
+$vorher = count(class_members_list($klasseId));
+$res = kindAnlegen($klasseId, 'Fritz Brinkmann', true);
+
+ok('Ein einzelnes Kind laesst sich nachtragen', $res['status'] === 200, 'Status ' . $res['status']);
+ok('Die Antwort ist die frische Zeile, keine ganze Seite',
+   ($res['json']['ok'] ?? false) === true && isset($res['json']['kind']),
+   substr($res['body'], 0, 120));
+/*
+ * Der Benutzername darf eine Ziffer tragen: Er ist ueber alle Schulen
+ * hinweg eindeutig, und ein zweiter "fritz.b" wird durchgezaehlt. Geprueft
+ * wird die Form, nicht ein fester Wert.
+ */
+ok('Mit Name, Benutzername und Anfangspasswort',
+   ($res['json']['kind']['name'] ?? '') === 'Fritz B.'
+   && preg_match('/^fritz\.b\d*$/', (string) ($res['json']['kind']['username'] ?? '')) === 1
+   && preg_match('/^\p{L}+ \p{L}+$/u', (string) ($res['json']['kind']['password'] ?? '')) === 1,
+   json_encode($res['json']['kind'] ?? null));
+ok('Und das Kind ist wirklich in der Klasse',
+   count(class_members_list($klasseId)) === $vorher + 1);
+
+// Derselbe Name ein zweites Mal legt niemanden doppelt an.
+$res = kindAnlegen($klasseId, 'Fritz Brinkmann', true);
+ok('Derselbe Name zweimal wird abgelehnt',
+   $res['status'] === 409 && ($res['json']['ok'] ?? true) === false,
+   'Status ' . $res['status']);
+ok('Und die Meldung sagt, warum',
+   str_contains((string) ($res['json']['error'] ?? ''), 'schon in der Klasse'));
+
+$res = kindAnlegen($klasseId, '   ', true);
+ok('Eine leere Eingabe wird abgelehnt', $res['status'] === 422, 'Status ' . $res['status']);
+
+/*
+ * Und ohne JavaScript: dasselbe Formular, gewoehnlich abgeschickt. Das ist
+ * kein Beiwerk - faellt das Skript aus, muss die Seite bedienbar bleiben.
+ */
+$vorher = count(class_members_list($klasseId));
+$res = kindAnlegen($klasseId, 'Greta Sommerfeld', false);
+ok('Ohne JavaScript geht derselbe Weg',
+   count(class_members_list($klasseId)) === $vorher + 1
+   && str_contains($res['body'], 'Greta S.'),
+   'Status ' . $res['status']);
+
+// Der Nachname darf auch hier nirgends ankommen.
+$spuren = (int) qv(
+    "SELECT COUNT(*) FROM users WHERE display_name LIKE '%Brinkmann%'
+                                   OR username LIKE '%brinkmann%'
+                                   OR display_name LIKE '%Sommerfeld%'"
+);
+ok('Die Nachnamen stehen nirgends in der Datenbank', $spuren === 0, $spuren . ' Spuren');
+
+// ---- Die Seite selbst.
+
+$res = teacherGet('class.php?id=' . $klasseId);
+ok('Die Kindertabelle hat eine Zeile zum Hinzufuegen',
+   str_contains($res['body'], 'id="neuesKind"'));
+ok('Das Feld gehoert ueber form= zum Formular',
+   str_contains($res['body'], 'form="newstudent"'));
+ok('Unter der Tabelle steht, dass Nachnamen nicht gespeichert werden',
+   str_contains($res['body'], 'Nachnamen werden nicht gespeichert'));
+ok('Die Klasse zeigt auch ihre Kurse',
+   str_contains($res['body'], 'Kurse dieser Klasse'));
+
+/*
+ * Das Textfeld fuer die ganze Liste gibt es nur, solange die Klasse leer
+ * ist. Danach waere ein Feld mit 28 Namen darin nur noch im Weg.
+ */
+ok('Bei gefuellter Klasse ist das grosse Textfeld weg',
+   !str_contains($res['body'], 'name="names"'));
+
+$leereKlasse = class_create((int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]),
+                            'Leer' . bin2hex(random_bytes(2)));
+$res = teacherGet('class.php?id=' . (int) $leereKlasse['id']);
+ok('Bei leerer Klasse ist es da', str_contains($res['body'], 'name="names"'));
+q('DELETE FROM classes WHERE id = ?', [(int) $leereKlasse['id']]);
+
+$skriptK = http($base . '/teacher/teacher.js');
+ok('Das Skript kennt den Enter-Weg',
+   str_contains($skriptK['body'], 'initStudentAdd')
+   && str_contains($skriptK['body'], "e.key === 'Enter'"));
+ok('Und setzt die Werte als Text, nicht als Markup',
+   str_contains($skriptK['body'], 'textContent = kind.name'),
+   'sonst zerlegt ein Name mit spitzer Klammer die Tabelle');
+
+/*
  * Ein gesperrtes Kind aufschliessen, ohne ihm ein neues Passwort zu geben.
  * Wer sich nur vertippt hat, soll weder warten noch abtippen muessen.
  */
@@ -4202,9 +4322,12 @@ ok('Und zwar die der App',
    var_export($qrGelesen, true) . ' statt ' . $erwarteteAdresse);
 ok('Dieselbe Adresse steht auch zum Abtippen darauf',
    str_contains($res['body'], h($erwarteteAdresse)));
+// Gezaehlt wird gegen die Klasse, nicht gegen eine feste Zahl - wer hier
+// ein Kind ergaenzt, soll nicht diesen Abschnitt rot faerben.
+$erwarteteBlaetter = count(class_members_list($klasseId));
 ok('Sie zeigt ein Blatt je Kind',
-   substr_count($res['body'], 'class="blatt"') === 4,
-   substr_count($res['body'], 'class="blatt"') . ' Blätter');
+   substr_count($res['body'], 'class="blatt"') === $erwarteteBlaetter,
+   substr_count($res['body'], 'class="blatt"') . ' statt ' . $erwarteteBlaetter);
 ok('Mit einem QR-Code darauf', str_contains($res['body'], '<svg '));
 ok('Und dem Anfangspasswort im Klartext',
    str_contains($res['body'], (string) $lilliNeu['initial_password']));
@@ -4240,8 +4363,15 @@ ok('Eine Klasse einer anderen Schule bleibt verschlossen',
 q('DELETE FROM classes WHERE id = ?', [$fremdeKlasse]);
 q('DELETE FROM schools WHERE id = ?', [$fremdeSchule2]);
 
-// Aufraeumen: erst die Kinder, dann die Klasse.
-foreach ($neueKinder as $k) {
+/*
+ * Aufraeumen: erst die Kinder, dann die Klasse.
+ *
+ * Gefragt wird nach dem tatsaechlichen Stand, nicht nach der Liste von
+ * vorhin - wer weiter oben ein Kind ergaenzt, haette es sonst als Waise
+ * hinterlassen, und der naechste Lauf faende einen belegten Benutzernamen
+ * vor.
+ */
+foreach (class_members_list($klasseId) as $k) {
     q('DELETE FROM users WHERE id = ?', [(int) $k['id']]);
 }
 q('DELETE FROM classes WHERE id = ?', [$klasseId]);
