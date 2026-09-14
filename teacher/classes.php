@@ -44,38 +44,87 @@ teacher_flash_render();
     </div>
 <?php else: ?>
 
-<?php if ($klassen === []): ?>
-    <p class="muted">Noch keine Klasse. Die erste steht gleich unten.</p>
-<?php else: ?>
-<table class="data">
-    <tr><th>Klasse</th><th class="num">Kinder</th><th class="actions"></th></tr>
+<?php
+/*
+ * Eine Tabelle, und die letzte Zeile ist die neue - wie bei den Kursen.
+ * Anlegen gehoert zur Liste: Man legt eine Klasse an, um sie dort zu haben.
+ */
+?>
+<table class="data courses">
+    <tr>
+        <th>Klasse</th>
+        <th class="num">Kinder</th>
+        <th class="num">Kurse</th>
+        <th class="actions"></th>
+    </tr>
+
     <?php foreach ($klassen as $k): ?>
         <tr<?= $k['active'] ? '' : ' class="dim"' ?>>
-            <td><strong><?= h($k['name']) ?></strong></td>
-            <td class="num"><?= (int) $k['students'] ?></td>
+            <td>
+                <span class="coursetitle">
+                    <span class="cflag">&#128101;</span>
+                    <span>
+                        <strong><?= h($k['name']) ?></strong>
+                        <?php if (!$k['active']): ?>
+                            <span class="tiny muted">stillgelegt</span>
+                        <?php endif; ?>
+                    </span>
+                </span>
+            </td>
+            <td class="num">
+                <?= (int) $k['students'] === 0
+                    ? '<span class="muted">&ndash;</span>'
+                    : (int) $k['students'] ?>
+            </td>
+            <td class="num">
+                <?= (int) $k['courses'] === 0
+                    ? '<span class="muted">&ndash;</span>'
+                    : (int) $k['courses'] ?>
+            </td>
             <td class="actions">
-                <a class="iconaction" title="Klasse öffnen"
+                <a class="iconaction" title="Klasse oeffnen"
                    href="<?= h(teacher_url('class.php') . '?id=' . (int) $k['id']) ?>">
                     <span aria-hidden="true">&#128101;</span> Öffnen
                 </a>
             </td>
         </tr>
     <?php endforeach; ?>
+
+    <?php
+    /*
+     * Wie bei den Kursen: Das Formular liegt neben der Tabelle, weil es sich
+     * in HTML nicht ueber mehrere Zellen spannen laesst. Das Feld verweist
+     * ueber form= darauf.
+     */
+    ?>
+    <tr class="newrow">
+        <td>
+            <span class="coursetitle">
+                <span class="cflag plus">+</span>
+                <input type="text" name="name" form="newclass" placeholder="5B"
+                       maxlength="32" required aria-label="Name der neuen Klasse">
+            </span>
+        </td>
+        <td colspan="2"></td>
+        <td class="actions">
+            <button class="iconaction primary" form="newclass"
+                    name="create_class" value="1" title="Klasse anlegen">
+                <span aria-hidden="true">+</span> Anlegen
+            </button>
+        </td>
+    </tr>
 </table>
-<?php endif; ?>
 
-<h2>Neue Klasse</h2>
-
-<form method="post" class="card" style="max-width:420px">
+<form method="post" id="newclass" hidden>
     <?= teacher_csrf_field() ?>
-    <label for="name">Name</label>
-    <input type="text" id="name" name="name" placeholder="5B" maxlength="32" required autofocus>
-    <button class="btn" name="create_class" value="1">Anlegen</button>
 </form>
 
 <p class="tiny muted">
-    So, wie die Klasse im Stundenplan heisst - "5B", "7c", "Q1". Die Kinder
-    kommen im nächsten Schritt hinein.
+    So, wie die Klasse im Stundenplan heisst - „5B", „7c", „Q1". Die Kinder
+    kommen im naechsten Schritt hinein: Klasse oeffnen, Namensliste
+    hineinkopieren. Aus einer Klasse wird noch kein Kurs - den legst du unter
+    <a href="<?= h(teacher_url('index.php')) ?>">Kurse</a> an, und die Kinder
+    der Klasse kommen dann gleich mit hinein.
 </p>
 
 <?php endif; ?>

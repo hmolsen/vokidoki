@@ -3976,7 +3976,22 @@ $klassenName = '9Z-' . bin2hex(random_bytes(2));
 $res  = teacherGet('classes.php');
 ok('Die Klassenübersicht öffnet sich', $res['status'] === 200);
 ok('Auch dort sind die Aktionen Knoepfe',
-   !preg_match('/>\s*öffnen\s*</u', $res['body']));
+   !preg_match('/>\s*öffnen\s*</u', $res['body'])
+   && str_contains($res['body'], 'class="iconaction"'));
+
+/*
+ * Dasselbe Muster wie bei den Kursen: eine Tabelle, und die letzte Zeile
+ * ist die neue. Ein Formular kann sich in HTML nicht ueber mehrere Zellen
+ * spannen, deshalb liegt es daneben und die Felder verweisen darauf.
+ */
+ok('Das Anlegen steckt in der Klassentabelle',
+   preg_match('/<tr class="newrow">/', $res['body']) === 1);
+ok('Das Namensfeld gehoert ueber form= dazu',
+   str_contains($res['body'], 'form="newclass"'));
+ok('Es gibt keine eigene Karte mehr dafuer',
+   !preg_match('/<h2>Neue Klasse<\/h2>/', $res['body']));
+ok('Die Tabelle zeigt auch, wie viele Kurse an der Klasse haengen',
+   preg_match('/<th class="num">Kurse<\/th>/', $res['body']) === 1);
 
 $navQuelle = (string) file_get_contents(__DIR__ . '/../teacher/_boot.php');
 ok('Klassen stehen links von Kursen',

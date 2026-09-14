@@ -48,7 +48,8 @@ function classes_for_school(int $schoolId): array
 {
     return qa(
         'SELECT c.*,
-                (SELECT COUNT(*) FROM class_members m WHERE m.class_id = c.id) AS students
+                (SELECT COUNT(*) FROM class_members m WHERE m.class_id = c.id) AS students,
+                (SELECT COUNT(*) FROM courses co WHERE co.class_id = c.id) AS courses
            FROM classes c
           WHERE c.school_id = ?
           ORDER BY c.active DESC, c.name',
