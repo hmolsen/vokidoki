@@ -449,9 +449,10 @@ initStudentAdd();
  * Vorher stand neben jeder Zeile ein Knopf "bis hier freigeben" - bei
  * hundert Vokabeln hundert Knoepfe, und keiner verriet vorher, was er
  * bewirkt. Jetzt liegt ein Balken zwischen der letzten freigegebenen und
- * der ersten gesperrten Vokabel. Wer ihn anfasst, schiebt ihn hoch oder
- * runter und sieht die Zeilen dabei umschlagen; beim Loslassen wird
- * gespeichert.
+ * der ersten gesperrten Vokabel. Wer ihn anfasst, zieht ihn dorthin, wo er
+ * hin soll, sieht die Zeilen dabei umschlagen und liest in der Blase am
+ * Griff mit, wie viele Vokabeln das waeren. Gespeichert wird beim
+ * Loslassen.
  *
  * Ohne JavaScript passiert hier nichts, und die Knoepfe je Zeile bleiben
  * stehen - dieselbe Seite, nur umstaendlicher.
@@ -468,70 +469,133 @@ function initReleaseBar() {
     tabelle.querySelectorAll('.js-hide').forEach((b) => b.remove());
     tabelle.classList.add('draggable');
 
-    const start = Number(tabelle.dataset.released || 0);
-    let stand   = Math.min(start, zeilen.length);   // 0 .. Anzahl
-    let zieht   = false;
+    /*
+     * Der Balken liegt UEBER der Tabelle, nicht in ihr.
+     *
+     * Als eigene Tabellenzeile liess er sich um genau eine Vokabel
+     * verschieben, und der Grund ist kein Rechenfehler, sondern eine Regel
+     * der Zeigerbindung: Wird ein Element in der DOM umgehaengt - und
+     * insertBefore haengt um -, verliert es seine Bindung an den Zeiger.
+     * Beim ersten Schritt schob sich der Balken also zwischen zwei andere
+     * Zeilen, gab dabei die Bindung ab, und alle weiteren Bewegungen
+     * landeten auf den Tabellenzeilen statt auf dem Griff. Nachgemessen:
+     * von dreissig pointermove kamen drei an, und pointerup kam nie an -
+     * gespeichert wurde am Ende, was die angeklickte Zeile sagte.
+     *
+     * Dazu kam, dass die eingefuegte Zeile alle Zeilen darunter um ihre
+     * eigene Hoehe nach unten schob: Die Tabelle bewegte sich unter dem
+     * stillstehenden Zeiger, fast eine Zeilenhoehe weit.
+     *
+     * Ueber der Tabelle faellt beides weg. Die Bindung haelt, die Geometrie
+     * steht still, und der Griff folgt dem Zeiger, so weit man will.
+     */
+    const huelle = document.createElement('div');
+    huelle.className = 'releasewrap';
+    tabelle.parentNode.insertBefore(huelle, tabelle);
+    huelle.appendChild(tabelle);
 
-    // Der Balken ist eine eigene Zeile, damit er sich in der Tabelle
-    // zwischen zwei Vokabeln schieben laesst und nichts ueberdeckt.
-    const balken = document.createElement('tr');
+    const start = Math.min(Number(tabelle.dataset.released || 0), zeilen.length);
+    let stand   = start;
+    let zieht   = false;
+    let letztes = 0;        // zuletzt gesehene Zeigerhoehe, fuers Mitrollen
+    let tempo   = 0;        // Rollschub am Fensterrand, 0 = steht
+
+    const balken = document.createElement('div');
     balken.className = 'releasebar';
     balken.innerHTML = `
-        <td colspan="5">
-            <div class="bar" tabindex="0" role="slider" aria-valuemin="0"
-                 aria-label="Freigabe bis hierhin">
-                <span class="grip" aria-hidden="true">&#8942;&#8942;</span>
-                <span class="barlabel"></span>
-            </div>
-        </td>`;
-    const griff = balken.querySelector('.bar');
-    const text  = balken.querySelector('.barlabel');
+        <div class="line"></div>
+        <div class="grip" tabindex="0" role="slider" aria-valuemin="0"
+             aria-label="Freigabe verschieben"
+             title="Ziehen: alles oberhalb ist freigegeben">
+            <span aria-hidden="true">&#8942;&#8942;</span>
+        </div>
+        <div class="bubble"></div>`;
+    huelle.appendChild(balken);
 
-    const setzen = (n, weich) => {
+    const griff = balken.querySelector('.grip');
+    const blase = balken.querySelector('.bubble');
+
+    /*
+     * Die Grenzen zwischen den Zeilen, gemessen von der Huelle aus.
+     *
+     * grenzen[i] ist die Hoehe, bei der genau i Vokabeln freigegeben waeren
+     * - also die Oberkante von Zeile i, und ganz zuletzt die Unterkante der
+     * letzten Zeile. Weil beides von derselben Huelle aus gemessen ist,
+     * bleiben die Werte beim Scrollen gueltig.
+     */
+    let grenzen = [];
+    const messen = () => {
+        const h = huelle.getBoundingClientRect();
+        grenzen = zeilen.map((tr) => tr.getBoundingClientRect().top - h.top);
+        grenzen.push(zeilen[zeilen.length - 1].getBoundingClientRect().bottom - h.top);
+    };
+
+    /** Welche Grenze liegt dieser Hoehe am naechsten? */
+    const naechste = (y) => {
+        let beste = 0;
+        let weite = Infinity;
+        for (let i = 0; i < grenzen.length; i++) {
+            const d = Math.abs(grenzen[i] - y);
+            if (d < weite) { weite = d; beste = i; }
+        }
+        return beste;
+    };
+
+    /** Nur die Anzeige: Zeilen, Blase, Vorlesewerte. */
+    const zeigen = (n, weich) => {
         stand = Math.max(0, Math.min(zeilen.length, n));
 
         zeilen.forEach((tr, i) => {
             const frei = i < stand;
+            const war  = tr.classList.contains('released');
             tr.classList.toggle('released', frei);
             tr.classList.toggle('locked', !frei);
-            // Beim Ziehen umschlagen lassen; beim Aufbau nicht, sonst
-            // flackert die ganze Tabelle beim Laden.
-            if (weich) {
+            // Nur umschlagen lassen, was sich wirklich aendert - sonst
+            // flackert beim Ziehen die ganze Tabelle mit.
+            if (weich && frei !== war) {
                 tr.classList.remove('flip');
                 void tr.offsetWidth;          // Neustart der Abfolge erzwingen
                 tr.classList.add('flip');
             }
         });
 
-        // Der Balken wandert an die Stelle, an der er steht.
-        if (stand === 0) {
-            tabelle.tBodies[0].insertBefore(balken, zeilen[0]);
-        } else if (stand >= zeilen.length) {
-            zeilen[zeilen.length - 1].after(balken);
-        } else {
-            zeilen[stand].before(balken);
-        }
-
-        griff.setAttribute('aria-valuemax', String(zeilen.length));
-        griff.setAttribute('aria-valuenow', String(stand));
-        text.textContent = stand === 0
-            ? 'Nichts freigegeben - hier anfassen und nach unten ziehen'
+        const text = stand === 0
+            ? 'Nichts freigegeben'
             : stand >= zeilen.length
                 ? `Alle ${zeilen.length} freigegeben`
                 : `${stand} von ${zeilen.length} freigegeben`;
+
+        griff.setAttribute('aria-valuemax', String(zeilen.length));
+        griff.setAttribute('aria-valuenow', String(stand));
+        griff.setAttribute('aria-valuetext', text);
+        blase.textContent = text;
     };
 
-    /** Zu welcher Stelle gehoert diese Bildschirmhoehe? */
-    const standBeiY = (y) => {
-        for (let i = 0; i < zeilen.length; i++) {
-            const r = zeilen[i].getBoundingClientRect();
-            if (y < r.top + r.height / 2) return i;
-        }
-        return zeilen.length;
+    /** Nur die Lage: Der Balken haengt an dieser Hoehe. */
+    const legen = (y) => { balken.style.top = Math.round(y) + 'px'; };
+
+    /** Beides - der eingerastete Zustand. */
+    const setzen = (n, weich) => { zeigen(n, weich); legen(grenzen[stand]); };
+
+    /**
+     * Waehrend des Ziehens.
+     *
+     * Der Balken folgt dem Zeiger auf den Pixel, nicht von Grenze zu
+     * Grenze - das ist der Unterschied zwischen Schieben und Klicken. Die
+     * Zeilen und die Zahl in der Blase richten sich dabei nach der
+     * naechstgelegenen Grenze, so dass man vor dem Loslassen sieht, was
+     * herauskommt. Eingerastet wird erst beim Loslassen.
+     */
+    const folgen = (clientY) => {
+        const h = huelle.getBoundingClientRect();
+        const y = Math.max(grenzen[0],
+                  Math.min(grenzen[grenzen.length - 1], clientY - h.top));
+        legen(y);
+        zeigen(naechste(y), true);
     };
 
     const speichern = () => {
-        if (stand === Math.min(start, zeilen.length)) return;   // nichts geaendert
+        if (stand === start) return;          // nichts geaendert
 
         const feld = document.createElement('input');
         feld.type  = 'hidden';
@@ -541,30 +605,65 @@ function initReleaseBar() {
         form.submit();
     };
 
-    griff.addEventListener('pointerdown', (e) => {
+    // ---- Ziehen
+
+    /*
+     * Am Fensterrand wird mitgerollt. Ohne das waere bei hundert Vokabeln
+     * Schluss, sobald der Bildschirm zu Ende ist - man kaeme nie von
+     * Vokabel 5 zu Vokabel 80.
+     */
+    const RAND  = 72;       // Abstand zum Fensterrand, ab dem gerollt wird
+    const SCHUB = 14;       // Pixel je Bild
+
+    const rollen = () => {
+        if (!zieht) return;
+        if (tempo !== 0) {
+            const vorher = window.scrollY;
+            window.scrollBy(0, tempo);
+            // Die Huelle hat sich mitbewegt, der Zeiger nicht: neu ausrichten.
+            if (window.scrollY !== vorher) folgen(letztes);
+        }
+        requestAnimationFrame(rollen);
+    };
+
+    balken.addEventListener('pointerdown', (e) => {
         e.preventDefault();
-        zieht = true;
-        griff.setPointerCapture(e.pointerId);
+        messen();
+        zieht   = true;
+        letztes = e.clientY;
+        balken.setPointerCapture(e.pointerId);
         balken.classList.add('dragging');
+        griff.focus({ preventScroll: true });
+        folgen(e.clientY);
+        requestAnimationFrame(rollen);
     });
 
-    griff.addEventListener('pointermove', (e) => {
+    balken.addEventListener('pointermove', (e) => {
         if (!zieht) return;
-        const neu = standBeiY(e.clientY);
-        if (neu !== stand) setzen(neu, true);
+        letztes = e.clientY;
+        folgen(e.clientY);
+
+        const hoehe = window.innerHeight;
+        tempo = e.clientY < RAND         ? -SCHUB
+              : e.clientY > hoehe - RAND ?  SCHUB
+              : 0;
     });
 
     const loslassen = () => {
         if (!zieht) return;
         zieht = false;
+        tempo = 0;
         balken.classList.remove('dragging');
+        messen();
+        setzen(stand, false);             // einrasten
         speichern();
     };
 
-    griff.addEventListener('pointerup', loslassen);
-    griff.addEventListener('pointercancel', loslassen);
+    balken.addEventListener('pointerup', loslassen);
+    balken.addEventListener('pointercancel', loslassen);
 
-    // Mit der Tastatur: hoch, runter, Anfang, Ende - und Enter speichert.
+    // ---- Tastatur: hoch, runter, Anfang, Ende - und Enter speichert.
+
     griff.addEventListener('keydown', (e) => {
         const schritt = { ArrowUp: -1, ArrowDown: 1, PageUp: -10, PageDown: 10 }[e.key];
         if (schritt !== undefined) {
@@ -579,8 +678,8 @@ function initReleaseBar() {
         }
     });
 
-    // Ein Klick auf eine gesperrte Zeile setzt den Balken dorthin - der
-    // kurze Weg, wenn man schon weiss, wohin.
+    // Ein Klick auf eine Zeile setzt den Balken dorthin - der kurze Weg,
+    // wenn man schon weiss, wohin.
     zeilen.forEach((tr, i) => {
         tr.addEventListener('click', () => {
             if (zieht) return;
@@ -589,7 +688,18 @@ function initReleaseBar() {
         });
     });
 
-    setzen(stand, false);
+    // Aendert sich das Layout - Fenstergroesse, nachgeladene Schrift -,
+    // steht der Balken sonst zwischen zwei anderen Zeilen als vorher.
+    const nachfuehren = () => {
+        if (zieht) return;
+        messen();
+        legen(grenzen[stand]);
+    };
+    window.addEventListener('resize', nachfuehren);
+    if (window.ResizeObserver) new ResizeObserver(nachfuehren).observe(tabelle);
+
+    messen();
+    setzen(start, false);
 }
 
 initReleaseBar();

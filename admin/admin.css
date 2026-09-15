@@ -590,23 +590,81 @@ table.release tr.flip td { animation: releaseflip .18s ease-out; }
     table.release tr.flip td { animation: none; }
 }
 
-tr.releasebar td { padding: 0 !important; background: none !important; border: 0 !important; }
+/* Der Balken liegt ueber der Tabelle, nicht in ihr - der Grund steht in
+   teacher.js. Hier zaehlt nur die Folge: Die Huelle ist der Bezugspunkt. */
+.releasewrap { position: relative; }
 
-.releasebar .bar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 6px 12px;
-    margin: 2px 0;
-    background: var(--accent);
-    color: var(--accent-text);
-    border-radius: 8px;
-    font-size: .82rem;
-    font-weight: 600;
+.releasebar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 0;
+    z-index: 4;
     cursor: grab;
     user-select: none;
     touch-action: none;   /* sonst scrollt das Handy beim Ziehen */
+    transition: top .12s ease-out;
 }
-.releasebar.dragging .bar { cursor: grabbing; filter: brightness(1.08); }
-.releasebar .bar:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
-.releasebar .grip { letter-spacing: -3px; opacity: .8; }
+/* Beim Ziehen haengt der Balken am Zeiger und darf nicht hinterherlaufen;
+   eingerastet wird erst beim Loslassen, und das darf gleiten. */
+.releasebar.dragging { transition: none; cursor: grabbing; }
+
+.releasebar .line {
+    position: absolute;
+    left: 0; right: 0; top: -2px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--accent);
+}
+.releasebar.dragging .line { top: -3px; height: 6px; }
+
+.releasebar .grip {
+    position: absolute;
+    left: 8px; top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: .85rem;
+    letter-spacing: -3px;
+}
+.releasebar .grip:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+/*
+ * Die Zahl steht neben dem Balken, nicht in ihm.
+ *
+ * Im Balken war sie ein Fremdkoerper - ein breites Band mit Text darin
+ * sieht aus wie ein Knopf und nicht wie eine Kante. Jetzt ist der Balken
+ * eine Linie, und die Blase haengt daran.
+ *
+ * In der Mitte, nicht am Griff: Links stehen die Vokabeln, und eine Blase
+ * dort deckte im Ruhezustand dauerhaft ein Wort zu. Zwischen der deutschen
+ * Spalte und der Satzzahl ist Platz, der keiner Zeile gehoert.
+ */
+.releasebar .bubble {
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    padding: 3px 11px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: .78rem;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, .18);
+}
+.releasebar.dragging .bubble {
+    font-size: .84rem;
+    padding: 4px 13px;
+    transform: translate(-50%, -50%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .releasebar { transition: none; }
+}

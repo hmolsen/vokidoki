@@ -2517,6 +2517,68 @@ ok('Und laesst sich zuruecknehmen',
    (int) qv('SELECT released_position FROM units WHERE id = ?', [$freiUnit]) === 0);
 
 /*
+ * Der Balken selbst laesst sich hier nicht ziehen - dazu braucht es einen
+ * Browser, der wirklich rechnet. Was diese Suite pruefen kann, ist die
+ * Form: dass der Balken nicht wieder in die Tabelle wandert.
+ *
+ * Denn genau daran lag es. Als eigene Tabellenzeile liess er sich um eine
+ * Vokabel verschieben und dann nicht mehr: insertBefore haengt das Element
+ * um, und ein umgehaengtes Element verliert seine Bindung an den Zeiger.
+ * Von dreissig Bewegungen kamen danach drei an. Nachgemessen wurde das mit
+ * einem echten Chrome; hier steht der Riegel, der den Rueckweg zumacht.
+ */
+// Fuer den Blick auf die Tabelle kurz etwas freigeben - danach wieder zu.
+freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
+    'release' => 3, 'unit_id' => $freiUnit, 'csrf' => $freiCsrf,
+]);
+$res = freiPost($base . '/teacher/unit.php?id=' . $freiUnit, null);
+ok('Die Tabelle trennt freigegebene und gesperrte Zeilen',
+   str_contains($res['body'], 'class="released"')
+   && str_contains($res['body'], 'class="locked"'));
+ok('Und jede Zeile sagt, die wievielte sie ist',
+   preg_match('/<tr class="(?:released|locked)" data-pos="1">/', $res['body']) === 1);
+ok('Die Marke steht an der Tabelle, damit das Skript sie findet',
+   str_contains($res['body'], 'data-released="'));
+ok('Ohne JavaScript bleibt je Zeile ein Knopf',
+   str_contains($res['body'], 'class="iconaction quiet js-hide"')
+   && str_contains($res['body'], 'form="releaseform"'),
+   'sonst ist die Freigabe ohne Skript nicht bedienbar');
+
+freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
+    'release' => 0, 'unit_id' => $freiUnit, 'csrf' => $freiCsrf,
+]);
+
+$skriptB = http($base . '/teacher/teacher.js');
+ok('Das Skript legt den Balken ueber die Tabelle, nicht hinein',
+   str_contains($skriptB['body'], "className = 'releasewrap'")
+   && !preg_match("/createElement\('tr'\)[^;]*;\s*\N*releasebar/", $skriptB['body']),
+   'als <tr> verliert er beim Verschieben die Zeigerbindung');
+ok('Er bindet den Zeiger an sich',
+   str_contains($skriptB['body'], 'setPointerCapture'));
+ok('Und folgt ihm frei, statt von Grenze zu Grenze zu springen',
+   str_contains($skriptB['body'], 'const folgen =')
+   && str_contains($skriptB['body'], "balken.style.top"),
+   'sonst ruckelt er zeilenweise statt sich ziehen zu lassen');
+ok('Gespeichert wird beim Loslassen, nicht schon beim Ziehen',
+   preg_match('/const loslassen[^}]*speichern\(\)/s', $skriptB['body']) === 1);
+ok('Die Zahl haengt in einer eigenen Blase',
+   str_contains($skriptB['body'], "class=\"bubble\"")
+   && str_contains($skriptB['body'], 'blase.textContent'),
+   'im Balken selbst war sie nicht zu lesen');
+ok('Am Fensterrand rollt die Seite mit',
+   str_contains($skriptB['body'], 'window.scrollBy'),
+   'sonst endet das Ziehen am unteren Bildrand');
+
+$cssB = (string) file_get_contents(__DIR__ . '/../admin/admin.css');
+ok('Die Huelle ist der Bezugspunkt fuer den Balken',
+   preg_match('/\.releasewrap\s*\{[^}]*position:\s*relative/s', $cssB) === 1);
+ok('Der Balken liegt darin absolut',
+   preg_match('/\.releasebar\s*\{[^}]*position:\s*absolute/s', $cssB) === 1);
+ok('Und faengt den Zeiger auch auf dem Handy ab',
+   preg_match('/\.releasebar\s*\{[^}]*touch-action:\s*none/s', $cssB) === 1,
+   'sonst scrollt das Handy statt zu ziehen');
+
+/*
  * Die Grenze: Eine Lerneinheit einer anderen Schule geht niemanden etwas an -
  * auch nicht ueber ein untergeschobenes Formular.
  */
