@@ -333,9 +333,7 @@ teacher_flash_render();
     <strong>Nachnamen werden nicht gespeichert.</strong> Du kannst „Fritz
     Brinkmann" eintippen oder eine ganze Klassenliste einfügen &ndash;
     gespeichert wird daraus nur „Fritz B.". Den Nachnamen wirft die Anwendung
-    beim Einlesen weg; er steht in keiner Tabelle und auf keinem Zettel. Ein
-    Vokabeltrainer muss die Kinder auseinanderhalten können, nicht wissen, wer
-    sie sind.
+    beim Einlesen weg; er steht in keiner Tabelle und auf keinem Zettel.
 </p>
 
 <?php if ($kinder !== []): ?>
@@ -375,8 +373,8 @@ teacher_flash_render();
     <p class="tiny muted">
         Einfach die Liste hineinkopieren, wie sie vorliegt &ndash; „Lilli
         Molsen" und „Molsen, Lilli" werden beide verstanden. Wer schon in der
-        Klasse ist, wird übersprungen; die Liste lässt sich also gefahrlos ein
-        zweites Mal einfügen.
+        Klasse ist, wird übersprungen; die Liste lässt sich also auch ein
+        zweites Mal einfügen ohne Duplikate zu erzeugen.
     </p>
 </form>
 <?php endif; ?>
