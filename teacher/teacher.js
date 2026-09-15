@@ -60,7 +60,7 @@ function initLanguagePicker(root) {
     const panel  = box.querySelector('.pickpanel');
     const search = box.querySelector('.picksearch');
     const list   = box.querySelector('.picklist');
-    const flagEl = box.querySelector('.pickflag');
+    let   flagEl = box.querySelector('.pickflag');
     const nameEl = box.querySelector('.picklabel');
 
     let gefiltert = options;
@@ -69,7 +69,8 @@ function initLanguagePicker(root) {
     const setzen = (name) => {
         const o = options.find((x) => x.name === name) || options[0];
         select.value = o.name;
-        flagEl.textContent = o.flag;
+        flagEl.outerHTML = fahnenBild(o.flag, 'pickflag') || '<span class="pickflag"></span>';
+        flagEl = box.querySelector('.pickflag');
         nameEl.textContent = o.name;
     };
 
@@ -116,7 +117,7 @@ function initLanguagePicker(root) {
             html += `${trenner ? '<li class="picksep" role="presentation"></li>' : ''}
                 <li role="option" data-i="${i}" aria-selected="${i === aktiv}"
                     class="${i === aktiv ? 'on' : ''}">
-                    <span class="pickflag">${o.flag}</span>${escapeHtml(o.name)}
+                    ${fahnenBild(o.flag, 'pickflag')}${escapeHtml(o.name)}
                 </li>`;
         });
         list.innerHTML = html;
@@ -271,6 +272,47 @@ function escapeHtml(s) {
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     }[c]));
 }
+
+/**
+ * Eine Fahne als Bild.
+ *
+ * Auf dem Handy sieht das Emoji gut aus, unter Windows steht an seiner
+ * Stelle das Laenderkuerzel - aus der britischen Fahne wird "GB". Daran
+ * aendert keine Schriftart etwas, also bringen wir das Bild mit; es liegt
+ * in assets/flags, benannt nach den Unicode-Stellen.
+ *
+ * Fehlt die Datei, tritt weiter unten das Emoji an ihre Stelle - dann sieht
+ * es aus wie vorher.
+ */
+function fahnenBild(emoji, klasse = 'cflag') {
+    const text = String(emoji ?? '').trim();
+    if (text === '') return '';
+
+    const name = [...text]
+        .map((z) => z.codePointAt(0))
+        .filter((n) => n !== 0xfe0f)      // "bitte farbig" gehoert nicht zum Zeichen
+        .map((n) => n.toString(16))
+        .join('-');
+    if (name === '') return '';
+
+    const basis = document.body.dataset.base || '';
+    return `<img class="${escapeHtml(klasse)}" src="${escapeHtml(basis)}/assets/flags/`
+         + `${escapeHtml(name)}.svg" alt="" width="24" height="24"`
+         + ` data-emoji="${escapeHtml(text)}">`;
+}
+
+// Fehlt die Datei, tritt das Emoji an ihre Stelle. Ein Hoerer fuers ganze
+// Dokument statt ein onerror an jedem Bild; error steigt nicht auf, deshalb
+// in der Abwaertsphase.
+document.addEventListener('error', (e) => {
+    const bild = e.target;
+    if (!(bild instanceof HTMLImageElement) || !bild.dataset.emoji) return;
+
+    const ersatz = document.createElement('span');
+    ersatz.className   = bild.className;
+    ersatz.textContent = bild.dataset.emoji;
+    bild.replaceWith(ersatz);
+}, true);
 
 /*
  * Gesucht wird im ganzen Dokument, nicht im Formular.

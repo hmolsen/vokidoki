@@ -44,6 +44,53 @@ body.admin { background: var(--bg); }
     padding: 22px 20px 60px;
 }
 .adminmain h1 { margin-bottom: 18px; }
+
+/* --------------------------------------------------------------- Der Pfad
+ *
+ * Klasse > Kurs > Lerneinheit, ueber dem Titel. Knoepfe und nicht Links:
+ * Der Weg eine Ebene hoeher ist auf diesen Seiten die haeufigste Handlung
+ * nach dem Lesen, und ein unterstrichenes Wort am Ende einer Fliesstextzeile
+ * findet dafuer niemand.
+ */
+.crumbs {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 10px;
+}
+.crumb {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-soft);
+    text-decoration: none;
+    font-size: .88rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+a.crumb:hover { background: var(--surface-2); color: var(--text); }
+.crumb.on {
+    background: none;
+    border-color: transparent;
+    color: var(--text);
+    padding-left: 4px;
+}
+.crumbsep { color: var(--text-soft); font-size: 1rem; }
+img.crumbflag { width: 20px; height: 15px; object-fit: contain; border-radius: 2px; }
+
+/* Knoepfe nebeneinander, linksbuendig und umbrechend - nicht auf die
+   Zeilenbreite verteilt wie .btn-row in der App. */
+.buttonrow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 18px;
+}
 .adminmain h2 { margin-top: 30px; }
 
 /* Tabellen */
@@ -208,6 +255,7 @@ td.wtcell select {
     white-space: nowrap;
 }
 .chip:hover { background: var(--surface-2); }
+img.chipflag { width: 18px; height: 13px; object-fit: contain; vertical-align: -.1em; }
 
 .chip.on {
     background: var(--accent);
@@ -421,6 +469,7 @@ tr.flagged > td {
 .pickbtn .picklabel { flex: 1 1 auto; }
 .pickbtn .pickchev  { color: var(--text-soft); }
 .pickflag { font-size: 1.15em; line-height: 1; }
+img.pickflag { width: auto; height: 1.15em; vertical-align: -.15em; }
 
 /*
  * Das Panel haengt an keinem Vorfahren mehr - position: fixed.
@@ -491,6 +540,14 @@ table.courses td { padding: 11px 12px; }
     border-radius: 8px;
 }
 .cflag.plus { color: var(--accent); font-weight: 700; font-size: 1.3rem; }
+
+/* Als Bild braucht die Fahne keinen Kasten dahinter - sie ist schon einer. */
+img.cflag {
+    width: 30px; height: 22px;
+    object-fit: contain;
+    background: none;
+    border-radius: 3px;
+}
 
 /* Zahlenwerte, die auf einen Blick eine Lage zeigen sollen. */
 .pill {

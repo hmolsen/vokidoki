@@ -402,7 +402,7 @@ teacher_flash_render();
         <tr<?= $c['active'] ? '' : ' class="dim"' ?>>
             <td>
                 <span class="coursetitle">
-                    <span class="cflag"><?= h($c['flag_emoji'] ?: "\u{1F310}") ?></span>
+                    <?= flag_html($c['flag_emoji'] ?: "\u{1F310}", 'cflag') ?>
                     <span>
                         <strong><?= h($c['name']) ?></strong>
                         <span class="tiny muted"><?= h($c['language_name']) ?></span>

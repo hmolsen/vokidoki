@@ -58,6 +58,52 @@ export function esc(value) {
     })[c]);
 }
 
+/**
+ * Eine Fahne als Bild.
+ *
+ * Die Fahnen stehen als Emoji in der Datenbank, und auf dem Handy sehen sie
+ * gut aus. Windows stellt die Regionalzeichen aber nicht als Fahnen dar,
+ * sondern als die zwei Buchstaben des Länderkürzels - aus der britischen
+ * Fahne wird "GB". Daran ändert keine Schriftart der Seite etwas; das Bild
+ * muss mitgebracht werden, und es liegt in assets/flags.
+ *
+ * Ob die Datei da ist, kann der Browser vorher nicht wissen. Er versucht es
+ * deshalb einfach - und wenn nichts kommt, setzt der Hörer weiter unten das
+ * Emoji an ihre Stelle. Auf dem Handy sieht das dann aus wie vorher.
+ */
+export function flagHtml(emoji, klasse = 'flag') {
+    const text = String(emoji ?? '').trim();
+    if (text === '') return '';
+
+    const name = [...text]
+        .map((z) => z.codePointAt(0))
+        .filter((n) => n !== 0xfe0f)      // "bitte farbig" gehört nicht zum Zeichen
+        .map((n) => n.toString(16))
+        .join('-');
+    if (name === '') return '';
+
+    return `<img class="${esc(klasse)}" src="${esc(VT.base)}/assets/flags/${esc(name)}.svg"`
+         + ` alt="" width="24" height="24" data-emoji="${esc(text)}">`;
+}
+
+/*
+ * Fehlt die Datei, tritt das Emoji an ihre Stelle.
+ *
+ * Ein Hörer für das ganze Dokument statt ein onerror an jedem Bild: Die
+ * Fahnen entstehen an einem halben Dutzend Stellen als Zeichenkette, und
+ * jede davon müsste sonst daran denken. error steigt nicht auf, deshalb in
+ * der Abwärtsphase.
+ */
+document.addEventListener('error', (e) => {
+    const bild = e.target;
+    if (!(bild instanceof HTMLImageElement) || !bild.dataset.emoji) return;
+
+    const ersatz = document.createElement('span');
+    ersatz.className   = bild.className;
+    ersatz.textContent = bild.dataset.emoji;
+    bild.replaceWith(ersatz);
+}, true);
+
 /** Setzt den Inhalt des Views und liefert den Container zurück. */
 export function render(html) {
     const app = document.getElementById('app');
@@ -103,10 +149,11 @@ export function go(path, replace = false) {
 
 // ------------------------------------------------------------------ Bausteine
 
-export function topbar(title, { backTo = null, action = '' } = {}) {
+export function topbar(title, { backTo = null, action = '', lead = '' } = {}) {
     return `
         <div class="topbar">
             ${backTo === null ? '' : `<button class="iconbtn" data-back="${esc(backTo)}" aria-label="Zurück">&#8249;</button>`}
+            ${lead}
             <h1>${esc(title)}</h1>
             ${action}
         </div>`;

@@ -1,6 +1,6 @@
 import {
     VT, api, render, esc, $, $$, on, go, topbar, loading, showError, clearError, withBusy,
-    hardRefresh,
+    hardRefresh, flagHtml,
 } from '../core.js';
 
 /* Die Sprachen, die hier gebraucht werden. Alles andere lässt sich
@@ -19,7 +19,7 @@ export async function languagesView() {
 
     const tiles = languages.map((lang) => `
         <button class="tile" data-lang="${lang.id}">
-            <span class="flag">${esc(lang.flag_emoji || '\u{1F310}')}</span>
+            ${flagHtml(lang.flag_emoji || '\u{1F310}')}
             <span class="name">${esc(lang.name)}</span>
             <span class="meta">${lang.vocab_count} Vokabeln</span>
         </button>
@@ -159,7 +159,7 @@ function installHint() {
 function showAddForm() {
     const presets = PRESETS.map((p, i) => `
         <button class="tile" data-preset="${i}">
-            <span class="flag">${p.flag}</span>
+            ${flagHtml(p.flag)}
             <span class="name">${esc(p.name)}</span>
         </button>
     `).join('');

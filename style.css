@@ -222,6 +222,27 @@ input:focus, select:focus {
 }
 .tile:active { transform: scale(.97); }
 .tile .flag  { font-size: 3.2rem; line-height: 1; }
+
+/*
+ * Fahnen als Bild.
+ *
+ * Unter Windows steht an der Stelle des Emojis sonst das Laenderkuerzel -
+ * "GB" statt der britischen Fahne. Das Bild kommt aus assets/flags; fehlt
+ * es, setzt core.js das Emoji an seine Stelle, und dann greifen wieder die
+ * Regeln darueber.
+ *
+ * Die Masse stehen hier und nicht am Bild: width/height im Markup sind nur
+ * da, damit beim Laden nichts springt.
+ */
+img.flag {
+    display: block;
+    width: auto;
+    height: 1em;
+    font-size: inherit;      /* damit die em-Hoehe von der Kachel kommt */
+}
+.tile img.flag { height: 3rem; }
+.tile.add img.flag { height: 2rem; }
+.topbar img.flag.lead { height: 1.5rem; }
 .tile .name  { font-size: 1.05rem; }
 .tile .meta  { font-size: .8rem; color: var(--text-soft); font-weight: 500; }
 

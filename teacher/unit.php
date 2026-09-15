@@ -31,7 +31,7 @@ $unitId = (int) ($_GET['id'] ?? $_POST['unit_id'] ?? 0);
  * Unterlagen ihrer Kollegin kommen, ein fremdes Kollegium nicht.
  */
 $unit = $schoolId === 0 ? null : q1(
-    'SELECT t.*, co.name AS course_name, co.school_id, c.name AS class_name,
+    'SELECT t.*, co.name AS course_name, co.school_id, co.class_id, c.name AS class_name,
             l.name AS language_name, l.flag_emoji
        FROM units t
        JOIN courses co   ON co.id = t.course_id
@@ -96,7 +96,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['release'])) {
     teacher_flash($fehlen === 0
         ? sprintf('%d Vokabeln freigegeben.', $bis)
         : sprintf('%d Vokabeln freigegeben. Für %d fehlen noch Lückensätze - '
-                  . 'mit "Sätze nachtragen" unten.', $bis, $fehlen));
+                  . 'mit „Sätze nachtragen".', $bis, $fehlen));
     teacher_redirect($zurueck);
 }
 
@@ -148,17 +148,31 @@ $frei   = (int) $unit['released_position'];
 $alles  = $frei >= $gesamt;
 $zustand = sentence_status($unitId, (int) $user['id']);
 
-teacher_head($unit['title'], 'index.php', $user);
+/*
+ * Der Pfad statt einer Fliesstextzeile.
+ *
+ * Klasse, Kurs, Lerneinheit - drei Ebenen, und die beiden oberen sind von
+ * hier aus erreichbar. Vorher stand dasselbe als "Englisch - Klasse 7b -
+ * zurueck zum Kurs" untereinander, wobei nur das letzte Stueck ein Link war
+ * und als solcher kaum zu erkennen.
+ */
+$pfad = [];
+if (($unit['class_name'] ?? null) !== null && ($unit['class_id'] ?? null) !== null) {
+    $pfad[] = [
+        'label' => 'Klasse ' . $unit['class_name'],
+        'href'  => teacher_url('class.php') . '?id=' . (int) $unit['class_id'],
+    ];
+}
+$pfad[] = [
+    'label' => (string) $unit['course_name'],
+    'href'  => teacher_url('course.php') . '?id=' . (int) $unit['course_id'],
+    'flag'  => (string) $unit['flag_emoji'],
+];
+$pfad[] = ['label' => (string) $unit['title'], 'href' => null];
+
+teacher_head($unit['title'], 'index.php', $user, $pfad);
 teacher_flash_render();
 ?>
-
-<p class="muted">
-    <?= h(trim($unit['flag_emoji'] . ' ' . $unit['language_name'])) ?>
-    <?php if (($unit['class_name'] ?? null) !== null): ?>
-        &middot; Klasse <?= h($unit['class_name']) ?>
-    <?php endif; ?>
-    &middot; <a href="<?= h(teacher_url('course.php') . '?id=' . (int) $unit['course_id']) ?>">zurück zum Kurs</a>
-</p>
 
 <?php if ($zustand['status'] === SENTENCE_RUNNING): ?>
     <div class="notice">
@@ -192,34 +206,46 @@ teacher_flash_render();
     <?php endif; ?>
 </p>
 
-<form method="post" class="compact">
+<?php
+/*
+ * Die Knoepfe in einer Reihe und von gleicher Bauart.
+ *
+ * "Alles freigeben" war ein Knopf, "Freigabe zuruecknehmen" ein roter Text
+ * mit Schloss daneben, und beide verschwanden abwechselnd - je nachdem, ob
+ * sie gerade etwas bewirkt haetten. Die Reihe sprang dadurch bei jedem
+ * Freigeben um. Jetzt stehen beide immer da, gleich gebaut und gleich gross;
+ * was nichts bewirken wuerde, ist abgeblendet und sagt im Titel, warum.
+ *
+ * Ein Formular fuer alle drei: Sie gehen an dieselbe Adresse und
+ * unterscheiden sich nur im Namen des Knopfes.
+ */
+$fehlen = vocab_without_sentences($unitId);
+?>
+<form method="post">
     <?= teacher_csrf_field() ?>
     <input type="hidden" name="unit_id" value="<?= $unitId ?>">
-    <?php if (!$alles): ?>
+
+    <div class="buttonrow">
         <button class="btn small" name="release" value="<?= $gesamt ?>"
+                <?= $alles ? 'disabled title="Es ist schon alles freigegeben."' : '' ?>
                 data-confirm="Alle <?= $gesamt ?> Vokabeln freigeben? Die Klasse sieht dann die ganze Lektion.">
             Alles freigeben
         </button>
-    <?php endif; ?>
-    <?php if ($frei > 0): ?>
-        <button class="iconaction danger" name="release" value="0"
-                data-confirm="Die ganze Lerneinheit wieder zumachen? Die Klasse sieht sie dann als leer. Gelernt bleibt gelernt.">
-            <span aria-hidden="true">&#128274;</span> Freigabe zurücknehmen
-        </button>
-    <?php endif; ?>
-</form>
 
-<?php $fehlen = vocab_without_sentences($unitId); ?>
-<?php if ($fehlen > 0 && $zustand['status'] !== SENTENCE_RUNNING): ?>
-<form method="post" class="compact">
-    <?= teacher_csrf_field() ?>
-    <input type="hidden" name="unit_id" value="<?= $unitId ?>">
-    <button class="btn small" name="catch_up" value="1"
-            data-confirm="Für <?= $fehlen ?> Vokabeln fehlen noch Lückensätze. Jetzt nachholen? Das kostet.">
-        Sätze nachtragen (<?= $fehlen ?>)
-    </button>
+        <button class="btn small secondary" name="release" value="0"
+                <?= $frei === 0 ? 'disabled title="Es ist nichts freigegeben."' : '' ?>
+                data-confirm="Die ganze Lerneinheit wieder zumachen? Die Klasse sieht sie dann als leer. Gelernt bleibt gelernt.">
+            Nichts freigeben
+        </button>
+
+        <?php if ($fehlen > 0 && $zustand['status'] !== SENTENCE_RUNNING): ?>
+            <button class="btn small secondary" name="catch_up" value="1"
+                    data-confirm="Für <?= $fehlen ?> Vokabeln fehlen noch Lückensätze. Jetzt nachholen? Das kostet.">
+                Sätze nachtragen (<?= $fehlen ?>)
+            </button>
+        <?php endif; ?>
+    </div>
 </form>
-<?php endif; ?>
 
 <?php
 /*

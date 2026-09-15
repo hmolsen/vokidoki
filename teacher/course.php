@@ -126,17 +126,25 @@ $einheiten  = course_units_list($courseId);
 $offene     = course_candidates($courseId, $schoolId);
 $verlust    = course_delete_preview($courseId);
 
-teacher_head($kurs['name'], 'index.php', $user);
+// Derselbe Pfad wie in der Lerneinheit, nur eine Ebene hoeher.
+$pfad = [];
+if (($kurs['class_name'] ?? null) !== null && ($kurs['class_id'] ?? null) !== null) {
+    $pfad[] = [
+        'label' => 'Klasse ' . $kurs['class_name'],
+        'href'  => teacher_url('class.php') . '?id=' . (int) $kurs['class_id'],
+    ];
+}
+$pfad[] = [
+    'label' => (string) $kurs['name'],
+    'href'  => null,
+    'flag'  => (string) $kurs['flag_emoji'],
+];
+
+teacher_head($kurs['name'], 'index.php', $user, $pfad);
 teacher_flash_render();
 ?>
 
-<p class="muted">
-    <?= h(trim($kurs['flag_emoji'] . ' ' . $kurs['language_name'])) ?>
-    <?php if (($kurs['class_name'] ?? null) !== null): ?>
-        &middot; Klasse <?= h($kurs['class_name']) ?>
-    <?php endif; ?>
-    &middot; <a href="<?= h(teacher_url('index.php')) ?>">zurück zur Übersicht</a>
-</p>
+<p class="muted"><?= h($kurs['language_name']) ?></p>
 
 <h2>Lerneinheiten</h2>
 

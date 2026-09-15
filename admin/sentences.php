@@ -244,7 +244,8 @@ flash_render();
     <?= filter_chips('Sprache',
         array_map(static fn (array $l): array => [
             'id'    => (int) $l['id'],
-            'label' => trim($l['flag_emoji'] . ' ' . $l['name']),
+            'label' => (string) $l['name'],
+            'flag'  => (string) $l['flag_emoji'],
         ], $languages),
         $langId, ['user' => $userId, 'q' => $suche], 'language', ['unit', 'p'], 'alle') ?>
 

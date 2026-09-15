@@ -2578,6 +2578,62 @@ ok('Und faengt den Zeiger auch auf dem Handy ab',
    preg_match('/\.releasebar\s*\{[^}]*touch-action:\s*none/s', $cssB) === 1,
    'sonst scrollt das Handy statt zu ziehen');
 
+// ---- Der Kopf der Seite: Pfad, Knopfreihe, Meldung an der richtigen Stelle.
+
+/*
+ * Vorher stand ueber der Tabelle eine Fliesstextzeile - "Englisch - Klasse
+ * 7b - zurueck zum Kurs" -, in der nur das letzte Stueck ein Link war. Der
+ * Weg eine Ebene hoeher ist auf dieser Seite aber die haeufigste Handlung
+ * nach dem Lesen. Jetzt steht dort ein Pfad aus Knoepfen.
+ */
+$res = freiPost($base . '/teacher/unit.php?id=' . $freiUnit, null);
+ok('Ueber dem Titel steht ein Pfad',
+   str_contains($res['body'], '<nav class="crumbs"'));
+ok('Er fuehrt zum Kurs',
+   preg_match('/<a class="crumb" href="[^"]*course\.php\?id=\d+"/', $res['body']) === 1);
+ok('Die Lerneinheit selbst ist kein Knopf, sondern die Stelle, an der man steht',
+   str_contains($res['body'], 'class="crumb on" aria-current="page"'));
+ok('Und "zurueck zum Kurs" als Fliesstext ist weg',
+   !str_contains($res['body'], 'zurück zum Kurs'));
+
+ok('Die beiden Freigabe-Knoepfe stehen in einer Reihe',
+   str_contains($res['body'], '<div class="buttonrow">'));
+ok('Und sind von gleicher Bauart',
+   substr_count($res['body'], 'class="btn small') >= 2,
+   'einer als iconaction danger sieht aus wie ein Link');
+ok('"Nichts freigeben" heisst jetzt so',
+   str_contains($res['body'], 'Nichts freigeben'));
+ok('Beide bleiben stehen, auch wenn einer gerade nichts bewirkt',
+   substr_count($res['body'], 'name="release"') >= 2
+   && str_contains($res['body'], 'disabled title='),
+   'sonst springt die Reihe bei jedem Freigeben um');
+
+/*
+ * Die Meldung gehoert unter den Titel und nicht zwischen Titel und
+ * Zwischenzeile - dort zerschnitt sie den Kopf der Seite.
+ */
+$mit = freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
+    'release' => 2, 'unit_id' => $freiUnit, 'csrf' => $freiCsrf,
+]);
+$posPfad = strpos($mit['body'], '<nav class="crumbs"');
+$posH1   = strpos($mit['body'], '<h1>');
+$posNote = strpos($mit['body'], '<div class="notice');
+$posH2   = strpos($mit['body'], '<h2>Freigabe</h2>');
+ok('Die Meldung steht zwischen Titel und Freigabe',
+   $posPfad !== false && $posH1 !== false && $posNote !== false && $posH2 !== false
+   && $posPfad < $posH1 && $posH1 < $posNote && $posNote < $posH2,
+   "Pfad $posPfad, h1 $posH1, Meldung $posNote, h2 $posH2");
+
+freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
+    'release' => 0, 'unit_id' => $freiUnit, 'csrf' => $freiCsrf,
+]);
+
+$cssK = $cssB;
+ok('Der Pfad ist als Knopfreihe gestaltet',
+   preg_match('/\.crumb\s*\{[^}]*border-radius:\s*999px/s', $cssK) === 1);
+ok('Und die Knopfreihe bricht um statt zu quetschen',
+   preg_match('/\.buttonrow\s*\{[^}]*flex-wrap:\s*wrap/s', $cssK) === 1);
+
 /*
  * Die Grenze: Eine Lerneinheit einer anderen Schule geht niemanden etwas an -
  * auch nicht ueber ein untergeschobenes Formular.
@@ -4673,6 +4729,72 @@ ok('Abmelden führt zurück zur Anmeldung',
 
 q('DELETE FROM users WHERE id = ?', [$lehrerId]);
 @unlink($lehrerJar);
+
+section('Fahnen als Bild');
+
+/*
+ * Warum das ueberhaupt sein muss: Windows stellt die Regionalzeichen nicht
+ * als Fahne dar, sondern als die zwei Buchstaben des Laenderkuerzels - aus
+ * der britischen Fahne wird "GB". Das laesst sich mit keiner Schriftart der
+ * Seite aendern; das Bild muss mitgebracht werden.
+ *
+ * Geprueft wird deshalb zweierlei: dass zu jedem Sinnbild der Sprachliste
+ * eine Datei da ist, und dass die Seiten sie auch einsetzen.
+ */
+require_once __DIR__ . '/../lib/flags.php';
+
+ok('Der Dateiname kommt aus den Unicode-Stellen',
+   flag_file("\u{1F1EC}\u{1F1E7}") === '1f1ec-1f1e7', (string) flag_file("\u{1F1EC}\u{1F1E7}"));
+ok('Die Variantenwahl faellt dabei weg',
+   flag_file("\u{1F3DB}\u{FE0F}") === '1f3db', (string) flag_file("\u{1F3DB}\u{FE0F}"));
+ok('Ohne Sinnbild gibt es keinen Namen', flag_file('') === null);
+
+$fehlende = [];
+foreach (world_languages() as $name => [$kuerzel, $bild]) {
+    if (flag_path($bild) === null) {
+        $fehlende[] = $name;
+    }
+}
+ok('Zu jeder Sprache der Liste liegt eine Datei',
+   $fehlende === [], implode(', ', array_slice($fehlende, 0, 8)));
+
+ok('Auch fuer die Weltkugel, die als Rueckfall dient',
+   flag_path("\u{1F310}") !== null);
+
+/*
+ * Fehlt eine Datei, bleibt das Emoji stehen. Das ist der Rueckfall, der auf
+ * dem Handy weiterhin richtig aussieht - und eine Sprache, fuer die niemand
+ * eine Fahne beigelegt hat, verliert dadurch nichts.
+ */
+ok('Ohne Datei bleibt das Emoji als Text stehen',
+   str_contains(flag_html("\u{1F984}"), '<span') && str_contains(flag_html("\u{1F984}"), "\u{1F984}"),
+   flag_html("\u{1F984}"));
+ok('Mit Datei wird daraus ein Bild',
+   str_contains(flag_html("\u{1F1EC}\u{1F1E7}"), '<img')
+   && str_contains(flag_html("\u{1F1EC}\u{1F1E7}"), '1f1ec-1f1e7.svg'));
+ok('Und das Bild ist abrufbar',
+   http($base . '/assets/flags/1f1ec-1f1e7.svg')['status'] === 200);
+
+// ---- Die Seiten setzen es auch ein.
+
+$res = http($base . '/core.js');
+ok('Die App baut Fahnen als Bild',
+   str_contains($res['body'], 'export function flagHtml')
+   && str_contains($res['body'], 'assets/flags/'));
+ok('Und setzt das Emoji ein, wenn das Bild fehlt',
+   str_contains($res['body'], 'bild.dataset.emoji')
+   && str_contains($res['body'], "addEventListener('error'"),
+   'error steigt nicht auf - der Hoerer muss in der Abwaertsphase lauschen');
+
+$res = http($base . '/views/languages.js');
+ok('Die Kachelliste ruft ihn auf', str_contains($res['body'], 'flagHtml('));
+ok('Und setzt die Fahne nicht mehr als Text',
+   !str_contains($res['body'], '<span class="flag">${esc(lang.flag_emoji'));
+
+$res = http($base . '/teacher/teacher.js');
+ok('Das Auswahlfeld fuer Sprachen ebenso',
+   str_contains($res['body'], 'function fahnenBild')
+   && str_contains($res['body'], 'fahnenBild(o.flag'));
 
 section('Abmelden und Token-Widerruf');
 

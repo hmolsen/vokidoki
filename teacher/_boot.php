@@ -8,6 +8,7 @@ require_once __DIR__ . '/../lib/access.php';
 require_once __DIR__ . '/../lib/courses.php';
 require_once __DIR__ . '/../lib/roster.php';
 require_once __DIR__ . '/../lib/worldlanguages.php';
+require_once __DIR__ . '/../lib/flags.php';
 require_once __DIR__ . '/../lib/throttle.php';
 require_once __DIR__ . '/../lib/settings.php';
 require_once __DIR__ . '/../lib/errors.php';
@@ -227,7 +228,47 @@ function teacher_blocked_page(): never
     exit;
 }
 
-function teacher_head(string $title, string $active, array $user): void
+/**
+ * Der Pfad ueber dem Titel, als Knoepfe.
+ *
+ * Eine Lerneinheit liegt in einem Kurs, der Kurs bei einer Klasse. Bisher
+ * stand dieser Zusammenhang als Fliesstext unter dem Titel, und der einzige
+ * Weg zurueck war ein unterstrichenes "zurueck zum Kurs" am Ende der Zeile -
+ * zu finden nur, wer danach sucht. Als Reihe von Knoepfen ist beides
+ * zugleich da: wo man ist und wie man eine Ebene hoeher kommt.
+ *
+ * Jeder Eintrag: ['label' => ..., 'href' => ... oder null, 'flag' => ...].
+ * Ohne href wird daraus die aktuelle Seite - kein Knopf, sondern die
+ * Beschriftung, die zeigt, wo man steht.
+ */
+function teacher_crumbs(array $crumbs): void
+{
+    if ($crumbs === []) {
+        return;
+    }
+
+    echo '<nav class="crumbs" aria-label="Pfad">';
+    $erster = true;
+    foreach ($crumbs as $c) {
+        if (!$erster) {
+            echo '<span class="crumbsep" aria-hidden="true">&#8250;</span>';
+        }
+        $erster = false;
+
+        $inhalt = (isset($c['flag']) && $c['flag'] !== '' ? flag_html((string) $c['flag'], 'crumbflag') : '')
+                . '<span>' . h($c['label']) . '</span>';
+
+        if (($c['href'] ?? null) === null) {
+            printf('<span class="crumb on" aria-current="page">%s</span>', $inhalt);
+        } else {
+            printf('<a class="crumb" href="%s">%s</a>', h((string) $c['href']), $inhalt);
+        }
+    }
+    echo "</nav>
+";
+}
+
+function teacher_head(string $title, string $active, array $user, array $crumbs = []): void
 {
     ?><!doctype html>
 <html lang="de"><head>
@@ -235,7 +276,7 @@ function teacher_head(string $title, string $active, array $user): void
 <title><?= h($title) ?> - Vokabeltrainer</title>
 <link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
 <link rel="stylesheet" href="<?= h(url('/admin/admin.css')) ?>">
-</head><body class="admin">
+</head><body class="admin" data-base="<?= h(base_path()) ?>">
 <div class="adminbar">
     <nav>
         <?php
@@ -260,6 +301,7 @@ function teacher_head(string $title, string $active, array $user): void
     </form>
 </div>
 <main class="adminmain">
+<?php teacher_crumbs($crumbs); ?>
 <h1><?= h($title) ?></h1>
     <?php
 }

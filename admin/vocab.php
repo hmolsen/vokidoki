@@ -481,7 +481,8 @@ foreach ($languages as $l) {
     <?= filter_chips('Sprache',
         array_map(static fn (array $l): array => [
             'id'    => (int) $l['id'],
-            'label' => trim($l['flag_emoji'] . ' ' . $l['name']),
+            'label' => (string) $l['name'],
+            'flag'  => (string) $l['flag_emoji'],
         ], $languages),
         $langId, ['user' => $userId], 'language', ['unit']) ?>
 
@@ -495,7 +496,7 @@ foreach ($languages as $l) {
 
 <?php if ($lang !== null): ?>
 <div class="card">
-    <strong><?= h(trim($lang['flag_emoji'] . ' ' . $lang['name'])) ?></strong>
+    <strong><?= flag_html((string) $lang['flag_emoji']) ?> <?= h($lang['name']) ?></strong>
     <span class="tiny muted">
         &middot; <?= (int) $lang['units'] ?> Lerneinheit(en),
         <?= (int) $lang['words'] ?> Vokabel(n)

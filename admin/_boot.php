@@ -7,6 +7,7 @@ require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/settings.php';
 require_once __DIR__ . '/../lib/cost.php';
 require_once __DIR__ . '/../lib/colors.php';
+require_once __DIR__ . '/../lib/flags.php';
 require_once __DIR__ . '/../lib/pager.php';
 require_once __DIR__ . '/../lib/punctuation.php';
 require_once __DIR__ . '/../lib/errors.php';
@@ -199,12 +200,22 @@ function filter_chips(
             h($allLabel),
         );
     }
+    /*
+     * Ein Eintrag darf eine Fahne mitbringen. Zusammengesetzt wird sie hier
+     * und nicht beim Aufrufer: Sonst muesste der fertiges HTML liefern, und
+     * ein Feld, das mal maskiert und mal nicht maskiert wird, geht frueher
+     * oder spaeter schief.
+     */
     foreach ($items as $item) {
+        $inhalt = (($item['flag'] ?? '') !== ''
+                    ? flag_html((string) $item['flag'], 'chipflag') . ' '
+                    : '')
+                . h($item['label']);
         $chips .= sprintf(
             '<a class="chip%s" href="%s">%s</a>',
             (int) $item['id'] === $current ? ' on' : '',
             h($link((int) $item['id'])),
-            h($item['label']),
+            $inhalt,
         );
     }
 

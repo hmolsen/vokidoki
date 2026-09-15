@@ -113,6 +113,31 @@ Länge und Präfix, nie der Key selbst.
 
 ---
 
+## Fahnen liegen als Datei bei
+
+Jede Sprache trägt ein Sinnbild — meist eine Fahne. Gespeichert wird es als
+Emoji, und auf dem Handy sieht das gut aus. **Windows stellt die
+Regionalzeichen nicht als Fahne dar, sondern als die zwei Buchstaben des
+Länderkürzels:** aus der britischen Fahne wird „GB". Das ist keine Sache der
+Schriftart der Seite, sondern eine Entscheidung des Betriebssystems — umgehen
+lässt sie sich nur, indem man das Bild mitbringt.
+
+Deshalb liegt zu jedem Sinnbild eine SVG-Datei in `assets/flags/`, benannt
+nach den Unicode-Stellen (`1f1ec-1f1e7.svg` ist `U+1F1EC U+1F1E7`, also
+Grossbritannien). `lib/flags.php` und `core.js` bauen daraus ein `<img>`;
+fehlt die Datei, bleibt das Emoji stehen, und dann sieht es aus wie vorher.
+Eine Sprache, für die niemand eine Fahne beigelegt hat, verliert dadurch
+nichts.
+
+Kommt eine Sprache dazu, genügt es, die Datei danebenzulegen — es gibt keine
+Liste, die gepflegt werden müsste.
+
+Die Grafiken stammen aus **Twemoji** (<https://github.com/jdecked/twemoji>)
+und stehen unter **CC-BY 4.0**. `assets/flags/HERKUNFT.md` sagt dasselbe noch
+einmal an Ort und Stelle.
+
+---
+
 ## Das Home-Bildschirm-Symbol pro Kind
 
 iOS gibt jeder installierten Web-App einen **eigenen Cookie-Container**, getrennt
@@ -386,7 +411,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-677 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+701 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
 Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
 Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
 hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
@@ -448,6 +473,6 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 887 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 911 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
