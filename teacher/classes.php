@@ -120,11 +120,14 @@ teacher_flash_render();
 </form>
 
 <p class="tiny muted">
-    So, wie die Klasse im Stundenplan heisst - „5B", „7c", „Q1". Die Kinder
-    kommen im naechsten Schritt hinein: Klasse oeffnen, Namensliste
-    hineinkopieren. Aus einer Klasse wird noch kein Kurs - den legst du unter
-    <a href="<?= h(teacher_url('index.php')) ?>">Kurse</a> an, und die Kinder
-    der Klasse kommen dann gleich mit hinein.
+    Hier legst du eine Klasse an. Die Klasse nennst du am besten so, wie sie in der Schule heißt
+    (zum Beispiel "5a", "9B" oder "7.2"). Innerhalb einer Klasse kannst du dann sowohl die Schülerinnen
+    und Schüler hinzufügen, als auch Kurse anlegen.
+    Ein Kurs (zum Beispiel "Englisch") ist dann mit der Klasse verknüpft und heißt beispielsweise
+    "English - 9B". <br>
+    Die Schülerinnen und Schüler einer Klasse werden automatisch einem Kurs der Klasse hinzugefügt.
+    Danach sind die Klassenliste und Kursliste unabhängig voneinander - du kannst in einem Kurs
+    individuell Kinder hinzufügen oder entfernen.
 </p>
 
 <?php endif; ?>
