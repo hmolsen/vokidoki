@@ -207,6 +207,62 @@ die richtige Quizantwort ausschließlich serverseitig.
 
 ---
 
+## Der Lehrkraft-Bereich hat eine Ebene weniger
+
+Die Navigation **ist** der Pfad: Oben links steht der Name der Schule und
+führt zu den Klassen, rechts davon wächst er mit — `Grundschule Musterhausen
+› Klasse 5B › Englisch - 5B › Unit 4`. Feste Reiter gibt es nicht mehr.
+
+Alles hängt an der Klasse. Eine eigene Seite „Kurse", die alle Kurse der
+Schule untereinander auflistete, gab es einmal; sie zwang dazu, in jeder
+Zeile die Klasse mitzulesen, und wer einen Kurs anlegen wollte, musste die
+Klasse in einem Auswahlfeld wieder heraussuchen, obwohl er gerade von ihr
+kam. Jetzt stehen in der Klasse zuerst ihre Kurse, darunter ihre Kinder, und
+beides legt man dort an. `teacher/index.php` leitet auf die Klassen weiter,
+damit ein Lesezeichen auf die alte Liste nicht ins Leere führt.
+
+Tabellenzeilen öffnen sich per Klick statt über einen „Öffnen"-Knopf in
+jeder Zeile. Der Name in der Zeile bleibt ein echter Link — für die
+Tastatur, fürs Aufklappen in einem neuen Tab und für alle, die keinen Zeiger
+benutzen.
+
+**Am Telefon** wird aus jeder Tabellenzeile eine Karte: Unterhalb von 720 px
+steht die Spaltenüberschrift vor dem Wert (aus `data-label` am `<td>`), die
+Aktionen liegen unten in der Karte, und nichts scrollt seitwärts. Am Rechner
+bleibt es eine Tabelle — dort vergleicht man Spalten.
+
+### Der QR-Code, der die Anmeldung ersetzt
+
+Eingelesen wird mit der Kamera, also am Telefon; verwaltet wird am Rechner.
+Dazwischen lag eine Anmeldung: Adresse abtippen, Benutzername, Passwort —
+für einen Vorgang, der danach zwanzig Sekunden dauert. „Am Smartphone
+einlesen" zeigt stattdessen einen QR-Code; wer ihn scannt, ist angemeldet
+und steht direkt im Einlesen dieses Kurses.
+
+**Das ist ein Passwort in Bildform**, und entsprechend eng ist es gefasst
+(`lib/handoff.php`):
+
+- **Einmal.** Eingelöst wird über ein bedingtes `UPDATE`; wer als zweiter
+  kommt, bekommt nichts.
+- **Kurz.** Zehn Minuten.
+- **Nur für sich selbst.** Erzeugen kann eine Marke nur eine angemeldete
+  Lehrkraft, nur per POST mit CSRF-Token, und nur auf das eigene Konto.
+- **Auf Druck, nicht auf Vorrat.** Der Code entsteht erst beim Klick und
+  verschwindet beim Schließen des Fensters — er soll nicht zehn Minuten lang
+  auf einem unbeaufsichtigten Bildschirm liegen.
+- **Das Ziel kommt aus der Marke**, nicht aus der Adresse, und wird beim
+  Einlösen geprüft.
+
+Was er *nicht* ist: eine eingeschränkte Sitzung. Wer die Marke einlöst, ist
+angemeldet wie nach Benutzername und Passwort. Das ist Absicht — zum
+Einlesen gehört die ganze App — und der Grund für die kurze Frist.
+
+Der QR-Code im noch leeren Kurs trägt **keine** Marke: Er führt nur in die
+Einleseansicht, und dort meldet man sich an. Eine Karte, die bei jedem
+Seitenaufruf einen Schlüssel erzeugt, hinterlässt eine Spur von Schlüsseln.
+
+---
+
 ## Kosten
 
 Jede Bilderkennung wird mit Modell, Token, Dauer und berechnetem Preis in
@@ -411,7 +467,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-701 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+757 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
 Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
 Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
 hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
@@ -473,6 +529,6 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 911 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 967 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.

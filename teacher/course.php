@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/qr.php';
+require_once __DIR__ . '/../lib/handoff.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['teacher_logout'])) {
     teacher_csrf_check();
@@ -20,7 +21,7 @@ if ($kurs === null) {
     // Bewusst dieselbe Meldung wie bei einem Kurs, den es gar nicht gibt:
     // Wer ihn nicht sehen darf, soll nicht erfahren, dass er existiert.
     teacher_flash('Diesen Kurs gibt es nicht.', 'bad');
-    teacher_redirect('index.php');
+    teacher_redirect('classes.php');
 }
 
 $zurueck = 'course.php?id=' . $courseId;
@@ -31,6 +32,58 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['sync_class'])
     teacher_flash($neu === 0
         ? 'Es war niemand nachzutragen.'
         : sprintf('%d aus der Klasse nachgetragen.', $neu));
+    teacher_redirect($zurueck);
+}
+
+/*
+ * Aufnehmen ueber den eingetippten Namen.
+ *
+ * Die Vorschlagsliste im Feld nennt nur, wer noch nicht im Kurs ist - hier
+ * wird trotzdem noch einmal gegen genau diese Liste geprueft. Was im
+ * Formular steht, hat der Aufrufer geschrieben, nicht die Seite.
+ *
+ * Angenommen werden Anzeigename und Benutzername. Zwei Kinder koennen
+ * "Lilli M." heissen; dann sagt die Meldung das und nennt den Weg, der
+ * eindeutig ist.
+ */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_member_by_name'])) {
+    teacher_csrf_check();
+
+    $eingabe = trim((string) ($_POST['member_name'] ?? ''));
+    if ($eingabe === '') {
+        teacher_flash('Da steht kein Name.', 'bad');
+        teacher_redirect($zurueck);
+    }
+
+    $klein   = mb_strtolower($eingabe);
+    $treffer = array_values(array_filter(
+        course_candidates($courseId, $schoolId),
+        static fn (array $k): bool => mb_strtolower((string) $k['display_name']) === $klein
+                                   || mb_strtolower((string) $k['username']) === $klein,
+    ));
+
+    if ($treffer === []) {
+        teacher_flash(sprintf(
+            '"%s" steht nicht zur Auswahl - entweder schon im Kurs oder nicht an dieser Schule.',
+            $eingabe,
+        ), 'bad');
+        teacher_redirect($zurueck);
+    }
+
+    if (count($treffer) > 1) {
+        teacher_flash(sprintf(
+            '"%s" gibt es %dmal. Nimm den Benutzernamen, der ist eindeutig: %s.',
+            $eingabe,
+            count($treffer),
+            implode(', ', array_column($treffer, 'username')),
+        ), 'bad');
+        teacher_redirect($zurueck);
+    }
+
+    $konto = $treffer[0];
+    course_add_member($courseId, (int) $konto['id'],
+        $konto['role'] === ROLE_TEACHER ? COURSE_ROLE_TEACHER : COURSE_ROLE_STUDENT);
+    teacher_flash(sprintf('%s ist jetzt im Kurs.', $konto['display_name']));
     teacher_redirect($zurueck);
 }
 
@@ -118,7 +171,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['delete_course
         . 'Lernstaenden von %d Kindern.',
         $name, $verlust['units'], $verlust['vocab'], $verlust['students'],
     ));
-    teacher_redirect('index.php');
+    teacher_redirect($kurs['class_id'] === null
+        ? 'classes.php'
+        : 'class.php?id=' . (int) $kurs['class_id']);
 }
 
 $mitglieder = course_members_list($courseId);
@@ -126,7 +181,17 @@ $einheiten  = course_units_list($courseId);
 $offene     = course_candidates($courseId, $schoolId);
 $verlust    = course_delete_preview($courseId);
 
-// Derselbe Pfad wie in der Lerneinheit, nur eine Ebene hoeher.
+/*
+ * Der Weg zum Einlesen, an einer Stelle gebildet.
+ *
+ * Die App faehrt ueber die Raute: /#/lang/<id>/import. Als Adresse fuer
+ * einen QR-Code muss sie vollstaendig sein - public_url() statt url(),
+ * sonst steht im Code ein Pfad und kein Link.
+ */
+$importPfad = '/lang/' . (int) $kurs['language_id'] . '/import';
+$importUrl  = url('/') . '#' . $importPfad;
+$importQr   = qr_svg(public_url('/') . '#' . $importPfad, 3, 'Zum Einlesen dieses Kurses');
+
 $pfad = [];
 if (($kurs['class_name'] ?? null) !== null && ($kurs['class_id'] ?? null) !== null) {
     $pfad[] = [
@@ -140,7 +205,7 @@ $pfad[] = [
     'flag'  => (string) $kurs['flag_emoji'],
 ];
 
-teacher_head($kurs['name'], 'index.php', $user, $pfad);
+teacher_head($kurs['name'], $user, $pfad);
 teacher_flash_render();
 ?>
 
@@ -148,95 +213,153 @@ teacher_flash_render();
 
 <h2>Lerneinheiten</h2>
 
+<?php if ($einheiten === []): ?>
 <?php
 /*
- * Eingelesen wird in der App, nicht hier - dafuer braucht es die Kamera.
- * Das stand bisher nur als Randnotiz unter der Tabelle und war damit
- * unsichtbar, solange es noch keine Lerneinheit gab. Genau dann braucht man
- * es aber: Der Kurs ist angelegt, und die Seite sagte nur, dass nichts da
- * ist - ohne zu verraten, wie etwas hinkommt.
+ * Der leere Kurs erklaert sich selbst.
+ *
+ * Eingelesen wird in der App am Handy - dort ist die Kamera. Das stand
+ * frueher als Randnotiz unter einer Tabelle, die es noch gar nicht gab.
+ * Der Code fuehrt direkt in die Einleseansicht dieses Kurses und nicht
+ * mehr nur auf die Startseite; wer ihn scannt, muss sich dort noch
+ * anmelden. Wer sich das sparen will, nimmt den Knopf darunter.
  */
-$appAdresse = public_url('/');
-$appQr      = qr_svg($appAdresse, 3, 'Adresse der App');
 ?>
-
-<?php if ($einheiten === []): ?>
-<div class="card" style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">
-    <?php if ($appQr !== null): ?>
-        <div style="flex:none;width:120px"><?= $appQr ?></div>
+<div class="card importcard">
+    <?php if ($importQr !== null): ?>
+        <div class="importqr"><?= $importQr ?></div>
     <?php endif; ?>
-    <div style="flex:1 1 260px">
-        <h3 style="margin:0 0 6px">Noch keine Lerneinheit</h3>
-        <p style="margin:0 0 10px">
-            Eingelesen wird <strong>in der App am Handy</strong> - dort ist die
+    <div class="importtext">
+        <h3>Noch keine Lerneinheit</h3>
+        <p>
+            Eingelesen wird <strong>am Handy</strong> &ndash; dort ist die
             Kamera. Buchseite fotografieren, das Modell erkennt die Vokabeln,
             und die Lektion landet in diesem Kurs.
         </p>
-        <p class="tiny muted" style="margin:0">
-            Code scannen oder <a href="<?= h(url('/')) ?>" target="_blank" rel="noopener">die
-            App hier öffnen</a> und mit demselben Konto anmelden. Die Lektion
-            erscheint danach in dieser Liste, und du gibst sie portionsweise frei -
-            Lückensätze entstehen nur für Freigegebenes.
+        <div class="buttonrow">
+            <a class="btn small" href="<?= h($importUrl) ?>" target="_blank" rel="noopener">
+                Vokabeln einlesen
+            </a>
+            <button class="btn small secondary" type="button" data-handoff>
+                <span aria-hidden="true">&#128241;</span> Am Smartphone einlesen
+            </button>
+        </div>
+        <p class="tiny muted">
+            Der Code führt genau hierher. Am Telefon meldest du dich dann an &ndash;
+            oder du nimmst „Am Smartphone einlesen", dann entfällt auch das.
         </p>
     </div>
 </div>
 <?php else: ?>
-<table class="data">
+<table class="data rowlink" id="einheiten">
     <tr>
-        <th>Titel</th><th class="num">Vokabeln</th><th>Freigegeben</th>
-        <th>Angelegt</th><th class="actions"></th>
+        <th>Titel</th>
+        <th class="num">Vokabeln</th>
+        <th>Freigegeben</th>
+        <th>Angelegt</th>
+        <th class="chev"></th>
     </tr>
     <?php foreach ($einheiten as $e): ?>
-        <tr>
-            <td><?= h($e['title']) ?></td>
-            <td class="num"><?= (int) $e['vocab_count'] ?></td>
-            <td>
+        <?php $ziel = teacher_url('unit.php') . '?id=' . (int) $e['id']; ?>
+        <tr data-href="<?= h($ziel) ?>">
+            <td data-label="Titel">
+                <a class="rowmain" href="<?= h($ziel) ?>"><?= h($e['title']) ?></a>
+            </td>
+            <td class="num" data-label="Vokabeln"><?= (int) $e['vocab_count'] ?></td>
+            <td data-label="Freigegeben">
                 <?php
                 $frei   = (int) $e['released_count'];
                 $gesamt = (int) $e['vocab_count'];
                 if ($gesamt === 0) {
                     echo '<span class="muted">&ndash;</span>';
                 } elseif ($frei >= $gesamt) {
-                    echo 'alle';
+                    echo '<span class="pill good">alle</span>';
                 } elseif ($frei === 0) {
                     echo '<span class="muted">noch keine</span>';
                 } else {
-                    printf('%d von %d', $frei, $gesamt);
+                    printf('<span class="pill">%d von %d</span>', $frei, $gesamt);
                 }
                 ?>
             </td>
-            <td class="tiny muted"><?= h(substr((string) $e['created_at'], 0, 10)) ?></td>
-            <td class="actions">
-                <a class="iconaction" title="Vokabeln freigeben"
-                   href="<?= h(teacher_url('unit.php') . '?id=' . (int) $e['id']) ?>">
-                    <span aria-hidden="true">&#128275;</span> Freigeben
-                </a>
-            </td>
+            <td class="tiny muted" data-label="Angelegt"><?= h(substr((string) $e['created_at'], 0, 10)) ?></td>
+            <td class="chev" aria-hidden="true">&#8250;</td>
         </tr>
     <?php endforeach; ?>
+
+    <?php
+    /*
+     * Die Anlegezeile, wie in jeder anderen Tabelle - nur dass hier nichts
+     * einzutippen ist. Eine Lerneinheit entsteht aus Fotos, und die macht
+     * man mit dem Geraet, das eine Kamera hat. Also zwei Wege: hier weiter
+     * (wenn das hier schon das Telefon ist) oder hinueber aufs Telefon.
+     */
+    ?>
+    <tr class="newrow">
+        <td colspan="5" data-label="Neue Lerneinheit">
+            <span class="coursetitle">
+                <span class="cflag plus">+</span>
+                <span class="buttonrow" style="margin:0">
+                    <a class="btn small" href="<?= h($importUrl) ?>"
+                       target="_blank" rel="noopener">Vokabeln einlesen</a>
+                    <button class="btn small secondary" type="button" data-handoff>
+                        <span aria-hidden="true">&#128241;</span> Am Smartphone einlesen
+                    </button>
+                </span>
+            </span>
+        </td>
+    </tr>
 </table>
+
 <p class="tiny muted">
-    Freigegeben wird portionsweise, und das hat einen Grund: Zu jeder
-    freigegebenen Vokabel entstehen Lückensätze, und die kosten. Eine ganze
-    Unit einlesen und nur das aufmachen, was dran ist, spart den Rest -
-    solange er nicht dran ist. Eine weitere Lektion liest du
-    <a href="<?= h(url('/')) ?>" target="_blank" rel="noopener">in der App</a>
-    am Handy ein; dafür braucht es die Kamera.
+    Eine Zeile anklicken öffnet die Freigabe. Freigegeben wird portionsweise:
+    Die Klasse sieht nur, was aufgemacht ist. Eingelesen wird am Handy &ndash;
+    dafür braucht es die Kamera.
 </p>
 <?php endif; ?>
 
+<?php
+/*
+ * Das Fenster mit dem Code.
+ *
+ * Es steht leer im HTML und wird erst gefuellt, wenn jemand darauf drueckt -
+ * die Marke darin ist eine Anmeldung, und die soll nicht auf Vorrat
+ * entstehen und zehn Minuten lang auf einem unbeaufsichtigten Bildschirm
+ * liegen. Ohne JavaScript bleibt der Knopf wirkungslos; der Weg ueber
+ * "Vokabeln einlesen" und eine Anmeldung am Telefon steht daneben.
+ */
+?>
+<dialog id="handoff" class="qrdialog"
+        data-url="<?= h(teacher_url('handoff.php')) ?>"
+        data-course="<?= $courseId ?>"
+        data-csrf="<?= h(teacher_csrf_token()) ?>">
+    <h3>Am Smartphone einlesen</h3>
+    <div class="qrslot" id="handoffSlot"></div>
+    <p class="tiny muted" id="handoffHint">
+        Code mit der Kamera des Telefons scannen. Du bist dann angemeldet und
+        stehst direkt im Einlesen dieses Kurses.
+    </p>
+    <p class="tiny muted">
+        <strong>Der Code ist ein Schlüssel.</strong> Er gilt
+        <?= HANDOFF_TTL ?> Minuten und nur ein einziges Mal &ndash; wer ihn
+        einlöst, ist als du angemeldet. Nicht abfotografieren lassen.
+    </p>
+    <form method="dialog"><button class="btn small secondary">Schließen</button></form>
+</dialog>
+
 <h2>Wer im Kurs ist</h2>
 
-<?php if ($mitglieder === []): ?>
-    <p class="muted">Noch niemand.</p>
-<?php else: ?>
-<table class="data">
-    <tr><th>Name</th><th>Benutzername</th><th>Rolle</th><th class="actions"></th></tr>
+<table class="data" id="mitglieder">
+    <tr>
+        <th>Name</th>
+        <th>Benutzername</th>
+        <th>Rolle</th>
+        <th class="actions"></th>
+    </tr>
     <?php foreach ($mitglieder as $m): ?>
         <tr<?= $m['active'] ? '' : ' class="dim"' ?>>
-            <td><?= h($m['display_name']) ?></td>
-            <td><code class="token"><?= h($m['username']) ?></code></td>
-            <td><?= $m['member_role'] === 'teacher' ? 'Lehrkraft' : 'SchülerIn' ?></td>
+            <td data-label="Name"><?= h($m['display_name']) ?></td>
+            <td data-label="Benutzername"><code class="token"><?= h($m['username']) ?></code></td>
+            <td data-label="Rolle"><?= $m['member_role'] === 'teacher' ? 'Lehrkraft' : 'SchülerIn' ?></td>
             <td class="actions">
                 <form method="post" class="compact">
                     <?= teacher_csrf_field() ?>
@@ -250,32 +373,81 @@ $appQr      = qr_svg($appAdresse, 3, 'Adresse der App');
             </td>
         </tr>
     <?php endforeach; ?>
+
+    <?php
+    /*
+     * Aufnehmen wie ueberall sonst: eine Zeile mit einem Feld.
+     *
+     * Vorher stand darunter ein Auswahlfeld mit allen Konten der Schule und
+     * daneben "Einzeln aufnehmen" - bei dreihundert Kindern eine Liste, durch
+     * die man scrollt. Jetzt tippt man den Namen, und die Vorschlagsliste
+     * engt ein. Sie enthaelt nur, wer noch nicht im Kurs ist; wer drin ist,
+     * steht ja schon oben.
+     *
+     * <datalist> und nicht selbstgebaut: Der Browser kann das, auf dem
+     * Telefon auch, und ohne JavaScript bleibt es ein Textfeld, in das man
+     * den Namen tippt.
+     */
+    ?>
+    <?php
+    /*
+     * Die Zeile steht auch dann da, wenn es niemanden mehr aufzunehmen gibt -
+     * dann sagt sie das. Eine Zeile, die je nach Datenlage verschwindet,
+     * laesst einen suchen, wo sie hin ist.
+     */
+    ?>
+    <tr class="newrow">
+        <td colspan="3" data-label="Aufnehmen">
+            <?php if ($offene === []): ?>
+                <span class="tiny muted">
+                    Alle Konten dieser Schule sind schon im Kurs. Neue Kinder
+                    legst du in der Klasse an.
+                </span>
+            <?php else: ?>
+                <span class="coursetitle">
+                    <span class="cflag plus">+</span>
+                    <input type="text" name="member_name" form="newmember"
+                           list="kandidaten" autocomplete="off" maxlength="80" required
+                           placeholder="Name eintippen" aria-label="Wen aufnehmen?">
+                </span>
+                <datalist id="kandidaten">
+                    <?php foreach ($offene as $o): ?>
+                        <option value="<?= h($o['display_name']) ?>"
+                            <?= $o['role'] === ROLE_TEACHER ? 'label="Lehrkraft"' : '' ?>></option>
+                    <?php endforeach; ?>
+                </datalist>
+            <?php endif; ?>
+        </td>
+        <td class="actions">
+            <?php if ($offene !== []): ?>
+                <button class="iconaction primary" form="newmember"
+                        name="add_member_by_name" value="1" title="In den Kurs aufnehmen">
+                    <span aria-hidden="true">+</span> Aufnehmen
+                </button>
+            <?php endif; ?>
+        </td>
+    </tr>
 </table>
+
+<?php if ($offene !== []): ?>
+<form method="post" id="newmember" hidden>
+    <?= teacher_csrf_field() ?>
+    <input type="hidden" name="course_id" value="<?= $courseId ?>">
+</form>
 <?php endif; ?>
 
 <?php if (($kurs['class_name'] ?? null) !== null): ?>
-<form method="post" class="compact">
-    <?= teacher_csrf_field() ?>
-    <input type="hidden" name="course_id" value="<?= $courseId ?>">
-    <button class="btn secondary small" name="sync_class" value="1">
-        Klasse <?= h($kurs['class_name']) ?> nachtragen
-    </button>
-</form>
-<?php endif; ?>
-
-<?php if ($offene !== []): ?>
-<form method="post" class="inline" style="margin-top:10px">
-    <?= teacher_csrf_field() ?>
-    <input type="hidden" name="course_id" value="<?= $courseId ?>">
-    <select name="add_member" style="width:auto;margin:0">
-        <?php foreach ($offene as $o): ?>
-            <option value="<?= (int) $o['id'] ?>">
-                <?= h($o['display_name']) ?><?= $o['role'] === ROLE_TEACHER ? ' (Lehrkraft)' : '' ?>
-            </option>
-        <?php endforeach; ?>
-    </select>
-    <button class="btn secondary small" type="submit">Einzeln aufnehmen</button>
-</form>
+<p class="buttonrow">
+    <span class="compactform">
+        <form method="post">
+            <?= teacher_csrf_field() ?>
+            <input type="hidden" name="course_id" value="<?= $courseId ?>">
+            <button class="btn secondary small" name="sync_class" value="1">
+                Klasse <?= h($kurs['class_name']) ?> nachtragen
+            </button>
+        </form>
+    </span>
+</p>
 <?php endif; ?>
 
 <p class="tiny muted">

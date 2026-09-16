@@ -43,7 +43,7 @@ $unit = $schoolId === 0 ? null : q1(
 
 if ($unit === null) {
     teacher_flash('Diese Lerneinheit gibt es nicht.', 'bad');
-    teacher_redirect('index.php');
+    teacher_redirect('classes.php');
 }
 
 $zurueck = 'unit.php?id=' . $unitId;
@@ -170,7 +170,7 @@ $pfad[] = [
 ];
 $pfad[] = ['label' => (string) $unit['title'], 'href' => null];
 
-teacher_head($unit['title'], 'index.php', $user, $pfad);
+teacher_head($unit['title'], $user, $pfad);
 teacher_flash_render();
 ?>
 

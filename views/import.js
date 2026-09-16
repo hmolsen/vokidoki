@@ -10,13 +10,41 @@ const JPEG_QUALITY = 0.82;
 
 const draftKey = (languageId) => `vt-draft-${languageId}`;
 
+/*
+ * In welchen Kurs das hier faellt.
+ *
+ * Wichtig fuer alle, die per Link oder QR-Code direkt hier landen, ohne
+ * vorher die Kursliste gesehen zu haben - "Vokabeln einlesen" allein sagt
+ * nicht, wessen Vokabeln. Der Name wird einmal geholt und gemerkt; kommt er
+ * nicht, wird eben nichts angezeigt, und das Einlesen geht trotzdem.
+ */
+let kursName = null;
+
+async function kursHolen(languageId) {
+    if (kursName !== null) return kursName;
+    try {
+        const { language } = await api('units', 'list', { query: { language_id: languageId } });
+        kursName = language?.course || language?.name || '';
+    } catch {
+        kursName = '';
+    }
+    return kursName;
+}
+
 export async function importView(languageId) {
+    kursName = null;
     const draft = loadDraft(languageId);
     if (draft) {
         showReview(languageId, draft.title, draft.entries, true);
-        return;
+    } else {
+        showCapture(languageId);
     }
-    showCapture(languageId);
+
+    // Nachgereicht statt abgewartet: Die Kamera soll nicht auf eine Abfrage
+    // warten, die nur eine Ueberschrift betrifft.
+    const name = await kursHolen(languageId);
+    const ziel = $('#kurs');
+    if (ziel && name) ziel.textContent = name;
 }
 
 // ------------------------------------------------------------------ Schritt 1: Fotos
@@ -28,6 +56,7 @@ export async function importView(languageId) {
 function showCapture(languageId, images = []) {
     render(`
         ${topbar('Vokabeln einlesen', { backTo: `/lang/${languageId}` })}
+        <p class="kurszeile">Kurs: <strong id="kurs">${esc(kursName || '...')}</strong></p>
         <div id="msg"></div>
 
         <p class="sub">
@@ -134,6 +163,7 @@ function showReview(languageId, title, entries, fromDraft) {
 
     render(`
         ${topbar('Stimmt das so?', { backTo: `/lang/${languageId}` })}
+        <p class="kurszeile">Kurs: <strong id="kurs">${esc(kursName || '...')}</strong></p>
         <div id="msg"></div>
 
         ${fromDraft ? '<div class="notice info">Deine letzte Eingabe wurde wiederhergestellt.</div>' : ''}

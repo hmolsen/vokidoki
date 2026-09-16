@@ -159,7 +159,7 @@ function teacher_require(): array
         login_attempts_reset($username);
 
         login_user((int) $row['id']);
-        teacher_redirect('index.php');
+        teacher_redirect('classes.php');
     }
 
     $user = current_user();
@@ -229,13 +229,13 @@ function teacher_blocked_page(): never
 }
 
 /**
- * Der Pfad ueber dem Titel, als Knoepfe.
+ * Der Pfad, und er ist zugleich die Navigation.
  *
- * Eine Lerneinheit liegt in einem Kurs, der Kurs bei einer Klasse. Bisher
- * stand dieser Zusammenhang als Fliesstext unter dem Titel, und der einzige
- * Weg zurueck war ein unterstrichenes "zurueck zum Kurs" am Ende der Zeile -
- * zu finden nur, wer danach sucht. Als Reihe von Knoepfen ist beides
- * zugleich da: wo man ist und wie man eine Ebene hoeher kommt.
+ * Schule > Klasse > Kurs > Lerneinheit. Vorher standen oben zwei feste
+ * Reiter ("Klassen", "Kurse") und darunter, auf manchen Seiten, ein Pfad -
+ * zwei Navigationen uebereinander, die dasselbe meinten. Jetzt gibt es eine:
+ * Der Pfad steht in der Leiste, und sein erstes Glied ist die Schule. Wer
+ * dorthin klickt, sieht alle Klassen.
  *
  * Jeder Eintrag: ['label' => ..., 'href' => ... oder null, 'flag' => ...].
  * Ohne href wird daraus die aktuelle Seite - kein Knopf, sondern die
@@ -255,7 +255,7 @@ function teacher_crumbs(array $crumbs): void
         }
         $erster = false;
 
-        $inhalt = (isset($c['flag']) && $c['flag'] !== '' ? flag_html((string) $c['flag'], 'crumbflag') : '')
+        $inhalt = (($c['flag'] ?? '') !== '' ? flag_html((string) $c['flag'], 'crumbflag') : '')
                 . '<span>' . h($c['label']) . '</span>';
 
         if (($c['href'] ?? null) === null) {
@@ -268,7 +268,26 @@ function teacher_crumbs(array $crumbs): void
 ";
 }
 
-function teacher_head(string $title, string $active, array $user, array $crumbs = []): void
+/**
+ * Das erste Glied des Pfades: die Schule.
+ *
+ * Es steht auf jeder Seite und fuehrt zur Uebersicht aller Klassen. Damit
+ * ist die Schule zugleich die Wurzel der Navigation - eine Lehrkraft
+ * arbeitet immer in genau einer, und ein Reiter "Klassen" neben dem Namen
+ * der Schule waere dasselbe zweimal.
+ */
+function teacher_school_crumb(array $user): array
+{
+    $name = (string) qv('SELECT name FROM schools WHERE id = ?',
+                        [(int) ($user['school_id'] ?? 0)]);
+
+    return [
+        'label' => $name !== '' ? $name : 'Ohne Schule',
+        'href'  => teacher_url('classes.php'),
+    ];
+}
+
+function teacher_head(string $title, array $user, array $crumbs = []): void
 {
     ?><!doctype html>
 <html lang="de"><head>
@@ -278,30 +297,16 @@ function teacher_head(string $title, string $active, array $user, array $crumbs 
 <link rel="stylesheet" href="<?= h(url('/admin/admin.css')) ?>">
 </head><body class="admin" data-base="<?= h(base_path()) ?>">
 <div class="adminbar">
-    <nav>
-        <?php
-        // Klassen zuerst: Sie entstehen zuerst, und ohne sie ist ein Kurs
-        // eine Huelle ohne Kinder.
-        $nav = [
-            'classes.php' => 'Klassen',
-            'index.php'   => 'Kurse',
-        ];
-        foreach ($nav as $datei => $label) {
-            printf('<a href="%s"%s>%s</a>',
-                h(teacher_url($datei)), $datei === $active ? ' class="on"' : '', h($label));
-        }
-        ?>
-    </nav>
+    <?php teacher_crumbs(array_merge([teacher_school_crumb($user)], $crumbs)); ?>
     <span class="tiny muted" style="margin-left:auto">
         <?= h($user['display_name']) ?>
     </span>
-    <form method="post" action="<?= h(teacher_url('index.php')) ?>" class="compact">
+    <form method="post" action="<?= h(teacher_url('classes.php')) ?>" class="compact">
         <?= teacher_csrf_field() ?>
         <button class="linkbtn" name="teacher_logout" value="1">Abmelden</button>
     </form>
 </div>
 <main class="adminmain">
-<?php teacher_crumbs($crumbs); ?>
 <h1><?= h($title) ?></h1>
     <?php
 }

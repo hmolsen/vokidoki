@@ -26,6 +26,9 @@ require_once __DIR__ . '/html.php';
 /** Wo die Dateien liegen, vom Projektstamm aus. */
 const FLAG_DIR = 'assets/flags';
 
+/** Womit eine Sprache ohne eigenes Sinnbild angezeigt wird. */
+const FLAG_FALLBACK = "\u{1F310}";
+
 /**
  * Der Dateiname zu einem Sinnbild, oder null.
  *

@@ -12,6 +12,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/lib/auth.php';
+require_once __DIR__ . '/lib/handoff.php';
 require_once __DIR__ . '/lib/access.php';
 require_once __DIR__ . '/lib/errors.php';
 require_once __DIR__ . '/lib/version.php';
@@ -33,6 +34,32 @@ if ($token !== '') {
         $_SESSION['device_token'] = $token;
     }
     header('Location: ' . url('/'), true, 302);
+    exit;
+}
+
+/*
+ * Der Sprung vom Rechner ans Telefon: eine Einmal-Marke aus einem QR-Code.
+ *
+ * Anders als der Geraete-Token oben ist sie keine Installation, sondern ein
+ * einziger Uebergang - sie gilt Minuten, laesst sich genau einmal einloesen
+ * und bringt gleich an die Stelle mit, an der weitergearbeitet wird. Das
+ * Ziel kommt aus der Marke, nicht aus der Adresse: Sonst schickte ein
+ * praeparierter Link jemanden irgendwohin.
+ *
+ * Weitergeleitet wird in jedem Fall, auch wenn die Marke nicht mehr gilt -
+ * dann landet man auf der Anmeldung, und die Adresse ist die Marke los.
+ */
+$sprung = isset($_GET['h']) && is_string($_GET['h']) ? $_GET['h'] : '';
+if ($sprung !== '') {
+    $ziel = url('/');
+    $eingeloest = handoff_redeem($sprung);
+    if ($eingeloest !== null) {
+        login_user((int) $eingeloest['user']['id']);
+        if (handoff_target_ok($eingeloest['target'])) {
+            $ziel = url('/') . '#' . $eingeloest['target'];
+        }
+    }
+    header('Location: ' . $ziel, true, 302);
     exit;
 }
 

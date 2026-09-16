@@ -605,6 +605,26 @@ function schema_migrations(): array
          * Gezaehlt wird je Konto und je Adresse; die Wartezeit waechst mit
          * der Zahl der Versuche.
          */
+        // Einmal-Marken fuer den Sprung vom Rechner ans Telefon. Ein
+        // QR-Code auf dem Bildschirm der Lehrkraft traegt eine davon; wer
+        // ihn scannt, ist angemeldet und steht im Einlesen. Kurzlebig und
+        // genau einmal einloesbar - siehe lib/handoff.php.
+        'login_handoffs.table' => [
+            static fn (): bool => !table_exists('login_handoffs'),
+            "CREATE TABLE login_handoffs (
+               id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+               user_id    INT UNSIGNED NOT NULL,
+               token_hash CHAR(64)     NOT NULL,
+               target     VARCHAR(255) NOT NULL DEFAULT '',
+               created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               expires_at DATETIME     NOT NULL,
+               used_at    DATETIME     NULL,
+               UNIQUE KEY uq_lh_hash (token_hash),
+               KEY idx_lh_user (user_id),
+               CONSTRAINT fk_lh_user FOREIGN KEY (user_id)
+                 REFERENCES users(id) ON DELETE CASCADE
+             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        ],
         'login_attempts.table' => [
             static fn (): bool => !table_exists('login_attempts'),
             "CREATE TABLE login_attempts (

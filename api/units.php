@@ -91,10 +91,27 @@ switch (action()) {
             $r['done'] = $r['steps_total'] > 0 && $r['steps_done'] >= $r['steps_total'];
         }
         unset($r);
+        /*
+         * Der Name des Kurses reist mit.
+         *
+         * Gebraucht beim Einlesen: Wer ueber einen Link oder einen QR-Code
+         * direkt dort landet, sieht sonst nur "Vokabeln einlesen" und weiss
+         * nicht, in welchen Kurs das faellt. Bei einer Familie steht dort
+         * dasselbe wie der Sprachname, bei einer Schule "Englisch - 5B".
+         */
+        $kurs = qv(
+            'SELECT co.name FROM courses co
+               JOIN course_members m ON m.course_id = co.id
+              WHERE co.language_id = ? AND m.user_id = ?
+              LIMIT 1',
+            [(int) $lang['id'], $uid],
+        );
+
         json_out(['ok' => true, 'language' => [
-            'id'   => (int) $lang['id'],
-            'name' => $lang['name'],
-            'flag' => $lang['flag_emoji'],
+            'id'     => (int) $lang['id'],
+            'name'   => $lang['name'],
+            'flag'   => $lang['flag_emoji'],
+            'course' => $kurs === null ? null : (string) $kurs,
         ], 'units' => $rows]);
 
     case 'get':

@@ -992,7 +992,8 @@ $schemaSql = (string) file_get_contents(__DIR__ . '/../schema.sql');
 $fehlend = [];
 foreach (['schools', 'classes', 'class_members', 'courses', 'course_members',
           'users', 'languages', 'units', 'vocab', 'sentences', 'sentence_flags',
-          'progress', 'ai_requests', 'settings', 'device_tokens'] as $t) {
+          'progress', 'ai_requests', 'settings', 'device_tokens',
+          'login_attempts', 'login_handoffs', 'password_words'] as $t) {
     if (!str_contains($schemaSql, 'CREATE TABLE IF NOT EXISTS ' . $t . ' (')) {
         $fehlend[] = $t;
     }
@@ -3468,9 +3469,27 @@ ok('Und erfaehrt nicht, woran es lag',
 
 $res = teacherLogin($lehrerName, 'lehrerin123');
 ok('Die Lehrkraft kommt hinein',
-   $res['status'] === 200 && str_contains($res['body'], 'Kurse'), "Status {$res['status']}");
-ok('Und sieht ihre Schule', str_contains($res['body'], 'Familie'));
-ok('Sowie die Kurse der Schule',
+   $res['status'] === 200 && str_contains($res['body'], 'Klassen'), "Status {$res['status']}");
+
+/*
+ * Der Name der Schule steht im Pfad oben links und fuehrt zu den Klassen.
+ * Frueher stand hier ein fester Name im Test - der galt genau in einer
+ * Datenbank und fiel in jeder anderen um.
+ */
+$schulName = (string) qv('SELECT s.name FROM schools s
+                            JOIN users u ON u.school_id = s.id WHERE u.id = ?', [$lehrerId]);
+ok('Und sieht ihre Schule im Pfad',
+   $schulName !== '' && str_contains($res['body'], h($schulName)), $schulName);
+ok('Der Name der Schule fuehrt zu den Klassen',
+   preg_match('/<a class="crumb" href="[^"]*classes\.php"/', $res['body']) === 1);
+
+$res = teacherGet('classes.php');
+ok('Sowie die Klassen der Schule',
+   preg_match('/class\.php\?id=(\d+)/', $res['body']) === 1);
+$res = teacherGet('class.php?id=' . (int) qv(
+    'SELECT c.id FROM classes c WHERE c.school_id = ? ORDER BY c.id LIMIT 1',
+    [(int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId])]));
+ok('Und darin die Kurse',
    preg_match('/course\.php\?id=(\d+)/', $res['body'], $km) === 1);
 
 $kursId = (int) ($km[1] ?? 0);
@@ -3846,8 +3865,9 @@ teacherRequest($base . '/teacher/class.php?id=' . $kursKlasseId, [
 ok('Mit zwei Kindern darin',
    count(class_members_list($kursKlasseId)) === 2);
 
-$res = teacherGet('index.php');
-ok('Die Uebersicht bietet das Anlegen an', str_contains($res['body'], 'name="create_course"'));
+$res = teacherGet('class.php?id=' . $kursKlasseId);
+ok('Die Klasse bietet das Anlegen eines Kurses an',
+   str_contains($res['body'], 'name="create_course"'));
 
 /*
  * Das Formular selbst. Was das Skript daraus macht - ein durchsuchbares
@@ -3869,8 +3889,9 @@ ok('Der Kursname steht als Text da',
 ok('Mit einem Stift daneben', str_contains($res['body'], 'data-editname'));
 ok('Und das Namensfeld ist zunaechst verborgen',
    preg_match('/<input type="text" name="name"[^>]*hidden/', $res['body']) === 1);
-ok('Die Klassen tragen ihren Namen fuer den Vorschlag mit',
-   preg_match('/<option value="\d+" data-name="/', $res['body']) === 1);
+ok('Die Klasse reist am Formular mit, statt ausgewaehlt zu werden',
+   preg_match('/data-classname="[^"]+"/', $res['body']) === 1,
+   'der Kurs entsteht in der Klasse - da gibt es nichts mehr auszuwaehlen');
 ok('Das Skript wird geladen', str_contains($res['body'], 'teacher.js?v='));
 
 $skript = http($base . '/teacher/teacher.js');
@@ -3901,7 +3922,7 @@ ok('Und das Skript setzt ihre Lage',
  * eine Eigenschaft der Sprache und keine Entscheidung, die eine Lehrkraft
  * treffen soll.
  */
-$res = teacherRequest($base . '/teacher/index.php', [
+$res = teacherRequest($base . '/teacher/class.php?id=' . $kursKlasseId, [
     'create_course' => '1',
     'language'      => 'Englisch',
     'class_id'      => $kursKlasseId,
@@ -3944,7 +3965,7 @@ ok('Und die Kinder der Klasse als SchuelerInnen',
 
 // Zweimal derselbe Kurs geht nicht.
 $vorher = (int) qv('SELECT COUNT(*) FROM courses');
-$res = teacherRequest($base . '/teacher/index.php', [
+$res = teacherRequest($base . '/teacher/class.php?id=' . $kursKlasseId, [
     'create_course' => '1', 'language' => 'Englisch',
     'class_id'      => $kursKlasseId, 'csrf' => $lehrerCsrf,
 ]);
@@ -3952,13 +3973,22 @@ ok('Denselben Kurs zweimal anzulegen wird abgelehnt',
    (int) qv('SELECT COUNT(*) FROM courses') === $vorher
    && str_contains($res['body'], 'gibt es an dieser Schule schon'));
 
-// Eine zweite Klasse darf dieselbe Sprache haben - mit eigenen Unterlagen.
-$res = teacherRequest($base . '/teacher/index.php', [
+/*
+ * Eine zweite Klasse darf dieselbe Sprache haben - mit eigenen Unterlagen.
+ * Angelegt wird sie in ihrer eigenen Klasse; einen Kurs "ohne Klasse" gibt
+ * es ueber die Oberflaeche nicht mehr.
+ */
+$zweiteKlasse = 'Kurs8' . bin2hex(random_bytes(2));
+$zweiteKlasseId = (int) (class_create(
+    (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]), $zweiteKlasse,
+)['id'] ?? 0);
+$res = teacherRequest($base . '/teacher/class.php?id=' . $zweiteKlasseId, [
     'create_course' => '1', 'language' => 'Englisch',
-    'class_id'      => 0, 'csrf' => $lehrerCsrf,
+    'class_id'      => $zweiteKlasseId, 'csrf' => $lehrerCsrf,
 ]);
-$zweiter = q1('SELECT * FROM courses WHERE name = ?', ['Englisch']);
-ok('Eine zweite Gruppe darf dieselbe Sprache lernen', $zweiter !== null);
+$zweiter = q1('SELECT * FROM courses WHERE name = ?', ['Englisch - ' . $zweiteKlasse]);
+ok('Eine zweite Gruppe darf dieselbe Sprache lernen', $zweiter !== null,
+   'Englisch - ' . $zweiteKlasse . ' nicht gefunden');
 ok('Und bekommt dafuer eine eigene Sprachzeile',
    $zweiter !== null
    && (int) $zweiter['language_id'] !== (int) ($neuerKurs['language_id'] ?? 0));
@@ -4226,9 +4256,17 @@ $klassenName = '9Z-' . bin2hex(random_bytes(2));
 
 $res  = teacherGet('classes.php');
 ok('Die Klassenübersicht öffnet sich', $res['status'] === 200);
-ok('Auch dort sind die Aktionen Knoepfe',
-   !preg_match('/>\s*öffnen\s*</u', $res['body'])
-   && str_contains($res['body'], 'class="iconaction"'));
+/*
+ * Kein Knopf "Öffnen" mehr: Die Zeile selbst oeffnet. Eine Spalte, die in
+ * jeder Zeile dasselbe sagt, war auf dem Telefon die breiteste.
+ */
+ok('Es gibt keinen Oeffnen-Knopf mehr',
+   !preg_match('/>\s*Öffnen\s*</u', $res['body']));
+ok('Die Zeile traegt stattdessen ihr Ziel',
+   preg_match('/<tr[^>]*data-href="[^"]*class\.php\?id=\d+"/', $res['body']) === 1);
+ok('Und der Name darin ist ein echter Link',
+   preg_match('/<a class="rowmain" href="[^"]*class\.php\?id=\d+"/', $res['body']) === 1,
+   'sonst kommt niemand ohne Zeiger dorthin');
 
 /*
  * Dasselbe Muster wie bei den Kursen: eine Tabelle, und die letzte Zeile
@@ -4244,10 +4282,23 @@ ok('Es gibt keine eigene Karte mehr dafuer',
 ok('Die Tabelle zeigt auch, wie viele Kurse an der Klasse haengen',
    preg_match('/<th class="num">Kurse<\/th>/', $res['body']) === 1);
 
+/*
+ * Die Navigation ist der Pfad. Zwei feste Reiter darueber gab es einmal -
+ * sie sagten dasselbe ein zweites Mal, und der Reiter "Kurse" fuehrte auf
+ * eine Liste, die es nicht mehr gibt.
+ */
 $navQuelle = (string) file_get_contents(__DIR__ . '/../teacher/_boot.php');
-ok('Klassen stehen links von Kursen',
-   strpos($navQuelle, "'classes.php' => 'Klassen'") < strpos($navQuelle, "'index.php'   => 'Kurse'"),
-   'die Reihenfolge stimmt nicht');
+ok('Es gibt keine festen Reiter mehr',
+   !str_contains($navQuelle, "'index.php'   => 'Kurse'"));
+ok('Der Pfad steht in der Leiste',
+   preg_match('/adminbar.*?teacher_crumbs/s', $navQuelle) === 1);
+ok('Und faengt bei der Schule an',
+   str_contains($navQuelle, 'teacher_school_crumb'));
+
+$res2 = teacherGet('index.php');
+ok('Die alte Kursliste leitet auf die Klassen',
+   str_contains($res2['body'], 'Klassen') && !str_contains($res2['body'], 'name="create_course"'),
+   'ein Lesezeichen darauf soll nicht ins Leere fuehren');
 preg_match('/name="csrf" value="([a-f0-9]+)"/', $res['body'], $cm);
 $lehrerCsrf = $cm[1] ?? '';
 
@@ -4718,9 +4769,421 @@ foreach (class_members_list($klasseId) as $k) {
 }
 q('DELETE FROM classes WHERE id = ?', [$klasseId]);
 
-$res = teacherRequest($base . '/teacher/index.php',
+section('Klasse als Mittelpunkt');
+
+/*
+ * Der Umbau: Die Kursliste als eigene Seite ist weg, alles steht in der
+ * Klasse. Geprueft wird die Form der Seiten - was das Skript daraus macht
+ * (Zeilenklick, Sofort-Zettel, QR-Fenster), laesst sich von hier aus nicht
+ * ausfuehren; dafuer gibt es die Zusicherungen am Quelltext weiter unten.
+ */
+$umbauKlasse = class_create(
+    (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]),
+    'Umbau' . bin2hex(random_bytes(2)),
+);
+$umbauKlasseId = (int) ($umbauKlasse['id'] ?? 0);
+ok('Eine Klasse fuer den Umbau steht bereit', $umbauKlasseId > 0);
+
+$res = teacherGet('class.php?id=' . $umbauKlasseId);
+
+// ---- Die Kurse stehen oben, die Kinder darunter.
+
+$posKurse  = strpos($res['body'], 'Kurse dieser Klasse');
+$posKinder = strpos($res['body'], 'Kinder dieser Klasse');
+ok('Die Kurse stehen ueber den Kindern',
+   $posKurse !== false && $posKinder !== false && $posKurse < $posKinder,
+   "Kurse $posKurse, Kinder $posKinder");
+
+ok('Die Kurstabelle hat eine Anlegezeile',
+   preg_match('/<tr class="newrow">.*?name="create_course"/s', $res['body']) === 1);
+ok('Und die Kindertabelle auch',
+   str_contains($res['body'], 'id="neuesKind"'));
+
+// ---- Der Zettel steht immer da, abgeblendet solange die Klasse leer ist.
+
+ok('Der Klassenzettel steht auch bei leerer Klasse schon da',
+   str_contains($res['body'], 'id="zettelAlle"'),
+   'er tauchte frueher erst nach dem Neuladen auf');
+ok('Bei leerer Klasse abgeblendet',
+   preg_match('/id="zettelAlle"[^>]*class="[^"]*\baus\b/', $res['body']) === 1
+   || preg_match('/class="[^"]*\baus\b[^"]*"[^>]*id="zettelAlle"/', $res['body']) === 1,
+   'sonst fuehrt er auf ein leeres Blatt');
+
+teacherRequest($base . '/teacher/class.php?id=' . $umbauKlasseId, [
+    'add_student' => '1', 'class_id' => $umbauKlasseId,
+    'student'     => 'Mira Talberg', 'csrf' => $lehrerCsrf,
+]);
+$res = teacherGet('class.php?id=' . $umbauKlasseId);
+ok('Mit einem Kind darin ist er frei',
+   str_contains($res['body'], 'id="zettelAlle"')
+   && !str_contains($res['body'], 'secondary aus')
+   && !str_contains($res['body'], 'aria-disabled'),
+   'die Sperre haengt noch dran');
+
+$skriptU = http($base . '/teacher/teacher.js');
+ok('Und das Skript nimmt die Sperre schon beim ersten Kind weg',
+   str_contains($skriptU['body'], 'zettelFreigeben')
+   && str_contains($skriptU['body'], "getElementById('zettelAlle')"),
+   'sonst erscheint er erst beim naechsten Laden');
+
+// ---- Zeilen oeffnen, statt einen Knopf dafuer zu tragen.
+
+ok('Das Skript macht Zeilen anklickbar',
+   str_contains($skriptU['body'], "closest('tr[data-href]')"));
+ok('Laesst aber Knoepfe und Felder in Ruhe',
+   str_contains($skriptU['body'], "closest('a, button, input, select, textarea, label')"),
+   'sonst oeffnet ein Klick auf "Entfernen" die Zeile');
+ok('Und markierten Text ebenso',
+   str_contains($skriptU['body'], 'getSelection'),
+   'wer etwas markiert, liest - er klickt nicht');
+
+// ---- Die Kursseite.
+
+$umbauKurs = course_create(
+    q1('SELECT * FROM users WHERE id = ?', [$lehrerId]),
+    'Umbauisch' . bin2hex(random_bytes(2)), "\u{1F310}", $umbauKlasseId, '',
+);
+$umbauKursId = is_string($umbauKurs) ? 0 : (int) $umbauKurs['id'];
+ok('Ein Kurs in dieser Klasse', $umbauKursId > 0,
+   is_string($umbauKurs) ? $umbauKurs : '');
+
+$res = teacherGet('course.php?id=' . $umbauKursId);
+
+ok('Der Pfad fuehrt ueber die Klasse zurueck',
+   preg_match('/<a class="crumb" href="[^"]*class\.php\?id=' . $umbauKlasseId . '"/', $res['body']) === 1);
+
+/*
+ * Der QR-Code im leeren Kurs fuehrt in die Einleseansicht dieses Kurses -
+ * frueher nur auf die Startseite, und dort stand man dann und wusste nicht
+ * weiter.
+ */
+$umbauSprache = (int) qv('SELECT language_id FROM courses WHERE id = ?', [$umbauKursId]);
+ok('Der leere Kurs zeigt einen Code',
+   str_contains($res['body'], '<svg') && str_contains($res['body'], 'importqr'));
+ok('Und einen Weg direkt ins Einlesen',
+   str_contains($res['body'], '#/lang/' . $umbauSprache . '/import'),
+   'der Code fuehrte frueher nur auf die Startseite');
+
+// Eine Lerneinheit anlegen - dann weicht die Karte der Tabelle mit Anlegezeile.
+$umbauUnit = makeUnit($lehrerId, $umbauSprache, 'Umbau-Unit');
+$res = teacherGet('course.php?id=' . $umbauKursId);
+ok('Mit Lerneinheiten ist die Karte weg', !str_contains($res['body'], 'importcard'));
+ok('Dafuer steht eine Anlegezeile in der Tabelle',
+   preg_match('/<tr class="newrow">.*?Vokabeln einlesen.*?data-handoff/s', $res['body']) === 1,
+   'beide Wege: hier weiter oder hinueber aufs Telefon');
+ok('Die Lerneinheit oeffnet sich per Zeilenklick',
+   preg_match('/<tr data-href="[^"]*unit\.php\?id=' . $umbauUnit . '"/', $res['body']) === 1);
+
+// ---- Aufnehmen ueber ein Feld mit Vorschlaegen.
+
+ok('Es gibt kein Auswahlfeld mehr zum Aufnehmen',
+   !str_contains($res['body'], 'Einzeln aufnehmen'));
+ok('Sondern eine Zeile mit Vorschlagsliste',
+   str_contains($res['body'], 'list="kandidaten"')
+   && str_contains($res['body'], '<datalist id="kandidaten"'));
+
+$fremder = makeUser('e2e_vorschlag', 'Vorschlag K.');
+q('UPDATE users SET school_id = ? WHERE id = ?',
+  [(int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]), $fremder]);
+
+$res = teacherGet('course.php?id=' . $umbauKursId);
+ok('Die Liste nennt, wer noch nicht im Kurs ist',
+   str_contains($res['body'], 'Vorschlag K.'));
+
+teacherRequest($base . '/teacher/course.php?id=' . $umbauKursId, [
+    'add_member_by_name' => '1', 'course_id' => $umbauKursId,
+    'member_name' => 'Vorschlag K.', 'csrf' => $lehrerCsrf,
+]);
+ok('Ein Name aus der Liste nimmt auf',
+   course_role($fremder, $umbauKursId) === 'student');
+
+$res = teacherGet('course.php?id=' . $umbauKursId);
+ok('Danach steht der Name nicht mehr in der Liste',
+   preg_match('/<datalist id="kandidaten">(.*?)<\/datalist>/s', $res['body'], $dm) !== 1
+   || !str_contains($dm[1], 'Vorschlag K.'));
+
+$vorher = (int) qv('SELECT COUNT(*) FROM course_members WHERE course_id = ?', [$umbauKursId]);
+teacherRequest($base . '/teacher/course.php?id=' . $umbauKursId, [
+    'add_member_by_name' => '1', 'course_id' => $umbauKursId,
+    'member_name' => 'Gibt Es Nicht', 'csrf' => $lehrerCsrf,
+]);
+ok('Ein erfundener Name nimmt niemanden auf',
+   (int) qv('SELECT COUNT(*) FROM course_members WHERE course_id = ?', [$umbauKursId]) === $vorher);
+
+q('DELETE FROM users WHERE id = ?', [$fremder]);
+
+// ---- Tabellen am Telefon.
+
+$cssU = (string) file_get_contents(__DIR__ . '/../admin/admin.css');
+ok('Es gibt einen Umbruchpunkt fuer kleine Bildschirme',
+   preg_match('/@media \(max-width: 720px\)/', $cssU) === 1);
+ok('Darunter wird aus jeder Zeile eine Karte',
+   preg_match('/@media \(max-width: 720px\).*?table\.data tr \{[^}]*display: block/s', $cssU) === 1);
+ok('Und die Spaltenueberschrift steht vor dem Wert',
+   str_contains($cssU, 'content: attr(data-label)'),
+   'ohne Kopfzeile waere eine Karte eine Reihe unbeschrifteter Werte');
+
+$res = teacherGet('class.php?id=' . $umbauKlasseId);
+ok('Die Zellen tragen ihre Beschriftung mit',
+   substr_count($res['body'], 'data-label="') >= 6,
+   substr_count($res['body'], 'data-label="') . ' Zellen');
+
+q('DELETE FROM classes WHERE id = ?', [$umbauKlasseId]);
+
+section('Sprung ans Telefon');
+
+/*
+ * Ein QR-Code, der die Anmeldung ersetzt, ist ein Passwort in Bildform.
+ * Entsprechend wird hier nicht die Schnittstelle geglaubt, sondern das
+ * BILD gelesen: Das SVG besteht aus einem Pfad mit einem Rechteck je
+ * dunklem Modul; daraus entsteht die Matrix zurueck, und qrLesen() macht
+ * daraus wieder Text. Was in diesem Text steht, wird dann wirklich
+ * aufgerufen - mit einem leeren Cookie-Glas, so wie ein Telefon daherkommt.
+ */
+require_once __DIR__ . '/../lib/handoff.php';
+
+/** Das SVG aus lib/qr.php zurueck in eine Matrix lesen. */
+function qrAusSvg(string $svg): ?array
+{
+    if (preg_match('/viewBox="0 0 (\d+) \d+"/', $svg, $v) !== 1) {
+        return null;
+    }
+    $ganz = (int) $v[1];
+    $rand = 4;
+    $size = $ganz - 2 * $rand;
+    if ($size < 21) {
+        return null;
+    }
+
+    $m = array_fill(0, $size, array_fill(0, $size, false));
+    if (preg_match('/<path d="([^"]*)"/', $svg, $p) !== 1) {
+        return null;
+    }
+    if (preg_match_all('/M(\d+) (\d+)h1v1h-1z/', $p[1], $treffer, PREG_SET_ORDER) === 0) {
+        return null;
+    }
+    foreach ($treffer as $t) {
+        $c = (int) $t[1] - $rand;
+        $r = (int) $t[2] - $rand;
+        if ($r >= 0 && $r < $size && $c >= 0 && $c < $size) {
+            $m[$r][$c] = true;
+        }
+    }
+    return $m;
+}
+
+// ---- Eine Marke entsteht nur auf Druck, und nur fuer eine Lehrkraft.
+
+/*
+ * Eigene Klasse, eigener Kurs: Der Abschnitt haengt dann an nichts, was ein
+ * anderer Abschnitt vorher aufgeraeumt haben koennte.
+ */
+$hoSchule = (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]);
+$hoKlasse = class_create($hoSchule, 'Sprung' . bin2hex(random_bytes(2)));
+$hoKurs   = 0;
+if (!is_string($hoKlasse)) {
+    $angelegt = course_create(
+        q1('SELECT * FROM users WHERE id = ?', [$lehrerId]),
+        'Sprungisch' . bin2hex(random_bytes(2)), "\u{1F310}", (int) $hoKlasse['id'], '',
+    );
+    if (!is_string($angelegt)) {
+        $hoKurs = (int) $angelegt['id'];
+    }
+}
+ok('Die Lehrkraft hat einen Kurs fuer den Versuch', $hoKurs > 0);
+
+$res = teacherGet('course.php?id=' . $hoKurs);
+preg_match('/name="csrf" value="([a-f0-9]+)"/', $res['body'], $hm);
+$hoCsrf = $hm[1] ?? '';
+
+ok('Die Kursseite bietet den Sprung an',
+   str_contains($res['body'], 'data-handoff')
+   && str_contains($res['body'], 'id="handoff"'));
+
+// Angemeldet, aber per GET: Eine Marke ist eine Handlung, kein Abruf.
+$res = teacherRequest($base . '/teacher/handoff.php', null);
+ok('Ohne POST gibt es keine Marke', $res['status'] === 405, 'Status ' . $res['status']);
+
+$vorher = (int) qv('SELECT COUNT(*) FROM login_handoffs');
+$res = teacherRequest($base . '/teacher/handoff.php', [
+    'course_id' => $hoKurs, 'csrf' => 'falsch',
+]);
+ok('Ohne gueltiges CSRF-Feld auch nicht',
+   (int) qv('SELECT COUNT(*) FROM login_handoffs') === $vorher);
+
+$res  = teacherRequest($base . '/teacher/handoff.php', [
+    'course_id' => $hoKurs, 'csrf' => $hoCsrf,
+]);
+$json = json_decode($res['body'], true);
+ok('Mit POST und CSRF entsteht eine', ($json['ok'] ?? false) === true,
+   mb_substr($res['body'], 0, 120));
+ok('Und die Antwort traegt ein SVG',
+   str_contains((string) ($json['svg'] ?? ''), '<svg'));
+ok('Sie nennt auch die Frist', (int) ($json['minuten'] ?? 0) === HANDOFF_TTL);
+
+// ---- Was im Bild steht, ist die Adresse, die zieht.
+
+$matrix = qrAusSvg((string) ($json['svg'] ?? ''));
+ok('Das Bild laesst sich zurueck in eine Matrix lesen', $matrix !== null);
+
+$adresse = $matrix === null ? null : qrLesen($matrix);
+ok('Und die Matrix wieder in Text', $adresse !== null, (string) $adresse);
+ok('Im Code steht eine Adresse mit Marke',
+   is_string($adresse) && str_contains($adresse, '?h='), (string) $adresse);
+
+/*
+ * Jetzt das Telefon: ein eigenes Cookie-Glas, also keine Sitzung. Wer die
+ * Adresse aufruft, muss danach angemeldet sein und im Einlesen dieses
+ * Kurses stehen.
+ */
+$handyJar = tempnam(sys_get_temp_dir(), 'vthandy');
+$holen = static function (string $url) use ($handyJar): array {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_COOKIEJAR      => $handyJar,
+        CURLOPT_COOKIEFILE     => $handyJar,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_HEADER         => true,
+        CURLOPT_TIMEOUT        => 30,
+    ]);
+    $antwort = (string) curl_exec($ch);
+    $status  = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $ort     = (string) curl_getinfo($ch, CURLINFO_REDIRECT_URL);
+    curl_close($ch);
+    return ['status' => $status, 'ort' => $ort, 'body' => $antwort];
+};
+
+// Die Adresse aus dem Bild zeigt auf public_url(); lokal ist das derselbe
+// Host, aber der Test soll gegen $base laufen und nicht gegen die Welt.
+$lokal = (string) $adresse;
+if (preg_match('/\?h=(.+)$/', $lokal, $hmm) === 1) {
+    $lokal = $base . '/?h=' . $hmm[1];
+}
+
+$r1 = $holen($lokal);
+ok('Die Marke leitet weiter', $r1['status'] === 302, 'Status ' . $r1['status']);
+ok('Und zwar in die Einleseansicht dieses Kurses',
+   str_contains($r1['ort'], '#/lang/') && str_contains($r1['ort'], '/import'),
+   $r1['ort']);
+
+// Angemeldet? Die API antwortet nur einer Sitzung.
+$ch = curl_init($base . '/api/languages.php?action=list');
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_COOKIEJAR      => $handyJar,
+    CURLOPT_COOKIEFILE     => $handyJar,
+    CURLOPT_HTTPHEADER     => ['X-Vokabeltrainer: 1'],
+    CURLOPT_TIMEOUT        => 30,
+]);
+$apiAntwort = json_decode((string) curl_exec($ch), true);
+curl_close($ch);
+ok('Das Telefon ist danach angemeldet', ($apiAntwort['ok'] ?? false) === true,
+   (string) ($apiAntwort['error'] ?? '?'));
+
+// ---- Genau einmal.
+
+/*
+ * Die Uhr eine Weile zuruecksetzen, bevor es ein zweites Mal versucht wird.
+ *
+ * Ohne das prueft der Abschnitt nichts: Beide Versuche fallen in dieselbe
+ * Sekunde, das zweite UPDATE schreibt denselben Wert noch einmal, MySQL
+ * meldet "null Zeilen geaendert" - und die Marke waere auch dann nicht
+ * einloesbar, wenn der Riegel ganz fehlte. Genau so ist es beim ersten
+ * Mutationsversuch gewesen: Der Riegel wurde entfernt, und der Test blieb
+ * gruen. Mit einer gealterten Marke faellt er um, wie er soll.
+ */
+q('UPDATE login_handoffs SET used_at = DATE_SUB(NOW(), INTERVAL 5 SECOND)
+    WHERE used_at IS NOT NULL AND used_at > DATE_SUB(NOW(), INTERVAL 1 MINUTE)');
+
+$zweiterJar = tempnam(sys_get_temp_dir(), 'vtzwei');
+$ch = curl_init($lokal);
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_COOKIEJAR      => $zweiterJar,
+    CURLOPT_COOKIEFILE     => $zweiterJar,
+    CURLOPT_FOLLOWLOCATION => false,
+    CURLOPT_TIMEOUT        => 30,
+]);
+curl_exec($ch);
+$ortZwei = (string) curl_getinfo($ch, CURLINFO_REDIRECT_URL);
+curl_close($ch);
+ok('Ein zweites Einloesen fuehrt nicht ins Einlesen',
+   !str_contains($ortZwei, '/import'), $ortZwei);
+
+$ch = curl_init($base . '/api/languages.php?action=list');
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_COOKIEJAR      => $zweiterJar,
+    CURLOPT_COOKIEFILE     => $zweiterJar,
+    CURLOPT_HTTPHEADER     => ['X-Vokabeltrainer: 1'],
+    CURLOPT_TIMEOUT        => 30,
+]);
+$zweiAntwort = json_decode((string) curl_exec($ch), true);
+curl_close($ch);
+ok('Und meldet niemanden an', ($zweiAntwort['ok'] ?? false) !== true);
+
+@unlink($handyJar);
+@unlink($zweiterJar);
+
+// ---- Abgelaufen ist abgelaufen.
+
+$alt = handoff_create($lehrerId, '/lang/1/import');
+q('UPDATE login_handoffs SET expires_at = DATE_SUB(NOW(), INTERVAL 1 MINUTE)
+    WHERE token_hash = ?', [hash('sha256', $alt)]);
+ok('Eine abgelaufene Marke zieht nicht', handoff_redeem($alt) === null);
+
+// ---- Fremde Kurse gehen niemanden etwas an.
+
+$fremderKurs = (int) qv(
+    'SELECT co.id FROM courses co WHERE co.school_id <> ? LIMIT 1',
+    [(int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId])],
+);
+if ($fremderKurs > 0) {
+    $res  = teacherRequest($base . '/teacher/handoff.php', [
+        'course_id' => $fremderKurs, 'csrf' => $hoCsrf,
+    ]);
+    $json = json_decode($res['body'], true);
+    ok('Fuer einen Kurs einer anderen Schule gibt es keine Marke',
+       ($json['ok'] ?? false) !== true, mb_substr($res['body'], 0, 80));
+}
+
+// ---- Das Ziel kommt aus der Marke, nicht aus der Adresse.
+
+ok('Ein Ziel mit Schema wird abgelehnt',
+   !handoff_target_ok('https://boese.example/'));
+ok('Ein Ziel mit doppeltem Schraegstrich ebenso',
+   !handoff_target_ok('//boese.example/'));
+ok('Ein gewoehnlicher Weg der App ist erlaubt',
+   handoff_target_ok('/lang/12/import'));
+
+/*
+ * Und die Pruefung greift auch wirklich auf dem Weg.
+ *
+ * Das Ziel steht in der Datenbank und kommt von unserem eigenen Code - ein
+ * fremdes koennte dort nur stehen, wenn jemand schon in der Datenbank ist.
+ * Trotzdem: Ein Riegel, der nie angefasst wird, ist einer, von dem niemand
+ * weiss, ob er haelt. Hier wird eine Marke von Hand verbogen.
+ */
+$boese = handoff_create($lehrerId, '/lang/1/import');
+q("UPDATE login_handoffs SET target = 'https://boese.example/' WHERE token_hash = ?",
+  [hash('sha256', $boese)]);
+
+$ch = curl_init($base . '/?h=' . rawurlencode($boese));
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_FOLLOWLOCATION => false,
+    CURLOPT_TIMEOUT        => 30,
+]);
+curl_exec($ch);
+$ortBoese = (string) curl_getinfo($ch, CURLINFO_REDIRECT_URL);
+curl_close($ch);
+ok('Ein verbogenes Ziel fuehrt nicht aus der Anwendung heraus',
+   !str_contains($ortBoese, 'boese.example'), $ortBoese);
+
+$res = teacherRequest($base . '/teacher/classes.php',
     ['teacher_logout' => '1', 'csrf' => (function () use ($base): string {
-        $s = teacherRequest($base . '/teacher/index.php', null);
+        $s = teacherRequest($base . '/teacher/classes.php', null);
         preg_match('/name="csrf" value="([a-f0-9]+)"/', $s['body'], $m);
         return $m[1] ?? '';
     })()]);

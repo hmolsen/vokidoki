@@ -6,7 +6,7 @@ require_once __DIR__ . '/_boot.php';
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['teacher_logout'])) {
     teacher_csrf_check();
     logout_user();
-    teacher_redirect('index.php');
+    teacher_redirect('classes.php');
 }
 
 $user     = teacher_require();
@@ -137,6 +137,39 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_students'
     teacher_redirect($zurück);
 }
 
+/*
+ * Einen Kurs anlegen - jetzt hier statt auf einer eigenen Kursseite.
+ *
+ * Die Klasse steht fest: Man ist in ihr. Auszuwaehlen bleibt die Sprache,
+ * und der Name ergibt sich aus beidem, solange die Lehrkraft nichts anderes
+ * eintraegt. Die Flagge kommt ebenfalls aus der Sprachliste - sie ist eine
+ * Eigenschaft der Sprache und keine Entscheidung, die jemand treffen soll.
+ */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['create_course'])) {
+    teacher_csrf_check();
+
+    $sprache  = (string) ($_POST['language'] ?? '');
+    $ergebnis = course_create(
+        $user,
+        $sprache,
+        language_flag($sprache),
+        $classId,
+        (string) ($_POST['name'] ?? ''),
+    );
+
+    if (is_string($ergebnis)) {
+        teacher_flash($ergebnis, 'bad');
+        teacher_redirect($zurück);
+    }
+
+    $drin = (int) qv('SELECT COUNT(*) FROM course_members WHERE course_id = ?',
+                     [(int) $ergebnis['id']]);
+    teacher_flash(sprintf(
+        'Kurs "%s" angelegt, %d Teilnehmende.', $ergebnis['name'], $drin,
+    ));
+    teacher_redirect('course.php?id=' . (int) $ergebnis['id']);
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['unlock'])) {
     teacher_csrf_check();
 
@@ -204,15 +237,125 @@ $gesperrt  = login_locked_usernames(array_column($kinder, 'username'));
 $frisch    = array_flip((array) ($_SESSION['teacher_fresh'] ?? []));
 unset($_SESSION['teacher_fresh']);
 
-teacher_head('Klasse ' . $klasse['name'], 'classes.php', $user);
+teacher_head('Klasse ' . $klasse['name'], $user, [
+    ['label' => 'Klasse ' . $klasse['name'], 'href' => null],
+]);
 teacher_flash_render();
 ?>
 
-<p class="muted">
-    <a href="<?= h(teacher_url('classes.php')) ?>">zurück zu den Klassen</a>
+<?php
+/*
+ * Die Kurse stehen oben.
+ *
+ * Eine Klasse wird einmal angelegt und einmal gefuellt; danach geht es bei
+ * jedem Besuch um einen Kurs - freigeben, einlesen, nachsehen. Was man
+ * staendig braucht, gehoert nach oben; die Namensliste ist Verwaltung und
+ * steht darunter.
+ */
+?>
+<h2>Kurse dieser Klasse</h2>
+
+<table class="data courses rowlink" id="kurse">
+    <tr>
+        <th>Kurs</th>
+        <th class="num">Kinder</th>
+        <th class="num">Lerneinheiten</th>
+        <th class="num">Freigegeben</th>
+        <th class="chev"></th>
+    </tr>
+
+    <?php foreach ($kurse as $c): ?>
+        <?php $ziel = teacher_url('course.php') . '?id=' . (int) $c['id']; ?>
+        <tr<?= $c['active'] ? '' : ' class="dim"' ?> data-href="<?= h($ziel) ?>">
+            <td data-label="Kurs">
+                <span class="coursetitle">
+                    <?= flag_html($c['flag_emoji'] ?: FLAG_FALLBACK, 'cflag') ?>
+                    <span>
+                        <a class="rowmain" href="<?= h($ziel) ?>"><?= h($c['name']) ?></a>
+                        <span class="tiny muted"><?= h($c['language_name']) ?></span>
+                    </span>
+                </span>
+            </td>
+            <td class="num" data-label="Kinder"><?= (int) $c['students'] ?></td>
+            <td class="num" data-label="Lerneinheiten"><?= (int) $c['units'] ?></td>
+            <td class="num" data-label="Freigegeben">
+                <?php
+                $frei   = (int) $c['released'];
+                $gesamt = (int) $c['vocab'];
+                if ($gesamt === 0) {
+                    echo '<span class="muted">&ndash;</span>';
+                } elseif ($frei >= $gesamt) {
+                    printf('<span class="pill good">alle %d</span>', $gesamt);
+                } else {
+                    printf('<span class="pill">%d von %d</span>', $frei, $gesamt);
+                }
+                ?>
+            </td>
+            <td class="chev" aria-hidden="true">&#8250;</td>
+        </tr>
+    <?php endforeach; ?>
+
+    <?php
+    /*
+     * Die Anlegezeile, wie in jeder anderen Tabelle auch. Die Klasse muss
+     * hier nicht mehr ausgewaehlt werden - man steht ja in ihr. Uebrig
+     * bleibt die Sprache, und der Name ergibt sich daraus.
+     */
+    ?>
+    <tr class="newrow">
+        <td data-label="Neuer Kurs">
+            <span class="coursetitle">
+                <span class="cflag plus">+</span>
+                <select name="language" form="newcourse" data-picker required>
+                    <?php foreach (language_choices() as $s): ?>
+                        <option value="<?= h($s['name']) ?>"
+                                data-flag="<?= h($s['flag']) ?>"
+                                data-top="<?= $s['top'] ? '1' : '0' ?>">
+                            <?= h($s['flag'] . ' ' . $s['name']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </span>
+        </td>
+        <td colspan="3" data-label="Name">
+            <div class="coursename">
+                <strong data-coursename></strong>
+                <button type="button" class="iconbtn" data-editname
+                        title="Namen selbst wählen" aria-label="Namen selbst wählen">&#9998;</button>
+                <input type="text" name="name" form="newcourse" maxlength="128" hidden>
+            </div>
+        </td>
+        <td class="actions">
+            <button class="iconaction primary" form="newcourse"
+                    name="create_course" value="1" title="Kurs anlegen">
+                <span aria-hidden="true">+</span> Anlegen
+            </button>
+        </td>
+    </tr>
+</table>
+
+<?php
+/*
+ * Das Formular liegt neben der Tabelle: In HTML kann es sich nicht ueber
+ * mehrere Zellen spannen. Die Klasse reist als verstecktes Feld mit, und
+ * data-classname sagt dem Skript, woraus es den Namen bilden soll.
+ */
+?>
+<form method="post" id="newcourse" data-coursform
+      data-classname="<?= h($klasse['name']) ?>" hidden>
+    <?= teacher_csrf_field() ?>
+    <input type="hidden" name="class_id" value="<?= $classId ?>">
+</form>
+
+<p class="tiny muted">
+    Eine Zeile anklicken öffnet den Kurs. Der Name ergibt sich aus Sprache
+    und Klasse; der Stift macht ihn frei wählbar. Die Kinder dieser Klasse
+    kommen beim Anlegen gleich mit in den Kurs.
+    <strong>Jeder Kurs hat seine eigenen Unterlagen:</strong> „Englisch - 5B"
+    und „Englisch - 6A" teilen sich nichts.
 </p>
 
-<h2>Kinder</h2>
+<h2>Kinder dieser Klasse</h2>
 
 <table class="data courses" id="kinder">
     <tr>
@@ -224,7 +367,7 @@ teacher_flash_render();
 
     <?php foreach ($kinder as $k): ?>
         <tr<?= isset($frisch[(int) $k['id']]) ? ' class="hit"' : ($k['active'] ? '' : ' class="dim"') ?>>
-            <td>
+            <td data-label="Name">
                 <span class="coursetitle">
                     <span class="cflag">&#128100;</span>
                     <span>
@@ -235,8 +378,8 @@ teacher_flash_render();
                     </span>
                 </span>
             </td>
-            <td><code class="token"><?= h($k['username']) ?></code></td>
-            <td>
+            <td data-label="Benutzername"><code class="token"><?= h($k['username']) ?></code></td>
+            <td data-label="Anfangspasswort">
                 <?php if (($k['initial_password'] ?? null) !== null && $k['initial_password'] !== ''): ?>
                     <code class="token"><?= h($k['initial_password']) ?></code>
                 <?php else: ?>
@@ -291,13 +434,12 @@ teacher_flash_render();
      */
     ?>
     <tr class="newrow" id="neuesKind">
-        <td>
+        <td data-label="Neues Kind">
             <span class="coursetitle">
                 <span class="cflag plus">+</span>
                 <input type="text" name="student" form="newstudent"
                        placeholder="Fritz Brinkmann" maxlength="80" required
-                       aria-label="Name des Kindes"
-                       <?= $kinder === [] ? '' : 'autofocus' ?>>
+                       aria-label="Name des Kindes">
             </span>
         </td>
         <td colspan="2" class="tiny muted">
@@ -329,26 +471,36 @@ teacher_flash_render();
     <input type="hidden" name="class_id" value="<?= $classId ?>">
 </form>
 
+<?php
+/*
+ * Der Zettel fuer die ganze Klasse.
+ *
+ * Er steht immer da und ist abgeblendet, solange die Klasse leer ist -
+ * vorher erschien er erst nach dem naechsten Laden, und wer gerade seine
+ * erste Klassenliste eingetippt hatte, sah ihn ausgerechnet dann nicht.
+ * Das Skript nimmt die Sperre weg, sobald das erste Kind in der Tabelle
+ * steht.
+ */
+?>
+<p class="buttonrow" id="klassenzettel">
+    <a class="btn small secondary<?= $kinder === [] ? ' aus' : '' ?>"
+       id="zettelAlle"
+       href="<?= h(teacher_url('print.php') . '?class=' . $classId) ?>"
+       target="_blank" rel="noopener"
+       <?= $kinder === [] ? 'aria-disabled="true" tabindex="-1" title="Erst ein Kind anlegen"' : '' ?>>
+        <span aria-hidden="true">&#128424;</span> Zettel für die ganze Klasse
+    </a>
+</p>
+
 <p class="tiny muted">
     <strong>Nachnamen werden nicht gespeichert.</strong> Du kannst „Fritz
     Brinkmann" eintippen oder eine ganze Klassenliste einfügen &ndash;
     gespeichert wird daraus nur „Fritz B.". Den Nachnamen wirft die Anwendung
     beim Einlesen weg; er steht in keiner Tabelle und auf keinem Zettel.
-</p>
-
-<?php if ($kinder !== []): ?>
-<p>
-    <a class="iconaction" href="<?= h(teacher_url('print.php') . '?class=' . $classId) ?>"
-       target="_blank" rel="noopener">
-        <span aria-hidden="true">&#128424;</span> Zettel für die ganze Klasse
-    </a>
-</p>
-<p class="tiny muted">
     Das Anfangspasswort steht im Klartext, damit sich das Anschreiben
-    nachdrucken lässt. Sobald ein Kind sein Passwort selbst ändert,
-    verschwindet es aus der Spalte.
+    nachdrucken lässt; sobald ein Kind es selbst ändert, verschwindet es aus
+    der Spalte.
 </p>
-<?php endif; ?>
 
 <?php
 /*
@@ -377,65 +529,6 @@ teacher_flash_render();
         zweites Mal einfügen ohne Duplikate zu erzeugen.
     </p>
 </form>
-<?php endif; ?>
-
-<h2>Kurse dieser Klasse</h2>
-
-<?php if ($kurse === []): ?>
-    <p class="muted">
-        Diese Klasse lernt noch nichts. Einen Kurs legst du unter
-        <a href="<?= h(teacher_url('index.php')) ?>">Kurse</a> an &ndash; die
-        Kinder von hier kommen dann gleich mit hinein.
-    </p>
-<?php else: ?>
-<table class="data courses">
-    <tr>
-        <th>Kurs</th>
-        <th class="num">Kinder</th>
-        <th class="num">Lerneinheiten</th>
-        <th class="num">Freigegeben</th>
-        <th class="actions"></th>
-    </tr>
-    <?php foreach ($kurse as $c): ?>
-        <tr<?= $c['active'] ? '' : ' class="dim"' ?>>
-            <td>
-                <span class="coursetitle">
-                    <?= flag_html($c['flag_emoji'] ?: "\u{1F310}", 'cflag') ?>
-                    <span>
-                        <strong><?= h($c['name']) ?></strong>
-                        <span class="tiny muted"><?= h($c['language_name']) ?></span>
-                    </span>
-                </span>
-            </td>
-            <td class="num"><?= (int) $c['students'] ?></td>
-            <td class="num"><?= (int) $c['units'] ?></td>
-            <td class="num">
-                <?php
-                $frei   = (int) $c['released'];
-                $gesamt = (int) $c['vocab'];
-                if ($gesamt === 0) {
-                    echo '<span class="muted">&ndash;</span>';
-                } elseif ($frei >= $gesamt) {
-                    printf('<span class="pill good">alle %d</span>', $gesamt);
-                } else {
-                    printf('<span class="pill">%d von %d</span>', $frei, $gesamt);
-                }
-                ?>
-            </td>
-            <td class="actions">
-                <a class="iconaction" title="Kurs öffnen"
-                   href="<?= h(teacher_url('course.php') . '?id=' . (int) $c['id']) ?>">
-                    <span aria-hidden="true">&#128214;</span> Öffnen
-                </a>
-            </td>
-        </tr>
-    <?php endforeach; ?>
-</table>
-<p class="tiny muted">
-    Ein Kind ist in einem Kurs, weil es dort eingetragen ist &ndash; nicht,
-    weil es in dieser Klasse steht. Beim Anlegen eines Kurses wird die Klasse
-    übernommen; wer später dazukommt, wird im Kurs nachgetragen.
-</p>
 <?php endif; ?>
 
 <?php teacher_foot(); ?>

@@ -251,6 +251,21 @@ CREATE TABLE IF NOT EXISTS login_attempts (
   KEY idx_login_attempts_ip (ip, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Einmal-Marken fuer den Sprung vom Rechner ans Telefon (QR-Code).
+-- Kurzlebig und einmalig einloesbar; gespeichert wird nur der SHA-256-Hash.
+CREATE TABLE IF NOT EXISTS login_handoffs (
+  id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id    INT UNSIGNED NOT NULL,
+  token_hash CHAR(64)     NOT NULL,
+  target     VARCHAR(255) NOT NULL DEFAULT '',
+  created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at DATETIME     NOT NULL,
+  used_at    DATETIME     NULL,
+  UNIQUE KEY uq_lh_hash (token_hash),
+  KEY idx_lh_user (user_id),
+  CONSTRAINT fk_lh_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS settings (
   k VARCHAR(64) PRIMARY KEY,
   v TEXT NOT NULL

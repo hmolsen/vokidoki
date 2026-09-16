@@ -725,3 +725,195 @@ table.release tr.flip td { animation: releaseflip .18s ease-out; }
 @media (prefers-reduced-motion: reduce) {
     .releasebar { transition: none; }
 }
+
+/* ------------------------------------------- Einlesen: Karte und Fenster */
+
+.importcard {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+.importqr   { flex: none; width: 120px; }
+.importtext { flex: 1 1 260px; }
+.importtext h3 { margin: 0 0 6px; }
+.importtext p  { margin: 0 0 10px; }
+
+/* Das Fenster mit dem Code. Bewusst schmal: Darin steht ein Bild und ein
+   Satz, und beides soll man aus zwei Metern Entfernung noch treffen. */
+.qrdialog {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    padding: 22px;
+    max-width: 340px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, .25);
+}
+.qrdialog::backdrop { background: rgba(0, 0, 0, .45); }
+.qrdialog h3 { margin: 0 0 14px; }
+.qrdialog p  { margin: 0 0 10px; }
+.qrslot {
+    display: grid;
+    place-items: center;
+    min-height: 220px;
+    margin-bottom: 12px;
+}
+.qrslot svg { width: 100%; height: auto; }
+
+/* ------------------------------------------------ Zeile als Knopf
+ *
+ * Statt einer Spalte mit einem "Öffnen"-Knopf in jeder Zeile: Die Zeile
+ * selbst öffnet. Der Haken am Ende zeigt, dass da etwas passiert - ein
+ * anklickbarer Bereich ohne jedes Zeichen ist eine Falle.
+ */
+table.rowlink tr[data-href] { cursor: pointer; }
+table.rowlink tr[data-href]:hover td { background: var(--surface-2); }
+
+table.data th.chev, table.data td.chev {
+    width: 1px;
+    padding-left: 0;
+    padding-right: 14px;
+    text-align: right;
+    color: var(--text-soft);
+    font-size: 1.15rem;
+    line-height: 1;
+}
+
+/* Der Name bleibt ein echter Link - für die Tastatur, fürs Aufklappen in
+   einem neuen Tab, und für alle, die keinen Zeiger benutzen. */
+a.rowmain {
+    color: inherit;
+    text-decoration: none;
+    font-weight: 700;
+}
+a.rowmain:hover { text-decoration: underline; }
+
+/* Ein Knopf, der noch nichts bewirkt - abgeblendet statt abwesend, damit
+   die Zeile nicht umspringt, sobald das erste Kind da ist. */
+.btn.aus, a.btn.aus {
+    opacity: .45;
+    pointer-events: none;
+}
+
+/* ------------------------------------------------ Tabellen am Telefon
+ *
+ * Eine Lehrkraft steht mit dem Telefon in der Hand vor der Klasse. Eine
+ * fünfspaltige Tabelle ist dort entweder unlesbar klein oder scrollt
+ * seitwärts, und beides heisst: nicht benutzbar.
+ *
+ * Unterhalb von 720 px wird deshalb aus jeder Zeile eine Karte. Die
+ * Spaltenüberschrift steht dann vor dem Wert - sie kommt aus data-label am
+ * <td>, damit sie nicht zweimal im Markup steht. Zellen ohne data-label
+ * (die Aktionsspalte) stehen ohne Beschriftung unten in der Karte.
+ *
+ * Am Rechner ändert sich nichts: Dort ist eine Tabelle das richtige Mittel,
+ * weil man Spalten vergleicht.
+ */
+@media (max-width: 720px) {
+    .adminmain { padding: 16px 12px 48px; }
+    .adminmain h1 { font-size: 1.4rem; }
+
+    table.data {
+        border: 0;
+        background: none;
+        overflow: visible;
+    }
+
+    /* Die Kopfzeile ist eine gewöhnliche <tr> mit <th> - ohne <thead>.
+       Beides ausblenden: das :has() für die Zeile, das th für den Fall,
+       dass ein Browser es nicht kennt. */
+    table.data tr:has(> th) { display: none; }
+    table.data th { display: none; }
+
+    table.data tr {
+        display: block;
+        margin-bottom: 10px;
+        padding: 12px 14px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+    }
+
+    table.data td {
+        display: flex;
+        gap: 12px;
+        align-items: baseline;
+        justify-content: space-between;
+        width: auto;
+        padding: 4px 0;
+        border: 0;
+        text-align: left;
+    }
+    table.data td.num { text-align: left; }
+
+    table.data td[data-label]::before {
+        content: attr(data-label);
+        flex: none;
+        color: var(--text-soft);
+        font-size: .78rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+
+    /* Die erste Zelle ist die Überschrift der Karte: gross, ohne Label. */
+    table.data td:first-child {
+        display: block;
+        padding-bottom: 8px;
+        font-size: 1.05rem;
+    }
+    table.data td:first-child::before { content: none; }
+
+    /* Der Haken zeigt am Telefon nichts, was die Karte nicht schon sagt. */
+    table.data td.chev { display: none; }
+
+    /* Aktionen unten, nebeneinander, mit Luft zum Tippen. */
+    table.data td.actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding-top: 10px;
+        margin-top: 4px;
+        border-top: 1px solid var(--border);
+    }
+    table.data td.actions form { margin: 0; }
+    table.data .iconaction { min-height: 40px; }
+
+    /* Die Anlegezeile ist am Telefon eine Karte wie die anderen - nur mit
+       Feldern statt Werten, und die Felder nehmen die ganze Breite. */
+    /* Die Karte ist getoent, nicht jede Zelle einzeln - sonst liegen
+       Streifen uebereinander statt einer Flaeche. */
+    table.data tr.newrow { background: var(--surface-2); }
+    table.data tr.newrow td { display: block; background: none; padding: 4px 0; }
+    table.data tr.newrow td:empty { display: none; }
+    table.data tr.newrow td::before { content: none; }
+    table.data tr.newrow td.actions { border-top: 0; padding-top: 6px; }
+    table.data tr.newrow td.actions .iconaction { width: 100%; justify-content: center; }
+    table.data tr.newrow input[type=text],
+    table.data tr.newrow select,
+    table.courses tr.newrow .picker,
+    table.courses tr.newrow input[type=text] {
+        width: 100%;
+        max-width: none;
+    }
+    table.data tr.newrow .coursetitle { width: 100%; }
+    table.data tr.newrow .coursetitle > span:last-child { flex: 1; }
+
+    /* Freigabetabelle: Die Karten wären hier falsch - man vergleicht
+       Vokabeln zeilenweise, und der Balken braucht durchgehende Zeilen. */
+    table.release tr:has(> th) { display: table-row; }
+    table.release, table.release tr, table.release td, table.release th {
+        display: revert;
+    }
+    table.release { display: table; width: 100%; background: var(--surface); }
+    table.release td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    table.release td::before { content: none; }
+
+    /* Der Pfad bekommt die ganze Zeile, Name und Abmelden die naechste -
+       sonst schieben sie sich ineinander, sobald der Pfad umbricht. */
+    .crumbs { gap: 2px; width: 100%; }
+    .crumb { padding: 5px 9px; font-size: .8rem; }
+    .adminbar { padding: 10px 12px; gap: 6px; }
+    .adminbar .tiny { margin-left: 0 !important; }
+}

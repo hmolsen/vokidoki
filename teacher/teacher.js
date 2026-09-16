@@ -236,7 +236,19 @@ function initCourseName(root) {
     const feld    = root.querySelector('input[name="name"]');
     const stift   = root.querySelector('[data-editname]');
     const select  = root.querySelector('select[data-picker]');
+
+    /*
+     * Die Klasse steht fest.
+     *
+     * Kurse entstehen jetzt in der Klasse, nicht mehr auf einer eigenen
+     * Kursseite - auszuwaehlen gibt es sie also nicht mehr, und ihr Name
+     * reist am Formular mit. Das alte Auswahlfeld wird trotzdem noch
+     * gelesen, falls irgendwo eines stehen bleibt.
+     */
     const klasse  = root.querySelector('select[name="class_id"]');
+    const fest    = root.querySelector('form[data-classname]')?.dataset.classname
+                 ?? document.querySelector('form[data-classname]')?.dataset.classname
+                 ?? '';
     if (!anzeige || !feld || !stift) return;
 
     let vonHand = false;
@@ -246,7 +258,7 @@ function initCourseName(root) {
         const sprache = select ? select.value : '';
         const k = klasse && klasse.selectedOptions[0]
             ? (klasse.selectedOptions[0].dataset.name || '')
-            : '';
+            : fest;
         const name = k === '' ? sprache : `${sprache} - ${k}`;
         anzeige.textContent = name;
         feld.value = name;
@@ -327,6 +339,34 @@ if (document.querySelector('[data-coursform]')) {
     initCourseName(document);
 }
 
+// --------------------------------------------------- Zeile als Knopf
+
+/*
+ * Eine ganze Zeile oeffnet den Eintrag.
+ *
+ * Vorher stand am Ende jeder Zeile ein Knopf "Öffnen" - eine Spalte, die
+ * bei jeder Zeile dasselbe sagte, und auf dem Handy die Spalte, die am
+ * meisten Platz frass. Der Name in der Zeile ist ohnehin ein Link; das hier
+ * macht die Flaeche daneben mitklickbar.
+ *
+ * Bewusst nicht das ganze <tr> zu einem Link machen: Ein Link um
+ * Tabellenzellen herum ist in HTML nicht erlaubt, und die Zeile enthaelt
+ * auch Knoepfe, die etwas anderes tun.
+ */
+document.addEventListener('click', (e) => {
+    const tr = e.target.closest('tr[data-href]');
+    if (!tr) return;
+
+    // Was selbst schon etwas tut, behaelt seinen Klick: Links, Knoepfe,
+    // Felder - und markierter Text ist ein Lesevorgang, kein Klick.
+    if (e.target.closest('a, button, input, select, textarea, label')) return;
+    if ((window.getSelection()?.toString() ?? '') !== '') return;
+
+    const ziel = tr.dataset.href;
+    if (e.metaKey || e.ctrlKey || e.button === 1) window.open(ziel, '_blank', 'noopener');
+    else window.location.href = ziel;
+});
+
 // ------------------------------------------------------ Kinder nachtragen
 
 /**
@@ -376,14 +416,14 @@ function initStudentAdd() {
         const tr = document.createElement('tr');
         tr.className = 'hit';
         tr.innerHTML = `
-            <td>
+            <td data-label="Name">
                 <span class="coursetitle">
                     <span class="cflag">&#128100;</span>
                     <span><strong></strong></span>
                 </span>
             </td>
-            <td><code class="token"></code></td>
-            <td><code class="token"></code></td>
+            <td data-label="Benutzername"><code class="token"></code></td>
+            <td data-label="Anfangspasswort"><code class="token"></code></td>
             <td class="actions">${aktionen(kind)}</td>`;
 
         // Name, Benutzername und Passwort als Text setzen, nicht als Markup -
@@ -399,6 +439,25 @@ function initStudentAdd() {
             `Neues Anfangspasswort für ${kind.name}? Das alte gilt dann nicht mehr.`;
 
         tabelle.insertBefore(tr, zeile);
+        zettelFreigeben();
+    };
+
+    /*
+     * Der Zettel fuer die ganze Klasse wird brauchbar, sobald das erste Kind
+     * da ist.
+     *
+     * Vorher entschied das PHP beim Ausliefern, und der Knopf erschien erst
+     * beim naechsten Laden - ausgerechnet nachdem jemand seine Klassenliste
+     * eingetippt hatte, war er nicht da. Jetzt steht er immer, abgeblendet,
+     * und hier faellt die Sperre.
+     */
+    const zettelFreigeben = () => {
+        const zettel = document.getElementById('zettelAlle');
+        if (!zettel) return;
+        zettel.classList.remove('aus');
+        zettel.removeAttribute('aria-disabled');
+        zettel.removeAttribute('tabindex');
+        zettel.removeAttribute('title');
     };
 
     /** Die Knoepfe einer Zeile, aus den Vorlagen der Seite gebaut. */
@@ -477,11 +536,76 @@ function initStudentAdd() {
         senden();
     });
 
-    // Der Knopf gehoert ueber form= zum Formular und loest damit submit aus.
-    feld.focus();
+    /*
+     * Kein Fokus beim Laden.
+     *
+     * Die Kurse stehen jetzt oben, die Kinder darunter - ein Feld, das sich
+     * den Fokus nimmt, scrollt die Seite an den Kurse vorbei. Nach dem
+     * Abschicken bleibt der Fokus im Feld, und darum geht es beim
+     * Nacheinander-Eintippen.
+     */
 }
 
 initStudentAdd();
+
+// ------------------------------------------- Sprung ans Telefon
+
+/**
+ * Der QR-Code, der die Anmeldung ersetzt.
+ *
+ * Er entsteht erst beim Druecken, nicht beim Laden der Seite: Die Marke
+ * darin IST eine Anmeldung, und die soll nicht auf Vorrat erzeugt werden
+ * und zehn Minuten lang auf einem unbeaufsichtigten Bildschirm liegen.
+ *
+ * Ohne JavaScript bleibt der Knopf wirkungslos - daneben steht deshalb
+ * immer der gewoehnliche Weg: Einleseansicht oeffnen und sich am Telefon
+ * anmelden.
+ */
+function initHandoff() {
+    const dialog = document.getElementById('handoff');
+    if (!dialog || typeof dialog.showModal !== 'function') return;
+
+    const slot   = document.getElementById('handoffSlot');
+    const hinweis = document.getElementById('handoffHint');
+    const grund   = hinweis ? hinweis.textContent : '';
+
+    document.querySelectorAll('[data-handoff]').forEach((knopf) => {
+        knopf.addEventListener('click', async () => {
+            slot.innerHTML = '<div class="spinner"></div>';
+            if (hinweis) hinweis.textContent = grund;
+            dialog.showModal();
+
+            try {
+                const daten = new FormData();
+                daten.set('course_id', dialog.dataset.course);
+                daten.set('csrf', dialog.dataset.csrf);
+
+                const res  = await fetch(dialog.dataset.url, {
+                    method: 'POST', body: daten, credentials: 'same-origin',
+                });
+                const json = await res.json();
+
+                if (!json.ok) {
+                    slot.textContent = '';
+                    if (hinweis) hinweis.textContent = json.error || 'Das hat nicht geklappt.';
+                    return;
+                }
+                // Der Server liefert fertiges SVG - es stammt aus lib/qr.php
+                // und nicht aus einer Eingabe.
+                slot.innerHTML = json.svg;
+            } catch {
+                slot.textContent = '';
+                if (hinweis) hinweis.textContent = 'Keine Verbindung zum Server.';
+            }
+        });
+    });
+
+    // Beim Schliessen den Code wegnehmen: Ein offenes Fenster im Hintergrund
+    // waere ein Schluessel, der liegen bleibt.
+    dialog.addEventListener('close', () => { slot.innerHTML = ''; });
+}
+
+initHandoff();
 
 // ------------------------------------------------------- Freigabe-Balken
 

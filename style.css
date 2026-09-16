@@ -161,6 +161,8 @@ p  { margin: 0 0 12px; }
 }
 .btn.danger { background: var(--bad); color: #fff; }
 .btn.small  { min-height: 44px; padding: 10px 14px; font-size: .95rem; width: auto; }
+/* Ein Link, der als Knopf auftritt, ist ein Knopf - ohne Unterstrich. */
+a.btn { text-decoration: none; }
 
 .btn-row { display: flex; gap: 10px; }
 .btn-row .btn { flex: 1; }
@@ -987,3 +989,12 @@ input.cloze-input[readonly] { opacity: 1; }
 .swatch-pick input:focus-visible + span {
     box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
 }
+
+/* Wessen Vokabeln hier eingelesen werden. Wichtig fuer alle, die ueber
+   einen Link oder einen QR-Code direkt hier landen. */
+.kurszeile {
+    margin: -8px 0 14px;
+    font-size: .9rem;
+    color: var(--text-soft);
+}
+.kurszeile strong { color: var(--text); }
