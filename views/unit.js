@@ -1,6 +1,6 @@
 import {
     VT, api, render, esc, $, go, topbar, loading, wireBack, progressBar,
-    showError, clearError,
+    showError, clearError, pupilHint,
 } from '../core.js';
 
 /** Die Übungsarten - Reihenfolge und Symbole gelten für die ganze Ansicht. */
@@ -43,6 +43,7 @@ export async function unitView(unitId) {
 
     render(`
         ${topbar(unit.title, { backTo: `/lang/${unit.language_id}` })}
+        ${pupilHint('Das ist diese Lerneinheit, wie ein Kind sie vor sich hat.')}
         <div id="msg"></div>
 
         ${komplett ? '<div class="notice good">Diese Lerneinheit hast du in beiden Übungen geschafft!</div>' : ''}

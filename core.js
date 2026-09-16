@@ -164,6 +164,26 @@ export function wireBack(root = document) {
     on('[data-back]', 'click', (e) => go(e.currentTarget.dataset.back), root);
 }
 
+/**
+ * Der Hinweis fuer die Lehrkraft: Das hier ist die Schueleransicht.
+ *
+ * Sie kommt aus ihrem Bereich hierher, um auszuprobieren, was ihre Klasse
+ * vor sich hat - und seit die Freigabe auch fuer sie gilt, sieht sie genau
+ * das. Ohne einen Satz dazu ist es aber nur eine Seite, die weniger zeigt
+ * als die Verwaltung, und das sieht nach einem Fehler aus.
+ *
+ * Fuer ein Kind steht dort nichts: Es braucht nicht erklaert zu bekommen,
+ * dass es seine eigene App sieht.
+ */
+export function pupilHint(text = 'So sieht deine Klasse das.') {
+    if (!VT.user?.isTeacher) return '';
+    return `<div class="notice pupilview">
+                <strong>Schüleransicht.</strong> ${esc(text)}
+                Freigegeben ist, was hier auftaucht &ndash; mehr sehen die
+                Kinder nicht.
+            </div>`;
+}
+
 export function loading(text = 'Einen Moment...') {
     return `<div class="empty"><div class="spinner"></div>${esc(text)}</div>`;
 }

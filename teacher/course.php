@@ -190,7 +190,15 @@ $verlust    = course_delete_preview($courseId);
  */
 $importPfad = '/lang/' . (int) $kurs['language_id'] . '/import';
 $importUrl  = url('/') . '#' . $importPfad;
-$importQr   = qr_svg(public_url('/') . '#' . $importPfad, 3, 'Zum Einlesen dieses Kurses');
+
+/*
+ * Der Weg in die Schueleransicht.
+ *
+ * Eine Lehrkraft sieht in der App genau das, was ihre Klasse sieht - das
+ * ist seit der Freigabe so gewollt. Dann muss sie auch hinkommen, und zwar
+ * von der Stelle aus, an der sie gerade etwas eingestellt hat.
+ */
+$schuelerUrl = url('/') . '#/lang/' . (int) $kurs['language_id'];
 
 $pfad = [];
 if (($kurs['class_name'] ?? null) !== null && ($kurs['class_id'] ?? null) !== null) {
@@ -205,7 +213,12 @@ $pfad[] = [
     'flag'  => (string) $kurs['flag_emoji'],
 ];
 
-teacher_head($kurs['name'], $user, $pfad);
+teacher_head($kurs['name'], $user, $pfad, sprintf(
+    '<a class="btn small secondary" href="%s" target="_blank" rel="noopener" '
+    . 'title="Die Ansicht, die deine Klasse sieht">'
+    . '<span aria-hidden="true">&#128065;</span> So sieht es die Klasse</a>',
+    h($schuelerUrl),
+));
 teacher_flash_render();
 ?>
 
@@ -216,38 +229,27 @@ teacher_flash_render();
 <?php if ($einheiten === []): ?>
 <?php
 /*
- * Der leere Kurs erklaert sich selbst.
+ * Der leere Kurs erklaert sich selbst - ohne QR-Code.
  *
- * Eingelesen wird in der App am Handy - dort ist die Kamera. Das stand
- * frueher als Randnotiz unter einer Tabelle, die es noch gar nicht gab.
- * Der Code fuehrt direkt in die Einleseansicht dieses Kurses und nicht
- * mehr nur auf die Startseite; wer ihn scannt, muss sich dort noch
- * anmelden. Wer sich das sparen will, nimmt den Knopf darunter.
+ * Er stand hier einmal, fuehrte aber nur dorthin, wo man sich erst noch
+ * anmelden muss. Der Weg, der das ueberspringt, ist "Am Smartphone
+ * einlesen"; ein zweiter Code daneben war einer zu viel.
  */
 ?>
-<div class="card importcard">
-    <?php if ($importQr !== null): ?>
-        <div class="importqr"><?= $importQr ?></div>
-    <?php endif; ?>
-    <div class="importtext">
-        <h3>Noch keine Lerneinheit</h3>
-        <p>
-            Eingelesen wird <strong>am Handy</strong> &ndash; dort ist die
-            Kamera. Buchseite fotografieren, das Modell erkennt die Vokabeln,
-            und die Lektion landet in diesem Kurs.
-        </p>
-        <div class="buttonrow">
-            <a class="btn small" href="<?= h($importUrl) ?>" target="_blank" rel="noopener">
-                Vokabeln einlesen
-            </a>
-            <button class="btn small secondary" type="button" data-handoff>
-                <span aria-hidden="true">&#128241;</span> Am Smartphone einlesen
-            </button>
-        </div>
-        <p class="tiny muted">
-            Der Code führt genau hierher. Am Telefon meldest du dich dann an &ndash;
-            oder du nimmst „Am Smartphone einlesen", dann entfällt auch das.
-        </p>
+<div class="card">
+    <h3 style="margin:0 0 6px">Noch keine Lerneinheit</h3>
+    <p style="margin:0 0 12px">
+        Eingelesen wird <strong>am Handy</strong> &ndash; dort ist die Kamera.
+        Buchseite fotografieren, das Modell erkennt die Vokabeln, und die
+        Lektion landet in diesem Kurs.
+    </p>
+    <div class="buttonrow" style="margin:0">
+        <a class="btn small" href="<?= h($importUrl) ?>" target="_blank" rel="noopener">
+            Vokabeln einlesen
+        </a>
+        <button class="btn small secondary" type="button" data-handoff>
+            <span aria-hidden="true">&#128241;</span> Am Smartphone einlesen
+        </button>
     </div>
 </div>
 <?php else: ?>
@@ -296,15 +298,13 @@ teacher_flash_render();
     ?>
     <tr class="newrow">
         <td colspan="5" data-label="Neue Lerneinheit">
-            <span class="coursetitle">
+            <span class="coursetitle addbuttons">
                 <span class="cflag plus">+</span>
-                <span class="buttonrow" style="margin:0">
-                    <a class="btn small" href="<?= h($importUrl) ?>"
-                       target="_blank" rel="noopener">Vokabeln einlesen</a>
-                    <button class="btn small secondary" type="button" data-handoff>
-                        <span aria-hidden="true">&#128241;</span> Am Smartphone einlesen
-                    </button>
-                </span>
+                <a class="btn small" href="<?= h($importUrl) ?>"
+                   target="_blank" rel="noopener">Vokabeln einlesen</a>
+                <button class="btn small secondary" type="button" data-handoff>
+                    <span aria-hidden="true">&#128241;</span> Am Smartphone einlesen
+                </button>
             </span>
         </td>
     </tr>

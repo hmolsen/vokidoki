@@ -170,7 +170,12 @@ $pfad[] = [
 ];
 $pfad[] = ['label' => (string) $unit['title'], 'href' => null];
 
-teacher_head($unit['title'], $user, $pfad);
+teacher_head($unit['title'], $user, $pfad, sprintf(
+    '<a class="btn small secondary" href="%s" target="_blank" rel="noopener" '
+    . 'title="Die Ansicht, die deine Klasse sieht">'
+    . '<span aria-hidden="true">&#128065;</span> So sieht es die Klasse</a>',
+    h(url('/') . '#/unit/' . $unitId),
+));
 teacher_flash_render();
 ?>
 

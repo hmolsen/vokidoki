@@ -287,7 +287,7 @@ function teacher_school_crumb(array $user): array
     ];
 }
 
-function teacher_head(string $title, array $user, array $crumbs = []): void
+function teacher_head(string $title, array $user, array $crumbs = [], string $neben = ''): void
 {
     ?><!doctype html>
 <html lang="de"><head>
@@ -298,16 +298,45 @@ function teacher_head(string $title, array $user, array $crumbs = []): void
 </head><body class="admin" data-base="<?= h(base_path()) ?>">
 <div class="adminbar">
     <?php teacher_crumbs(array_merge([teacher_school_crumb($user)], $crumbs)); ?>
-    <span class="tiny muted" style="margin-left:auto">
-        <?= h($user['display_name']) ?>
+    <?php
+    /*
+     * Rechts das eigene Konto.
+     *
+     * Die Einstellungen liegen in der App, nicht hier - Name, Farbe und
+     * Passwort sind dieselben, egal von welcher Seite man kommt, und eine
+     * zweite Fassung davon im Lehrkraft-Bereich waeren zwei Orte fuer eine
+     * Sache. Das Zahnrad ist dasselbe wie in der App.
+     *
+     * Und Abmelden ist ein Knopf, kein unterstrichenes Wort: Es tut etwas,
+     * statt woandershin zu fuehren.
+     */
+    ?>
+    <span class="barright">
+        <span class="tiny muted"><?= h($user['display_name']) ?></span>
+        <a class="iconbtn" href="<?= h(url('/') . '#/konto') ?>"
+           title="Mein Konto: Name, Farbe, Passwort" aria-label="Mein Konto">&#9881;</a>
+        <form method="post" action="<?= h(teacher_url('classes.php')) ?>" class="compact">
+            <?= teacher_csrf_field() ?>
+            <button class="btn small secondary" name="teacher_logout" value="1">
+                Abmelden
+            </button>
+        </form>
     </span>
-    <form method="post" action="<?= h(teacher_url('classes.php')) ?>" class="compact">
-        <?= teacher_csrf_field() ?>
-        <button class="linkbtn" name="teacher_logout" value="1">Abmelden</button>
-    </form>
 </div>
 <main class="adminmain">
-<h1><?= h($title) ?></h1>
+<?php
+/*
+ * Die Ueberschrift, und daneben Platz fuer einen Knopf.
+ *
+ * Gebraucht von Kurs und Lerneinheit: Von dort fuehrt ein Weg in die
+ * Schueleransicht - nicht als Randnotiz weiter unten, sondern dort, wo der
+ * Name der Sache steht.
+ */
+?>
+<div class="titelzeile">
+    <h1><?= h($title) ?></h1>
+    <?= $neben ?>
+</div>
     <?php
 }
 

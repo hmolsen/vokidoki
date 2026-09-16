@@ -27,6 +27,17 @@ body.admin { background: var(--bg); }
 .adminbar nav a.on    { background: var(--accent); color: #fff; }
 .adminbar .logout { margin: 0; }
 
+/* Name, Zahnrad und Abmelden gehoeren zusammen und stehen rechts. */
+.barright {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+}
+.barright form { margin: 0; }
+.barright a.iconbtn { text-decoration: none; width: 38px; height: 38px; font-size: 1rem; }
+.barright a.iconbtn:hover { background: var(--surface-2); color: var(--accent); }
+
 .linkbtn {
     background: none;
     border: none;
@@ -44,6 +55,27 @@ body.admin { background: var(--bg); }
     padding: 22px 20px 60px;
 }
 .adminmain h1 { margin-bottom: 18px; }
+
+/* Ueberschrift und ein Knopf daneben - der Knopf steht in der Zeile des
+   Namens und nicht irgendwo darunter. */
+.titelzeile {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+}
+.titelzeile h1 { margin: 0; }
+
+/* Die beiden Wege zum Einlesen stehen nebeneinander, nicht untereinander -
+   sie sind gleichwertig, und zwei Knoepfe uebereinander lesen sich wie
+   Schritt eins und Schritt zwei. */
+.coursetitle.addbuttons {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
 
 /* --------------------------------------------------------------- Der Pfad
  *
@@ -890,6 +922,13 @@ a.rowmain:hover { text-decoration: underline; }
     table.data tr.newrow td::before { content: none; }
     table.data tr.newrow td.actions { border-top: 0; padding-top: 6px; }
     table.data tr.newrow td.actions .iconaction { width: 100%; justify-content: center; }
+
+    /* Auch am Telefon nebeneinander, solange sie nebeneinander passen. */
+    .coursetitle.addbuttons { gap: 8px; }
+    .coursetitle.addbuttons .btn { flex: 1 1 auto; }
+
+    .titelzeile { gap: 10px; }
+    .titelzeile h1 { font-size: 1.3rem; }
     table.data tr.newrow input[type=text],
     table.data tr.newrow select,
     table.courses tr.newrow .picker,

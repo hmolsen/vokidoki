@@ -4858,11 +4858,16 @@ ok('Der Pfad fuehrt ueber die Klasse zurueck',
  * weiter.
  */
 $umbauSprache = (int) qv('SELECT language_id FROM courses WHERE id = ?', [$umbauKursId]);
-ok('Der leere Kurs zeigt einen Code',
-   str_contains($res['body'], '<svg') && str_contains($res['body'], 'importqr'));
-ok('Und einen Weg direkt ins Einlesen',
-   str_contains($res['body'], '#/lang/' . $umbauSprache . '/import'),
-   'der Code fuehrte frueher nur auf die Startseite');
+/*
+ * Im leeren Kurs steht kein QR-Code mehr. Er fuehrte dorthin, wo man sich
+ * erst noch anmelden muss - der Weg, der das ueberspringt, heisst "Am
+ * Smartphone einlesen", und zwei Codes nebeneinander waren einer zu viel.
+ */
+ok('Der leere Kurs zeigt keinen Code mehr',
+   !str_contains($res['body'], 'importqr') && !str_contains($res['body'], '<svg'));
+ok('Aber beide Wege ins Einlesen',
+   str_contains($res['body'], '#/lang/' . $umbauSprache . '/import')
+   && str_contains($res['body'], 'data-handoff'));
 
 // Eine Lerneinheit anlegen - dann weicht die Karte der Tabelle mit Anlegezeile.
 $umbauUnit = makeUnit($lehrerId, $umbauSprache, 'Umbau-Unit');
@@ -4929,6 +4934,137 @@ ok('Die Zellen tragen ihre Beschriftung mit',
    substr_count($res['body'], 'data-label="') . ' Zellen');
 
 q('DELETE FROM classes WHERE id = ?', [$umbauKlasseId]);
+
+section('Feinschliff im Lehrkraft-Bereich');
+
+// ---- Die Leiste: Zahnrad und ein Knopf zum Abmelden.
+
+$res = teacherGet('classes.php');
+ok('Abmelden ist ein Knopf, kein unterstrichenes Wort',
+   preg_match('/<button class="btn small secondary" name="teacher_logout"/', $res['body']) === 1
+   && !preg_match('/class="linkbtn" name="teacher_logout"/', $res['body']),
+   'es tut etwas, statt woandershin zu fuehren');
+ok('Daneben steht ein Zahnrad',
+   preg_match('/<a class="iconbtn" href="[^"]*#\/konto"/', $res['body']) === 1);
+ok('Es fuehrt in dieselben Einstellungen wie in der App',
+   str_contains($res['body'], '#/konto'),
+   'zwei Fassungen derselben Sache waeren bald zwei verschiedene');
+
+// ---- Der Weg in die Schueleransicht steht in der Zeile der Ueberschrift.
+
+$fsKlasse = class_create(
+    (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]),
+    'Fein' . bin2hex(random_bytes(2)),
+);
+$fsKlasseId = (int) ($fsKlasse['id'] ?? 0);
+$fsKurs = course_create(
+    q1('SELECT * FROM users WHERE id = ?', [$lehrerId]),
+    'Feinisch' . bin2hex(random_bytes(2)), "\u{1F310}", $fsKlasseId, '',
+);
+$fsKursId    = is_string($fsKurs) ? 0 : (int) $fsKurs['id'];
+$fsSprache   = (int) qv('SELECT language_id FROM courses WHERE id = ?', [$fsKursId]);
+ok('Ein Kurs fuer den Feinschliff', $fsKursId > 0);
+
+$res = teacherGet('course.php?id=' . $fsKursId);
+ok('Die Ueberschrift hat eine eigene Zeile',
+   preg_match('/<div class="titelzeile">\s*<h1>/', $res['body']) === 1);
+ok('Und darin einen Weg in die Schueleransicht',
+   preg_match('/<div class="titelzeile">.*?href="[^"]*#\/lang\/' . $fsSprache . '"/s', $res['body']) === 1,
+   'nicht als Randnotiz weiter unten');
+
+$fsUnit = makeUnit($lehrerId, $fsSprache, 'Feinschliff-Unit');
+$res = teacherGet('unit.php?id=' . $fsUnit);
+ok('Die Lerneinheit ebenso',
+   preg_match('/<div class="titelzeile">.*?href="[^"]*#\/unit\/' . $fsUnit . '"/s', $res['body']) === 1);
+
+$kern = http($base . '/core.js');
+ok('Die Schueleransicht erklaert sich der Lehrkraft',
+   str_contains($kern['body'], 'export function pupilHint'));
+ok('Und nur ihr',
+   str_contains($kern['body'], 'VT.user?.isTeacher'),
+   'ein Kind muss nicht erklaert bekommen, dass es seine eigene App sieht');
+
+$spr = http($base . '/views/language.js');
+ok('Die Sprachseite zeigt ihn', str_contains($spr['body'], 'pupilHint('));
+$lern = http($base . '/views/unit.js');
+ok('Die Lerneinheit auch', str_contains($lern['body'], 'pupilHint('));
+
+// ---- Die beiden Wege zum Einlesen stehen nebeneinander.
+
+$res = teacherGet('course.php?id=' . $fsKursId);
+ok('Die Anlegezeile stellt beide Wege nebeneinander',
+   preg_match('/class="coursetitle addbuttons"/', $res['body']) === 1);
+$cssF = (string) file_get_contents(__DIR__ . '/../admin/admin.css');
+ok('Und die Reihe ist waagerecht',
+   preg_match('/\.coursetitle\.addbuttons\s*\{[^}]*display:\s*flex/s', $cssF) === 1,
+   'untereinander lesen sie sich wie Schritt eins und Schritt zwei');
+
+// ---- Das Farbfeld nimmt feste Groessen statt der halben Seite.
+
+$cssS = (string) file_get_contents(__DIR__ . '/../style.css');
+ok('Das Farbfeld waechst nicht mehr mit der Fensterbreite',
+   preg_match('/\.swatches\s*\{[^}]*grid-template-columns:\s*repeat\(8,\s*\d+px\)/s', $cssS) === 1,
+   'mit 1fr wurden daraus 64 Kacheln von je siebzig Pixeln');
+ok('Die Farbprobe hat eine feste Groesse',
+   preg_match('/\.swatch-pick span\s*\{[^}]*width:\s*\d+px/s', $cssS) === 1);
+
+q('DELETE FROM classes WHERE id = ?', [$fsKlasseId]);
+
+// ---- Zwei Kurse derselben Sprache lassen sich auseinanderhalten.
+
+/*
+ * Der gemeldete Fall: zwei Kacheln "Englisch" nebeneinander. Die Kachel
+ * traegt dann den Namen des Kurses - aber nur dann. In einer Familie heisst
+ * der Kurs "Englisch Lilli M.", und der eigene Name auf der eigenen Kachel
+ * ist keine Auskunft.
+ */
+$dsSchule = (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]);
+$dsA = class_create($dsSchule, 'DsA' . bin2hex(random_bytes(2)));
+$dsB = class_create($dsSchule, 'DsB' . bin2hex(random_bytes(2)));
+$dsLehrer = q1('SELECT * FROM users WHERE id = ?', [$lehrerId]);
+$dsSprache = 'Doppelisch' . bin2hex(random_bytes(2));
+$dsKursA = course_create($dsLehrer, $dsSprache, "\u{1F310}", (int) $dsA['id'], '');
+$dsJar = tempnam(sys_get_temp_dir(), 'vtds');
+
+$einmal = apiAls($dsJar, function () use ($lehrerName) {
+    apiCall('auth', 'login', ['username' => $lehrerName, 'password' => 'lehrerin123']);
+    [$d] = apiCall('languages', 'list');
+    return array_column($d['languages'] ?? [], 'name');
+});
+ok('Bei einem Kurs steht der Name der Sprache auf der Kachel',
+   in_array($dsSprache, $einmal, true), implode(', ', $einmal));
+
+$dsKursB = course_create($dsLehrer, $dsSprache, "\u{1F310}", (int) $dsB['id'], '');
+ok('Ein zweiter Kurs derselben Sprache ist moeglich', !is_string($dsKursB),
+   is_string($dsKursB) ? $dsKursB : '');
+
+$zweimal = apiAls($dsJar, function () use ($lehrerName) {
+    apiCall('auth', 'login', ['username' => $lehrerName, 'password' => 'lehrerin123']);
+    [$d] = apiCall('languages', 'list');
+    return array_column($d['languages'] ?? [], 'name');
+});
+ok('Bei zweien stehen die Kursnamen da',
+   in_array($dsSprache . ' - ' . $dsA['name'], $zweimal, true)
+   && in_array($dsSprache . ' - ' . $dsB['name'], $zweimal, true),
+   implode(', ', $zweimal));
+ok('Und nicht zweimal dasselbe Wort',
+   count(array_keys($zweimal, $dsSprache, true)) === 0);
+
+/*
+ * Die Ueberschrift der Sprachseite folgt derselben Regel. Stuende dort etwas
+ * anderes als auf der Kachel, waere der Weg dorthin eine Ueberraschung.
+ */
+$kopfA = apiAls($dsJar, function () use ($lehrerName, $dsKursA) {
+    apiCall('auth', 'login', ['username' => $lehrerName, 'password' => 'lehrerin123']);
+    [$d] = apiCall('units', 'list', null,
+                   ['language_id' => (int) $dsKursA['language_id']]);
+    return (string) ($d['language']['label'] ?? '');
+});
+ok('Die Seite dahinter traegt denselben Namen wie die Kachel',
+   $kopfA === $dsSprache . ' - ' . $dsA['name'], $kopfA);
+
+@unlink($dsJar);
+q('DELETE FROM classes WHERE id IN (?, ?)', [(int) $dsA['id'], (int) $dsB['id']]);
 
 section('Sprung ans Telefon');
 

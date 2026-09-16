@@ -1,4 +1,5 @@
-import { VT, api, render, esc, on, go, topbar, loading, wireBack, progressBar, flagHtml } from '../core.js';
+import { VT, api, render, esc, on, go, topbar, loading, wireBack, progressBar, flagHtml,
+         pupilHint } from '../core.js';
 
 /**
  * Startseite einer Sprache: einlesen und üben auf einer Ebene.
@@ -43,8 +44,10 @@ export async function languageView(languageId) {
     `).join('');
 
     render(`
-        ${topbar(language.name, { backTo: '/', lead: flagHtml(language.flag, 'flag lead') })}
+        ${topbar(language.label || language.name,
+                 { backTo: '/', lead: flagHtml(language.flag, 'flag lead') })}
         <div id="msg"></div>
+        ${pupilHint('Das ist die Ansicht deines Kurses, wie ein Kind sie hat.')}
 
         ${units.length > 0 ? `
             <div class="card">

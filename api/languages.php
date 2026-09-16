@@ -20,7 +20,7 @@ switch (action()) {
              * Gezaehlt wird nur Freigegebenes. Sonst stuende hier "20
              * Vokabeln", waehrend die Lerneinheit drei zeigt.
              */
-            'SELECT l.id, l.name, l.flag_emoji, l.code,
+            'SELECT l.id, l.name, co.name AS course_name, l.flag_emoji, l.code,
                     (SELECT COUNT(*) FROM units u
                       WHERE u.course_id = co.id) AS unit_count,
                     (SELECT COUNT(*) FROM vocab v
@@ -34,11 +34,35 @@ switch (action()) {
               ORDER BY l.name',
             [user_is_teacher($user) ? 1 : 0, $uid],
         );
+        /*
+         * Zwei Kacheln "Englisch" nebeneinander.
+         *
+         * Wer Englisch in der 5B und in der 6A gibt, sah zweimal dasselbe
+         * Wort und musste raten. Dann - und nur dann - traegt die Kachel
+         * den Namen des Kurses: "Englisch - 5B".
+         *
+         * Nicht immer, denn in einer Familie heisst der Kurs "Englisch
+         * Lilli M.", und auf der Kachel eines Kindes seinen eigenen Namen
+         * zu lesen ist keine Auskunft, sondern Laerm. Entschieden wird je
+         * Konto: Es geht darum, was DIESER Mensch vor sich hat.
+         */
+        $wieOft = [];
+        foreach ($rows as $r) {
+            $wieOft[$r['name']] = ($wieOft[$r['name']] ?? 0) + 1;
+        }
+
         foreach ($rows as &$r) {
+            if (($wieOft[$r['name']] ?? 0) > 1 && ($r['course_name'] ?? '') !== '') {
+                $r['name'] = $r['course_name'];
+            }
+            unset($r['course_name']);
+
             $r['id']          = (int) $r['id'];
             $r['unit_count']  = (int) $r['unit_count'];
             $r['vocab_count'] = (int) $r['vocab_count'];
         }
+        unset($r);
+
         json_out(['ok' => true, 'languages' => $rows]);
 
     case 'create':

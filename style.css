@@ -965,10 +965,19 @@ input.cloze-input[readonly] { opacity: 1; }
  * bleibt bedienbar, nur unsichtbar - so laesst sich das Feld weiterhin mit
  * der Tastatur durchlaufen.
  */
+/*
+ * Feste Kaestchen statt gedehnter Spalten.
+ *
+ * Mit repeat(8, 1fr) wuchs das Feld mit der Karte mit: Auf einem breiten
+ * Bildschirm standen dort 64 Kacheln von je siebzig Pixeln - ein Farbfeld,
+ * das mehr Platz nahm als alles andere auf der Seite zusammen. Die Groesse
+ * einer Farbprobe haengt nicht von der Fensterbreite ab.
+ */
 .swatches {
     display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    gap: 6px;
+    grid-template-columns: repeat(8, 26px);
+    gap: 5px;
+    justify-content: start;
     margin-bottom: 16px;
 }
 .swatch-pick { position: relative; display: block; cursor: pointer; line-height: 0; }
@@ -978,8 +987,9 @@ input.cloze-input[readonly] { opacity: 1; }
 }
 .swatch-pick span {
     display: block;
-    aspect-ratio: 1;
-    border-radius: 8px;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
     background: var(--c);
     border: 1px solid rgba(0, 0, 0, .1);
 }
@@ -998,3 +1008,14 @@ input.cloze-input[readonly] { opacity: 1; }
     color: var(--text-soft);
 }
 .kurszeile strong { color: var(--text); }
+
+/* Der Hinweis in der Schueleransicht - fuer Lehrkraefte, die von ihrem
+   Bereich herkommen. Zurueckhaltend: Er erklaert die Seite, er ist nicht
+   ihr Inhalt. */
+.notice.pupilview {
+    background: var(--surface-2);
+    border-color: var(--border);
+    color: var(--text-soft);
+    font-size: .88rem;
+}
+.notice.pupilview strong { color: var(--text); }

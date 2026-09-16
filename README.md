@@ -221,6 +221,18 @@ kam. Jetzt stehen in der Klasse zuerst ihre Kurse, darunter ihre Kinder, und
 beides legt man dort an. `teacher/index.php` leitet auf die Klassen weiter,
 damit ein Lesezeichen auf die alte Liste nicht ins Leere führt.
 
+Rechts in der Leiste stehen der eigene Name, ein Zahnrad und ein Knopf zum
+Abmelden. Das Zahnrad führt in dieselben Einstellungen wie in der App
+(`#/konto`) — Name, Farbe und Passwort sind dieselbe Sache, egal von welcher
+Seite man kommt, und eine zweite Fassung davon wären bald zwei
+verschiedene.
+
+Von Kurs und Lerneinheit führt ein Knopf **in der Zeile der Überschrift** in
+die Schüleransicht: „So sieht es die Klasse". Die App sagt dort, dass man
+gerade die Schüleransicht vor sich hat — ohne diesen Satz ist es nur eine
+Seite, die weniger zeigt als die Verwaltung, und das sieht nach einem Fehler
+aus. Für Kinder steht dort nichts.
+
 Tabellenzeilen öffnen sich per Klick statt über einen „Öffnen"-Knopf in
 jeder Zeile. Der Name in der Zeile bleibt ein echter Link — für die
 Tastatur, fürs Aufklappen in einem neuen Tab und für alle, die keinen Zeiger
@@ -257,9 +269,20 @@ Was er *nicht* ist: eine eingeschränkte Sitzung. Wer die Marke einlöst, ist
 angemeldet wie nach Benutzername und Passwort. Das ist Absicht — zum
 Einlesen gehört die ganze App — und der Grund für die kurze Frist.
 
-Der QR-Code im noch leeren Kurs trägt **keine** Marke: Er führt nur in die
-Einleseansicht, und dort meldet man sich an. Eine Karte, die bei jedem
-Seitenaufruf einen Schlüssel erzeugt, hinterlässt eine Spur von Schlüsseln.
+Im noch leeren Kurs steht **kein** QR-Code mehr. Er führte dorthin, wo man
+sich erst noch anmelden muss — der Weg, der genau das überspringt, heisst
+„Am Smartphone einlesen", und zwei Codes nebeneinander waren einer zu viel.
+
+### Zwei Kurse derselben Sprache
+
+Wer Englisch in der 5B und in der 6A gibt, sah in der App zweimal die Kachel
+„Englisch" und konnte nicht raten, welche welche ist. Die Kachel trägt
+deshalb den Namen des Kurses — **aber nur dann**: In einer Familie heisst
+der Kurs „Englisch Lilli M.", und der eigene Name auf der eigenen Kachel ist
+keine Auskunft, sondern Lärm. Entschieden wird je Konto, denn es geht darum,
+was *dieser* Mensch vor sich hat. Die Seite hinter der Kachel trägt
+denselben Namen; stünde dort etwas anderes, wäre der Weg dorthin eine
+Überraschung.
 
 ---
 
@@ -467,7 +490,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-757 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+777 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
 Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
 Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
 hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
@@ -529,6 +552,6 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 967 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 987 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.

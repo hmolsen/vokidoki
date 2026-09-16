@@ -107,11 +107,29 @@ switch (action()) {
             [(int) $lang['id'], $uid],
         );
 
+        /*
+         * Wie auf der Kachel: Der Kursname steht nur da, wenn er etwas
+         * unterscheidet. Wer Englisch zweimal hat, braucht "Englisch - 5B";
+         * wer es einmal hat, liest lieber "Englisch" als seinen eigenen
+         * Namen. Die Regel muss dieselbe sein wie in api/languages.php -
+         * sonst heisst die Kachel anders als die Seite dahinter.
+         */
+        $gleichnamig = (int) qv(
+            'SELECT COUNT(*) FROM courses co
+               JOIN languages l2      ON l2.id = co.language_id
+               JOIN course_members m  ON m.course_id = co.id
+              WHERE m.user_id = ? AND l2.name = ?',
+            [$uid, (string) $lang['name']],
+        );
+        $anzeige = $gleichnamig > 1 && $kurs !== null ? (string) $kurs : (string) $lang['name'];
+
         json_out(['ok' => true, 'language' => [
             'id'     => (int) $lang['id'],
             'name'   => $lang['name'],
             'flag'   => $lang['flag_emoji'],
             'course' => $kurs === null ? null : (string) $kurs,
+            // Was als Ueberschrift dastehen soll - Sprache oder Kurs.
+            'label'  => $anzeige,
         ], 'units' => $rows]);
 
     case 'get':
