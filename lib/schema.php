@@ -609,6 +609,54 @@ function schema_migrations(): array
         // QR-Code auf dem Bildschirm der Lehrkraft traegt eine davon; wer
         // ihn scannt, ist angemeldet und steht im Einlesen. Kurzlebig und
         // genau einmal einloesbar - siehe lib/handoff.php.
+        /*
+         * vocab.position soll wieder heissen, was alles annimmt: 0..n-1
+         * ohne Luecken - Teil 1 von 2.
+         *
+         * Die Spalte ist zweierlei zugleich: Reihenfolge UND Freigabezeiger.
+         * Elf Abfragen vergleichen v.position < u.released_position, und
+         * "Alles freigeben" setzt die Marke auf COUNT(*). Loescht jemand
+         * eine Vokabel in der Mitte, bleibt ein Loch - und danach ist
+         * MAX(position)+1 groesser als COUNT(*), die letzte Vokabel also
+         * mit "Alles freigeben" nicht mehr erreichbar. Still, ohne Meldung.
+         *
+         * Gelaufen wird das genau einmal, vor dem Schluessel: Danach kann
+         * kein Weg mehr Luecken erzeugen, und die Pruefung kostet nur noch
+         * einen Blick auf die Indexliste statt einer Gruppierung ueber alle
+         * Vokabeln.
+         */
+        'vocab.position.compact' => [
+            static fn (): bool => table_exists('vocab')
+                && !index_exists('vocab', 'uq_vocab_pos')
+                && vocab_positions_have_gaps(),
+            'UPDATE vocab v
+               JOIN (SELECT id,
+                            ROW_NUMBER() OVER (PARTITION BY unit_id
+                                                   ORDER BY position, id) - 1 AS neu
+                       FROM vocab) r ON r.id = v.id
+                SET v.position = r.neu
+              WHERE v.position <> r.neu',
+        ],
+
+        /*
+         * Teil 2: der Riegel.
+         *
+         * Zwei Vokabeln mit derselben Position teilen sich einen
+         * Freigabeschritt - eine von beiden ist danach nicht einzeln
+         * freizugeben. Der Schluessel macht daraus einen lauten Fehler statt
+         * einer stillen Verfaelschung, und er schliesst das Wettrennen
+         * zweier gleichzeitiger Anfuegungen.
+         *
+         * Muss NACH der Verdichtung stehen: Auf einer Datenbank mit Luecken
+         * gaebe es zwar keine Dubletten, aber die Reihenfolge ist trotzdem
+         * die richtige - erst geradeziehen, dann festnageln.
+         */
+        'vocab.position.unique' => [
+            static fn (): bool => table_exists('vocab')
+                && !index_exists('vocab', 'uq_vocab_pos'),
+            'ALTER TABLE vocab ADD UNIQUE KEY uq_vocab_pos (unit_id, position)',
+        ],
+
         'login_handoffs.table' => [
             static fn (): bool => !table_exists('login_handoffs'),
             "CREATE TABLE login_handoffs (
@@ -686,6 +734,26 @@ function column_is_nullable(string $table, string $column): bool
  * Umbau von uq_progress braucht aber eine Prüfung auf den Index selbst - sonst
  * liefe er bei jedem Aufruf erneut oder gar nicht.
  */
+/**
+ * Gibt es irgendeine Lerneinheit mit Loechern in den Positionen?
+ *
+ * Nur fuer den Waechter der Verdichtung. Bewusst hier und nicht in
+ * lib/vocab.php: lib/schema.php soll fuer eine Bedingung keine weitere
+ * Datei laden muessen.
+ */
+function vocab_positions_have_gaps(): bool
+{
+    $n = qv(
+        'SELECT COUNT(*) FROM (
+             SELECT unit_id FROM vocab
+              GROUP BY unit_id
+             HAVING MIN(position) <> 0 OR MAX(position) <> COUNT(*) - 1
+             LIMIT 1
+         ) x',
+    );
+    return (int) $n > 0;
+}
+
 function index_exists(string $table, string $index): bool
 {
     $n = qv(

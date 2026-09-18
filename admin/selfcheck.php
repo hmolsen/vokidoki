@@ -9,6 +9,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/keyvault.php';
 require_once __DIR__ . '/../lib/sentences.php';
+require_once __DIR__ . '/../lib/vocab.php';
 
 admin_require();
 
@@ -180,6 +181,40 @@ check($checks, 'Lernstand je Kind', static function (): array {
     }
 
     return [false, 'noch am alten Schlüssel (vocab_id, mode): ein Lernstand für alle Kinder'];
+});
+
+check($checks, 'Reihenfolge der Vokabeln', static function (): array {
+    if (!table_exists('vocab')) {
+        return [false, 'Tabelle vocab fehlt'];
+    }
+
+    /*
+     * vocab.position ist Reihenfolge UND Freigabezeiger zugleich. Elf
+     * Abfragen vergleichen v.position < u.released_position, und „Alles
+     * freigeben" setzt die Marke auf COUNT(*). Sind die Positionen einer
+     * Einheit nicht lückenlos 0..n-1, zeigt die Marke ins Leere: Die letzte
+     * Vokabel bleibt unsichtbar, ohne dass irgendwo etwas meldet.
+     */
+    $luecken = vocab_units_with_gaps();
+    $riegel  = index_exists('vocab', 'uq_vocab_pos');
+
+    if ($luecken !== []) {
+        $namen = array_slice(array_column($luecken, 'title'), 0, 3);
+        return [false, sprintf(
+            '%d Lerneinheit(en) mit Lücken in den Positionen (%s%s) - '
+            . 'dort erreicht „Alles freigeben" die letzte Vokabel nicht',
+            count($luecken),
+            implode(', ', $namen),
+            count($luecken) > 3 ? ', …' : '',
+        )];
+    }
+
+    if (!$riegel) {
+        return [false, 'Positionen sind lückenlos, aber uq_vocab_pos fehlt - '
+                     . 'die Schemaänderungen ausführen'];
+    }
+
+    return [true, 'lückenlos, und uq_vocab_pos hält es so'];
 });
 
 check($checks, 'Sprachkürzel', static function (): array {

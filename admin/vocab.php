@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/ai.php';
 require_once __DIR__ . '/../lib/sentences.php';
+require_once __DIR__ . '/../lib/vocab.php';
 
 admin_require();
 
@@ -315,8 +316,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
 
     if (isset($_POST['delete_vocab'])) {
-        q('DELETE FROM vocab WHERE id = ?', [(int) $_POST['delete_vocab']]);
-        flash('Vokabel gelöscht.');
+        /*
+         * Ueber lib/vocab.php und nicht mit einem blanken DELETE.
+         *
+         * Zwei Dinge haengen daran, die ein DELETE allein nicht tut: Lag die
+         * Vokabel unterhalb der Freigabemarke, muss die Marke mitsinken -
+         * sonst rueckt stillschweigend ein gesperrtes Wort nach. Und die
+         * Positionen muessen danach wieder lueckenlos sein, sonst erreicht
+         * "Alles freigeben" die letzte Vokabel nicht mehr.
+         */
+        vocab_delete((int) $_POST['delete_vocab']);
+        flash('Vokabel gelöscht. Der Lernstand der Kinder dazu ist mit weg.');
         back_to_filter($userId, $langId, $unitId);
     }
 
@@ -327,12 +337,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         if ($f === '' || $nv === '') {
             flash('Beide Felder ausfüllen.', 'bad');
         } else {
-            $pos = (int) (qv('SELECT COALESCE(MAX(position), -1) + 1 FROM vocab WHERE unit_id = ?', [$target]) ?? 0);
-            q(
-                'INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, ?)',
-                [$target, mb_substr($f, 0, 255), mb_substr($nv, 0, 255), $pos],
+            // Derselbe Weg wie beim Einlesen und im Lehrkraft-Bereich: eine
+            // Transaktion, lueckenlose Positionen, und punctuation_fix() -
+            // das fehlte hier, weshalb von Hand ergaenzte Vokabeln hinterher
+            // in der Liste "Abstaende" auftauchten.
+            $code = (string) qv(
+                'SELECT l.code FROM units t JOIN languages l ON l.id = t.language_id
+                  WHERE t.id = ?', [$target],
             );
-            flash('Vokabel ergänzt.');
+            $dazu = vocab_append($target, [['foreign' => $f, 'native' => $nv]],
+                                 $code !== '' ? $code : null);
+            flash($dazu > 0 ? 'Vokabel ergänzt.' : 'Die Vokabel liess sich nicht ergänzen.',
+                  $dazu > 0 ? 'good' : 'bad');
         }
         back_to_filter($userId, $langId, $unitId);
     }

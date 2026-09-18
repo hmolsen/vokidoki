@@ -4773,6 +4773,180 @@ foreach (class_members_list($klasseId) as $k) {
 }
 q('DELETE FROM classes WHERE id = ?', [$klasseId]);
 
+section('Reihenfolge und Freigabe der Vokabeln');
+
+/*
+ * vocab.position ist zweierlei zugleich: Reihenfolge UND Freigabezeiger.
+ * Elf Abfragen vergleichen v.position < u.released_position, und „Alles
+ * freigeben" setzt die Marke auf COUNT(*). Das traegt nur, solange die
+ * Positionen luecklos 0..n-1 sind - und genau das war vor diesem Abschnitt
+ * nicht garantiert.
+ */
+require_once __DIR__ . '/../lib/vocab.php';
+
+$posKlasse = class_create(
+    (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]),
+    'Pos' . bin2hex(random_bytes(2)),
+);
+$posKurs = course_create(
+    q1('SELECT * FROM users WHERE id = ?', [$lehrerId]),
+    'Positionisch' . bin2hex(random_bytes(2)), "\u{1F310}", (int) $posKlasse['id'], '',
+);
+$posKursId  = is_string($posKurs) ? 0 : (int) $posKurs['id'];
+$posSprache = is_string($posKurs) ? 0 : (int) $posKurs['language_id'];
+ok('Ein Kurs fuer die Positionen', $posKursId > 0);
+
+$posUnit = makeUnit($lehrerId, $posSprache, 'Positions-Unit');
+foreach (['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot'] as $i => $w) {
+    q('INSERT INTO vocab (unit_id, position, term_foreign, term_native)
+       VALUES (?, ?, ?, ?)', [$posUnit, $i, $w, 'de-' . $w]);
+}
+q('UPDATE units SET released_position = 3 WHERE id = ?', [$posUnit]);
+
+/** Die Woerter, die ein Kind dieser Einheit gerade sieht. */
+$sichtbar = static function (int $unitId): array {
+    return array_column(qa(
+        'SELECT v.term_foreign FROM vocab v JOIN units u ON u.id = v.unit_id
+          WHERE v.unit_id = ? AND v.position < u.released_position
+          ORDER BY v.position', [$unitId],
+    ), 'term_foreign');
+};
+
+ok('Zu Beginn sind drei Woerter frei',
+   $sichtbar($posUnit) === ['alpha', 'bravo', 'charlie'],
+   implode(',', $sichtbar($posUnit)));
+
+// ---- Anfuegen aendert nicht, was freigegeben ist.
+
+$vorher = (int) qv('SELECT released_position FROM units WHERE id = ?', [$posUnit]);
+$dazu   = vocab_append($posUnit, [
+    ['foreign' => 'golf',  'native' => 'de-golf'],
+    ['foreign' => 'hotel', 'native' => 'de-hotel'],
+]);
+ok('Zwei Vokabeln kommen dazu', $dazu === 2, (string) $dazu);
+ok('Die Freigabemarke bleibt, wo sie war',
+   (int) qv('SELECT released_position FROM units WHERE id = ?', [$posUnit]) === $vorher);
+ok('Und die Klasse sieht weiterhin genau dieselben Woerter',
+   $sichtbar($posUnit) === ['alpha', 'bravo', 'charlie'],
+   implode(',', $sichtbar($posUnit)));
+ok('Die neuen stehen hinten dran',
+   (int) qv('SELECT position FROM vocab WHERE unit_id = ? AND term_foreign = ?',
+            [$posUnit, 'hotel']) === 7);
+ok('Die Positionen sind lueckenlos', vocab_positions_dense($posUnit));
+
+// ---- Loeschen unterhalb der Marke laesst dieselben Woerter frei.
+
+$bravo = (int) qv('SELECT id FROM vocab WHERE unit_id = ? AND term_foreign = ?',
+                  [$posUnit, 'bravo']);
+vocab_delete($bravo);
+
+ok('Nach dem Loeschen sinkt die Marke mit',
+   (int) qv('SELECT released_position FROM units WHERE id = ?', [$posUnit]) === 2,
+   (string) qv('SELECT released_position FROM units WHERE id = ?', [$posUnit]));
+ok('Die Klasse sieht dieselben Woerter wie vorher, nur ohne das geloeschte',
+   $sichtbar($posUnit) === ['alpha', 'charlie'],
+   implode(',', $sichtbar($posUnit)));
+ok('Und die Positionen sind wieder lueckenlos', vocab_positions_dense($posUnit));
+
+/*
+ * Der Kern der Sache: Ohne die Markenkorrektur waere jetzt "delta"
+ * freigegeben - ein Wort, das niemand freigegeben hat.
+ */
+ok('Kein gesperrtes Wort ist nachgerueckt',
+   !in_array('delta', $sichtbar($posUnit), true), implode(',', $sichtbar($posUnit)));
+
+// ---- Loeschen oberhalb der Marke laesst sie in Ruhe.
+
+$golf = (int) qv('SELECT id FROM vocab WHERE unit_id = ? AND term_foreign = ?',
+                 [$posUnit, 'golf']);
+$vorMarke = (int) qv('SELECT released_position FROM units WHERE id = ?', [$posUnit]);
+vocab_delete($golf);
+ok('Ein gesperrtes Wort zu loeschen ruehrt die Marke nicht an',
+   (int) qv('SELECT released_position FROM units WHERE id = ?', [$posUnit]) === $vorMarke);
+
+// ---- "Alles freigeben" erreicht auch das zuletzt Angefuegte.
+
+vocab_append($posUnit, [['foreign' => 'india', 'native' => 'de-india']]);
+$gesamt = (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$posUnit]);
+q('UPDATE units SET released_position = ? WHERE id = ?', [$gesamt, $posUnit]);
+ok('"Alles freigeben" erreicht wirklich alle - auch die angefuegten',
+   count($sichtbar($posUnit)) === $gesamt,
+   count($sichtbar($posUnit)) . ' von ' . $gesamt);
+ok('Einschliesslich der zuletzt angefuegten',
+   in_array('india', $sichtbar($posUnit), true));
+
+// ---- Die Verdichtung raeumt Loecher weg.
+
+q('DELETE FROM vocab WHERE unit_id = ? AND term_foreign = ?', [$posUnit, 'charlie']);
+ok('Ein blankes DELETE hinterlaesst ein Loch', !vocab_positions_dense($posUnit),
+   'sonst prueft der naechste Schritt nichts');
+$bewegt = vocab_compact_positions($posUnit);
+ok('Die Verdichtung raeumt es weg', vocab_positions_dense($posUnit));
+ok('Und sagt, wie viele Zeilen sich bewegt haben', $bewegt > 0, (string) $bewegt);
+ok('Die Reihenfolge bleibt dabei erhalten',
+   array_column(qa('SELECT term_foreign FROM vocab WHERE unit_id = ? ORDER BY position',
+                   [$posUnit]), 'term_foreign')
+   === ['alpha', 'delta', 'echo', 'foxtrot', 'hotel', 'india'],
+   implode(',', array_column(qa('SELECT term_foreign FROM vocab WHERE unit_id = ? ORDER BY position',
+                                [$posUnit]), 'term_foreign')));
+
+// ---- Der Riegel in der Datenbank.
+
+ok('Es gibt einen eindeutigen Schluessel auf (unit_id, position)',
+   index_exists('vocab', 'uq_vocab_pos'));
+
+$dublette = false;
+try {
+    $erste = (int) qv('SELECT id FROM vocab WHERE unit_id = ? ORDER BY position LIMIT 1',
+                      [$posUnit]);
+    $zweite = (int) qv('SELECT id FROM vocab WHERE unit_id = ? ORDER BY position LIMIT 1 OFFSET 1',
+                       [$posUnit]);
+    q('UPDATE vocab SET position = 0 WHERE id = ?', [$zweite]);
+    $dublette = true;
+} catch (Throwable $e) {
+    // genau so soll es sein
+}
+ok('Zwei Vokabeln koennen sich keine Position teilen', !$dublette,
+   'sonst teilen sie sich einen Freigabeschritt');
+
+// ---- Und dass das ueberhaupt auffaellt.
+
+ok('Der Selbsttest kennt die Frage',
+   str_contains((string) file_get_contents(__DIR__ . '/../admin/selfcheck.php'),
+                'Reihenfolge der Vokabeln'));
+ok('Die Schemaaenderung steht in der richtigen Reihenfolge',
+   array_search('vocab.position.compact', array_keys(schema_migrations()), true)
+   < array_search('vocab.position.unique', array_keys(schema_migrations()), true),
+   'erst geradeziehen, dann festnageln');
+ok('Und schema.sql kennt den Schluessel auch',
+   str_contains((string) file_get_contents(__DIR__ . '/../schema.sql'), 'uq_vocab_pos'),
+   'sonst laufen frische Installation und Migration auseinander');
+
+// ---- punctuation_fix greift auch von Hand.
+
+$posUnit2 = makeUnit($lehrerId, $posSprache, 'Abstands-Unit');
+vocab_append($posUnit2, [['foreign' => 'Ça va ?', 'native' => 'Wie geht es ?']], 'fr');
+$paar = q1('SELECT term_foreign, term_native FROM vocab WHERE unit_id = ?', [$posUnit2]);
+ok('Im Deutschen faellt der Abstand vor dem Fragezeichen weg',
+   ($paar['term_native'] ?? '') === 'Wie geht es?', (string) ($paar['term_native'] ?? ''));
+ok('Im Franzoesischen bleibt er',
+   str_contains((string) ($paar['term_foreign'] ?? ''), ' ?')
+   || str_contains((string) ($paar['term_foreign'] ?? ''), "\u{202F}?"),
+   (string) ($paar['term_foreign'] ?? ''));
+
+/*
+ * Vollstaendig wegraeumen, nicht nur die Klasse.
+ *
+ * Eine Klasse zu loeschen nimmt den Kurs nicht mit, und am Kurs haengen
+ * Sprache, Lerneinheiten und Vokabeln. Der Abschnitt "Kategorien
+ * nachtragen" zaehlt spaeter ALLE Vokabeln ohne Wortart - liegen hier
+ * welche herum, faellt er um, und zwar an einer Stelle, die mit diesem
+ * Abschnitt nichts zu tun hat.
+ */
+q('DELETE FROM languages WHERE id = ?', [$posSprache]);
+q('DELETE FROM courses   WHERE id = ?', [$posKursId]);
+q('DELETE FROM classes   WHERE id = ?', [(int) $posKlasse['id']]);
+
 section('Meine Kurse als Startseite');
 
 /*
@@ -4966,6 +5140,14 @@ ok('Mit nur einem eigenen Kurs gibt es kein Menue',
    'ein Menue mit einem Eintrag ist eines zu viel');
 @unlink($einzelJar);
 
+// Ebenso hier: erst die Sprachen (sie ziehen Kurse, Einheiten und Vokabeln
+// mit), dann die Konten und Klassen.
+foreach ([$startKurs, $fremderKurs, $leererKurs, $einzelKurs] as $k) {
+    if (!is_string($k)) {
+        q('DELETE FROM languages WHERE id = ?', [(int) $k['language_id']]);
+        q('DELETE FROM courses   WHERE id = ?', [(int) $k['id']]);
+    }
+}
 q('DELETE FROM users   WHERE id IN (?, ?)', [$zweiteId, $einzelId]);
 q('DELETE FROM classes WHERE id IN (?, ?)',
   [(int) $startKlasse['id'], (int) $fremdeKlasse['id']]);
@@ -5610,6 +5792,26 @@ ok('Widerrufener Token meldet niemanden mehr an',
    !str_contains($res['body'], 'Testkinds Vokabeln'));
 
 // ------------------------------------------------------------------ Aufräumen
+
+/*
+ * Die Sprachen zuerst - und das fehlte lange.
+ *
+ * Eine Sprache haengt an der Schule, nicht am Konto: users zu loeschen
+ * nimmt sie nicht mit. Jeder Lauf liess deshalb eine Sprache "Testisch"
+ * samt Kurs, Lerneinheit und Vokabeln zurueck. Nach zweiundfuenfzig Laeufen
+ * lagen zweiundfuenfzig davon herum, und die Pruefung "Nach dem Nachtragen
+ * hat jede Vokabel eine Kategorie" zaehlt ALLE Vokabeln ohne Wortart - sie
+ * fiel um, ohne dass sich am Code etwas geaendert haette.
+ *
+ * Kurse, Einheiten, Vokabeln und Saetze fallen per ON DELETE CASCADE mit
+ * (fk_course_language, fk_unit_language).
+ */
+foreach ([$languageId ?? 0, $otherLang ?? 0, $fremdLang ?? 0, $freiLang ?? 0] as $lid) {
+    if ((int) $lid > 0) {
+        q('DELETE FROM languages WHERE id = ?', [(int) $lid]);
+    }
+}
+q("DELETE FROM languages WHERE name IN ('Testisch', 'Fremdisch', 'Spanisch', 'Klingonisch')");
 
 q('DELETE FROM users WHERE id = ?', [$userId]);
 q("DELETE FROM users WHERE username IN ('e2e_other')");

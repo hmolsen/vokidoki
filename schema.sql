@@ -73,8 +73,14 @@ CREATE TABLE IF NOT EXISTS vocab (
   note         VARCHAR(255) NULL,
   -- Wortart, vom Modell beim Einlesen bestimmt; NULL = noch nicht bestimmt.
   word_type    VARCHAR(16)  NULL,
+  -- position ist zweierlei: Reihenfolge UND Freigabezeiger. Elf Abfragen
+  -- vergleichen v.position < u.released_position, und "Alles freigeben"
+  -- setzt die Marke auf COUNT(*). Das traegt nur, solange die Positionen
+  -- je Einheit luecklos 0..n-1 sind - deshalb der eindeutige Schluessel
+  -- und lib/vocab.php, durch das jede Aenderung geht.
   position     INT UNSIGNED NOT NULL DEFAULT 0,
   KEY idx_vocab_unit (unit_id, position),
+  UNIQUE KEY uq_vocab_pos (unit_id, position),
   CONSTRAINT fk_vocab_unit FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
