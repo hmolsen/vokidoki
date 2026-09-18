@@ -113,6 +113,49 @@ a.crumb:hover { background: var(--surface-2); color: var(--text); }
     padding-left: 4px;
 }
 .crumbsep { color: var(--text-soft); font-size: 1rem; }
+
+/* Ein Krumen, der aufklappt - der Weg zu den Geschwistern. Ganz ohne
+   Skript: <details> kann das, mit Tastatur und Vorleseprogramm. */
+details.crumbmenu { position: relative; padding: 0; }
+details.crumbmenu > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 10px 6px 12px;
+    cursor: pointer;
+    list-style: none;
+    white-space: nowrap;
+}
+details.crumbmenu > summary::-webkit-details-marker { display: none; }
+details.crumbmenu > summary:hover { color: var(--text); }
+.crumbchev { font-size: .75rem; opacity: .7; }
+details.crumbmenu[open] > summary .crumbchev { transform: rotate(180deg); }
+
+details.crumbmenu > div {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 240px;
+    padding: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .18);
+}
+details.crumbmenu > div a {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 9px 11px;
+    border-radius: 8px;
+    color: var(--text);
+    text-decoration: none;
+    font-weight: 500;
+    white-space: nowrap;
+}
+details.crumbmenu > div a:hover { background: var(--surface-2); }
+details.crumbmenu > div a.on { font-weight: 700; background: var(--surface-2); }
 img.crumbflag { width: 20px; height: 15px; object-fit: contain; border-radius: 2px; }
 
 /* Knoepfe nebeneinander, linksbuendig und umbrechend - nicht auf die
@@ -792,6 +835,52 @@ table.release tr.flip td { animation: releaseflip .18s ease-out; }
     margin-bottom: 12px;
 }
 .qrslot svg { width: 100%; height: auto; }
+
+/* --------------------------------------------------- Kurskarten
+ *
+ * Die Startseite der Lehrkraft. Kein .tile wie in der Schueler-App: Das ist
+ * quadratisch und fuer zwei Woerter gemacht, hier stehen vier Zeilen und
+ * zwei Knoepfe darin.
+ */
+.kurskarten {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 14px;
+    margin-bottom: 20px;
+}
+.kurskarte { margin: 0; display: flex; flex-direction: column; }
+.kurskarte.dim { opacity: .55; }
+
+/* Der Kopf ist der Weg in den Kurs - ein echter Link, nicht nur eine
+   anklickbare Flaeche. */
+.kurskopf {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    color: inherit;
+    text-decoration: none;
+    margin-bottom: 10px;
+}
+.kurskopf > span { display: flex; flex-direction: column; min-width: 0; }
+.kurskopf strong { font-size: 1.05rem; }
+.kurskopf:hover strong { text-decoration: underline; }
+
+.kurskarte .kurszahlen { margin: 0 0 8px; }
+.kurskarte .kursstand  { margin: 0 0 14px; }
+/* Die Knoepfe sitzen unten, damit Karten nebeneinander gleich aussehen,
+   auch wenn ein Kursname umbricht. */
+.kurskarte .buttonrow  { margin: auto 0 0; }
+.kurskarte .buttonrow .btn { flex: 1 1 auto; }
+
+details.kursealle { margin-bottom: 20px; }
+details.kursealle > summary {
+    cursor: pointer;
+    font-weight: 600;
+    padding: 10px 0;
+}
+details.kursealle[open] > summary { margin-bottom: 12px; }
+
+.verwaltung { margin-top: 26px; }
 
 /* ------------------------------------------------ Zeile als Knopf
  *

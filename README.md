@@ -207,19 +207,43 @@ die richtige Quizantwort ausschließlich serverseitig.
 
 ---
 
-## Der Lehrkraft-Bereich hat eine Ebene weniger
+## Der Lehrkraft-Bereich beginnt bei der Arbeit
 
-Die Navigation **ist** der Pfad: Oben links steht der Name der Schule und
-führt zu den Klassen, rechts davon wächst er mit — `Grundschule Musterhausen
-› Klasse 5B › Englisch - 5B › Unit 4`. Feste Reiter gibt es nicht mehr.
+**Die Startseite sind die eigenen Kurse.** Vorher war es die Klassenliste —
+und damit die Verwaltung: Eine Klasse legt man einmal im Schuljahr an, eine
+Lerneinheit jede Woche. Bis zur Freigabe waren es drei Klicks und vier
+Seiten, und die Kursseite war die einzige Stelle im ganzen Quelltext, die
+auf eine Lerneinheit verlinkte.
 
-Alles hängt an der Klasse. Eine eigene Seite „Kurse", die alle Kurse der
-Schule untereinander auflistete, gab es einmal; sie zwang dazu, in jeder
-Zeile die Klasse mitzulesen, und wer einen Kurs anlegen wollte, musste die
-Klasse in einem Auswahlfeld wieder heraussuchen, obwohl er gerade von ihr
-kam. Jetzt stehen in der Klasse zuerst ihre Kurse, darunter ihre Kinder, und
-beides legt man dort an. `teacher/index.php` leitet auf die Klassen weiter,
-damit ein Lesezeichen auf die alte Liste nicht ins Leere führt.
+Jetzt steht je Kurs eine Karte da, mit den beiden Handgriffen, die ständig
+gebraucht werden: **„+ Lerneinheit"** führt in die Einleseansicht dieses
+Kurses, **„Freigeben"** direkt in die neueste Lerneinheit. Ohne Lerneinheit
+ist der Knopf abgeblendet statt abwesend — eine Karte, die je nach Datenlage
+anders aussieht, lässt einen suchen. Die Kurse der Kolleginnen stehen
+zugeklappt darunter: Eine Vertretung muss an die Unterlagen kommen, aber das
+ist der Ausnahmefall. Klassen und Kinder sind Verwaltung und stehen am Fuß.
+
+Dafür gibt es `courses_for_teacher()` — die Abfrage „welche Kurse
+unterrichte *ich*" fehlte bis dahin ganz; nichts im Quelltext filterte je
+nach Konto **und** Rolle, obwohl der Index dafür seit der Schulumstellung
+bereitlag.
+
+**Der Kurswechsel hängt am Pfad.** Wer Englisch in der 5a und Französisch in
+der 7b gibt, musste hoch zur Schule und durch eine andere Klasse wieder
+hinunter. Jetzt klappt der Kursname im Pfad auf und zeigt die eigenen Kurse
+— ein Klick von jeder Kurs- und Lerneinheitsseite aus. Gebaut als
+`<details>`, ohne eine Zeile JavaScript: Der Browser kann das Auf- und
+Zuklappen von sich aus, mit Tastatur und Vorleseprogramm. Wer nur einen
+eigenen Kurs hat, bekommt keine Liste — ein Menü mit einem Eintrag ist eines
+zu viel.
+
+Die Navigation **ist** der Pfad: Oben links der Name der Schule, er führt
+auf die eigenen Kurse; rechts davon wächst er mit — `Grundschule
+Musterhausen › Klasse 5B › Englisch - 5B › Unit 4`. Feste Reiter gibt es
+nicht.
+
+Klassen und Kurse hängen weiter zusammen: In der Klasse stehen zuerst ihre
+Kurse, darunter ihre Kinder, und beides legt man dort an.
 
 Rechts in der Leiste stehen der eigene Name, ein Zahnrad und ein Knopf zum
 Abmelden. Das Zahnrad führt in dieselben Einstellungen wie in der App
@@ -490,7 +514,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-777 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+799 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
 Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
 Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
 hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
@@ -552,7 +576,7 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 987 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 1009 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
 
@@ -570,7 +594,7 @@ Quelltext völlig richtig aussahen:
 - Der Zettel für die ganze Klasse wurde erst beim nächsten Laden anklickbar.
 
 ```bash
-node tests/browser/lauf.mjs --fixture            # 40 Prüfungen
+node tests/browser/lauf.mjs --fixture            # 59 Prüfungen
 node tests/browser/lauf.mjs --fixture bilder/    # dazu Bildschirmfotos
 ```
 

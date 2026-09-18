@@ -75,6 +75,13 @@ $klasseId = (int) $klasse['id'];
 $leere    = class_create($schuleId, '8d');
 $leereId  = (int) $leere['id'];
 
+/*
+ * Die Kinder VOR dem Kurs: course_create() uebernimmt die Klasse in den
+ * Kurs. Andersherum steht der Kurs da und ist leer - und die Karte meldete
+ * "0 Kinder", obwohl die Klasse voll war.
+ */
+students_bulk_create($schuleId, $klasseId, "Nora Wendt\nPaul Timm\nSina Krug");
+
 $lehrer = q1('SELECT * FROM users WHERE id = ?', [$lehrerId]);
 $kurs   = course_create($lehrer, 'Englisch', language_flag('Englisch'), $klasseId, '');
 if (is_string($kurs)) {
@@ -88,8 +95,6 @@ $klasse2   = class_create($schuleId, '9a');
 $kurs2     = course_create($lehrer, 'Französisch', language_flag('Französisch'),
                            (int) $klasse2['id'], '');
 $kurs2Id   = is_string($kurs2) ? 0 : (int) $kurs2['id'];
-
-students_bulk_create($schuleId, $klasseId, "Nora Wendt\nPaul Timm\nSina Krug");
 
 // Eine Lerneinheit mit genug Vokabeln, dass sich ein Balken ziehen lässt.
 q('INSERT INTO units (language_id, course_id, title, released_position)

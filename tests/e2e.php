@@ -3480,8 +3480,12 @@ $schulName = (string) qv('SELECT s.name FROM schools s
                             JOIN users u ON u.school_id = s.id WHERE u.id = ?', [$lehrerId]);
 ok('Und sieht ihre Schule im Pfad',
    $schulName !== '' && str_contains($res['body'], h($schulName)), $schulName);
-ok('Der Name der Schule fuehrt zu den Klassen',
-   preg_match('/<a class="crumb" href="[^"]*classes\.php"/', $res['body']) === 1);
+/*
+ * Die Wurzel der Navigation sind die eigenen Kurse, nicht die Klassen.
+ * Eine Klasse legt man einmal im Schuljahr an; gearbeitet wird mit Kursen.
+ */
+ok('Der Name der Schule fuehrt auf die eigenen Kurse',
+   preg_match('/<a class="crumb" href="[^"]*index\.php"/', $res['body']) === 1);
 
 $res = teacherGet('classes.php');
 ok('Sowie die Klassen der Schule',
@@ -4769,6 +4773,203 @@ foreach (class_members_list($klasseId) as $k) {
 }
 q('DELETE FROM classes WHERE id = ?', [$klasseId]);
 
+section('Meine Kurse als Startseite');
+
+/*
+ * Die Startseite war die Klassenliste. Eine Klasse legt man einmal im
+ * Schuljahr an, eine Lerneinheit jede Woche - und bis zur Freigabe waren es
+ * drei Klicks und vier Seiten. Jetzt liegt der Alltag vorn.
+ */
+
+$startSchule = (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]);
+
+// Eine zweite Lehrkraft derselben Schule - fuer die Gegenprobe, dass jede
+// nur ihre eigenen Kurse als "meine" sieht.
+$zweiteName = 'lehr2_' . bin2hex(random_bytes(3));
+q('INSERT INTO users (school_id, username, display_name, password_hash, color, role, can_import)
+   VALUES (?, ?, ?, ?, ?, ?, 1)',
+  [$startSchule, $zweiteName, 'Herr Zweit',
+   password_hash('lehrerin123', PASSWORD_DEFAULT), '#4f7cff', ROLE_TEACHER]);
+$zweiteId = (int) db()->lastInsertId();
+
+$startKlasse = class_create($startSchule, 'Start' . bin2hex(random_bytes(2)));
+$startKurs   = course_create(
+    q1('SELECT * FROM users WHERE id = ?', [$lehrerId]),
+    'Startisch' . bin2hex(random_bytes(2)), "\u{1F310}", (int) $startKlasse['id'], '',
+);
+$startKursId = is_string($startKurs) ? 0 : (int) $startKurs['id'];
+ok('Ein Kurs fuer die Startseite', $startKursId > 0,
+   is_string($startKurs) ? $startKurs : '');
+
+$fremdeKlasse = class_create($startSchule, 'Fremd' . bin2hex(random_bytes(2)));
+$fremderKurs  = course_create(
+    q1('SELECT * FROM users WHERE id = ?', [$zweiteId]),
+    'Fremdisch' . bin2hex(random_bytes(2)), "\u{1F310}", (int) $fremdeKlasse['id'], '',
+);
+$fremderKursId = is_string($fremderKurs) ? 0 : (int) $fremderKurs['id'];
+
+// ---- Die Abfrage, die es vorher nicht gab.
+
+$meine = courses_for_teacher($lehrerId, $startSchule);
+$namen = array_column($meine, 'name');
+ok('courses_for_teacher liefert den eigenen Kurs',
+   in_array($startKurs['name'], $namen, true), implode(', ', $namen));
+ok('Und nicht den der Kollegin',
+   !in_array($fremderKurs['name'], $namen, true), implode(', ', $namen));
+
+$seine = array_column(courses_for_teacher($zweiteId, $startSchule), 'name');
+ok('Umgekehrt genauso',
+   in_array($fremderKurs['name'], $seine, true)
+   && !in_array($startKurs['name'], $seine, true), implode(', ', $seine));
+
+/*
+ * Die Rolle wird wirklich geprueft, nicht nur die Mitgliedschaft.
+ *
+ * Heute faellt das nicht auf: Eine Lehrkraft ist ueberall, wo sie Mitglied
+ * ist, auch als Lehrkraft eingetragen - course_add_member() traegt die
+ * Rolle des Kontos ein. Die Mutationsprobe blieb deshalb gruen, als der
+ * Rollenfilter entfernt wurde. Eine Zeile mit der Rolle "student" laesst
+ * sich aber jederzeit anders erzeugen, etwa durch eine Ueberfuehrung, und
+ * dann stuende ein fremder Kurs unter "Meine Kurse". Also: von Hand
+ * eintragen und nachsehen.
+ */
+q("INSERT INTO course_members (course_id, user_id, member_role) VALUES (?, ?, 'student')",
+  [$fremderKursId, $lehrerId]);
+$mitSchuelerzeile = array_column(courses_for_teacher($lehrerId, $startSchule), 'name');
+ok('Eine Mitgliedschaft als SchuelerIn macht den Kurs nicht zu meinem',
+   !in_array($fremderKurs['name'], $mitSchuelerzeile, true),
+   implode(', ', $mitSchuelerzeile));
+q('DELETE FROM course_members WHERE course_id = ? AND user_id = ?',
+  [$fremderKursId, $lehrerId]);
+
+/*
+ * Die neueste Lerneinheit reist mit - sie ist das Ziel des Freigeben-Knopfes
+ * auf der Karte. Ohne sie muesste die Karte je Kurs nachfragen.
+ */
+$eigene = null;
+foreach ($meine as $k) {
+    if ((int) $k['id'] === $startKursId) { $eigene = $k; }
+}
+ok('Ohne Lerneinheit ist die neueste leer',
+   $eigene !== null && $eigene['latest_unit'] === null);
+
+$startUnit = makeUnit($lehrerId, (int) $startKurs['language_id'], 'Start-Unit');
+$meine = courses_for_teacher($lehrerId, $startSchule);
+foreach ($meine as $k) {
+    if ((int) $k['id'] === $startKursId) { $eigene = $k; }
+}
+ok('Mit einer ist sie die neueste',
+   (int) ($eigene['latest_unit'] ?? 0) === $startUnit,
+   (string) ($eigene['latest_unit'] ?? 'null'));
+
+// ---- Die Seite.
+
+$res = teacherGet('index.php');
+ok('Die Startseite ist keine Weiterleitung mehr', $res['status'] === 200);
+ok('Sie heisst "Meine Kurse"', str_contains($res['body'], '<h1>Meine Kurse</h1>'));
+ok('Und zeigt Karten statt einer Tabelle',
+   str_contains($res['body'], 'class="kurskarten"')
+   && substr_count($res['body'], 'kurskarte') >= 1);
+ok('Der eigene Kurs steht darauf', str_contains($res['body'], h($startKurs['name'])));
+
+ok('Die Karte fuehrt mit einem Klick in die Freigabe',
+   str_contains($res['body'], 'unit.php?id=' . $startUnit),
+   'vorher waren es drei Klicks und vier Seiten');
+ok('Und mit einem in die Einleseansicht',
+   str_contains($res['body'], '#/lang/' . (int) $startKurs['language_id'] . '/import'));
+
+ok('Die Kurse der Kolleginnen stehen zugeklappt darunter',
+   str_contains($res['body'], 'class="kursealle"')
+   && str_contains($res['body'], h($fremderKurs['name'])),
+   'eine Vertretung muss an die Unterlagen kommen');
+ok('Die Verwaltung steht am Fuss',
+   str_contains($res['body'], 'class="verwaltung tiny muted"')
+   && str_contains($res['body'], 'classes.php'));
+
+/*
+ * Ohne Lerneinheit ist "Freigeben" abgeblendet statt abwesend - eine Karte,
+ * die je nach Datenlage anders aussieht, laesst einen suchen.
+ */
+$leererKurs = course_create(
+    q1('SELECT * FROM users WHERE id = ?', [$lehrerId]),
+    'Leerisch' . bin2hex(random_bytes(2)), "\u{1F310}", (int) $startKlasse['id'], '',
+);
+$res = teacherGet('index.php');
+ok('Ohne Lerneinheit ist der Freigeben-Knopf abgeblendet',
+   preg_match('/<span class="btn small secondary aus"[^>]*>Freigeben<\/span>/', $res['body']) === 1,
+   'er soll dastehen, nicht fehlen');
+
+// ---- Der Kurswechsler im Pfad.
+
+$res = teacherGet('course.php?id=' . $startKursId);
+ok('Der Kurskrumen ist ein Menue',
+   str_contains($res['body'], 'details class="crumb crumbmenu"'));
+ok('Er nennt die eigenen Kurse',
+   substr_count($res['body'], 'crumbmenu') > 0
+   && str_contains($res['body'], h((string) $leererKurs['name'])),
+   'sonst fuehrt der Wechsel wieder ueber die Schule');
+ok('Und den Weg zu allen Kursen der Schule',
+   str_contains($res['body'], 'Alle Kurse der Schule'));
+ok('Der aktuelle Kurs ist darin markiert',
+   preg_match('/<a href="[^"]*course\.php\?id=' . $startKursId
+              . '" class="on" aria-current="page"/', $res['body']) === 1);
+
+$res = teacherGet('unit.php?id=' . $startUnit);
+ok('In der Lerneinheit steht er auch',
+   str_contains($res['body'], 'details class="crumb crumbmenu"'));
+
+/*
+ * Ein Menue mit einem Eintrag ist ein Menue zu viel: Wer nur einen Kurs
+ * hat, bekommt einen gewoehnlichen Krumen.
+ */
+$einzelName = 'lehr3_' . bin2hex(random_bytes(3));
+q('INSERT INTO users (school_id, username, display_name, password_hash, color, role, can_import)
+   VALUES (?, ?, ?, ?, ?, ?, 1)',
+  [$startSchule, $einzelName, 'Frau Einzel',
+   password_hash('lehrerin123', PASSWORD_DEFAULT), '#4f7cff', ROLE_TEACHER]);
+$einzelId   = (int) db()->lastInsertId();
+$einzelKurs = course_create(
+    q1('SELECT * FROM users WHERE id = ?', [$einzelId]),
+    'Einzelisch' . bin2hex(random_bytes(2)), "\u{1F310}", (int) $startKlasse['id'], '',
+);
+
+$einzelJar = tempnam(sys_get_temp_dir(), 'vteinzel');
+$einzelSeite = (function () use ($base, $einzelJar, $einzelName, $einzelKurs): string {
+    $hole = static function (string $url, ?array $post) use ($einzelJar): string {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_COOKIEJAR      => $einzelJar,
+            CURLOPT_COOKIEFILE     => $einzelJar,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_TIMEOUT        => 30,
+        ]);
+        if ($post !== null) {
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post));
+        }
+        $body = (string) curl_exec($ch);
+        curl_close($ch);
+        return $body;
+    };
+    $seite = $hole($base . '/teacher/', null);
+    preg_match('/name="csrf" value="([a-f0-9]+)"/', $seite, $m);
+    $hole($base . '/teacher/index.php', [
+        'teacher_login' => '1', 'username' => $einzelName,
+        'password' => 'lehrerin123', 'csrf' => $m[1] ?? '',
+    ]);
+    return $hole($base . '/teacher/course.php?id=' . (int) $einzelKurs['id'], null);
+})();
+
+ok('Mit nur einem eigenen Kurs gibt es kein Menue',
+   !str_contains($einzelSeite, 'crumbmenu'),
+   'ein Menue mit einem Eintrag ist eines zu viel');
+@unlink($einzelJar);
+
+q('DELETE FROM users   WHERE id IN (?, ?)', [$zweiteId, $einzelId]);
+q('DELETE FROM classes WHERE id IN (?, ?)',
+  [(int) $startKlasse['id'], (int) $fremdeKlasse['id']]);
+
 section('Klasse als Mittelpunkt');
 
 /*
@@ -5317,9 +5518,9 @@ curl_close($ch);
 ok('Ein verbogenes Ziel fuehrt nicht aus der Anwendung heraus',
    !str_contains($ortBoese, 'boese.example'), $ortBoese);
 
-$res = teacherRequest($base . '/teacher/classes.php',
+$res = teacherRequest($base . '/teacher/index.php',
     ['teacher_logout' => '1', 'csrf' => (function () use ($base): string {
-        $s = teacherRequest($base . '/teacher/classes.php', null);
+        $s = teacherRequest($base . '/teacher/index.php', null);
         preg_match('/name="csrf" value="([a-f0-9]+)"/', $s['body'], $m);
         return $m[1] ?? '';
     })()]);

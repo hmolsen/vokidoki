@@ -159,7 +159,7 @@ function teacher_require(): array
         login_attempts_reset($username);
 
         login_user((int) $row['id']);
-        teacher_redirect('classes.php');
+        teacher_redirect('index.php');
     }
 
     $user = current_user();
@@ -258,6 +258,34 @@ function teacher_crumbs(array $crumbs): void
         $inhalt = (($c['flag'] ?? '') !== '' ? flag_html((string) $c['flag'], 'crumbflag') : '')
                 . '<span>' . h($c['label']) . '</span>';
 
+        /*
+         * Ein Krumen mit Menü: der Weg zu den Geschwistern.
+         *
+         * Wer Englisch in der 5a und Französisch in der 7b gibt, musste
+         * bisher hoch zur Schule und durch eine andere Klasse wieder
+         * hinunter. Hier hängt die Liste am Namen des Kurses selbst.
+         *
+         * <details> und kein Skript: Der Browser kann das Auf- und Zuklappen
+         * von sich aus, mit Tastatur und Vorleseprogramm. Ein eigenes Panel
+         * müsste seine Lage von Hand berechnen, wie beim Sprachfeld - das
+         * lohnt für eine Liste, die nur aufklappt, nicht.
+         */
+        if (($c['menu'] ?? []) !== []) {
+            echo '<details class="crumb crumbmenu"><summary>' . $inhalt
+               . '<span class="crumbchev" aria-hidden="true">&#9662;</span></summary><div>';
+            foreach ($c['menu'] as $m) {
+                printf(
+                    '<a href="%s"%s>%s%s</a>',
+                    h((string) $m['href']),
+                    ($m['on'] ?? false) ? ' class="on" aria-current="page"' : '',
+                    ($m['flag'] ?? '') !== '' ? flag_html((string) $m['flag'], 'crumbflag') : '',
+                    h((string) $m['label']),
+                );
+            }
+            echo '</div></details>';
+            continue;
+        }
+
         if (($c['href'] ?? null) === null) {
             printf('<span class="crumb on" aria-current="page">%s</span>', $inhalt);
         } else {
@@ -276,6 +304,43 @@ function teacher_crumbs(array $crumbs): void
  * arbeitet immer in genau einer, und ein Reiter "Klassen" neben dem Namen
  * der Schule waere dasselbe zweimal.
  */
+/**
+ * Der Krumen fuer einen Kurs - mit der Liste der eigenen Kurse daran.
+ *
+ * Gebraucht von course.php und unit.php. Wer keinen zweiten eigenen Kurs
+ * hat, bekommt keine Liste: Ein Menue mit einem Eintrag ist ein Menue zu
+ * viel.
+ */
+function teacher_course_crumb(array $user, array $kurs, bool $aktuell): array
+{
+    $krumen = [
+        'label' => (string) $kurs['name'],
+        'href'  => $aktuell ? null : teacher_url('course.php') . '?id=' . (int) $kurs['id'],
+        'flag'  => (string) ($kurs['flag_emoji'] ?? ''),
+    ];
+
+    $meine = courses_for_teacher((int) $user['id'], (int) ($user['school_id'] ?? 0));
+    if (count($meine) < 2) {
+        return $krumen;
+    }
+
+    $krumen['menu'] = [];
+    foreach ($meine as $k) {
+        $krumen['menu'][] = [
+            'label' => (string) $k['name'],
+            'href'  => teacher_url('course.php') . '?id=' . (int) $k['id'],
+            'flag'  => (string) $k['flag_emoji'],
+            'on'    => (int) $k['id'] === (int) $kurs['id'],
+        ];
+    }
+    $krumen['menu'][] = [
+        'label' => 'Alle Kurse der Schule',
+        'href'  => teacher_url('index.php'),
+    ];
+
+    return $krumen;
+}
+
 function teacher_school_crumb(array $user): array
 {
     $name = (string) qv('SELECT name FROM schools WHERE id = ?',
@@ -283,7 +348,7 @@ function teacher_school_crumb(array $user): array
 
     return [
         'label' => $name !== '' ? $name : 'Ohne Schule',
-        'href'  => teacher_url('classes.php'),
+        'href'  => teacher_url('index.php'),
     ];
 }
 
@@ -315,7 +380,7 @@ function teacher_head(string $title, array $user, array $crumbs = [], string $ne
         <span class="tiny muted"><?= h($user['display_name']) ?></span>
         <a class="iconbtn" href="<?= h(url('/') . '#/konto') ?>"
            title="Mein Konto: Name, Farbe, Passwort" aria-label="Mein Konto">&#9881;</a>
-        <form method="post" action="<?= h(teacher_url('classes.php')) ?>" class="compact">
+        <form method="post" action="<?= h(teacher_url('index.php')) ?>" class="compact">
             <?= teacher_csrf_field() ?>
             <button class="btn small secondary" name="teacher_logout" value="1">
                 Abmelden

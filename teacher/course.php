@@ -5,12 +5,6 @@ require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/qr.php';
 require_once __DIR__ . '/../lib/handoff.php';
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['teacher_logout'])) {
-    teacher_csrf_check();
-    logout_user();
-    teacher_redirect('index.php');
-}
-
 $user = teacher_require();
 
 $schoolId = (int) ($user['school_id'] ?? 0);
@@ -207,11 +201,8 @@ if (($kurs['class_name'] ?? null) !== null && ($kurs['class_id'] ?? null) !== nu
         'href'  => teacher_url('class.php') . '?id=' . (int) $kurs['class_id'],
     ];
 }
-$pfad[] = [
-    'label' => (string) $kurs['name'],
-    'href'  => null,
-    'flag'  => (string) $kurs['flag_emoji'],
-];
+// Der Kurskrumen traegt die Liste der eigenen Kurse - ein Klick zum Wechseln.
+$pfad[] = teacher_course_crumb($user, $kurs, true);
 
 teacher_head($kurs['name'], $user, $pfad, sprintf(
     '<a class="btn small secondary" href="%s" target="_blank" rel="noopener" '

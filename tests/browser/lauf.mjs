@@ -22,6 +22,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { bilanz } from './browser.mjs';
+import { pruefe as navigation } from './navigation.mjs';
 import { pruefe as freigabe } from './freigabe.mjs';
 import { pruefe as fahnen }   from './fahnen.mjs';
 import { pruefe as klasse }   from './klasse.mjs';
@@ -50,6 +51,7 @@ if (aus) mkdirSync(aus, { recursive: true });
 console.log(`Browser-Pruefungen gegen ${f.basis}`);
 
 try {
+    await navigation(f, aus);
     await freigabe(f, aus);
     await fahnen(f, aus);
     await klasse(f, aus);

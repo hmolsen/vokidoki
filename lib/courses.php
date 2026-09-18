@@ -384,6 +384,53 @@ function courses_for_school(int $schoolId): array
 }
 
 /**
+ * Die Kurse, die DIESE Lehrkraft unterrichtet.
+ *
+ * Dieselben Zahlen wie courses_for_school(), nur enger: Mitglied mit der
+ * Rolle "teacher". Genau diese Abfrage fehlte - deshalb war die Startseite
+ * eine Klassenliste, obwohl niemand mit Klassen arbeitet. Man arbeitet mit
+ * Kursen; Klassen legt man einmal im Schuljahr an.
+ *
+ * courses_for_school() bleibt daneben stehen und bleibt richtig: Eine
+ * Vertretung muss an die Unterlagen der Kollegin kommen. Die eigenen Kurse
+ * sind der Alltag, alle Kurse der Ausnahmefall - und so stehen sie auch auf
+ * der Seite.
+ *
+ * Der Index idx_course_member_user (user_id, member_role) liegt seit der
+ * Schulumstellung bereit und wird hier zum ersten Mal wirklich benutzt.
+ */
+function courses_for_teacher(int $userId, int $schoolId): array
+{
+    return qa(
+        "SELECT co.*,
+                c.name AS class_name,
+                l.name AS language_name, l.flag_emoji,
+                (SELECT COUNT(*) FROM course_members m
+                  WHERE m.course_id = co.id AND m.member_role = 'student') AS students,
+                (SELECT COUNT(*) FROM units t WHERE t.course_id = co.id) AS units,
+                (SELECT COUNT(*) FROM vocab v
+                   JOIN units t ON t.id = v.unit_id
+                  WHERE t.course_id = co.id) AS vocab,
+                (SELECT COUNT(*) FROM vocab v
+                   JOIN units t ON t.id = v.unit_id
+                  WHERE t.course_id = co.id
+                    AND v.position < t.released_position) AS released,
+                (SELECT t.id FROM units t
+                  WHERE t.course_id = co.id
+                  ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS latest_unit
+           FROM courses co
+           JOIN course_members mine ON mine.course_id = co.id
+                                   AND mine.user_id = ?
+                                   AND mine.member_role = ?
+           JOIN languages l ON l.id = co.language_id
+           LEFT JOIN classes c ON c.id = co.class_id
+          WHERE co.school_id = ?
+          ORDER BY co.active DESC, c.name IS NULL, c.name, co.name",
+        [$userId, COURSE_ROLE_TEACHER, $schoolId],
+    );
+}
+
+/**
  * Wessen Konto steht für einen Kurs gerade.
  *
  * Gebraucht an drei Stellen, die einen Menschen brauchen, wo es nur noch

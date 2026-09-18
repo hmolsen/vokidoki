@@ -3,12 +3,6 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['teacher_logout'])) {
-    teacher_csrf_check();
-    logout_user();
-    teacher_redirect('classes.php');
-}
-
 $user     = teacher_require();
 $schoolId = (int) ($user['school_id'] ?? 0);
 

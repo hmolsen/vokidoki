@@ -14,12 +14,6 @@ require_once __DIR__ . '/../lib/sentences.php';
  * lohnt sich seitenweise - aber nur das aufgemacht, was gerade dran ist.
  */
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['teacher_logout'])) {
-    teacher_csrf_check();
-    logout_user();
-    teacher_redirect('index.php');
-}
-
 $user     = teacher_require();
 $schoolId = (int) ($user['school_id'] ?? 0);
 
@@ -163,11 +157,11 @@ if (($unit['class_name'] ?? null) !== null && ($unit['class_id'] ?? null) !== nu
         'href'  => teacher_url('class.php') . '?id=' . (int) $unit['class_id'],
     ];
 }
-$pfad[] = [
-    'label' => (string) $unit['course_name'],
-    'href'  => teacher_url('course.php') . '?id=' . (int) $unit['course_id'],
-    'flag'  => (string) $unit['flag_emoji'],
-];
+$pfad[] = teacher_course_crumb($user, [
+    'id'         => (int) $unit['course_id'],
+    'name'       => (string) $unit['course_name'],
+    'flag_emoji' => (string) $unit['flag_emoji'],
+], false);
 $pfad[] = ['label' => (string) $unit['title'], 'href' => null];
 
 teacher_head($unit['title'], $user, $pfad, sprintf(
