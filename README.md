@@ -555,3 +555,45 @@ kostenpflichtige API treffen.
 Zusammen 987 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
+
+### Die fünfte Suite: ein echter Browser
+
+Die vier Suiten oben sehen HTML. Sie können nicht sehen, ob sich ein Balken
+ziehen lässt, ob ein Bild wirklich ankommt oder ob ein Knopf nach dem
+Eintippen freigegeben wird — und genau dort lagen drei Fehler, die im
+Quelltext völlig richtig aussahen:
+
+- Der Freigabebalken verlor beim Verschieben seine **Zeigerbindung** und
+  liess sich um genau eine Vokabel bewegen.
+- Die Fahnen standen als `<img>` im Quelltext; ob die Datei dahinter
+  existiert, verrät der Quelltext nicht.
+- Der Zettel für die ganze Klasse wurde erst beim nächsten Laden anklickbar.
+
+```bash
+node tests/browser/lauf.mjs --fixture            # 40 Prüfungen
+node tests/browser/lauf.mjs --fixture bilder/    # dazu Bildschirmfotos
+```
+
+Gesteuert wird Chrome über das DevTools-Protokoll, ohne Fremdpaket: Node
+bringt seit Fassung 22 einen WebSocket mit. Gebraucht werden also **Node und
+ein installiertes Chrome** — und deshalb ist das hier ausdrücklich die
+fünfte Suite und **nicht** eine der vier: Wer nur die vier fährt, braucht
+nichts davon. `tests/browser/fixture.php` legt eine eigene Schule
+„BROWSERTEST-Schule" an und räumt sie am Ende wieder weg, auch wenn eine
+Prüfung umfällt.
+
+Zwei Fallen, die je eine Stunde gekostet haben und deshalb hier stehen:
+
+- In Git Bash macht die Pfadumsetzung aus einem Argument `/konto` klaglos
+  `C:/Program Files/Git/konto`. Wer Hash-Pfade übergibt, setzt
+  `MSYS_NO_PATHCONV=1` davor.
+- Eine Navigation, die sich **nur im Hash** unterscheidet, lädt das Dokument
+  nicht neu. Nach einer frischen Anmeldung kennt die laufende Seite
+  `VT.user` noch als `null` — erst neu laden, dann den Hash setzen.
+
+Und eine Lehre über Prüfungen selbst: Die erste Fassung der Balkenprüfung zog
+in Schritten von fünf Pixeln und blieb grün, als die Zeigerbindung
+testweise entfernt wurde — bei kleinen Schritten bleibt der Balken unter dem
+Zeiger, also treffen die Ereignisse ihn auch ohne Bindung. Erst ein
+**zügiger** Zug, bei dem der Zeiger den Balken überholt, fällt um. Eine
+Prüfung, die bei entferntem Riegel grün bleibt, prüft den Riegel nicht.

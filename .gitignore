@@ -15,3 +15,6 @@
 .DS_Store
 Thumbs.db
 .idea/
+
+# Bildschirmfotos der Browser-Suite, falls ein Ordner angegeben wird
+/tests/browser/bilder/
