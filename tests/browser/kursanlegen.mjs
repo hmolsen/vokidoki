@@ -135,6 +135,25 @@ export async function pruefe(f, aus) {
         ok('Sie ist von hier aus trotzdem erreichbar', kurs.zurKlasse !== '',
            'von der Hauptansicht aus muss alles erreichbar sein');
 
+        /*
+         * Und frisch angelegt gibt es nichts nachzutragen: Die Kinder der
+         * Klasse sind gerade mitgekommen. Der Knopf steht trotzdem da -
+         * abgeblendet, damit man ihn beim naechsten Mal nicht sucht.
+         */
+        const nachtragen = await b.js(`(() => {
+            const k = document.querySelector('[name="sync_class"]');
+            return {
+                da:       !!k,
+                gesperrt: k?.disabled ?? null,
+                text:     k?.textContent?.trim().replace(/\\s+/g, ' ') ?? '',
+            };
+        })()`);
+        ok('Das Nachtragen steht da', nachtragen.da);
+        ok('Und ist abgeblendet, weil niemand fehlt', nachtragen.gesperrt === true,
+           String(nachtragen.gesperrt));
+        ok('Der Knopf sagt das auch',
+           nachtragen.text.startsWith('Alle Kinder aus Klasse'), nachtragen.text);
+
         // ---- Und von dort direkt wieder zurück.
 
         await b.geh(f.basis + kurs.zurKlasse.replace(/^.*\/teacher\//, '/teacher/'), 1300);

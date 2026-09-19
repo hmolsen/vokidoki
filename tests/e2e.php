@@ -4247,11 +4247,61 @@ teacherRequest($base . '/teacher/course.php?id=' . $neuerKursId, [
 ok('Jemand laesst sich aus dem Kurs nehmen',
    course_role($ida, $neuerKursId) === null);
 
+/*
+ * Und der Knopf sagt, was er tun wuerde.
+ *
+ * "Klasse 5B nachtragen" liess offen, ob dabei etwas passiert - und meistens
+ * passierte nichts: Die Kinder kommen beim Anlegen des Kurses mit hinein.
+ * Wer draufdrueckte, bekam "Es war niemand nachzutragen", also eine Auskunft
+ * auf eine Frage, die er nicht gestellt hatte.
+ */
+ok('Genau eines fehlt jetzt', course_class_missing($neuerKursId) === 1,
+   (string) course_class_missing($neuerKursId));
+
+$res = teacherGet('course.php?id=' . $neuerKursId);
+ok('Der Knopf nennt die Zahl der Fehlenden',
+   preg_match('/1\s+fehlendes Kind\s+aus Klasse ' . preg_quote($kursKlasse, '/')
+              . '\s+eintragen/s', $res['body']) === 1,
+   'sonst weiss man erst nach dem Druecken, ob er etwas tut');
+ok('Und steht dabei nicht abgeblendet',
+   preg_match('/name="sync_class" value="1"\s*>/s', $res['body']) === 1,
+   'es gibt ja etwas zu tun');
+
 teacherRequest($base . '/teacher/course.php?id=' . $neuerKursId, [
     'sync_class' => '1', 'course_id' => $neuerKursId, 'csrf' => $lehrerCsrf,
 ]);
 ok('Und die Klasse laesst sich nachtragen',
    course_role($ida, $neuerKursId) === 'student');
+
+ok('Danach fehlt niemand mehr', course_class_missing($neuerKursId) === 0);
+
+$res = teacherGet('course.php?id=' . $neuerKursId);
+ok('Dann steht der Knopf abgeblendet da',
+   preg_match('/name="sync_class" value="1"\s+disabled/s', $res['body']) === 1,
+   'dastehen soll er trotzdem - sonst sucht man ihn beim naechsten Mal');
+ok('Und sagt, dass alle drin sind',
+   preg_match('/Alle Kinder aus Klasse ' . preg_quote($kursKlasse, '/')
+              . ' sind im Kurs/', $res['body']) === 1);
+ok('Und nennt im Titel den Grund',
+   str_contains($res['body'], 'Alle Kinder der Klasse sind schon im Kurs.'));
+
+/*
+ * Ein Kurs ohne Klasse hat nichts nachzutragen - dort steht der Knopf gar
+ * nicht erst, und die Abfrage darf ihn auch nicht zaehlen.
+ */
+$zaehlKurs = course_create(
+    q1('SELECT * FROM users WHERE id = ?', [$lehrerId]),
+    'Zaehlisch' . bin2hex(random_bytes(2)), "\u{1F310}", null, '',
+);
+if (!is_string($zaehlKurs)) {
+    ok('Ein Kurs ohne Klasse zaehlt keine Fehlenden',
+       course_class_missing((int) $zaehlKurs['id']) === 0);
+    $zaehlSeite = teacherGet('course.php?id=' . (int) $zaehlKurs['id']);
+    ok('Und bietet das Nachtragen gar nicht erst an',
+       !str_contains($zaehlSeite['body'], 'name="sync_class"'));
+    q('DELETE FROM languages WHERE id = ?', [(int) $zaehlKurs['language_id']]);
+    q('DELETE FROM courses   WHERE id = ?', [(int) $zaehlKurs['id']]);
+}
 
 /*
  * Die Grenze: Ein Konto einer anderen Schule kommt nicht in den Kurs, auch
@@ -5443,8 +5493,12 @@ ok('Die Kurse der Kolleginnen stehen zugeklappt darunter',
    && str_contains($res['body'], h($fremderKurs['name'])),
    'eine Vertretung muss an die Unterlagen kommen');
 ok('Die Verwaltung steht am Fuss',
-   str_contains($res['body'], 'class="verwaltung tiny muted"')
+   str_contains($res['body'], 'class="card verwaltung"')
    && str_contains($res['body'], 'classes.php'));
+ok('Und als Karte mit einem Knopf, nicht als Fussnote',
+   preg_match('/<div class="card verwaltung">.*?<a class="btn small secondary" '
+              . 'href="[^"]*classes\.php"/s', $res['body']) === 1,
+   'ein unterstrichenes Wort mitten in einem grauen Satz ist kein Weg');
 
 /*
  * Ohne Lerneinheit ist "Freigeben" abgeblendet statt abwesend - eine Karte,

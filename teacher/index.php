@@ -167,13 +167,28 @@ teacher_flash_render();
 </details>
 <?php endif; ?>
 
-<p class="verwaltung tiny muted">
-    <strong>Verwaltung:</strong>
-    <a href="<?= h(teacher_url('classes.php')) ?>">Klassen und Kinder</a>
-    &middot; Dort legst du Klassen an, trägst Kinder ein und druckst die
-    Zettel mit den Zugangsdaten. Zum Unterrichten brauchst du das nur beim
-    ersten Mal.
-</p>
+<?php
+/*
+ * Die Verwaltung als Karte, nicht als Fussnote.
+ *
+ * Sie stand als grauer Satz unter den Kursen, mit dem Weg dorthin als
+ * unterstrichenem Wort mittendrin. Was man zweimal im Jahr braucht, gehoert
+ * nach unten - aber es gehoert aussehen wie etwas, das man anfassen kann.
+ * Also dieselbe Karte wie oben, und der Weg als Knopf.
+ */
+?>
+<div class="card verwaltung">
+    <span class="verwaltungtext">
+        <strong>Verwaltung</strong>
+        <span class="tiny muted">
+            Klassen anlegen, Kinder eintragen, Zettel mit den Zugangsdaten
+            drucken. Zum Unterrichten brauchst du das nur beim ersten Mal.
+        </span>
+    </span>
+    <a class="btn small secondary" href="<?= h(teacher_url('classes.php')) ?>">
+        Klassen und Kinder
+    </a>
+</div>
 
 <?php endif; ?>
 

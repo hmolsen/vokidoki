@@ -251,6 +251,12 @@ unterrichte *ich*" fehlte bis dahin ganz; nichts im Quelltext filterte je
 nach Konto **und** Rolle, obwohl der Index dafür seit der Schulumstellung
 bereitlag.
 
+Am Fuß steht die **Verwaltung als Karte**, nicht als Fußnote: Klassen
+anlegen, Kinder eintragen, Zettel drucken — mit einem Knopf statt einem
+unterstrichenen Wort mitten in einem grauen Satz. Was man zweimal im Jahr
+braucht, gehört nach unten, aber es gehört auszusehen wie etwas, das man
+anfassen kann.
+
 **Und die letzte Kachel legt einen neuen an.** Ein Kurs entstand vorher in
 einer Anlegezeile am Fuß der Kurstabelle *einer Klasse* — wer einen wollte,
 musste erst wissen, dass Kurse in Klassen wohnen, dann die Klassenliste
@@ -311,6 +317,17 @@ ab, nicht den Weg: Eine Klasse öffnet man zweimal im Jahr, einen Kurs jede
 Woche, und beim Wechsel zwischen zwei eigenen Kursen war der Umweg über die
 Klasse genau das. Die Klasse ist deshalb kein Halt mehr, sondern ein Ziel
 wie jedes andere: Sie steht dort, wo es um ihre Kinder geht.
+
+**Der Knopf zum Nachtragen sagt, was er tun würde.** „Klasse 5B nachtragen"
+ließ offen, ob dabei etwas passiert — und meistens passierte nichts: Die
+Kinder kommen beim Anlegen des Kurses mit hinein, nachzutragen ist nur, wer
+seither dazugekommen ist. Wer draufdrückte, bekam „Es war niemand
+nachzutragen", also eine Auskunft auf eine Frage, die er nicht gestellt
+hatte. Jetzt steht die Zahl darin („9 fehlende Kinder aus Klasse 5B
+eintragen"), und ohne etwas zu tun ist er abgeblendet — dastehen soll er
+trotzdem, sonst sucht man ihn beim nächsten Mal. Gezählt wird mit
+`course_class_missing()`, derselben Menge, die `course_sync_class()`
+eintragen würde.
 
 Von der Kursseite führt „Klasse 5B verwalten" dorthin, und der Kurs reist
 in der Adresse mit (`class.php?id=…&kurs=…`). Der Pfad in der Klasse lautet
@@ -699,7 +716,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-968 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+978 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
 Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
 Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
 hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
@@ -761,7 +778,7 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 1178 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 1188 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
 
@@ -779,7 +796,7 @@ Quelltext völlig richtig aussahen:
 - Der Zettel für die ganze Klasse wurde erst beim nächsten Laden anklickbar.
 
 ```bash
-node tests/browser/lauf.mjs --fixture            # 166 Prüfungen
+node tests/browser/lauf.mjs --fixture            # 169 Prüfungen
 node tests/browser/lauf.mjs --fixture bilder/    # dazu Bildschirmfotos
 ```
 

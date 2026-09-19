@@ -215,6 +215,37 @@ function course_sync_class(int $courseId): int
     )->rowCount();
 }
 
+/**
+ * Wie viele Kinder der Klasse fehlen im Kurs noch?
+ *
+ * Dieselbe Menge, die course_sync_class() eintragen würde - nur gezählt
+ * statt geschrieben. Gebraucht für den Knopf: Er soll sagen, was er tun
+ * würde ("9 fehlende Kinder aus Klasse 5B eintragen"), und abgeblendet
+ * dastehen, wenn es nichts zu tun gibt. Ein Knopf, der nur die Auskunft
+ * "es war niemand nachzutragen" holt, ist eine Frage, keine Handlung.
+ *
+ * Ein Kurs ohne Klasse hat nichts nachzutragen; dort steht der Knopf gar
+ * nicht erst.
+ */
+function course_class_missing(int $courseId): int
+{
+    $kurs = q1('SELECT class_id FROM courses WHERE id = ?', [$courseId]);
+    if ($kurs === null || $kurs['class_id'] === null) {
+        return 0;
+    }
+
+    return (int) qv(
+        "SELECT COUNT(*)
+           FROM class_members m
+           JOIN users u ON u.id = m.user_id
+          WHERE m.class_id = ?
+            AND u.role <> 'teacher'
+            AND NOT EXISTS (SELECT 1 FROM course_members cm
+                             WHERE cm.course_id = ? AND cm.user_id = m.user_id)",
+        [(int) $kurs['class_id'], $courseId],
+    );
+}
+
 /** Jemanden aus einem Kurs nehmen. Der Lernstand bleibt, falls er zurückkommt. */
 function course_remove_member(int $courseId, int $userId): void
 {

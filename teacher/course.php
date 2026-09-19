@@ -445,12 +445,35 @@ teacher_flash_render();
  * sich dabei mit: Von dort fuehrt der Pfad wieder hierher zurueck.
  */
 ?>
+<?php
+/*
+ * Der Knopf sagt, was er tun wuerde.
+ *
+ * "Klasse 5B nachtragen" liess offen, ob dabei etwas passiert - und meistens
+ * passierte nichts: Die Kinder kommen beim Anlegen des Kurses mit hinein,
+ * nachzutragen ist nur, wer seither dazugekommen ist. Wer draufdrueckte,
+ * bekam "Es war niemand nachzutragen", also eine Auskunft auf eine Frage,
+ * die er nicht gestellt hatte. Jetzt steht die Zahl im Knopf, und ohne
+ * etwas zu tun ist er abgeblendet - dastehen soll er trotzdem, sonst sucht
+ * man ihn beim naechsten Mal.
+ */
+$fehlende = course_class_missing($courseId);
+?>
 <div class="buttonrow">
     <form method="post">
         <?= teacher_csrf_field() ?>
         <input type="hidden" name="course_id" value="<?= $courseId ?>">
-        <button class="btn small secondary" name="sync_class" value="1">
-            Klasse <?= h($kurs['class_name']) ?> nachtragen
+        <button class="btn small secondary" name="sync_class" value="1"
+                <?= $fehlende === 0
+                    ? 'disabled title="Alle Kinder der Klasse sind schon im Kurs."'
+                    : '' ?>>
+            <?php if ($fehlende === 0): ?>
+                Alle Kinder aus Klasse <?= h($kurs['class_name']) ?> sind im Kurs
+            <?php else: ?>
+                <?= $fehlende ?>
+                <?= $fehlende === 1 ? 'fehlendes Kind' : 'fehlende Kinder' ?>
+                aus Klasse <?= h($kurs['class_name']) ?> eintragen
+            <?php endif; ?>
         </button>
     </form>
     <a class="btn small secondary" href="<?= h(teacher_url('class.php')

@@ -937,7 +937,32 @@ details.kursealle > summary {
 }
 details.kursealle[open] > summary { margin-bottom: 12px; }
 
-.verwaltung { margin-top: 26px; }
+/*
+ * Die Verwaltung am Fuss der Startseite: Satz links, Weg rechts.
+ *
+ * Sie stand als grauer Absatz da, mit dem Link als unterstrichenem Wort
+ * mittendrin - und sah damit aus wie eine Fussnote, nicht wie ein Weg. Am
+ * Telefon nimmt der Knopf die ganze Breite und steht unter dem Satz.
+ */
+.verwaltung {
+    margin-top: 26px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.verwaltung .verwaltungtext {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1 1 260px;
+    min-width: 0;
+}
+.verwaltung .btn { margin: 0; flex: 0 0 auto; }
+
+@media (max-width: 520px) {
+    .verwaltung .btn { flex: 1 1 100%; }
+}
 
 /* --------------------------------------------------- Eine Wahl treffen
  *
