@@ -20,28 +20,46 @@ const draftKey = (languageId) => `vt-draft-${languageId}`;
  */
 let kursName = null;
 
+/* Die vorhandenen Lerneinheiten - Ziele zum Anhaengen. */
+let einheiten = [];
+
 async function kursHolen(languageId) {
     if (kursName !== null) return kursName;
     try {
-        const { language } = await api('units', 'list', { query: { language_id: languageId } });
-        kursName = language?.course || language?.name || '';
+        const { language, units } = await api('units', 'list', { query: { language_id: languageId } });
+        kursName  = language?.course || language?.name || '';
+        einheiten = Array.isArray(units) ? units : [];
     } catch {
-        kursName = '';
+        kursName  = '';
+        einheiten = [];
     }
     return kursName;
 }
 
 export async function importView(languageId) {
-    kursName = null;
+    kursName  = null;
+    einheiten = [];
+
     const draft = loadDraft(languageId);
+
     if (draft) {
+        /*
+         * Hier wird gewartet, und zwar mit Absicht.
+         *
+         * Der Pruefschritt enthaelt die Wahl "neue Lerneinheit oder an eine
+         * vorhandene anhaengen", und die braucht die Liste der Einheiten.
+         * Wird sie nachgereicht, ist die Wahl im Moment des Zeichnens noch
+         * leer - und dann steht sie gar nicht da.
+         */
+        await kursHolen(languageId);
         showReview(languageId, draft.title, draft.entries, true);
-    } else {
-        showCapture(languageId);
+        return;
     }
 
-    // Nachgereicht statt abgewartet: Die Kamera soll nicht auf eine Abfrage
-    // warten, die nur eine Ueberschrift betrifft.
+    showCapture(languageId);
+
+    // Beim Fotografieren nachgereicht: Dort haengt nur die Ueberschrift
+    // daran, und die Kamera soll nicht auf eine Abfrage warten.
     const name = await kursHolen(languageId);
     const ziel = $('#kurs');
     if (ziel && name) ziel.textContent = name;
@@ -135,6 +153,9 @@ function showCapture(languageId, images = []) {
                 },
             });
             saveDraft(languageId, data.title, data.entries);
+            // Sicherstellen, dass die Liste da ist - der Pruefschritt baut
+            // seine Wahl daraus.
+            await kursHolen(languageId);
             showReview(languageId, data.title, data.entries, false);
         } catch (err) {
             // Fotos bewusst weiterreichen - sie noch einmal zu machen wäre ärgerlich.
@@ -174,10 +195,13 @@ function showReview(languageId, title, entries, fromDraft) {
         </p>
 
         <div class="card">
-            <label for="title">Titel der Lerneinheit</label>
-            <input type="text" id="title" maxlength="128"
-                   placeholder="z. B. Unit 1" value="${esc(title || '')}">
-            ${title ? '' : '<p class="tiny muted" style="margin:-6px 0 0">Auf den Fotos stand keine Überschrift - denk dir einen Namen aus.</p>'}
+            ${zielWahl(entries)}
+            <div id="neueEinheit">
+                <label for="title">Titel der Lerneinheit</label>
+                <input type="text" id="title" maxlength="128"
+                       placeholder="z. B. Unit 1" value="${esc(title || '')}">
+                ${title ? '' : '<p class="tiny muted" style="margin:-6px 0 0">Auf den Fotos stand keine Überschrift - denk dir einen Namen aus.</p>'}
+            </div>
         </div>
 
         <div class="pairs-head">
@@ -196,7 +220,9 @@ function showReview(languageId, title, entries, fromDraft) {
     wireBack();
 
     const pairs  = $('#pairs');
-    const persist = () => saveDraft(languageId, $('#title').value, collectAll());
+    // Das Titelfeld kann versteckt sein (beim Anhaengen) - dann steht im
+    // Entwurf eben nichts. Nur da sein muss es, sonst wirft der Zugriff.
+    const persist = () => saveDraft(languageId, $('#title')?.value ?? '', collectAll());
 
     // Eine Delegation für Löschen und Tippen, statt Listener pro Zeile.
     pairs.addEventListener('click', (event) => {
@@ -206,7 +232,7 @@ function showReview(languageId, title, entries, fromDraft) {
         persist();
     });
     pairs.addEventListener('input', persist);
-    $('#title').addEventListener('input', persist);
+    $('#title')?.addEventListener('input', persist);
 
     $('#addRow').addEventListener('click', () => {
         pairs.insertAdjacentHTML('beforeend', pairRow({ foreign: '', native: '' }, $$('.pair').length));
@@ -219,12 +245,36 @@ function showReview(languageId, title, entries, fromDraft) {
         showCapture(languageId);
     });
 
+    /*
+     * Beim Anhaengen braucht es keinen Titel - die Einheit hat schon einen.
+     * Das Feld verschwindet dann, damit niemand etwas eintippt, was
+     * hinterher nirgends steht.
+     */
+    const ziel = $('#ziel');
+    const umschalten = () => {
+        const anhaengen = ziel && ziel.value !== '';
+        const feld = $('#neueEinheit');
+        if (feld) feld.hidden = anhaengen;
+        const hinweis = $('#zielhinweis');
+        if (hinweis) hinweis.hidden = !anhaengen;
+        $('#save').textContent = anhaengen
+            ? 'Vokabeln anhängen'
+            : 'Lerneinheit speichern';
+    };
+    if (ziel) {
+        ziel.addEventListener('change', umschalten);
+        umschalten();
+    }
+
     $('#save').addEventListener('click', async (event) => {
         clearError();
-        const unitTitle = $('#title').value.trim();
-        if (!unitTitle) {
+
+        const anId      = ziel && ziel.value !== '' ? Number(ziel.value) : 0;
+        const unitTitle = $('#title') ? $('#title').value.trim() : '';
+
+        if (anId === 0 && !unitTitle) {
             showError('Bitte gib der Lerneinheit einen Titel.');
-            $('#title').focus();
+            $('#title')?.focus();
             return;
         }
         const collected = collectComplete();
@@ -234,10 +284,13 @@ function showReview(languageId, title, entries, fromDraft) {
         }
 
         try {
-            await withBusy(event.currentTarget, 'Wird gespeichert...', async () => {
-                const data = await api('import', 'save', {
-                    body: { language_id: Number(languageId), title: unitTitle, entries: collected },
-                });
+            await withBusy(event.currentTarget,
+                           anId > 0 ? 'Wird angehängt...' : 'Wird gespeichert...', async () => {
+                const body = { language_id: Number(languageId), entries: collected };
+                if (anId > 0) body.unit_id = anId;
+                else body.title = unitTitle;
+
+                const data = await api('import', 'save', { body });
                 clearDraft(languageId);
                 go(`/unit/${data.unit_id}`);
             });
@@ -245,6 +298,33 @@ function showReview(languageId, title, entries, fromDraft) {
             showError(err.message);
         }
     });
+}
+
+/**
+ * Neue Lerneinheit oder eine vorhandene erweitern?
+ *
+ * Die Wahl steht erst hier, nach dem Fotografieren: Vorher weiss man noch
+ * nicht, ob die Seite zur letzten Lektion gehoert oder eine neue anfaengt.
+ * Ohne vorhandene Einheiten gibt es nichts zu waehlen - dann bleibt es beim
+ * Titelfeld allein.
+ */
+function zielWahl() {
+    if (einheiten.length === 0) return '';
+
+    const optionen = einheiten.map((u) => `
+        <option value="${u.id}">${esc(u.title)} (${u.total} Vokabeln)</option>
+    `).join('');
+
+    return `
+        <label for="ziel">Wohin?</label>
+        <select id="ziel">
+            <option value="">Neue Lerneinheit</option>
+            <optgroup label="An eine vorhandene anhängen">${optionen}</optgroup>
+        </select>
+        <p class="tiny muted" id="zielhinweis" style="margin:-6px 0 14px" hidden>
+            Die neuen Vokabeln kommen hinten dran. Freigegeben wird dadurch
+            nichts &ndash; deine Klasse sieht sie erst, wenn du sie aufmachst.
+        </p>`;
 }
 
 function pairRow(entry, index) {

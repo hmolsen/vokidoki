@@ -297,6 +297,20 @@ Im noch leeren Kurs steht **kein** QR-Code mehr. Er führte dorthin, wo man
 sich erst noch anmelden muss — der Weg, der genau das überspringt, heisst
 „Am Smartphone einlesen", und zwei Codes nebeneinander waren einer zu viel.
 
+### Eine Lerneinheit lässt sich erweitern
+
+Jedes Einlesen legte bisher eine **neue** Lerneinheit an — die Route trug
+nur eine `language_id`, die Nutzlast kein `unit_id`. Wer eine zweite
+Buchseite derselben Lektion fotografierte, bekam „Unit 4" und „Unit 4 (2)"
+und musste beide einzeln freigeben.
+
+Im Prüfschritt steht jetzt die Wahl: **neue Lerneinheit** oder **an eine
+vorhandene anhängen**. Die Wahl kommt erst dort, nach dem Fotografieren —
+vorher weiss man noch nicht, ob die Seite zur letzten Lektion gehört.
+Angehängt wird hinten; **`released_position` bleibt unberührt**, die neuen
+Wörter sind für die Klasse also zunächst unsichtbar, genau wie eine frisch
+eingelesene Einheit. Lückensätze entstehen für sie wie für alle anderen.
+
 ### Zwei Kurse derselben Sprache
 
 Wer Englisch in der 5B und in der 6A gibt, sah in der App zweimal die Kachel
@@ -514,7 +528,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-824 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+846 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
 Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
 Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
 hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
@@ -576,7 +590,7 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 1034 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 1068 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
 
@@ -594,7 +608,7 @@ Quelltext völlig richtig aussahen:
 - Der Zettel für die ganze Klasse wurde erst beim nächsten Laden anklickbar.
 
 ```bash
-node tests/browser/lauf.mjs --fixture            # 59 Prüfungen
+node tests/browser/lauf.mjs --fixture            # 71 Prüfungen
 node tests/browser/lauf.mjs --fixture bilder/    # dazu Bildschirmfotos
 ```
 

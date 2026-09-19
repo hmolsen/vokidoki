@@ -136,6 +136,7 @@ section('Testaccount vorbereiten');
 
 require_once __DIR__ . '/../lib/courses.php';
 require_once __DIR__ . '/../lib/access.php';
+require_once __DIR__ . '/../lib/vocab.php';
 
 /*
  * Ein Konto entsteht nie fuer sich allein - es gehoert zu einer Schule, und
@@ -4773,6 +4774,165 @@ foreach (class_members_list($klasseId) as $k) {
 }
 q('DELETE FROM classes WHERE id = ?', [$klasseId]);
 
+section('Weitere Seiten in dieselbe Lerneinheit');
+
+/*
+ * Bis hierher legte jedes Einlesen eine NEUE Lerneinheit an - die Route
+ * trug nur eine language_id, die Nutzlast kein unit_id. Wer eine zweite
+ * Buchseite derselben Lektion fotografierte, bekam "Unit 4" und "Unit 4
+ * (2)" und musste beide einzeln freigeben.
+ */
+
+/*
+ * Der Abschnitt steht spaet in der Suite - bis hierher hat sie sich mehrfach
+ * an- und abgemeldet, und ein frueherer Abschnitt hat dem Testkind das
+ * Einlese-Recht abgenommen, um zu pruefen, dass es dann nicht mehr geht.
+ * Also beides wiederherstellen, statt sich auf einen Zustand zu verlassen,
+ * den ein anderer Abschnitt hinterlassen hat.
+ */
+q('UPDATE users SET can_import = 1 WHERE id = ?', [$userId]);
+apiCall('auth', 'login', ['username' => $username, 'password' => 'geheim123']);
+
+$anKlasse = class_create(
+    (int) qv('SELECT school_id FROM users WHERE id = ?', [$userId]),
+    'Anhang' . bin2hex(random_bytes(2)),
+);
+$anLang = makeLanguage($userId, 'Anhaengisch' . bin2hex(random_bytes(2)));
+
+// Eine Einheit mit drei Vokabeln, zwei davon freigegeben.
+[$d, $st] = apiCall('import', 'save', [
+    'language_id' => $anLang,
+    'title'       => 'Anhang-Unit',
+    'entries'     => [
+        ['foreign' => 'red',   'native' => 'rot'],
+        ['foreign' => 'blue',  'native' => 'blau'],
+        ['foreign' => 'green', 'native' => 'gruen'],
+    ],
+]);
+ok('Eine Lerneinheit entsteht wie bisher', ($d['ok'] ?? false) === true,
+   $d['error'] ?? "Status $st");
+$anUnit = (int) ($d['unit_id'] ?? 0);
+q('UPDATE units SET released_position = 2 WHERE id = ?', [$anUnit]);
+
+$woerter = static fn (int $u): array => array_column(qa(
+    'SELECT term_foreign FROM vocab WHERE unit_id = ? ORDER BY position', [$u],
+), 'term_foreign');
+
+ok('Mit drei Vokabeln', count($woerter($anUnit)) === 3, implode(',', $woerter($anUnit)));
+
+// ---- Anhaengen statt neu anlegen.
+
+$unitsVorher = (int) qv('SELECT COUNT(*) FROM units WHERE language_id = ?', [$anLang]);
+
+[$d, $st] = apiCall('import', 'save', [
+    'language_id' => $anLang,
+    'unit_id'     => $anUnit,
+    'entries'     => [
+        ['foreign' => 'yellow', 'native' => 'gelb'],
+        ['foreign' => 'black',  'native' => 'schwarz'],
+    ],
+]);
+ok('Mit unit_id wird angehaengt', ($d['ok'] ?? false) === true, $d['error'] ?? "Status $st");
+ok('Und zwar in dieselbe Einheit', (int) ($d['unit_id'] ?? 0) === $anUnit);
+ok('Es entsteht keine zweite Lerneinheit',
+   (int) qv('SELECT COUNT(*) FROM units WHERE language_id = ?', [$anLang]) === $unitsVorher,
+   'genau das war der Grund fuer "Unit 4" und "Unit 4 (2)"');
+ok('Die neuen Vokabeln stehen hinten dran',
+   $woerter($anUnit) === ['red', 'blue', 'green', 'yellow', 'black'],
+   implode(',', $woerter($anUnit)));
+ok('Ohne Titel geht es dabei auch', true);
+
+// ---- Und die Freigabe bleibt, wo sie war.
+
+ok('Die Freigabemarke ruehrt sich nicht',
+   (int) qv('SELECT released_position FROM units WHERE id = ?', [$anUnit]) === 2,
+   (string) qv('SELECT released_position FROM units WHERE id = ?', [$anUnit]));
+ok('Die Klasse sieht die angehaengten Woerter also noch nicht',
+   array_column(qa('SELECT v.term_foreign FROM vocab v JOIN units u ON u.id = v.unit_id
+                     WHERE v.unit_id = ? AND v.position < u.released_position
+                     ORDER BY v.position', [$anUnit]), 'term_foreign')
+   === ['red', 'blue']);
+ok('Die Positionen sind lueckenlos', vocab_positions_dense($anUnit));
+
+// ---- Fuer die angehaengten Vokabeln entstehen Lueckensaetze.
+
+if ($isFake) {
+    /*
+     * Die Saetze entstehen im Hintergrund - die Antwort auf 'save' ist
+     * schon da, waehrend noch gearbeitet wird. Ohne waitForSentences()
+     * prueft man die Uhr und nicht die Anwendung.
+     */
+    $anStand = waitForSentences($anUnit);
+    ok('Der Satzlauf fuer die angehaengten Vokabeln wird fertig',
+       $anStand === 'done', $anStand);
+    ok('Fuer die angehaengten Vokabeln gibt es Saetze',
+       (int) qv('SELECT COUNT(*) FROM sentences s JOIN vocab v ON v.id = s.vocab_id
+                  WHERE v.unit_id = ? AND v.term_foreign = ?', [$anUnit, 'yellow']) > 0,
+       'sonst bleibt die Vokabel im Lueckentext stumm');
+    ok('Und die vorher schon vorhandenen behalten ihre',
+       (int) qv('SELECT COUNT(*) FROM sentences s JOIN vocab v ON v.id = s.vocab_id
+                  WHERE v.unit_id = ? AND v.term_foreign = ?', [$anUnit, 'red']) > 0);
+}
+
+// ---- Ohne Titel und ohne unit_id geht nichts.
+
+[$d, $st] = apiCall('import', 'save', [
+    'language_id' => $anLang,
+    'entries'     => [['foreign' => 'grey', 'native' => 'grau']],
+]);
+ok('Eine neue Einheit ohne Titel wird abgelehnt', ($d['ok'] ?? true) === false,
+   "Status $st");
+
+// ---- Die Grenze: eine fremde Lerneinheit.
+
+$fremdeLang = makeLanguage($otherId, 'Fremdanhang' . bin2hex(random_bytes(2)));
+$fremdeUnit = makeUnit($otherId, $fremdeLang, 'Fremde Anhang-Unit');
+$vorherFremd = (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$fremdeUnit]);
+
+[$d, $st] = apiCall('import', 'save', [
+    'language_id' => $anLang,
+    'unit_id'     => $fremdeUnit,
+    'entries'     => [['foreign' => 'stolen', 'native' => 'geklaut']],
+]);
+ok('In eine fremde Lerneinheit laesst sich nichts schreiben',
+   ($d['ok'] ?? true) === false, "Status $st");
+ok('Und es kommt dort auch nichts an',
+   (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$fremdeUnit]) === $vorherFremd);
+
+/*
+ * Auch die eigene Einheit laesst sich nicht unter falscher Sprache fuellen.
+ * Sonst reichte eine Sprache, an der man Rechte hat, um in jede andere
+ * eigene Einheit zu schreiben - und die Sprache bestimmt, wie
+ * punctuation_fix() arbeitet.
+ */
+$zweiteLang = makeLanguage($userId, 'Zweitanhang' . bin2hex(random_bytes(2)));
+[$d, $st] = apiCall('import', 'save', [
+    'language_id' => $zweiteLang,
+    'unit_id'     => $anUnit,
+    'entries'     => [['foreign' => 'wrong', 'native' => 'falsch']],
+]);
+ok('Eine Einheit einer anderen Sprache wird abgelehnt',
+   ($d['ok'] ?? true) === false, "Status $st");
+ok('Und bleibt unveraendert', count($woerter($anUnit)) === 5,
+   implode(',', $woerter($anUnit)));
+
+// ---- Die Oberflaeche bietet die Wahl an.
+
+$skriptA = http($base . '/views/import.js');
+ok('Die Einleseansicht laesst die Wahl',
+   str_contains($skriptA['body'], 'function zielWahl')
+   && str_contains($skriptA['body'], "id=\"ziel\""));
+ok('Vorbelegt ist "Neue Lerneinheit"',
+   str_contains($skriptA['body'], '<option value="">Neue Lerneinheit</option>'));
+ok('Und sie schickt unit_id mit',
+   str_contains($skriptA['body'], 'body.unit_id = anId'));
+ok('Beim Anhaengen verschwindet das Titelfeld',
+   str_contains($skriptA['body'], "feld.hidden = anhaengen"),
+   'sonst tippt jemand einen Titel, der nirgends landet');
+
+q('DELETE FROM languages WHERE id IN (?, ?, ?)', [$anLang, $fremdeLang, $zweiteLang]);
+q('DELETE FROM classes   WHERE id = ?', [(int) $anKlasse['id']]);
+
 section('Reihenfolge und Freigabe der Vokabeln');
 
 /*
@@ -4782,8 +4942,6 @@ section('Reihenfolge und Freigabe der Vokabeln');
  * Positionen luecklos 0..n-1 sind - und genau das war vor diesem Abschnitt
  * nicht garantiert.
  */
-require_once __DIR__ . '/../lib/vocab.php';
-
 $posKlasse = class_create(
     (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]),
     'Pos' . bin2hex(random_bytes(2)),

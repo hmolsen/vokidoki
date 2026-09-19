@@ -7,6 +7,7 @@ require_once __DIR__ . '/../lib/punctuation.php';
 require_once __DIR__ . '/../lib/ai.php';
 require_once __DIR__ . '/../lib/wordtypes.php';
 require_once __DIR__ . '/../lib/sentences.php';
+require_once __DIR__ . '/../lib/vocab.php';
 
 require_api_request();
 $user = require_user();
@@ -104,8 +105,32 @@ switch (action()) {
         $b     = json_body();
         require_cap($user, CAP_IMPORT);
         $lang  = edit_language($user, body_int($b, 'language_id'));
+
+        /*
+         * Zwei Ziele: eine neue Lerneinheit, oder eine vorhandene erweitern.
+         *
+         * Bisher gab es nur das erste, und zwar ohne Wahl - jedes Einlesen
+         * legte eine neue an. Wer eine zweite Buchseite derselben Lektion
+         * fotografierte, bekam "Unit 4" und "Unit 4 (2)" und musste beide
+         * einzeln freigeben.
+         *
+         * Geprueft wird ueber load_unit_for_edit() (CAP_IMPORT und
+         * Kursmitgliedschaft) UND dass die Einheit wirklich zu der Sprache
+         * gehoert, die mitgeschickt wurde. Sonst liesse sich ueber eine
+         * untergeschobene unit_id in eine fremde Lerneinheit schreiben.
+         */
+        $anhaengen = isset($b['unit_id']) ? body_int($b, 'unit_id') : 0;
+        $ziel      = null;
+
+        if ($anhaengen > 0) {
+            $ziel = edit_unit($user, $anhaengen);
+            if ((int) $ziel['language_id'] !== (int) $lang['id']) {
+                json_fail('Diese Lerneinheit gehört zu einem anderen Kurs.', 403);
+            }
+        }
+
         $title = body_str($b, 'title', 128);
-        if ($title === '') {
+        if ($ziel === null && $title === '') {
             json_fail('Bitte einen Titel für die Lerneinheit angeben.');
         }
 
@@ -144,26 +169,36 @@ switch (action()) {
             json_fail('Keine vollständigen Vokabelpaare gefunden.');
         }
 
+        $paare = [];
+        foreach ($clean as [$f, $n, $note, $type]) {
+            $paare[] = ['foreign' => $f, 'native' => $n,
+                        'note' => $note, 'word_type' => $type];
+        }
+
         $pdo = db();
         $pdo->beginTransaction();
         try {
-            // Die Lerneinheit gehoert dem Kurs. Ohne course_id waere sie
-            // nach der Umstellung der Zugriffsregeln fuer niemanden sichtbar.
-            $kurs = course_for_language((int) $lang['id']);
-            q(
-                'INSERT INTO units (language_id, course_id, title, released_position)
-                 VALUES (?, ?, ?, ?)',
-                [(int) $lang['id'], $kurs === null ? null : (int) $kurs['id'], $title,
-                 initial_released_position($user)],
-            );
-            $unitId = (int) $pdo->lastInsertId();
-
-            $st = $pdo->prepare(
-                'INSERT INTO vocab (unit_id, term_foreign, term_native, note, word_type, position)
-                 VALUES (?, ?, ?, ?, ?, ?)'
-            );
-            foreach ($clean as $i => [$f, $n, $note, $type]) {
-                $st->execute([$unitId, $f, $n, $note, $type, $i]);
+            if ($ziel !== null) {
+                $unitId = (int) $ziel['id'];
+                /*
+                 * Anhaengen ruehrt released_position NICHT an. Die neuen
+                 * Woerter sind fuer die Klasse damit zunaechst unsichtbar -
+                 * genau wie eine frisch eingelesene Einheit einer Lehrkraft.
+                 * Wer sie zeigen will, schiebt den Balken.
+                 */
+                vocab_append($unitId, $paare, $lang['code'] ?? null);
+            } else {
+                // Die Lerneinheit gehoert dem Kurs. Ohne course_id waere sie
+                // nach der Umstellung der Zugriffsregeln fuer niemanden sichtbar.
+                $kurs = course_for_language((int) $lang['id']);
+                q(
+                    'INSERT INTO units (language_id, course_id, title, released_position)
+                     VALUES (?, ?, ?, ?)',
+                    [(int) $lang['id'], $kurs === null ? null : (int) $kurs['id'], $title,
+                     initial_released_position($user)],
+                );
+                $unitId = (int) $pdo->lastInsertId();
+                vocab_append($unitId, $paare, $lang['code'] ?? null);
             }
             $pdo->commit();
         } catch (Throwable $e) {

@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { bilanz } from './browser.mjs';
 import { pruefe as navigation } from './navigation.mjs';
 import { pruefe as freigabe } from './freigabe.mjs';
+import { pruefe as einlesen } from './einlesen.mjs';
 import { pruefe as fahnen }   from './fahnen.mjs';
 import { pruefe as klasse }   from './klasse.mjs';
 import { pruefe as mobil }    from './mobil.mjs';
@@ -53,6 +54,7 @@ console.log(`Browser-Pruefungen gegen ${f.basis}`);
 try {
     await navigation(f, aus);
     await freigabe(f, aus);
+    await einlesen(f, aus);
     await fahnen(f, aus);
     await klasse(f, aus);
     await mobil(f, aus);
