@@ -25,6 +25,7 @@ import { bilanz } from './browser.mjs';
 import { pruefe as navigation } from './navigation.mjs';
 import { pruefe as freigabe } from './freigabe.mjs';
 import { pruefe as einlesen } from './einlesen.mjs';
+import { pruefe as vokabeln } from './vokabeln.mjs';
 import { pruefe as fahnen }   from './fahnen.mjs';
 import { pruefe as klasse }   from './klasse.mjs';
 import { pruefe as mobil }    from './mobil.mjs';
@@ -55,6 +56,7 @@ try {
     await navigation(f, aus);
     await freigabe(f, aus);
     await einlesen(f, aus);
+    await vokabeln(f, aus);
     await fahnen(f, aus);
     await klasse(f, aus);
     await mobil(f, aus);

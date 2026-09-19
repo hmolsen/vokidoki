@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/sentences.php';
+require_once __DIR__ . '/../lib/vocab.php';
 
 /*
  * Eine Lerneinheit aus Sicht der Lehrkraft - und die Stelle, an der
@@ -26,7 +27,7 @@ $unitId = (int) ($_GET['id'] ?? $_POST['unit_id'] ?? 0);
  */
 $unit = $schoolId === 0 ? null : q1(
     'SELECT t.*, co.name AS course_name, co.school_id, co.class_id, c.name AS class_name,
-            l.name AS language_name, l.flag_emoji
+            l.name AS language_name, l.flag_emoji, l.code
        FROM units t
        JOIN courses co   ON co.id = t.course_id
        JOIN languages l  ON l.id = t.language_id
@@ -127,6 +128,100 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['catch_up'])) 
     set_time_limit(900);
     generate_sentences_tracked($unitId);
     exit;
+}
+
+/*
+ * Vokabeln von Hand: hinzufuegen, aendern, loeschen.
+ *
+ * Bisher konnte das nur der Betreiber im Admin. Eine Lehrkraft sah in ihrer
+ * eigenen Lerneinheit ein falsch erkanntes Wort und konnte nichts tun -
+ * ausser die ganze Einheit neu einzulesen.
+ *
+ * Alles laeuft ueber lib/vocab.php: Positionen bleiben lueckenlos, die
+ * Freigabemarke wird beim Loeschen mitgefuehrt, und punctuation_fix()
+ * greift wie beim Einlesen.
+ *
+ * Zur Berechtigung: Diese Seite prueft auf die SCHULE (oben, beim Laden der
+ * Einheit) - nicht auf die Kursmitgliedschaft wie die API. Das ist Absicht
+ * und bleibt so: Eine Vertretung muss an den Unterlagen ihrer Kollegin
+ * arbeiten koennen, und genau dafuer ist der Lehrkraft-Bereich da.
+ */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_vocab'])) {
+    teacher_csrf_check();
+
+    $f = trim((string) ($_POST['new_f'] ?? ''));
+    $n = trim((string) ($_POST['new_n'] ?? ''));
+
+    if ($f === '' || $n === '') {
+        teacher_flash('Beide Felder ausfüllen - Fremdsprache und Deutsch.', 'bad');
+        teacher_redirect($zurueck);
+    }
+
+    $dazu = vocab_append($unitId, [['foreign' => $f, 'native' => $n]],
+                         $unit['code'] ?? null);
+    if ($dazu === 0) {
+        teacher_flash('Die Vokabel liess sich nicht anlegen.', 'bad');
+        teacher_redirect($zurueck);
+    }
+
+    /*
+     * Und gleich einen Lueckensatz dazu - sonst bleibt die neue Vokabel im
+     * Lueckentext stumm, und niemand sieht, warum. Dasselbe Muster wie
+     * "Saetze nachtragen": antworten, dann weiterarbeiten.
+     */
+    if (budget_block_reason((int) $user['id']) === null && sentence_claim($unitId)) {
+        teacher_flash(sprintf('„%s" ist dabei. Der Lückensatz entsteht gerade.', $f));
+        teacher_redirect_and_continue($zurueck);
+        set_time_limit(900);
+        generate_sentences_tracked($unitId);
+        exit;
+    }
+
+    teacher_flash(sprintf('„%s" ist dabei.', $f));
+    teacher_redirect($zurueck);
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['save_vocab'])) {
+    teacher_csrf_check();
+
+    $vokabelId = (int) $_POST['save_vocab'];
+
+    // Nur Vokabeln DIESER Einheit - sonst liesse sich ueber ein
+    // untergeschobenes Formular jede Vokabel der Anwendung aendern.
+    if ((int) qv('SELECT COUNT(*) FROM vocab WHERE id = ? AND unit_id = ?',
+                 [$vokabelId, $unitId]) !== 1) {
+        teacher_flash('Diese Vokabel gehört nicht zu dieser Lerneinheit.', 'bad');
+        teacher_redirect($zurueck);
+    }
+
+    $ok = vocab_update(
+        $vokabelId,
+        (string) ($_POST['edit_f'] ?? ''),
+        (string) ($_POST['edit_n'] ?? ''),
+        $unit['code'] ?? null,
+    );
+    teacher_flash($ok ? 'Geändert.' : 'Beide Felder ausfüllen.', $ok ? 'good' : 'bad');
+    teacher_redirect($zurueck);
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['delete_vocab'])) {
+    teacher_csrf_check();
+
+    $vokabelId = (int) $_POST['delete_vocab'];
+
+    if ((int) qv('SELECT COUNT(*) FROM vocab WHERE id = ? AND unit_id = ?',
+                 [$vokabelId, $unitId]) !== 1) {
+        teacher_flash('Diese Vokabel gehört nicht zu dieser Lerneinheit.', 'bad');
+        teacher_redirect($zurueck);
+    }
+
+    $wort = (string) qv('SELECT term_foreign FROM vocab WHERE id = ?', [$vokabelId]);
+    vocab_delete($vokabelId);
+    teacher_flash(sprintf(
+        '„%s" ist gelöscht - mit den Lückensätzen dazu und dem, was die '
+        . 'Kinder daran gelernt hatten.', $wort,
+    ));
+    teacher_redirect($zurueck);
 }
 
 $vokabeln = qa(
@@ -273,9 +368,17 @@ $fehlen = vocab_without_sentences($unitId);
         <?php $istFrei = $i < $frei; ?>
         <tr class="<?= $istFrei ? 'released' : 'locked' ?>" data-pos="<?= $i + 1 ?>">
             <td class="num"><?= $i + 1 ?></td>
-            <td><strong><?= h($v['term_foreign']) ?></strong></td>
-            <td><?= h($v['term_native']) ?></td>
-            <td class="num">
+            <td data-label="Fremdsprache">
+                <strong data-wort><?= h($v['term_foreign']) ?></strong>
+                <input type="text" name="edit_f" value="<?= h($v['term_foreign']) ?>"
+                       form="vokabel<?= (int) $v['id'] ?>" maxlength="255" hidden>
+            </td>
+            <td data-label="Deutsch">
+                <span data-wort><?= h($v['term_native']) ?></span>
+                <input type="text" name="edit_n" value="<?= h($v['term_native']) ?>"
+                       form="vokabel<?= (int) $v['id'] ?>" maxlength="255" hidden>
+            </td>
+            <td class="num" data-label="Sätze">
                 <?= (int) $v['saetze'] > 0
                     ? (int) $v['saetze']
                     : '<span class="muted" title="Für diese Vokabel gibt es noch keinen Lückensatz">&ndash;</span>' ?>
@@ -285,15 +388,74 @@ $fehlen = vocab_without_sentences($unitId);
                         form="releaseform" title="Bis hier freigeben">
                     <span aria-hidden="true">&#128275;</span> bis hier
                 </button>
+                <button class="iconaction quiet" data-edit="<?= (int) $v['id'] ?>"
+                        type="button" title="Diese Vokabel ändern">
+                    <span aria-hidden="true">&#9998;</span> Ändern
+                </button>
+                <button class="iconaction primary" form="vokabel<?= (int) $v['id'] ?>"
+                        name="save_vocab" value="<?= (int) $v['id'] ?>"
+                        data-save="<?= (int) $v['id'] ?>" title="Änderung speichern" hidden>
+                    <span aria-hidden="true">&#10003;</span> Sichern
+                </button>
+                <button class="iconaction danger" form="vokabel<?= (int) $v['id'] ?>"
+                        name="delete_vocab" value="<?= (int) $v['id'] ?>"
+                        title="Diese Vokabel löschen"
+                        data-confirm="&bdquo;<?= h($v['term_foreign']) ?>&ldquo; löschen? Die Lückensätze dazu und der Lernstand aller Kinder daran verschwinden mit.">
+                    <span aria-hidden="true">&#10005;</span> Löschen
+                </button>
             </td>
         </tr>
     <?php endforeach; ?>
+
+    <?php
+    /*
+     * Die Anlegezeile, wie in jeder anderen Tabelle. Sie steht ausserhalb
+     * der Freigabelogik: kein data-pos, keine released/locked-Klasse - der
+     * Balken darf sie nicht als Vokabelzeile zaehlen.
+     */
+    ?>
+    <tr class="newrow">
+        <td class="num"><span class="cflag plus">+</span></td>
+        <td data-label="Fremdsprache">
+            <input type="text" name="new_f" form="neueVokabel" maxlength="255"
+                   placeholder="apple" aria-label="Fremdsprache">
+        </td>
+        <td data-label="Deutsch">
+            <input type="text" name="new_n" form="neueVokabel" maxlength="255"
+                   placeholder="Apfel" aria-label="Deutsch">
+        </td>
+        <td></td>
+        <td class="actions">
+            <button class="iconaction primary" form="neueVokabel"
+                    name="add_vocab" value="1" title="Vokabel hinzufügen">
+                <span aria-hidden="true">+</span> Hinzufügen
+            </button>
+        </td>
+    </tr>
 </table>
 
 <form method="post" id="releaseform">
     <?= teacher_csrf_field() ?>
     <input type="hidden" name="unit_id" value="<?= $unitId ?>">
 </form>
+
+<form method="post" id="neueVokabel">
+    <?= teacher_csrf_field() ?>
+    <input type="hidden" name="unit_id" value="<?= $unitId ?>">
+</form>
+
+<?php
+/*
+ * Je Vokabel ein eigenes Formular - ein Formular kann sich in HTML nicht
+ * ueber mehrere Zellen spannen, und die Felder gehoeren ueber form= dazu.
+ */
+?>
+<?php foreach ($vokabeln as $v): ?>
+    <form method="post" id="vokabel<?= (int) $v['id'] ?>">
+        <?= teacher_csrf_field() ?>
+        <input type="hidden" name="unit_id" value="<?= $unitId ?>">
+    </form>
+<?php endforeach; ?>
 
 <p class="tiny muted">
     Die Lückensätze entstehen schon beim Einlesen, für die ganze Einheit.

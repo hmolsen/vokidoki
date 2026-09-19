@@ -548,6 +548,58 @@ function initStudentAdd() {
 
 initStudentAdd();
 
+// ------------------------------------------ Vokabel aendern
+
+/**
+ * Aus einer Zeile ein Formular machen und zurueck.
+ *
+ * Beide Fassungen stehen im HTML - die Anzeige und die Felder. Das Skript
+ * schaltet nur um. Ohne JavaScript bleiben die Felder verborgen und der
+ * Sichern-Knopf ebenso; was dann bleibt, sind Hinzufuegen und Loeschen, und
+ * beides funktioniert als gewoehnliches Formular.
+ *
+ * Bewusst kein Nachbauen der Zeile: Was im HTML steht, muss hier nicht noch
+ * einmal entstehen - und ein Wort mit einer spitzen Klammer darin kann die
+ * Tabelle so nicht zerlegen.
+ */
+function initVocabEdit() {
+    const tabelle = document.getElementById('freigabe');
+    if (!tabelle) return;
+
+    const umschalten = (zeile, bearbeiten) => {
+        zeile.querySelectorAll('[data-wort]').forEach((e) => { e.hidden = bearbeiten; });
+        zeile.querySelectorAll('input[name="edit_f"], input[name="edit_n"]')
+             .forEach((e) => { e.hidden = !bearbeiten; });
+
+        const stift  = zeile.querySelector('[data-edit]');
+        const sicher = zeile.querySelector('[data-save]');
+        if (stift)  stift.hidden  = bearbeiten;
+        if (sicher) sicher.hidden = !bearbeiten;
+
+        zeile.classList.toggle('bearbeiten', bearbeiten);
+        if (bearbeiten) zeile.querySelector('input[name="edit_f"]')?.focus();
+    };
+
+    tabelle.addEventListener('click', (e) => {
+        const stift = e.target.closest('[data-edit]');
+        if (!stift) return;
+        e.preventDefault();
+        umschalten(stift.closest('tr'), true);
+    });
+
+    // Escape bricht ab, ohne zu speichern - und ohne die Seite zu verlassen.
+    tabelle.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const zeile = e.target.closest('tr');
+        if (zeile && zeile.classList.contains('bearbeiten')) {
+            e.preventDefault();
+            umschalten(zeile, false);
+        }
+    });
+}
+
+initVocabEdit();
+
 // ------------------------------------------- Sprung ans Telefon
 
 /**
@@ -847,8 +899,17 @@ function initReleaseBar() {
     // Ein Klick auf eine Zeile setzt den Balken dorthin - der kurze Weg,
     // wenn man schon weiss, wohin.
     zeilen.forEach((tr, i) => {
-        tr.addEventListener('click', () => {
+        tr.addEventListener('click', (e) => {
             if (zieht) return;
+            /*
+             * In den Zeilen stehen jetzt auch Knoepfe und Felder - Aendern,
+             * Loeschen, die Eingabefelder beim Bearbeiten. Ein Klick darauf
+             * ist kein Klick auf die Zeile, sonst verschiebt "Loeschen"
+             * nebenbei die Freigabe. Dieselbe Wache wie bei tr[data-href].
+             */
+            if (e.target.closest('a, button, input, select, textarea, label')) return;
+            if ((window.getSelection()?.toString() ?? '') !== '') return;
+
             setzen(i + 1, true);
             speichern();
         });

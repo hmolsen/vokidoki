@@ -5607,6 +5607,162 @@ ok('Die Seite dahinter traegt denselben Namen wie die Kachel',
 @unlink($dsJar);
 q('DELETE FROM classes WHERE id IN (?, ?)', [(int) $dsA['id'], (int) $dsB['id']]);
 
+section('Vokabeln von Hand');
+
+/*
+ * Bisher konnte nur der Betreiber im Admin eine Vokabel ergaenzen, aendern
+ * oder loeschen. Eine Lehrkraft sah ein falsch erkanntes Wort in ihrer
+ * eigenen Lerneinheit und konnte nichts tun - ausser alles neu einzulesen.
+ */
+
+$hvKlasse = class_create(
+    (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]),
+    'Hand' . bin2hex(random_bytes(2)),
+);
+$hvKurs = course_create(
+    q1('SELECT * FROM users WHERE id = ?', [$lehrerId]),
+    'Handisch' . bin2hex(random_bytes(2)), "\u{1F310}", (int) $hvKlasse['id'], '',
+);
+$hvKursId = is_string($hvKurs) ? 0 : (int) $hvKurs['id'];
+$hvUnit   = makeUnit($lehrerId, (int) $hvKurs['language_id'], 'Hand-Unit');
+foreach (['alpha', 'bravo', 'charlie'] as $i => $w) {
+    q('INSERT INTO vocab (unit_id, position, term_foreign, term_native)
+       VALUES (?, ?, ?, ?)', [$hvUnit, $i, $w, 'de-' . $w]);
+}
+q('UPDATE units SET released_position = 2 WHERE id = ?', [$hvUnit]);
+ok('Eine Lerneinheit fuer die Handarbeit', $hvUnit > 0);
+
+$woerter = static fn (): array => array_column(qa(
+    'SELECT term_foreign FROM vocab WHERE unit_id = ? ORDER BY position', [$hvUnit],
+), 'term_foreign');
+
+// ---- Die Seite bietet es an.
+
+$res = teacherGet('unit.php?id=' . $hvUnit);
+ok('Die Vokabeltabelle hat eine Anlegezeile',
+   str_contains($res['body'], 'name="new_f"') && str_contains($res['body'], 'name="add_vocab"'));
+ok('Je Zeile gibt es Aendern und Loeschen',
+   substr_count($res['body'], 'data-edit=') === 3
+   && substr_count($res['body'], 'name="delete_vocab"') === 3,
+   substr_count($res['body'], 'data-edit=') . ' / '
+   . substr_count($res['body'], 'name="delete_vocab"'));
+ok('Die Rueckfrage beim Loeschen nennt die Folgen',
+   str_contains($res['body'], 'Lernstand aller Kinder daran verschwinden mit'),
+   'eine Vokabel zu loeschen nimmt jedem Kind seinen Stand dazu');
+
+// ---- Hinzufuegen.
+
+teacherRequest($base . '/teacher/unit.php?id=' . $hvUnit, [
+    'add_vocab' => '1', 'unit_id' => $hvUnit,
+    'new_f' => 'delta', 'new_n' => 'de-delta', 'csrf' => $lehrerCsrf,
+]);
+ok('Eine Vokabel von Hand kommt dazu',
+   $woerter() === ['alpha', 'bravo', 'charlie', 'delta'], implode(',', $woerter()));
+ok('Die Freigabe bleibt, wo sie war',
+   (int) qv('SELECT released_position FROM units WHERE id = ?', [$hvUnit]) === 2);
+ok('Die Positionen sind lueckenlos', vocab_positions_dense($hvUnit));
+
+$vorher = count($woerter());
+teacherRequest($base . '/teacher/unit.php?id=' . $hvUnit, [
+    'add_vocab' => '1', 'unit_id' => $hvUnit,
+    'new_f' => '', 'new_n' => 'ohne', 'csrf' => $lehrerCsrf,
+]);
+ok('Ein halbes Paar wird abgelehnt', count($woerter()) === $vorher);
+
+// ---- Aendern.
+
+$bravoId = (int) qv('SELECT id FROM vocab WHERE unit_id = ? AND term_foreign = ?',
+                    [$hvUnit, 'bravo']);
+teacherRequest($base . '/teacher/unit.php?id=' . $hvUnit, [
+    'save_vocab' => $bravoId, 'unit_id' => $hvUnit,
+    'edit_f' => 'bravissimo', 'edit_n' => 'de-bravissimo', 'csrf' => $lehrerCsrf,
+]);
+ok('Eine Vokabel laesst sich aendern',
+   (string) qv('SELECT term_foreign FROM vocab WHERE id = ?', [$bravoId]) === 'bravissimo');
+ok('Die Position bleibt dabei dieselbe',
+   (int) qv('SELECT position FROM vocab WHERE id = ?', [$bravoId]) === 1);
+
+// ---- Loeschen unterhalb der Marke.
+
+$sichtbar = static fn (): array => array_column(qa(
+    'SELECT v.term_foreign FROM vocab v JOIN units u ON u.id = v.unit_id
+      WHERE v.unit_id = ? AND v.position < u.released_position
+      ORDER BY v.position', [$hvUnit],
+), 'term_foreign');
+
+ok('Vor dem Loeschen sieht die Klasse zwei Woerter',
+   $sichtbar() === ['alpha', 'bravissimo'], implode(',', $sichtbar()));
+
+teacherRequest($base . '/teacher/unit.php?id=' . $hvUnit, [
+    'delete_vocab' => $bravoId, 'unit_id' => $hvUnit, 'csrf' => $lehrerCsrf,
+]);
+ok('Die Vokabel ist weg', $woerter() === ['alpha', 'charlie', 'delta'],
+   implode(',', $woerter()));
+ok('Und die Klasse sieht deshalb eines weniger - nicht ein anderes',
+   $sichtbar() === ['alpha'], implode(',', $sichtbar()));
+ok('Die Positionen sind wieder lueckenlos', vocab_positions_dense($hvUnit));
+
+// ---- Die Grenze: fremde Vokabeln.
+
+$fremdKlasse = class_create(
+    (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]),
+    'HandFremd' . bin2hex(random_bytes(2)),
+);
+$fremdKurs = course_create(
+    q1('SELECT * FROM users WHERE id = ?', [$lehrerId]),
+    'Handfremd' . bin2hex(random_bytes(2)), "\u{1F310}", (int) $fremdKlasse['id'], '',
+);
+$fremdUnit = makeUnit($lehrerId, (int) $fremdKurs['language_id'], 'Andere Unit');
+q('INSERT INTO vocab (unit_id, position, term_foreign, term_native)
+   VALUES (?, 0, ?, ?)', [$fremdUnit, 'unberuehrt', 'de-unberuehrt']);
+$fremdVokabel = (int) qv('SELECT id FROM vocab WHERE unit_id = ?', [$fremdUnit]);
+
+teacherRequest($base . '/teacher/unit.php?id=' . $hvUnit, [
+    'save_vocab' => $fremdVokabel, 'unit_id' => $hvUnit,
+    'edit_f' => 'gekapert', 'edit_n' => 'de-gekapert', 'csrf' => $lehrerCsrf,
+]);
+ok('Eine Vokabel aus einer anderen Lerneinheit laesst sich nicht aendern',
+   (string) qv('SELECT term_foreign FROM vocab WHERE id = ?', [$fremdVokabel]) === 'unberuehrt',
+   (string) qv('SELECT term_foreign FROM vocab WHERE id = ?', [$fremdVokabel]));
+
+teacherRequest($base . '/teacher/unit.php?id=' . $hvUnit, [
+    'delete_vocab' => $fremdVokabel, 'unit_id' => $hvUnit, 'csrf' => $lehrerCsrf,
+]);
+ok('Und auch nicht loeschen',
+   (int) qv('SELECT COUNT(*) FROM vocab WHERE id = ?', [$fremdVokabel]) === 1);
+
+/*
+ * Und die Lerneinheit einer anderen Schule geht niemanden etwas an - die
+ * Seite selbst prueft das schon beim Laden, aber gerade deshalb muss es
+ * einmal nachgewiesen sein.
+ */
+q("INSERT IGNORE INTO schools (name) VALUES ('Fremde Schule 7')");
+$fremdeSchule7 = (int) qv("SELECT id FROM schools WHERE name = 'Fremde Schule 7'");
+q('UPDATE courses SET school_id = ? WHERE id = ?', [$fremdeSchule7, (int) $fremdKurs['id']]);
+
+$res = teacherGet('unit.php?id=' . $fremdUnit);
+ok('Eine Lerneinheit einer anderen Schule laesst sich nicht oeffnen',
+   !str_contains($res['body'], 'unberuehrt'));
+
+q('UPDATE courses SET school_id = ? WHERE id = ?',
+  [(int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]), (int) $fremdKurs['id']]);
+q('DELETE FROM schools WHERE id = ?', [$fremdeSchule7]);
+
+// ---- Der Zeilenklick darf die Knoepfe in Ruhe lassen.
+
+$skriptH = http($base . '/teacher/teacher.js');
+ok('Das Skript schaltet die Zeile zum Formular um',
+   str_contains($skriptH['body'], 'function initVocabEdit'));
+ok('Und der Freigabe-Zeilenklick laesst Knoepfe aus',
+   preg_match('/zeilen\.forEach\(\(tr, i\) => \{.*?closest\(.a, button, input/s',
+              $skriptH['body']) === 1,
+   'sonst gibt ein Druck auf "Loeschen" nebenbei Vokabeln frei');
+
+q('DELETE FROM languages WHERE id IN (?, ?)',
+  [(int) $hvKurs['language_id'], (int) $fremdKurs['language_id']]);
+q('DELETE FROM classes WHERE id IN (?, ?)',
+  [(int) $hvKlasse['id'], (int) $fremdKlasse['id']]);
+
 section('Sprung ans Telefon');
 
 /*

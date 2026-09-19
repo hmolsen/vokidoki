@@ -1045,3 +1045,25 @@ a.rowmain:hover { text-decoration: underline; }
     .adminbar { padding: 10px 12px; gap: 6px; }
     .adminbar .tiny { margin-left: 0 !important; }
 }
+
+/*
+ * hidden muss hidden heissen.
+ *
+ * .iconaction setzt display: inline-flex, und das schlaegt das eingebaute
+ * [hidden] { display: none } - der Sichern-Knopf stand dadurch in jeder
+ * Zeile, obwohl er erst beim Bearbeiten auftauchen soll. Dasselbe gilt
+ * fuer alles andere, dem eine display-Regel gegeben wurde.
+ */
+.iconaction[hidden], .btn[hidden], .coursetitle[hidden] { display: none !important; }
+
+/* Eine Vokabelzeile im Bearbeitungszustand. Die Felder ersetzen den Text
+   an Ort und Stelle - keine zweite Zeile, kein Fenster. */
+table.release tr.bearbeiten td { background: var(--surface-2); }
+table.release td input[type=text] {
+    margin: 0;
+    min-height: 34px;
+    width: 100%;
+    font-size: .94rem;
+}
+table.release tr.newrow td { background: var(--surface-2); vertical-align: middle; }
+table.release tr.newrow input[type=text] { margin: 0; min-height: 34px; width: 100%; }

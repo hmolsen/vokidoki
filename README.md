@@ -311,6 +311,21 @@ Angehängt wird hinten; **`released_position` bleibt unberührt**, die neuen
 Wörter sind für die Klasse also zunächst unsichtbar, genau wie eine frisch
 eingelesene Einheit. Lückensätze entstehen für sie wie für alle anderen.
 
+### Vokabeln von Hand
+
+In der Freigabetabelle lässt sich jede Vokabel **ändern** und **löschen**,
+und unten steht eine Zeile zum **Hinzufügen** — dasselbe Muster wie in jeder
+anderen Tabelle. Bisher konnte das nur der Betreiber im Admin; eine
+Lehrkraft sah ein falsch erkanntes Wort in ihrer eigenen Lerneinheit und
+konnte nichts tun, ausser alles neu einzulesen.
+
+Alles läuft über `lib/vocab.php`: Positionen bleiben lückenlos, die
+Freigabemarke wird beim Löschen mitgeführt, `punctuation_fix()` greift wie
+beim Einlesen, und zu einer neuen Vokabel entsteht gleich ein Lückensatz.
+
+Eine Vokabel zu löschen nimmt jedem Kind seinen Lernstand dazu — `progress`
+hängt per `ON DELETE CASCADE` daran. Die Rückfrage sagt das.
+
 ### Zwei Kurse derselben Sprache
 
 Wer Englisch in der 5B und in der 6A gibt, sah in der App zweimal die Kachel
@@ -528,7 +543,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-846 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+865 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
 Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
 Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
 hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
@@ -590,7 +605,7 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 1068 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 1102 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
 
@@ -608,7 +623,7 @@ Quelltext völlig richtig aussahen:
 - Der Zettel für die ganze Klasse wurde erst beim nächsten Laden anklickbar.
 
 ```bash
-node tests/browser/lauf.mjs --fixture            # 71 Prüfungen
+node tests/browser/lauf.mjs --fixture            # 86 Prüfungen
 node tests/browser/lauf.mjs --fixture bilder/    # dazu Bildschirmfotos
 ```
 
