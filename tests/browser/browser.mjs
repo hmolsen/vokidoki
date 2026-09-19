@@ -169,9 +169,25 @@ export async function browser({ port = 9400, breite = 1200, hoehe = 1000,
         clickCount: 1, pointerType: 'mouse',
     });
 
-    const taste = async (key, code) => {
-        await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key, windowsVirtualKeyCode: code });
-        await send('Input.dispatchKeyEvent', { type: 'keyUp', key, windowsVirtualKeyCode: code });
+    /*
+     * Eine Taste.
+     *
+     * Ohne `text` bleibt es bei rawKeyDown: Das loest die Hoerer der Seite
+     * aus und sonst nichts - richtig fuer Escape oder die Pfeile. Mit
+     * `text` wird daraus eine Taste, die AUCH ihre eingebaute Wirkung hat:
+     * Enter schickt dann ein Formular ab, wie am echten Geraet. Das ist
+     * kein Beiwerk - "Enter bestaetigt" laesst sich ohne diese Zeile nicht
+     * pruefen, und die Pruefung war gruen, weil sie nur die Hoerer sah.
+     */
+    const taste = async (key, code, text = null) => {
+        const art = text === null ? 'rawKeyDown' : 'keyDown';
+        const dazu = text === null ? {} : { text, unmodifiedText: text };
+        await send('Input.dispatchKeyEvent',
+                   { type: art, key, windowsVirtualKeyCode: code,
+                     nativeVirtualKeyCode: code, ...dazu });
+        await send('Input.dispatchKeyEvent',
+                   { type: 'keyUp', key, windowsVirtualKeyCode: code,
+                     nativeVirtualKeyCode: code });
     };
 
     /*

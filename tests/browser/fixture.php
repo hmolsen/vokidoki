@@ -90,6 +90,20 @@ if (is_string($kurs)) {
 }
 $kursId = (int) $kurs['id'];
 
+/*
+ * Eine Klasse ohne Kurs, mit Kindern darin.
+ *
+ * Fuer das Suchfeld "Wen aufnehmen?": Es zeigt die Konten der Schule, die
+ * noch NICHT im Kurs sind. Ohne solche Konten gaebe es nichts zu suchen.
+ * Die Namen sind mit Bedacht gewaehlt - "Mar" trifft zwei, "Mart" genau
+ * einen.
+ */
+$suchKlasse = class_create($schuleId, '7b');
+students_bulk_create($schuleId, (int) $suchKlasse['id'],
+                     "Marek Sonntag
+Marta Wendt
+Nils Ohlsen");
+
 // Ein zweiter Kurs in einer zweiten Klasse - dafür ist der Kurswechsler da.
 $klasse2   = class_create($schuleId, '9a');
 $kurs2     = course_create($lehrer, 'Französisch', language_flag('Französisch'),
@@ -117,6 +131,7 @@ echo json_encode([
     'schule'     => $schuleId,
     'klasse'     => $klasseId,
     'leereKlasse' => $leereId,
+    'suchKlasse'  => (int) $suchKlasse['id'],
     'kurs'       => $kursId,
     'kurs2'      => $kurs2Id,
     'sprache'    => (int) $kurs['language_id'],

@@ -29,6 +29,7 @@ import { pruefe as einlesen } from './einlesen.mjs';
 import { pruefe as vokabeln } from './vokabeln.mjs';
 import { pruefe as fahnen }   from './fahnen.mjs';
 import { pruefe as klasse }   from './klasse.mjs';
+import { pruefe as suche }    from './suche.mjs';
 import { pruefe as mobil }    from './mobil.mjs';
 import { pruefe as kursanlegen } from './kursanlegen.mjs';
 
@@ -62,6 +63,7 @@ try {
     await vokabeln(f, aus);
     await fahnen(f, aus);
     await klasse(f, aus);
+    await suche(f, aus);
     await mobil(f, aus);
     // Zuletzt: legt einen Kurs an, und die Navigation zaehlt vorher Karten.
     await kursanlegen(f, aus);

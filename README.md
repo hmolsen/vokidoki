@@ -348,18 +348,48 @@ Die Klassenliste ist damit das, wonach sie aussieht: die Liste der Klassen,
 in denen Kinder angelegt und Zettel gedruckt werden. Kurse stehen dort keine
 mehr — auch nicht die ohne Klasse; **alle** Kurse stehen auf der Startseite.
 
+**„Wen aufnehmen?" sucht mit, während getippt wird.** Eine Schule hat
+dreihundert Kinder, und der Kurs braucht eines davon; dort stand ein
+`<datalist>`, und der Browser bietet seine Vorschläge nach eigenem
+Gutdünken an, in eigener Gestalt, auf dem Telefon oft gar nicht. Jetzt
+filtert das Feld bei jedem Zeichen in der Liste derer, die noch **nicht** im
+Kurs sind. Drei Zustände: mehrere Treffer → Liste darunter; genau einer →
+die Liste verschwindet und der Rest des Namens steht grau hinter dem
+Getippten, Enter nimmt ihn; keiner → ein Satz statt einer leeren Liste.
+
+Das Graue ist kein Text im Feld, sondern ein zweites Element darunter — ein
+Eingabefeld kann nicht zwei Farben zugleich —, und der getippte Teil wird
+darin unsichtbar gesetzt, damit die Buchstaben nicht doppelt stehen. Die
+Namen liest das Skript aus demselben `<datalist>`, das ohne JavaScript
+stehenbleibt: eine Quelle, zwei Wege. Und die Vorschlagsliste hängt an
+keinem Vorfahren (`position: fixed`), sonst schnäpe `table.data` mit seinem
+`overflow: hidden` drei Viertel davon ab — dieselbe Falle wie beim
+Sprachfeld, und im DOM steht die Liste dabei vollständig da. Gesehen hat es
+erst eine Prüfung mit `elementFromPoint`.
+
 Rechts in der Leiste stehen der eigene Name, ein Zahnrad und ein Knopf zum
 Abmelden. Das Zahnrad führt in dieselben Einstellungen wie in der App
 (`#/konto`) — Name, Farbe und Passwort sind dieselbe Sache, egal von welcher
 Seite man kommt, und eine zweite Fassung davon wären bald zwei
 verschiedene.
 
-Neben der Überschrift einer Lerneinheit steht **„‹ Meine Kurse"** — der Weg
-zurück auf die Startseite. Dorthin führte vorher nur der Name der Schule im
-Pfad, und der liest sich nicht wie „zurück", sondern wie der Name der
-Schule. Hierher kommt man mit **einem** Klick von der Startseite
-(„Freigeben" auf der Kurskarte); hinaus soll es genauso gehen. Dasselbe gilt
-für das Einlesen: Die Ansicht trägt neben dem Kursnamen denselben Knopf.
+**Die Überschrift einer Lerneinheit ist der Weg zurück — und das
+Umbenennen.** Sie lautet „Englisch - 5B › Unit 4": Der Kurs davor ist ein
+Knopf, und er sieht auch nach einem aus; ein unterstrichenes Wort in einer
+Überschrift liest man als Überschrift. Eine Ebene höher will man von hier
+aus öfter als ganz nach oben, und ganz nach oben führt das Häuschen.
+Daneben ein Stift: Der Titel wird an Ort und Stelle zum Eingabefeld, mit
+Haken zum Sichern und Kreuz zum Verwerfen. Er stand vorher als eigenes
+Formular am Fuß der Seite — dieselbe Sache an zwei Stellen, zwei
+Bildschirme voneinander entfernt. Ohne JavaScript steht alles nebeneinander
+da; das Skript blendet nur um.
+
+Beim Einlesen trägt die Ansicht neben dem Kursnamen den Knopf „‹ Meine
+Kurse", und **nach** dem Einlesen landet eine Lehrkraft in der Freigabe der
+Lerneinheit, nicht in der Schüleransicht: Eingelesen ist noch nicht
+aufgemacht, und dort sähe sie eine leere Liste. Für ein Kind bleibt es die
+Lerneinheit in der App — es hat gerade seine eigenen Vokabeln eingelesen und
+will üben.
 
 Von Kurs und Lerneinheit führt ein Knopf **in der Zeile der Überschrift** in
 die Schüleransicht: „So sieht es die Klasse". Die App sagt dort, dass man
@@ -431,6 +461,15 @@ Stift sein soll. Dass sie **nebeneinander** stehen und nicht untereinander,
 hängt an vierzehn Pixeln: Als Emoji sind sie je 42 px breit, dazu Abstand,
 das Leerzeichen aus dem Quelltext und der Innenabstand der Zelle — zusammen
 rund 98, und die Spalte war 86 breit. Jetzt 100.
+
+**Die Anlegezeile steht nicht mehr in der Tabelle.** Sie war die letzte
+Zeile der Freigabetabelle — am falschen Ort: Die Tabelle zeigt, was
+freigegeben ist, der Balken läuft durch sie hindurch, und eine Zeile mit
+zwei leeren Feldern mittendrin sieht aus wie eine Vokabel ohne Wort.
+Darunter steht jetzt **„Lerneinheit erweitern"** mit drei gleichwertigen
+Wegen nebeneinander: von Hand (ein `<details>`, das der Browser ohne eine
+Zeile JavaScript auf- und zuklappt), aus Dateien (die Einleseansicht), mit
+dem Telefon (der QR-Code, der bisher nur im Kurs stand).
 
 **Im Kopf steht die Sprache, nicht das Wort „Fremdsprache".** `🇬🇧 Englisch`
 und `🇩🇪 Deutsch`, beide mit ihrer Fahne als SVG: Die Spalte sagt damit, was
@@ -742,7 +781,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-987 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+1010 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
 Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
 Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
 hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
@@ -804,7 +843,7 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 1197 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 1220 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
 
@@ -822,7 +861,7 @@ Quelltext völlig richtig aussahen:
 - Der Zettel für die ganze Klasse wurde erst beim nächsten Laden anklickbar.
 
 ```bash
-node tests/browser/lauf.mjs --fixture            # 172 Prüfungen
+node tests/browser/lauf.mjs --fixture            # 199 Prüfungen
 node tests/browser/lauf.mjs --fixture bilder/    # dazu Bildschirmfotos
 ```
 

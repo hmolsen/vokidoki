@@ -393,8 +393,22 @@ function teacher_leer(string $text, string $knoepfe = ''): string
          . '</div>';
 }
 
-function teacher_head(string $title, array $user, array $crumbs = [], string $neben = ''): void
-{
+/**
+ * Der Kopf der Seite.
+ *
+ * $titelHtml ersetzt die Ueberschrift durch fertiges HTML, wenn sie mehr
+ * ist als ein Wort - die Lerneinheit setzt dort den Kurs als Knopf, ihren
+ * eigenen Namen und den Stift zum Umbenennen hinein. $title bleibt
+ * trotzdem noetig: Er steht im Titel des Fensters, und dort hat Auszeichnung
+ * nichts zu suchen.
+ */
+function teacher_head(
+    string $title,
+    array $user,
+    array $crumbs = [],
+    string $neben = '',
+    string $titelHtml = '',
+): void {
     ?><!doctype html>
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -440,7 +454,7 @@ function teacher_head(string $title, array $user, array $crumbs = [], string $ne
  */
 ?>
 <div class="titelzeile">
-    <h1><?= h($title) ?></h1>
+    <h1><?= $titelHtml === '' ? h($title) : $titelHtml ?></h1>
     <?= $neben ?>
 </div>
     <?php

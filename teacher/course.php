@@ -404,11 +404,28 @@ teacher_flash_render();
                     legst du in der Klasse an.
                 </span>
             <?php else: ?>
-                <span class="coursetitle">
+                <?php
+                /*
+                 * Das Feld sucht mit, waehrend getippt wird.
+                 *
+                 * Die Liste steht als <datalist> im HTML - das ist der Weg
+                 * ohne JavaScript: ein Textfeld mit Vorschlaegen, das der
+                 * Browser selbst anbietet. Mit JavaScript liest das Skript
+                 * dieselbe Liste aus, filtert bei jedem Zeichen und zeigt
+                 * die Treffer darunter; bleibt einer uebrig, schreibt es
+                 * ihn grau zu Ende. Zwei Wege, eine Quelle.
+                 */
+                ?>
+                <span class="coursetitle suchfeld" data-suche>
                     <span class="cflag plus">+</span>
-                    <input type="text" name="member_name" form="newmember"
-                           list="kandidaten" autocomplete="off" maxlength="80" required
-                           placeholder="Name eintippen" aria-label="Wen aufnehmen?">
+                    <span class="feldbox">
+                        <span class="geist" aria-hidden="true"></span>
+                        <input type="text" name="member_name" form="newmember"
+                               list="kandidaten" autocomplete="off" maxlength="80" required
+                               role="combobox" aria-expanded="false" aria-autocomplete="both"
+                               placeholder="Name eintippen" aria-label="Wen aufnehmen?">
+                    </span>
+                    <ul class="vorschlaege" role="listbox" hidden></ul>
                 </span>
                 <datalist id="kandidaten">
                     <?php foreach ($offene as $o): ?>

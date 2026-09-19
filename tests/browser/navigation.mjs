@@ -97,22 +97,37 @@ export async function pruefe(f, aus) {
                .includes('unit.php?id=' + f.unit));
 
         /*
-         * Und einer wieder zurueck.
+         * Und einer wieder zurueck - in den Kurs.
          *
-         * Hierher kommt man mit einem Klick von der Startseite. Zurueck fuehrte
-         * nur der Name der Schule im Pfad, und der liest sich nicht wie
-         * "zurueck" - er liest sich wie der Name der Schule.
+         * Die Ueberschrift lautet "Englisch - 8c > Unit 1", und der Kurs
+         * davor ist ein Knopf. Vorher stand hier "Meine Kurse"; eine Ebene
+         * hoeher will man von hier aus oefter als ganz nach oben, und ganz
+         * nach oben fuehrt das Haeuschen im Pfad.
          */
-        const raus = await b.js(`[...document.querySelectorAll('.titelzeile a.btn')]
-            .find((a) => a.textContent.includes('Meine Kurse'))?.getAttribute('href') ?? ''`);
-        ok('Neben der Überschrift steht der Weg zurück', raus !== '',
-           'sonst führt aus der Freigabe nur der Schulname heraus');
+        const kopf = await b.js(`(() => {
+            const a = document.querySelector('h1 a.kursknopf');
+            return {
+                ziel: a?.getAttribute('href') ?? '',
+                text: a?.textContent?.trim() ?? '',
+                name: document.querySelector('h1 [data-titel]')?.textContent?.trim() ?? '',
+                stift: !!document.querySelector('h1 [data-rename]'),
+                meineKurse: (document.querySelector('.titelzeile')?.textContent ?? '')
+                    .includes('Meine Kurse'),
+            };
+        })()`);
+        ok('Die Überschrift trägt den Kurs als Knopf zurück',
+           kopf.ziel.includes('course.php?id=' + f.kurs), kopf.ziel);
+        ok('Und danach den Namen der Lerneinheit',
+           kopf.name === 'Unit 1 - Browsertest', kopf.name);
+        ok('Mit einem Stift zum Umbenennen daneben', kopf.stift);
+        ok('„Meine Kurse" steht nicht mehr daneben', !kopf.meineKurse,
+           'dafür gibt es das Häuschen im Pfad');
 
-        await b.js(`[...document.querySelectorAll('.titelzeile a.btn')]
-                      .find((a) => a.textContent.includes('Meine Kurse')).click()`);
+        await b.js(`document.querySelector('h1 a.kursknopf').click()`);
         await schlafe(1400);
-        ok('Und ein Druck darauf führt auf die Startseite',
-           (await b.js(`document.querySelector('h1')?.textContent ?? ''`)) === 'Meine Kurse');
+        ok('Und ein Druck darauf führt in den Kurs',
+           (await b.js(`location.search`)).includes('id=' + f.kurs));
+        await b.geh(f.basis + '/teacher/unit.php?id=' + f.unit, 1400);
 
         // ---- Der Kurswechsler.
 

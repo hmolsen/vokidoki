@@ -2,6 +2,9 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
+// Fuer HANDOFF_TTL im Fenster mit dem QR-Code - der Sprung ans Telefon
+// steht jetzt auch hier, nicht nur im Kurs.
+require_once __DIR__ . '/../lib/handoff.php';
 require_once __DIR__ . '/../lib/sentences.php';
 require_once __DIR__ . '/../lib/vocab.php';
 
@@ -325,28 +328,64 @@ $pfad[] = teacher_course_crumb($user, [
 $pfad[] = ['label' => (string) $unit['title'], 'href' => null];
 
 /*
- * Neben der Ueberschrift zwei Wege hinaus.
+ * Die Ueberschrift ist der Weg zurueck - und das Umbenennen.
  *
- * Auf diese Seite kommt man von der Startseite mit einem Klick - "Freigeben"
- * auf der Kurskarte. Zurueck fuehrte bisher nur der Name der Schule im Pfad,
- * und der liest sich nicht wie "zurueck". Also ein Knopf, der es sagt.
+ * Sie lautet "Englisch - 5B > Unit 4": Der Kurs davor ist ein Knopf, der
+ * dorthin zurueckfuehrt. Er sieht auch nach einem aus; ein unterstrichenes
+ * Wort in einer Ueberschrift liest man als Ueberschrift.
  *
- * Und die Schueleransicht oeffnet im selben Fenster. Sie stand einmal auf
- * target="_blank" - damals war das der einzige Weg zurueck: Man schloss den
- * Tab wieder. Seit sie selbst einen Knopf "Zurueck zur Verwaltung" traegt,
- * der auf genau diese Lerneinheit zeigt, ist der zweite Tab keine Hilfe
- * mehr, sondern eine Ablage.
+ * "Meine Kurse" stand hier einmal daneben. Dafuer gibt es jetzt das
+ * Haeuschen im Pfad, und eine Ebene hoeher will man von hier aus oefter
+ * als ganz nach oben.
+ *
+ * Und der Stift: Der Titel wird an Ort und Stelle zum Eingabefeld, mit
+ * Haken zum Sichern und Kreuz zum Verwerfen. Er stand vorher als eigenes
+ * Formular am Fuss der Seite - eine Zeile, die dasselbe noch einmal sagte,
+ * was oben schon stand. Ohne JavaScript ist das Feld von Anfang an da und
+ * das Formular ein gewoehnliches; das Skript blendet nur um.
  */
+$kursUrl   = teacher_url('course.php') . '?id=' . (int) $unit['course_id'];
+$importUrl = url('/') . '#/lang/' . (int) $unit['language_id'] . '/import';
+
+$titelHtml = sprintf(
+    '<a class="kursknopf" href="%s" title="Zur&uuml;ck zum Kurs">%s%s</a>'
+    . '<span class="titelsep" aria-hidden="true">&#8250;</span>'
+    . '<span class="einheitname" data-titel>%s</span>'
+    . '<input class="einheitfeld" type="text" name="title" form="titelform"'
+    . ' value="%s" maxlength="128" required aria-label="Titel der Lerneinheit">'
+    . '<button class="iconbtn" type="button" data-rename'
+    . ' title="Umbenennen" aria-label="Umbenennen">&#9999;&#65039;</button>'
+    . '<button class="iconbtn gut" form="titelform" name="rename_unit" value="1"'
+    . ' data-rename-save title="Sichern" aria-label="Sichern">&#10003;</button>'
+    . '<button class="iconbtn" type="button" data-rename-cancel'
+    . ' title="Verwerfen" aria-label="Verwerfen">&#10005;</button>',
+    h($kursUrl),
+    flag_html((string) $unit['flag_emoji'] ?: FLAG_FALLBACK, 'kopfflagge'),
+    h((string) $unit['course_name']),
+    h((string) $unit['title']),
+    h((string) $unit['title']),
+);
+
 teacher_head($unit['title'], $user, $pfad, sprintf(
-    '<a class="btn small secondary" href="%s">&#8249; Meine Kurse</a>'
-    . '<a class="btn small secondary" href="%s" '
+    '<a class="btn small secondary" href="%s" '
     . 'title="Die Ansicht, die deine Klasse sieht">'
     . '<span aria-hidden="true">&#128065;</span> So sieht es die Klasse</a>',
-    h(teacher_url('index.php')),
     h(url('/') . '#/unit/' . $unitId),
-));
+), $titelHtml);
+
 teacher_flash_render();
 ?>
+
+<?php
+/*
+ * Das Formular zum Titel liegt neben der Ueberschrift: In HTML darf ein
+ * <form> nicht in einer <h1> stehen, das Feld gehoert ueber form= dazu.
+ */
+?>
+<form method="post" id="titelform" hidden>
+    <?= teacher_csrf_field() ?>
+    <input type="hidden" name="unit_id" value="<?= $unitId ?>">
+</form>
 
 <?php if ($zustand['status'] === SENTENCE_RUNNING): ?>
     <div class="notice">
@@ -375,11 +414,9 @@ teacher_flash_render();
 ?>
 <?php if ($gesamt === 0): ?>
     <?= teacher_leer(
-        'Diese Lerneinheit hat noch keine Vokabeln. Trag unten eine von Hand '
-        . 'ein, oder lies eine Buchseite ein.',
-        sprintf('<a class="btn small" href="%s" target="_blank" rel="noopener">'
-                . 'Vokabeln einlesen</a>',
-                h(url('/') . '#/lang/' . (int) $unit['language_id'] . '/import')),
+        'Diese Lerneinheit hat noch keine Vokabeln. Unter &bdquo;Lerneinheit '
+        . 'erweitern&ldquo; stehen die drei Wege: von Hand, aus Dateien, '
+        . 'oder mit dem Telefon fotografiert.',
     ) ?>
 <?php else: ?>
 
@@ -519,38 +556,10 @@ $fehlen = vocab_without_sentences($unitId);
         </tr>
     <?php endforeach; ?>
 
-    <?php
-    /*
-     * Die Anlegezeile, wie in jeder anderen Tabelle. Sie steht ausserhalb
-     * der Freigabelogik: kein data-pos, keine released/locked-Klasse - der
-     * Balken darf sie nicht als Vokabelzeile zaehlen.
-     */
-    ?>
-    <tr class="newrow">
-        <td>
-            <input type="text" name="new_f" form="neueVokabel" maxlength="255"
-                   placeholder="apple" aria-label="Fremdsprache">
-        </td>
-        <td>
-            <input type="text" name="new_n" form="neueVokabel" maxlength="255"
-                   placeholder="Apfel" aria-label="Deutsch">
-        </td>
-        <td class="actions">
-            <button class="iconaction primary nurbild" form="neueVokabel"
-                    name="add_vocab" value="1" title="Vokabel hinzufügen">
-                <span aria-hidden="true">+</span><span class="nurvorlesen">Hinzufügen</span>
-            </button>
-        </td>
-    </tr>
     </tbody>
 </table>
 
 <form method="post" id="releaseform">
-    <?= teacher_csrf_field() ?>
-    <input type="hidden" name="unit_id" value="<?= $unitId ?>">
-</form>
-
-<form method="post" id="neueVokabel">
     <?= teacher_csrf_field() ?>
     <input type="hidden" name="unit_id" value="<?= $unitId ?>">
 </form>
@@ -576,25 +585,102 @@ $fehlen = vocab_without_sentences($unitId);
     Kinder ist beim nächsten Freigeben wieder da.
 </p>
 
-<h2>Diese Lerneinheit</h2>
+<h2>Lerneinheit erweitern</h2>
 
 <?php
 /*
- * Umbenennen: eine Zeile, wie überall. Der Titel ist das, was die Klasse
- * in ihrer Liste liest - "Unit 4" aus dem Buch, oder was die Lehrkraft
- * daraus macht.
+ * Drei Wege, eine Lerneinheit zu fuellen - nebeneinander, weil sie
+ * gleichwertig sind.
+ *
+ * Die Anlegezeile fuer eine einzelne Vokabel stand bis hierher als letzte
+ * Zeile IN der Freigabetabelle. Dort war sie am falschen Ort: Die Tabelle
+ * zeigt, was freigegeben ist, und der Balken laeuft durch sie hindurch -
+ * eine Zeile mit zwei leeren Feldern mittendrin sieht aus wie eine Vokabel
+ * ohne Wort.
+ *
+ * Von Hand als <details>: Das Auf- und Zuklappen kann der Browser von
+ * selbst, mit Tastatur und Vorleseprogramm, und ohne JavaScript steht das
+ * Formular genauso da.
  */
 ?>
-<form method="post" class="card anlegezeile">
-    <?= teacher_csrf_field() ?>
-    <input type="hidden" name="unit_id" value="<?= $unitId ?>">
-    <span class="coursetitle">
-        <span class="cflag">&#128218;</span>
-        <input type="text" name="title" maxlength="128" required
-               value="<?= h((string) $unit['title']) ?>" aria-label="Titel der Lerneinheit">
-    </span>
-    <button class="btn small secondary" name="rename_unit" value="1">Umbenennen</button>
-</form>
+<div class="erweitern">
+    <details class="card erweiternkarte">
+        <summary>
+            <span class="cflag">&#9999;&#65039;</span>
+            <span class="wahltext">
+                <strong>Vokabel manuell hinzufügen</strong>
+                <span class="tiny muted">Ein Paar eintippen</span>
+            </span>
+        </summary>
+
+        <form method="post" class="handform" id="neueVokabel">
+            <?= teacher_csrf_field() ?>
+            <input type="hidden" name="unit_id" value="<?= $unitId ?>">
+            <label for="new_f"><?= h((string) $unit['language_name']) ?></label>
+            <input type="text" id="new_f" name="new_f" maxlength="255"
+                   placeholder="apple" autocomplete="off">
+            <label for="new_n">Deutsch</label>
+            <input type="text" id="new_n" name="new_n" maxlength="255"
+                   placeholder="Apfel" autocomplete="off">
+            <button class="btn small" name="add_vocab" value="1">Hinzufügen</button>
+        </form>
+    </details>
+
+    <a class="card erweiternkarte" href="<?= h($importUrl) ?>">
+        <span class="cflag">&#128193;</span>
+        <span class="wahltext">
+            <strong>Vokabeln aus Dateisystem hochladen</strong>
+            <span class="tiny muted">Fotos einer Buchseite auswählen</span>
+        </span>
+    </a>
+
+    <button class="card erweiternkarte" type="button" data-handoff>
+        <span class="cflag">&#128241;</span>
+        <span class="wahltext">
+            <strong>Vokabeln mit Smartphone fotografieren</strong>
+            <span class="tiny muted">QR-Code scannen, direkt weiterarbeiten</span>
+        </span>
+    </button>
+</div>
+
+<?php
+/*
+ * Das Fenster mit dem Code - dasselbe wie im Kurs.
+ *
+ * Es steht leer im HTML und wird erst gefuellt, wenn jemand darauf drueckt:
+ * Die Marke darin ist eine Anmeldung, und die soll nicht auf Vorrat
+ * entstehen und zehn Minuten lang auf einem unbeaufsichtigten Bildschirm
+ * liegen.
+ */
+?>
+<dialog id="handoff" class="qrdialog"
+        data-url="<?= h(teacher_url('handoff.php')) ?>"
+        data-course="<?= (int) $unit['course_id'] ?>"
+        data-csrf="<?= h(teacher_csrf_token()) ?>">
+    <h3>Am Smartphone einlesen</h3>
+    <div class="qrslot" id="handoffSlot"></div>
+    <p class="tiny muted" id="handoffHint">
+        Code mit der Kamera des Telefons scannen. Du bist dann angemeldet und
+        stehst direkt im Einlesen dieses Kurses.
+    </p>
+    <p class="tiny muted">
+        <strong>Der Code ist ein Schlüssel.</strong> Er gilt
+        <?= HANDOFF_TTL ?> Minuten und nur ein einziges Mal &ndash; wer ihn
+        einlöst, ist als du angemeldet. Nicht abfotografieren lassen.
+    </p>
+    <form method="dialog"><button class="btn small secondary">Schließen</button></form>
+</dialog>
+
+<?php
+/*
+ * Umbenannt wird oben in der Ueberschrift, nicht hier unten.
+ *
+ * Hier stand einmal eine zweite Zeile mit demselben Titel darin - dieselbe
+ * Sache an zwei Stellen, und die untere zwei Bildschirme von der oberen
+ * entfernt. Uebrig bleibt das Loeschen.
+ */
+?>
+<h2>Diese Lerneinheit</h2>
 
 <?php
 /*

@@ -114,14 +114,25 @@ export async function pruefe(f, aus) {
         })()`);
         await schlafe(2500);
 
+        /*
+         * Und danach dort, wo es weitergeht.
+         *
+         * Fuer eine Lehrkraft ist das die Freigabe, nicht die
+         * Schueleransicht: Eingelesen ist noch nicht aufgemacht, und in der
+         * Schueleransicht saehe sie eine leere Liste - freigegeben ist ja
+         * noch nichts.
+         */
         const danach = await b.js(`({
-            ort:   location.hash,
-            titel: document.querySelector('.topbar h1')?.textContent ?? '',
+            ort:   location.pathname + location.search + location.hash,
+            titel: document.querySelector('h1 [data-titel]')?.textContent?.trim() ?? '',
+            balken: !!document.querySelector('.releasebar'),
         })`);
-        ok('Nach dem Anhängen steht man in der Lerneinheit',
-           danach.ort.includes('/unit/' + f.unit), danach.ort);
+        ok('Nach dem Anhängen steht man in der Freigabe der Lerneinheit',
+           danach.ort.includes('/teacher/unit.php?id=' + f.unit), danach.ort);
         ok('Und es ist die vorhandene, keine neue',
            danach.titel === 'Unit 1 - Browsertest', danach.titel);
+        ok('Der Freigabebalken ist gleich da', danach.balken,
+           'der nächste Griff nach dem Einlesen ist immer derselbe');
 
         await b.js(`localStorage.clear()`);
     } finally {

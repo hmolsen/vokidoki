@@ -2705,6 +2705,63 @@ ok('Und verteilen die Breite fest',
    preg_match('/table\.data\.release\s*\{\s*table-layout:\s*fixed/s', $cssB) === 1,
    'sonst rutschen die Spalten, sobald eine Zeile zum Formular wird');
 
+
+// ---- Die drei Wege, eine Lerneinheit zu erweitern.
+
+/*
+ * Die Anlegezeile stand bis hierher als letzte Zeile IN der Freigabetabelle
+ * - am falschen Ort: Die Tabelle zeigt, was freigegeben ist, der Balken
+ * laeuft durch sie hindurch, und eine Zeile mit zwei leeren Feldern
+ * mittendrin sieht aus wie eine Vokabel ohne Wort. Jetzt stehen darunter
+ * drei gleichwertige Wege nebeneinander.
+ */
+$res = freiPost($base . '/teacher/unit.php?id=' . $freiUnit, null);
+
+ok('In der Freigabetabelle steht keine Anlegezeile mehr',
+   preg_match('/<table class="data release".*?<\/table>/s', $res['body'], $tm) === 1
+   && !str_contains($tm[0], 'name="new_f"'),
+   'sie gehoert unter die Tabelle, nicht hinein');
+
+ok('Darunter steht "Lerneinheit erweitern"',
+   str_contains($res['body'], '<h2>Lerneinheit erweitern</h2>'));
+ok('Mit drei Wegen', substr_count($res['body'], 'class="card erweiternkarte"') === 3,
+   substr_count($res['body'], 'class="card erweiternkarte"') . ' statt 3');
+
+ok('Von Hand: ein Formular, zugeklappt',
+   preg_match('/<details class="card erweiternkarte">.*?name="new_f".*?name="add_vocab"/s',
+              $res['body']) === 1,
+   '<details> kann das Auf- und Zuklappen von selbst, auch ohne JavaScript');
+ok('Aus Dateien: der Weg in die Einleseansicht',
+   preg_match('/<a class="card erweiternkarte" href="[^"]*#\/lang\/\d+\/import"/',
+              $res['body']) === 1);
+ok('Mit dem Telefon: der QR-Code',
+   preg_match('/<button class="card erweiternkarte" type="button" data-handoff>/',
+              $res['body']) === 1);
+ok('Und das Fenster dafuer steht auch hier',
+   str_contains($res['body'], 'id="handoff"')
+   && str_contains($res['body'], 'data-course="'),
+   'der Sprung ans Telefon stand nur im Kurs');
+
+ok('Das Feld heisst nach der Sprache, nicht "Fremdsprache"',
+   str_contains($res['body'], '<label for="new_f">' . h($kopfSprache) . '</label>'),
+   $kopfSprache);
+
+// ---- Und nach dem Einlesen geht es in die Freigabe, nicht in die App.
+
+/*
+ * Fuer ein Kind ist die Lerneinheit in der App das Ziel - es hat gerade
+ * seine eigenen Vokabeln eingelesen und will ueben. Fuer eine Lehrkraft ist
+ * es die Freigabe: Eingelesen ist noch nicht aufgemacht, und in der
+ * Schueleransicht saehe sie eine leere Liste.
+ */
+$einleseQuelle = (string) file_get_contents(__DIR__ . '/../views/import.js');
+ok('Nach dem Einlesen landet eine Lehrkraft in der Freigabe',
+   preg_match('/if \(VT\.user\?\.isTeacher\) \{.{0,200}?teacher\/unit\.php\?id=/s',
+              $einleseQuelle) === 1,
+   'nicht in der Schueleransicht - dort waere die Liste leer');
+ok('Und ein Kind weiterhin in der App',
+   str_contains($einleseQuelle, 'go(`/unit/${data.unit_id}`);'));
+
 // ---- Der Kopf der Seite: Pfad, Knopfreihe, Meldung an der richtigen Stelle.
 
 /*
@@ -4352,6 +4409,36 @@ if (!is_string($zaehlKurs)) {
     q('DELETE FROM languages WHERE id = ?', [(int) $zaehlKurs['language_id']]);
     q('DELETE FROM courses   WHERE id = ?', [(int) $zaehlKurs['id']]);
 }
+
+// ---- Das Suchfeld fuer die Aufnahme.
+
+/*
+ * Eine Schule hat dreihundert Kinder, und der Kurs braucht eines davon.
+ * Was das Skript daraus macht - Filtern bei jedem Zeichen, eine Liste
+ * darunter, die graue Ergaenzung bei genau einem Treffer - laesst sich von
+ * hier aus nicht ausfuehren; geprueft wird, dass die Bausteine da sind.
+ * Ohne sie bleibt ein Textfeld mit <datalist>, und auch das muss bedienbar
+ * sein.
+ */
+$res = teacherGet('course.php?id=' . $neuerKursId);
+ok('Das Feld ist als Suchfeld ausgezeichnet',
+   str_contains($res['body'], 'data-suche')
+   && str_contains($res['body'], 'name="member_name"'));
+ok('Die graue Ergaenzung hat ihren Platz',
+   str_contains($res['body'], 'class="geist"'),
+   'ein Eingabefeld kann nicht zwei Farben zugleich');
+ok('Und die Vorschlagsliste auch',
+   str_contains($res['body'], 'class="vorschlaege"'));
+ok('Die Namen stehen weiterhin als <datalist> im HTML',
+   str_contains($res['body'], '<datalist id="kandidaten">'),
+   'das ist der Weg ohne JavaScript - und die Quelle fuer das Skript');
+ok('Das Skript liest sie von dort',
+   str_contains($skript['body'], 'function initMemberSearch')
+   && str_contains($skript['body'], "feld.removeAttribute('list')"),
+   'zwei Vorschlagslisten uebereinander waeren eine zu viel');
+ok('Und es sucht ohne Umlaute wie das Sprachfeld',
+   preg_match('/^const passt = /m', $skript['body']) === 1,
+   'dieselbe Faltung, an einer Stelle');
 
 /*
  * Die Grenze: Ein Konto einer anderen Schule kommt nicht in den Kurs, auch
@@ -6298,19 +6385,51 @@ ok('Eine Lerneinheit zum Verwalten', $lvUnit > 0);
 
 // ---- Der Weg zurueck auf die Startseite.
 
+/*
+ * Die Ueberschrift ist der Weg zurueck: "Englisch - 5B > Unit 4", und der
+ * Kurs davor ist ein Knopf. "Meine Kurse" stand hier einmal daneben -
+ * dafuer gibt es das Haeuschen im Pfad, und eine Ebene hoeher will man von
+ * hier aus oefter als ganz nach oben.
+ */
 $res = teacherGet('unit.php?id=' . $lvUnit);
-ok('Neben der Ueberschrift steht der Weg zurueck',
-   preg_match('/<div class="titelzeile">.*?href="[^"]*teacher\/index\.php"/s',
+ok('Die Ueberschrift traegt den Kurs als Knopf zurueck',
+   preg_match('/<h1><a class="kursknopf" href="[^"]*course\.php\?id=' . $lvKursId . '"/',
               $res['body']) === 1,
-   'von hier kommt man mit einem Klick von der Startseite - und zurueck nur ueber den Schulnamen');
-ok('Und er heisst nach dem, wohin er fuehrt',
-   str_contains($res['body'], 'Meine Kurse'));
+   'ein unterstrichenes Wort in einer Ueberschrift liest man als Ueberschrift');
+ok('Danach kommt der Name der Lerneinheit',
+   preg_match('/<span class="einheitname" data-titel>Unit vorher<\/span>/', $res['body']) === 1);
+preg_match('/<div class="titelzeile">.*?<\/div>/s', $res['body'], $tz);
+ok('Und "Meine Kurse" steht nicht mehr daneben',
+   !str_contains($tz[0] ?? '', 'Meine Kurse'),
+   'dafuer gibt es das Haeuschen im Pfad - dort steht es weiterhin im Titel');
 
-// ---- Umbenennen.
+// ---- Umbenennen, oben in der Ueberschrift.
 
+ok('Der Stift steht in der Ueberschrift',
+   preg_match('/<h1>.*?data-rename[ >]/s', $res['body']) === 1);
+ok('Mit Haken zum Sichern und Kreuz zum Verwerfen',
+   str_contains($res['body'], 'data-rename-save')
+   && str_contains($res['body'], 'data-rename-cancel'));
+ok('Das Feld gehoert ueber form= zum Formular daneben',
+   preg_match('/<input class="einheitfeld"[^>]*form="titelform"/', $res['body']) === 1,
+   'ein <form> darf in HTML nicht in einer <h1> stehen');
 ok('Die Seite bietet das Umbenennen an',
    str_contains($res['body'], 'name="rename_unit"')
    && str_contains($res['body'], 'name="title"'));
+ok('Und unten steht es kein zweites Mal',
+   substr_count($res['body'], 'name="rename_unit"') === 1,
+   'dieselbe Sache an zwei Stellen, zwei Bildschirme voneinander entfernt');
+/*
+ * Ohne JavaScript steht alles nebeneinander da: Name, Feld, alle drei
+ * Knoepfe. Haesslich, aber bedienbar - und genau in dieser Reihenfolge
+ * richtig. Das Skript blendet um, was gerade nicht gebraucht wird.
+ */
+$skriptT = http($base . '/teacher/teacher.js');
+ok('Das Skript blendet den Titel um',
+   str_contains($skriptT['body'], 'function initUnitTitle'));
+ok('Und Escape verwirft wie das Kreuz',
+   preg_match('/function initUnitTitle.*?Escape/s', $skriptT['body']) === 1,
+   'wie beim Aendern einer Vokabel');
 
 teacherRequest($base . '/teacher/unit.php?id=' . $lvUnit, [
     'rename_unit' => '1', 'unit_id' => $lvUnit,

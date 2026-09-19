@@ -1,5 +1,5 @@
 import {
-    api, render, esc, $, $$, go, topbar, wireBack, showError, clearError, withBusy,
+    VT, api, render, esc, $, $$, go, topbar, wireBack, showError, clearError, withBusy,
     teacherBack,
 } from '../core.js';
 
@@ -299,6 +299,23 @@ function showReview(languageId, title, entries, fromDraft) {
 
                 const data = await api('import', 'save', { body });
                 clearDraft(languageId);
+                /*
+                 * Und danach dorthin, wo es weitergeht.
+                 *
+                 * Fuer ein Kind ist das die Lerneinheit in der App - es hat
+                 * gerade seine eigenen Vokabeln eingelesen und will ueben.
+                 * Fuer eine Lehrkraft ist es die Freigabe: Eingelesen ist
+                 * noch nicht aufgemacht, und der naechste Griff ist immer
+                 * derselbe. Sie in der Schueleransicht abzusetzen hiess,
+                 * ihr eine leere Liste zu zeigen - freigegeben ist ja noch
+                 * nichts.
+                 */
+                if (VT.user?.isTeacher) {
+                    window.location.href =
+                        `${VT.base}/teacher/unit.php?id=${data.unit_id}`;
+                    await new Promise((r) => setTimeout(r, 4000));
+                    return;
+                }
                 go(`/unit/${data.unit_id}`);
             });
         } catch (err) {

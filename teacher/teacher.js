@@ -50,6 +50,26 @@ initBarHoehe();
  * bleibt die Liste als <select> sichtbar und ist bedienbar; das ist der
  * Grund, warum sie im HTML steht und nicht hier.
  */
+/*
+ * Ohne Umlaute vergleichen - fuer jedes Suchfeld hier. - und zwar in beiden Schreibweisen.
+ *
+ * Wer keine Umlaute tippt, schreibt mal "danisch" und mal "daenisch".
+ * Nur eine Form zu falten trifft die andere nicht: "dänisch" wird zu
+ * "daenisch", und darin steckt "danisch" nicht. Deshalb zwei Formen und
+ * ein Treffer, wenn eine von beiden passt.
+ */
+const ohnePunkte = (s) => s.toLowerCase()
+    .replace(/ß/g, 'ss')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+const ausgeschrieben = (s) => s.toLowerCase()
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+const passt = (name, suche) =>
+    ohnePunkte(name).includes(ohnePunkte(suche))
+    || ausgeschrieben(name).includes(ausgeschrieben(suche));
+
 function initLanguagePicker(root) {
     const select = root.querySelector('select[data-picker]');
     if (!select) return;
@@ -99,25 +119,6 @@ function initLanguagePicker(root) {
         nameEl.textContent = o.name;
     };
 
-    /*
-     * Ohne Umlaute vergleichen - und zwar in beiden Schreibweisen.
-     *
-     * Wer keine Umlaute tippt, schreibt mal "danisch" und mal "daenisch".
-     * Nur eine Form zu falten trifft die andere nicht: "dänisch" wird zu
-     * "daenisch", und darin steckt "danisch" nicht. Deshalb zwei Formen und
-     * ein Treffer, wenn eine von beiden passt.
-     */
-    const ohnePunkte = (s) => s.toLowerCase()
-        .replace(/ß/g, 'ss')
-        .normalize('NFD').replace(/[̀-ͯ]/g, '');
-
-    const ausgeschrieben = (s) => s.toLowerCase()
-        .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
-        .normalize('NFD').replace(/[̀-ͯ]/g, '');
-
-    const passt = (name, suche) =>
-        ohnePunkte(name).includes(ohnePunkte(suche))
-        || ausgeschrieben(name).includes(ausgeschrieben(suche));
 
     const zeichnen = () => {
         const suche = search.value.trim();
@@ -305,6 +306,200 @@ document.addEventListener('error', (e) => {
 if (document.querySelector('select[data-picker]')) {
     initLanguagePicker(document);
 }
+
+// --------------------------------------------------- Wen aufnehmen?
+
+/**
+ * Das Suchfeld für die Kursaufnahme.
+ *
+ * Eine Schule hat dreihundert Kinder, und der Kurs braucht eines davon.
+ * Vorher stand dort ein <datalist> - der Browser bietet seine Vorschläge
+ * erst nach eigenem Gutdünken an, in eigener Gestalt, und auf dem Telefon
+ * oft gar nicht. Jetzt sucht das Feld bei jedem Zeichen in der Liste der
+ * Kinder, die noch nicht im Kurs sind, und zeigt die Treffer darunter.
+ *
+ * Bleibt genau einer übrig, verschwindet die Liste und der Rest des Namens
+ * steht grau hinter dem Getippten - Enter nimmt ihn. Das Graue ist kein
+ * Text im Feld, sondern ein zweites Element darunter: Ein Eingabefeld kann
+ * nicht zwei Farben zugleich. Der getippte Teil wird darin unsichtbar
+ * gesetzt, damit die Buchstaben nicht doppelt stehen.
+ *
+ * Ohne JavaScript bleibt das <datalist> im HTML und tut, was es immer tat.
+ * Deshalb liest das Skript seine Namen auch von dort - eine Quelle, kein
+ * zweiter Datenweg.
+ */
+function initMemberSearch() {
+    const box = document.querySelector('[data-suche]');
+    if (!box) return;
+
+    const feld  = box.querySelector('input[name="member_name"]');
+    const geist = box.querySelector('.geist');
+    const liste = box.querySelector('.vorschlaege');
+    const daten = document.getElementById(feld?.getAttribute('list') ?? '');
+    if (!feld || !geist || !liste || !daten) return;
+
+    const namen = [...daten.options].map((o) => o.value);
+
+    // Die eigene Liste ersetzt die des Browsers - beide zugleich wären zwei
+    // Vorschlagslisten übereinander.
+    feld.removeAttribute('list');
+
+    let gezeigt = [];
+    let aktiv   = -1;
+    let ergaenzung = '';
+
+    /*
+     * Die Liste haengt an keinem Vorfahren: position: fixed. Ihre Lage
+     * muss deshalb von Hand gesetzt und beim Rollen mitgefuehrt werden -
+     * sonst bleibt sie stehen, waehrend die Seite darunter wegfaehrt.
+     * Dieselbe Loesung wie beim Sprachfeld, und aus demselben Grund:
+     * table.data schneidet mit overflow: hidden jedes Kind ab.
+     */
+    const platzieren = () => {
+        const r = feld.getBoundingClientRect();
+        liste.style.left  = `${r.left}px`;
+        liste.style.top   = `${r.bottom + 4}px`;
+        liste.style.width = `${r.width}px`;
+    };
+
+    const schliessen = () => {
+        liste.hidden = true;
+        liste.innerHTML = '';
+        feld.setAttribute('aria-expanded', 'false');
+        gezeigt = [];
+        aktiv = -1;
+    };
+
+    const mitfuehren = () => { if (!liste.hidden) platzieren(); };
+    window.addEventListener('scroll', mitfuehren, true);
+    window.addEventListener('resize', mitfuehren);
+
+    const geistSetzen = (getippt, voll) => {
+        ergaenzung = voll;
+        if (voll === '') {
+            geist.textContent = '';
+            return;
+        }
+        // Der getippte Teil unsichtbar, damit der Rest an der richtigen
+        // Stelle beginnt - und zwar in der Schrift des Feldes.
+        geist.innerHTML = '';
+        const vorn = document.createElement('i');
+        vorn.textContent = getippt;
+        geist.append(vorn, document.createTextNode(voll.slice(getippt.length)));
+    };
+
+    const zeichnen = () => {
+        const roh = feld.value;
+        const suche = roh.trim();
+
+        if (suche === '') {
+            geistSetzen('', '');
+            schliessen();
+            return;
+        }
+
+        const treffer = namen.filter((n) => passt(n, suche));
+
+        /*
+         * Genau einer, und er fängt mit dem Getippten an: Dann ist die
+         * Liste überflüssig - der Name steht ja schon da, nur grau.
+         */
+        const eindeutig = treffer.length === 1
+            && ohnePunkte(treffer[0]).startsWith(ohnePunkte(suche));
+
+        if (eindeutig) {
+            geistSetzen(roh, roh + treffer[0].slice(suche.length));
+            schliessen();
+            return;
+        }
+
+        geistSetzen('', '');
+
+        if (treffer.length === 0) {
+            liste.innerHTML = '<li class="leertreffer">Niemand gefunden, der noch '
+                            + 'nicht im Kurs ist.</li>';
+            liste.hidden = false;
+            platzieren();
+            feld.setAttribute('aria-expanded', 'true');
+            gezeigt = [];
+            aktiv = -1;
+            return;
+        }
+
+        gezeigt = treffer.slice(0, 8);
+        aktiv = -1;
+        liste.innerHTML = gezeigt.map((n, i) => `<li role="option" data-i="${i}"
+            aria-selected="false">${escapeHtml(n)}</li>`).join('');
+        liste.hidden = false;
+        platzieren();
+        feld.setAttribute('aria-expanded', 'true');
+    };
+
+    const markieren = () => {
+        [...liste.querySelectorAll('li[role=option]')].forEach((li, i) => {
+            li.classList.toggle('on', i === aktiv);
+            li.setAttribute('aria-selected', i === aktiv ? 'true' : 'false');
+        });
+    };
+
+    const nehmen = (name) => {
+        feld.value = name;
+        geistSetzen('', '');
+        schliessen();
+        feld.form?.requestSubmit?.(
+            document.querySelector('[name="add_member_by_name"]'),
+        );
+    };
+
+    feld.addEventListener('input', zeichnen);
+
+    feld.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            if (gezeigt.length === 0) return;
+            e.preventDefault();
+            aktiv = e.key === 'ArrowDown'
+                ? Math.min(aktiv + 1, gezeigt.length - 1)
+                : Math.max(aktiv - 1, 0);
+            markieren();
+            return;
+        }
+
+        if (e.key === 'Escape') {
+            geistSetzen('', '');
+            schliessen();
+            return;
+        }
+
+        if (e.key !== 'Enter') return;
+
+        // Enter bestätigt: erst den markierten Eintrag, sonst die graue
+        // Ergänzung. Beides schreibt den vollen Namen ins Feld - danach
+        // schickt das Formular ganz gewöhnlich ab.
+        if (aktiv >= 0) {
+            e.preventDefault();
+            nehmen(gezeigt[aktiv]);
+            return;
+        }
+        if (ergaenzung !== '') {
+            feld.value = ergaenzung;
+            geistSetzen('', '');
+            schliessen();
+        }
+    });
+
+    liste.addEventListener('click', (e) => {
+        const li = e.target.closest('li[role=option]');
+        if (!li) return;
+        nehmen(gezeigt[Number(li.dataset.i)]);
+    });
+
+    // Wer woandershin fasst, will die Liste nicht mehr sehen.
+    document.addEventListener('click', (e) => {
+        if (!box.contains(e.target)) schliessen();
+    });
+}
+
+initMemberSearch();
 
 // --------------------------------------------------- Zeile als Knopf
 
@@ -529,6 +724,57 @@ initStudentAdd();
  * einmal entstehen - und ein Wort mit einer spitzen Klammer darin kann die
  * Tabelle so nicht zerlegen.
  */
+/**
+ * Der Titel der Lerneinheit, an Ort und Stelle.
+ *
+ * Ein Druck auf den Stift macht aus der Ueberschrift ein Eingabefeld, mit
+ * Haken zum Sichern und Kreuz zum Verwerfen. Vorher stand dafuer am Fuss
+ * der Seite eine zweite Zeile mit demselben Titel darin - dieselbe Sache an
+ * zwei Stellen, zwei Bildschirme voneinander entfernt.
+ *
+ * Ohne JavaScript steht alles nebeneinander da: Name, Feld, alle drei
+ * Knoepfe. Das ist haesslich, aber bedienbar - und genau in dieser
+ * Reihenfolge ist es richtig. Das Skript blendet um, was gerade nicht
+ * gebraucht wird.
+ */
+function initUnitTitle() {
+    const feld    = document.querySelector('.einheitfeld');
+    const name    = document.querySelector('[data-titel]');
+    const stift   = document.querySelector('[data-rename]');
+    const sichern = document.querySelector('[data-rename-save]');
+    const weg     = document.querySelector('[data-rename-cancel]');
+    if (!feld || !name || !stift || !sichern || !weg) return;
+
+    const urtext = feld.value;
+
+    const zeigen = (bearbeiten) => {
+        name.hidden    = bearbeiten;
+        stift.hidden   = bearbeiten;
+        feld.hidden    = !bearbeiten;
+        sichern.hidden = !bearbeiten;
+        weg.hidden     = !bearbeiten;
+        if (bearbeiten) {
+            feld.focus();
+            feld.select();
+        }
+    };
+
+    zeigen(false);
+
+    stift.addEventListener('click', () => zeigen(true));
+    weg.addEventListener('click', () => { feld.value = urtext; zeigen(false); });
+
+    // Escape wie das Kreuz - und wie beim Aendern einer Vokabel.
+    feld.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        e.preventDefault();
+        feld.value = urtext;
+        zeigen(false);
+    });
+}
+
+initUnitTitle();
+
 function initVocabEdit() {
     const tabelle = document.getElementById('freigabe');
     if (!tabelle) return;

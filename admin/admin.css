@@ -65,7 +65,51 @@ body.admin { background: var(--bg); }
     flex-wrap: wrap;
     margin-bottom: 18px;
 }
-.titelzeile h1 { margin: 0; }
+.titelzeile h1 {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+/*
+ * Die Ueberschrift einer Lerneinheit: "Englisch - 5B > Unit 4".
+ *
+ * Der Kurs davor ist ein Knopf zurueck, und er sieht auch nach einem aus -
+ * ein unterstrichenes Wort in einer Ueberschrift liest man als
+ * Ueberschrift. Kleiner als der Name der Lerneinheit: Die steht hier im
+ * Mittelpunkt, der Kurs ist der Weg dorthin zurueck.
+ */
+.kursknopf {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text-soft);
+    font-size: .95rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.kursknopf:hover { background: var(--surface-2); color: var(--text); }
+.titelsep { color: var(--text-soft); font-weight: 400; }
+
+.einheitfeld {
+    margin: 0;
+    font: inherit;
+    font-size: 1.1rem;
+    padding: 4px 10px;
+    min-width: 12ch;
+    max-width: 100%;
+    flex: 1 1 14ch;
+}
+.titelzeile .iconbtn { width: 34px; height: 34px; font-size: 1rem; }
+.titelzeile .iconbtn.gut { border-color: var(--accent); color: var(--accent); }
 
 /* Die beiden Wege zum Einlesen stehen nebeneinander, nicht untereinander -
    sie sind gleichwertig, und zwei Knoepfe uebereinander lesen sich wie
@@ -1045,6 +1089,119 @@ details.kursealle[open] > summary { margin-bottom: 12px; }
    steht neben Karten mit Knoepfen darin und waere sonst halb so hoch. */
 .kurskarten .wahlkarte.neuerkurs { min-height: 132px; }
 
+/* --------------------------------------------- Lerneinheit erweitern
+ *
+ * Drei gleichwertige Wege nebeneinander: von Hand, aus Dateien, mit dem
+ * Telefon. Dasselbe Raster wie die Kurskarten - eine Wahl und ihr Ergebnis
+ * sollen gleich aussehen -, aber oben ausgerichtet: Die erste Karte klappt
+ * auf, die beiden anderen bleiben, wie sie sind.
+ */
+.erweitern {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 14px;
+    align-items: start;
+    margin-bottom: 20px;
+}
+.erweiternkarte {
+    margin: 0;
+    display: block;
+    width: 100%;
+    text-align: left;
+    color: inherit;
+    text-decoration: none;
+    font: inherit;
+    cursor: pointer;
+}
+.erweiternkarte:hover { border-color: var(--accent); background: var(--surface-2); }
+.erweiternkarte:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.erweiternkarte > summary,
+a.erweiternkarte, button.erweiternkarte {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+}
+.erweiternkarte > summary { cursor: pointer; list-style: none; }
+.erweiternkarte > summary::-webkit-details-marker { display: none; }
+.erweiternkarte .wahltext {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.erweiternkarte strong { font-size: 1rem; }
+
+/* Das Formular darin: erst wenn aufgeklappt, dann untereinander. */
+.handform { margin-top: 14px; }
+.handform label { display: block; margin-bottom: 4px; }
+.handform input[type=text] { margin: 0 0 12px; width: 100%; }
+.handform .btn { margin: 0; }
+
+/* ------------------------------------------------- Wen aufnehmen?
+ *
+ * Ein Suchfeld mit Vorschlagsliste und grauer Ergaenzung. Das Graue liegt
+ * als zweites Element UNTER dem Feld, in derselben Schrift und an derselben
+ * Stelle - ein Eingabefeld kann nicht zwei Farben zugleich. Deshalb muessen
+ * Schrift, Innenabstand und Rahmen auf beiden Seiten gleich sein, sonst
+ * steht die Ergaenzung neben dem Getippten statt dahinter.
+ */
+.suchfeld { position: relative; }
+.suchfeld .feldbox { position: relative; display: block; flex: 1 1 auto; min-width: 0; }
+.suchfeld input[type=text] { position: relative; background: none; width: 100%; }
+
+.suchfeld .geist {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    padding: 7px 11px;
+    font-size: 15px;
+    color: var(--text-soft);
+    white-space: pre;
+    overflow: hidden;
+    pointer-events: none;
+}
+.suchfeld .geist i { visibility: hidden; font-style: normal; }
+
+/*
+ * Die Liste haengt nicht in der Tabelle.
+ *
+ * table.data traegt overflow: hidden fuer die runden Ecken, und das
+ * schneidet jedes Kind mit position: absolute ab - das Feld steht
+ * ausgerechnet in der letzten Zeile, die Liste waere zu drei Vierteln weg.
+ * Mit position: fixed haengt sie an keinem Vorfahren mehr; dafuer setzt
+ * teacher.js ihre Lage und fuehrt sie beim Rollen mit. Dieselbe Loesung
+ * wie beim Sprachfeld, und aus demselben Grund.
+ */
+.suchfeld .vorschlaege {
+    position: fixed;
+    z-index: 30;
+    top: 0;
+    left: 0;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    max-height: 260px;
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, .12);
+}
+.suchfeld .vorschlaege li {
+    padding: 8px 10px;
+    border-radius: 7px;
+    cursor: pointer;
+}
+.suchfeld .vorschlaege li.on,
+.suchfeld .vorschlaege li:hover { background: var(--surface-2); }
+.suchfeld .vorschlaege li.leertreffer {
+    color: var(--text-soft);
+    font-size: .88rem;
+    cursor: default;
+}
+.suchfeld .vorschlaege li.leertreffer:hover { background: none; }
+
 /* Anlegen ohne Tabelle darum: ein Feld, ein Knopf, eine Zeile. */
 .anlegezeile {
     display: flex;
@@ -1313,7 +1470,8 @@ a.rowmain:hover { text-decoration: underline; }
  * Zeile, obwohl er erst beim Bearbeiten auftauchen soll. Dasselbe gilt
  * fuer alles andere, dem eine display-Regel gegeben wurde.
  */
-.iconaction[hidden], .btn[hidden], .coursetitle[hidden] { display: none !important; }
+.iconaction[hidden], .btn[hidden], .coursetitle[hidden],
+.iconbtn[hidden], .einheitfeld[hidden], .einheitname[hidden] { display: none !important; }
 
 /* Eine Vokabelzeile im Bearbeitungszustand. Die Felder ersetzen den Text
    an Ort und Stelle - keine zweite Zeile, kein Fenster. */

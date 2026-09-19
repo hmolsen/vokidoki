@@ -30,6 +30,9 @@ export async function pruefe(f, aus) {
             return {
                 zeilen:   document.querySelectorAll('#freigabe tr[data-pos]').length,
                 anlegen:  !!document.querySelector('#freigabe tr.newrow input[name="new_f"]'),
+                erweitern: document.querySelectorAll('.erweiternkarte').length,
+                vonHand:  !!document.querySelector('.handform input[name="new_f"]'),
+                zu:       document.querySelector('details.erweiternkarte')?.open === false,
                 aendern:  sichtbar('#freigabe [data-edit]'),
                 sichern:  sichtbar('#freigabe [data-save]'),
                 felder:   sichtbar('#freigabe input[name="edit_f"]'),
@@ -37,8 +40,20 @@ export async function pruefe(f, aus) {
             };
         })()`);
 
-        ok('Die Vokabeltabelle hat eine Anlegezeile', ruhe.anlegen,
-           'so wie jede andere Tabelle auch');
+        /*
+         * Die Anlegezeile stand bis hierher als letzte Zeile IN der
+         * Freigabetabelle - am falschen Ort: Die Tabelle zeigt, was
+         * freigegeben ist, der Balken laeuft durch sie hindurch, und eine
+         * Zeile mit zwei leeren Feldern mittendrin sieht aus wie eine
+         * Vokabel ohne Wort.
+         */
+        ok('In der Tabelle steht keine Anlegezeile mehr', !ruhe.anlegen,
+           'sie gehört unter die Tabelle, nicht hinein');
+        ok('Dafür gibt es drei Wege, die Lerneinheit zu erweitern',
+           ruhe.erweitern === 3, String(ruhe.erweitern));
+        ok('Von Hand ist einer davon', ruhe.vonHand);
+        ok('Und liegt zugeklappt da', ruhe.zu,
+           'zwei leere Felder sind kein Inhalt');
         ok('Je Zeile steht "Ändern" da', ruhe.aendern === ruhe.zeilen,
            ruhe.aendern + ' von ' + ruhe.zeilen);
         ok('"Sichern" steht noch nirgends', ruhe.sichern === 0,
@@ -149,6 +164,7 @@ export async function pruefe(f, aus) {
             `document.querySelectorAll('#freigabe tr[data-pos]').length`);
 
         await b.js(`(() => {
+            document.querySelector('details.erweiternkarte').open = true;
             document.querySelector('input[name="new_f"]').value = 'zebra';
             document.querySelector('input[name="new_n"]').value = 'Zebra';
             document.querySelector('[name="add_vocab"]').click();
