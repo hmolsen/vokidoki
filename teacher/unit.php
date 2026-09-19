@@ -38,7 +38,7 @@ $unit = $schoolId === 0 ? null : q1(
 
 if ($unit === null) {
     teacher_flash('Diese Lerneinheit gibt es nicht.', 'bad');
-    teacher_redirect('classes.php');
+    teacher_redirect('index.php');
 }
 
 $zurueck = 'unit.php?id=' . $unitId;
@@ -239,18 +239,16 @@ $zustand = sentence_status($unitId, (int) $user['id']);
 /*
  * Der Pfad statt einer Fliesstextzeile.
  *
- * Klasse, Kurs, Lerneinheit - drei Ebenen, und die beiden oberen sind von
- * hier aus erreichbar. Vorher stand dasselbe als "Englisch - Klasse 7b -
- * zurueck zum Kurs" untereinander, wobei nur das letzte Stueck ein Link war
- * und als solcher kaum zu erkennen.
+ * Schule, Kurs, Lerneinheit - und der Kurs klappt zu den anderen eigenen
+ * auf. Vorher stand dasselbe als "Englisch - Klasse 7b - zurueck zum Kurs"
+ * untereinander, wobei nur das letzte Stueck ein Link war und als solcher
+ * kaum zu erkennen.
+ *
+ * Die Klasse stand hier einmal davor. Sie ist keine Ebene mehr: Von einer
+ * Lerneinheit fuehrt kein Weg zur Klassenliste, den jemand gehen wollte -
+ * gemeint ist immer der Kurs.
  */
 $pfad = [];
-if (($unit['class_name'] ?? null) !== null && ($unit['class_id'] ?? null) !== null) {
-    $pfad[] = [
-        'label' => 'Klasse ' . $unit['class_name'],
-        'href'  => teacher_url('class.php') . '?id=' . (int) $unit['class_id'],
-    ];
-}
 $pfad[] = teacher_course_crumb($user, [
     'id'         => (int) $unit['course_id'],
     'name'       => (string) $unit['course_name'],

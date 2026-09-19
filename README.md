@@ -251,6 +251,38 @@ unterrichte *ich*" fehlte bis dahin ganz; nichts im Quelltext filterte je
 nach Konto **und** Rolle, obwohl der Index dafür seit der Schulumstellung
 bereitlag.
 
+**Und die letzte Kachel legt einen neuen an.** Ein Kurs entstand vorher in
+einer Anlegezeile am Fuß der Kurstabelle *einer Klasse* — wer einen wollte,
+musste erst wissen, dass Kurse in Klassen wohnen, dann die Klassenliste
+finden, dann die richtige Klasse öffnen. Drei Entscheidungen, von denen nur
+eine mit dem Kurs zu tun hatte. Einen Kurs *ohne* Klasse gab es über die
+Oberfläche gar nicht mehr, obwohl das Datenmodell ihn kann.
+
+Jetzt fragt `teacher/neu.php` das, was wirklich zu entscheiden ist, und zwar
+eins nach dem anderen:
+
+1. **Für welche Klasse?** Alle Klassen der Schule als Kacheln, und
+   „Kurs ohne Klasse" als eine davon — nicht als Kleingedrucktes darunter.
+   Auf jeder Kachel steht, was die Wahl bedeutet („28 Kinder kommen mit in
+   den Kurs" gegen „Bleibt leer — Kinder nimmst du einzeln auf"). Eine
+   Klasse, die es noch nicht gibt, lässt sich hier anlegen; sonst wäre der
+   erste Schritt für eine neue Lehrkraft eine Sackgasse.
+2. **Für welche Sprache?** Die fünf Schulsprachen als Kacheln — so war es
+   in der Familien-App —, alle übrigen im durchsuchbaren Feld darunter.
+   Jede Kachel ist ein Absendeknopf, der seinen Sprachnamen trägt;
+   abgeschickt wird nur der gedrückte. Das kann HTML von sich aus.
+
+Danach steht der Kurs, und man ist da, wo man hinwollte: auf seiner Seite.
+Der Name ergibt sich aus beidem („Englisch - 5B"), die Flagge aus der
+Sprachliste — sie ist eine Eigenschaft der Sprache und keine Entscheidung,
+die jemand treffen soll. Gefragt wird erst, wenn genau dieser Name schon
+vergeben ist; dann ist das keine Zusatzfrage, sondern die Antwort auf ein
+Problem.
+
+Jeder Schritt ist eine eigene Adresse. Das ist nicht Geschmack: Zurück-Knopf,
+Lesezeichen und Neuladen sollen tun, was man von ihnen erwartet — und ohne
+JavaScript muss es genauso gehen.
+
 **Und die Anmeldung führt dorthin.** Es gibt zwei Wege hinein — das
 Formular des Lehrkraft-Bereichs und die Anmeldung der App —, und der zweite
 kannte nur ein Ziel: die Kachelansicht. Eine Lehrkraft landete damit in der
@@ -269,13 +301,28 @@ Zuklappen von sich aus, mit Tastatur und Vorleseprogramm. Wer nur einen
 eigenen Kurs hat, bekommt keine Liste — ein Menü mit einem Eintrag ist eines
 zu viel.
 
-Die Navigation **ist** der Pfad: Oben links der Name der Schule, er führt
-auf die eigenen Kurse; rechts davon wächst er mit — `Grundschule
-Musterhausen › Klasse 5B › Englisch - 5B › Unit 4`. Feste Reiter gibt es
-nicht.
+Die Navigation **ist** der Pfad, und er ist kurz: `Grundschule Musterhausen
+› Englisch - 5B › Unit 4`. Oben links der Name der Schule, er führt auf die
+eigenen Kurse; rechts davon wächst er mit. Feste Reiter gibt es nicht.
 
-Klassen und Kurse hängen weiter zusammen: In der Klasse stehen zuerst ihre
-Kurse, darunter ihre Kinder, und beides legt man dort an.
+**Die Klasse steht nicht mehr darin.** Sie stand einmal dazwischen —
+`Schule › Klasse 5B › Englisch - 5B` —, und das bildete die Datenstruktur
+ab, nicht den Weg: Eine Klasse öffnet man zweimal im Jahr, einen Kurs jede
+Woche, und beim Wechsel zwischen zwei eigenen Kursen war der Umweg über die
+Klasse genau das. Die Klasse ist deshalb kein Halt mehr, sondern ein Ziel
+wie jedes andere: Sie steht dort, wo es um ihre Kinder geht.
+
+Von der Kursseite führt „Klasse 5B verwalten" dorthin, und der Kurs reist
+in der Adresse mit (`class.php?id=…&kurs=…`). Der Pfad in der Klasse lautet
+dann `Schule › Englisch - 5B › Klasse 5B` statt `Schule › Klassen › Klasse
+5B`, und daneben steht ein Knopf zurück. Wer ohne Kurs kommt — über
+„Verwaltung: Klassen und Kinder" am Fuß der Startseite —, bekommt den
+anderen Pfad. Beides sind echte Wege, und der Pfad zeigt den, den man
+gegangen ist.
+
+Die Klassenliste ist damit das, wonach sie aussieht: die Liste der Klassen,
+in denen Kinder angelegt und Zettel gedruckt werden. Kurse stehen dort keine
+mehr — auch nicht die ohne Klasse; **alle** Kurse stehen auf der Startseite.
 
 Rechts in der Leiste stehen der eigene Name, ein Zahnrad und ein Knopf zum
 Abmelden. Das Zahnrad führt in dieselben Einstellungen wie in der App
@@ -604,7 +651,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-905 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+934 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
 Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
 Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
 hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
@@ -666,7 +713,7 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 1115 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 1144 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
 
@@ -684,7 +731,7 @@ Quelltext völlig richtig aussahen:
 - Der Zettel für die ganze Klasse wurde erst beim nächsten Laden anklickbar.
 
 ```bash
-node tests/browser/lauf.mjs --fixture            # 113 Prüfungen
+node tests/browser/lauf.mjs --fixture            # 141 Prüfungen
 node tests/browser/lauf.mjs --fixture bilder/    # dazu Bildschirmfotos
 ```
 

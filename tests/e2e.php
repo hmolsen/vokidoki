@@ -3949,32 +3949,86 @@ ok('Mit zwei Kindern darin',
    count(class_members_list($kursKlasseId)) === 2);
 
 $res = teacherGet('class.php?id=' . $kursKlasseId);
-ok('Die Klasse bietet das Anlegen eines Kurses an',
-   str_contains($res['body'], 'name="create_course"'));
+ok('Die Klasse fuehrt zum Assistenten',
+   str_contains($res['body'], 'neu.php?klasse=' . $kursKlasseId),
+   'der Kurs entsteht dort, nicht mehr in einer Anlegezeile hier');
+ok('Und legt selbst keinen Kurs mehr an',
+   !str_contains($res['body'], 'name="create_course"'));
+
+// ---- Schritt 1: Fuer welche Klasse?
+
+$res = teacherGet('neu.php');
+ok('Der Assistent fragt zuerst nach der Klasse',
+   str_contains($res['body'], '<h1>Für welche Klasse?</h1>'));
+ok('Und sagt, wo man steht', str_contains($res['body'], 'Schritt 1 von 2'));
+ok('Die Klassen der Schule stehen zur Wahl',
+   str_contains($res['body'], 'neu.php?klasse=' . $kursKlasseId)
+   && str_contains($res['body'], h($kursKlasse)));
+ok('Und auf der Kachel steht, was die Wahl bedeutet',
+   str_contains($res['body'], 'kommen mit in den Kurs'),
+   'sonst muss man raten, was die Klasse mit dem Kurs zu tun hat');
+ok('"Kurs ohne Klasse" steht daneben, nicht darunter',
+   str_contains($res['body'], 'neu.php?klasse=0')
+   && str_contains($res['body'], 'Kurs ohne Klasse'));
+ok('Eine Klasse laesst sich hier anlegen',
+   str_contains($res['body'], 'name="neue_klasse"'),
+   'sonst ist der erste Schritt fuer eine neue Lehrkraft eine Sackgasse');
+ok('Auf Schritt 1 ist noch keine Sprache zu sehen',
+   !str_contains($res['body'], 'data-picker'),
+   'eine Frage je Seite');
+
+// Eine Klasse von hier aus: Danach geht es gleich weiter zur Sprache.
+$ausAssistent = 'Assi' . bin2hex(random_bytes(2));
+$res = teacherRequest($base . '/teacher/neu.php', [
+    'neue_klasse' => '1', 'klassenname' => $ausAssistent, 'csrf' => $lehrerCsrf,
+]);
+$assiKlasseId = (int) qv('SELECT id FROM classes WHERE school_id = ? AND name = ?',
+    [(int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]), $ausAssistent]);
+ok('Eine Klasse entsteht im Assistenten', $assiKlasseId > 0);
+ok('Und der Assistent steht danach bei der Sprache',
+   str_contains($res['body'], '<h1>Für welche Sprache?</h1>'),
+   'wer beim Kursanlegen eine Klasse anlegt, will sie auch nehmen');
+
+// ---- Schritt 2: Fuer welche Sprache?
+
+$res = teacherGet('neu.php?klasse=' . $kursKlasseId);
+ok('Schritt 2 fragt nach der Sprache',
+   str_contains($res['body'], '<h1>Für welche Sprache?</h1>'));
+ok('Und sagt, wo man steht', str_contains($res['body'], 'Schritt 2 von 2'));
+ok('Die Klasse steht im Pfad', str_contains($res['body'], 'Klasse ' . h($kursKlasse)));
 
 /*
- * Das Formular selbst. Was das Skript daraus macht - ein durchsuchbares
- * Feld, der Name als Text mit Stift - laesst sich von hier aus nicht
- * ausfuehren; geprueft wird, dass die Bausteine da sind, auf denen es
- * aufsetzt. Ohne sie faellt es auf ein gewoehnliches Auswahlfeld zurueck,
- * und auch das muss bedienbar bleiben.
+ * Die fuenf Schulsprachen als Kacheln - so wie in der Familien-App. Jede
+ * ist ein Absendeknopf, der seinen Namen traegt; abgeschickt wird nur der
+ * gedrueckte. Das kann HTML von sich aus.
  */
-ok('Die Sprachen stehen als Auswahlfeld im HTML',
+ok('Die fuenf Schulsprachen stehen als Kacheln da',
+   substr_count($res['body'], 'class="card wahlkarte" name="sprache"') === 5,
+   substr_count($res['body'], 'class="card wahlkarte" name="sprache"') . ' statt 5');
+ok('Englisch ist eine davon',
+   str_contains($res['body'], 'name="sprache" value="Englisch"'));
+ok('Auf der Kachel steht, wie der Kurs heissen wird',
+   str_contains($res['body'], 'Englisch - ' . h($kursKlasse)),
+   'sonst ist der Name eine Ueberraschung');
+
+/*
+ * Und darunter alle uebrigen. Was das Skript daraus macht - ein
+ * durchsuchbares Feld - laesst sich von hier aus nicht ausfuehren; geprueft
+ * wird, dass die Bausteine da sind. Ohne sie faellt es auf ein gewoehnliches
+ * Auswahlfeld zurueck, und auch das muss bedienbar bleiben.
+ */
+ok('Alle uebrigen Sprachen stehen als Auswahlfeld im HTML',
    substr_count($res['body'], 'data-flag=') > 80,
    substr_count($res['body'], 'data-flag=') . ' Eintraege');
-ok('Die fuenf Schulsprachen sind als solche gekennzeichnet',
+ok('Die fuenf Schulsprachen sind darin als solche gekennzeichnet',
    substr_count($res['body'], 'data-top="1"') === 5,
    substr_count($res['body'], 'data-top="1"') . ' statt 5');
-ok('Es gibt kein Feld fuer die Flagge mehr',
-   !str_contains($res['body'], 'name="flag"'));
-ok('Der Kursname steht als Text da',
-   str_contains($res['body'], 'data-coursename'));
-ok('Mit einem Stift daneben', str_contains($res['body'], 'data-editname'));
-ok('Und das Namensfeld ist zunaechst verborgen',
-   preg_match('/<input type="text" name="name"[^>]*hidden/', $res['body']) === 1);
-ok('Die Klasse reist am Formular mit, statt ausgewaehlt zu werden',
-   preg_match('/data-classname="[^"]+"/', $res['body']) === 1,
-   'der Kurs entsteht in der Klasse - da gibt es nichts mehr auszuwaehlen');
+ok('Es gibt kein Feld fuer die Flagge',
+   !str_contains($res['body'], 'name="flag"'),
+   'eine Flagge ist eine Eigenschaft der Sprache, keine Entscheidung');
+ok('Und im Regelfall auch keines fuer den Namen',
+   !str_contains($res['body'], 'name="name"'),
+   'der Name ergibt sich aus Sprache und Klasse');
 ok('Das Skript wird geladen', str_contains($res['body'], 'teacher.js?v='));
 
 $skript = http($base . '/teacher/teacher.js');
@@ -3987,9 +4041,9 @@ ok('Es kennt beide Schreibweisen ohne Umlaute',
  * Die aufgeklappte Liste darf die Tabelle nicht abschneiden.
  *
  * table.data traegt overflow: hidden fuer die runden Ecken - ein Kind mit
- * position: absolute wird dort gekappt, und das Auswahlfeld steht
- * ausgerechnet in der letzten Zeile. Mit position: fixed haengt das Panel
- * an keinem Vorfahren mehr; dafuer muss seine Lage von Hand gesetzt werden.
+ * position: absolute wird dort gekappt. Mit position: fixed haengt das
+ * Panel an keinem Vorfahren mehr; dafuer muss seine Lage von Hand gesetzt
+ * werden.
  */
 $pickerCss = (string) file_get_contents(__DIR__ . '/../admin/admin.css');
 ok('Die aufgeklappte Liste haengt nicht in der Tabelle',
@@ -4000,16 +4054,10 @@ ok('Und das Skript setzt ihre Lage',
    && str_contains($skript['body'], "addEventListener('scroll'"),
    'ein festes Panel muss beim Scrollen mitgefuehrt werden');
 
-/*
- * Ohne Flagge im Formular: Die kommt aus der Sprachliste. Eine Flagge ist
- * eine Eigenschaft der Sprache und keine Entscheidung, die eine Lehrkraft
- * treffen soll.
- */
-$res = teacherRequest($base . '/teacher/class.php?id=' . $kursKlasseId, [
-    'create_course' => '1',
-    'language'      => 'Englisch',
-    'class_id'      => $kursKlasseId,
-    'csrf'          => $lehrerCsrf,
+// ---- Und dann steht der Kurs.
+
+$res = teacherRequest($base . '/teacher/neu.php', [
+    'klasse' => $kursKlasseId, 'sprache' => 'Englisch', 'csrf' => $lehrerCsrf,
 ]);
 $neuerKurs = q1('SELECT * FROM courses WHERE name = ?', ['Englisch - ' . $kursKlasse]);
 ok('Der Kurs heisst "Sprache - Klasse"', $neuerKurs !== null,
@@ -4021,6 +4069,10 @@ ok('Er haengt an der Klasse',
 ok('Und an der Schule der Lehrkraft',
    (int) ($neuerKurs['school_id'] ?? 0)
    === (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]));
+ok('Danach steht man auf der Kursseite',
+   str_contains($res['body'], 'So sieht es die Klasse')
+   && str_contains($res['body'], 'Lerneinheiten'),
+   'der Assistent endet dort, wo man hinwollte');
 
 $eigeneSprache = q1('SELECT * FROM languages WHERE id = ?',
                     [(int) ($neuerKurs['language_id'] ?? 0)]);
@@ -4046,28 +4098,41 @@ ok('Und die Kinder der Klasse als SchuelerInnen',
    ($rollen['Ida B.'] ?? '') === 'student' && ($rollen['Tom F.'] ?? '') === 'student',
    json_encode($rollen));
 
-// Zweimal derselbe Kurs geht nicht.
+// ---- Zweimal derselbe Kurs: abgelehnt, aber nicht als Sackgasse.
+
 $vorher = (int) qv('SELECT COUNT(*) FROM courses');
-$res = teacherRequest($base . '/teacher/class.php?id=' . $kursKlasseId, [
-    'create_course' => '1', 'language' => 'Englisch',
-    'class_id'      => $kursKlasseId, 'csrf' => $lehrerCsrf,
+$res = teacherRequest($base . '/teacher/neu.php', [
+    'klasse' => $kursKlasseId, 'sprache' => 'Englisch', 'csrf' => $lehrerCsrf,
 ]);
 ok('Denselben Kurs zweimal anzulegen wird abgelehnt',
    (int) qv('SELECT COUNT(*) FROM courses') === $vorher
    && str_contains($res['body'], 'gibt es an dieser Schule schon'));
+ok('Und zwar auf Schritt 2, nicht zurueck auf Schritt 1',
+   str_contains($res['body'], '<h1>Für welche Sprache?</h1>'),
+   'die Klasse steht ja schon fest');
+ok('Erst jetzt fragt der Assistent nach einem Namen',
+   str_contains($res['body'], 'name="name"'),
+   'keine Zusatzfrage, sondern die Antwort auf ein Problem');
+
+$res = teacherRequest($base . '/teacher/neu.php', [
+    'klasse' => $kursKlasseId, 'sprache' => 'Englisch',
+    'name'   => 'Englisch - ' . $kursKlasse . ' (zweite Gruppe)', 'csrf' => $lehrerCsrf,
+]);
+$zweiteGruppe = q1('SELECT * FROM courses WHERE name = ?',
+                   ['Englisch - ' . $kursKlasse . ' (zweite Gruppe)']);
+ok('Mit eigenem Namen geht es dann doch', $zweiteGruppe !== null);
+q('DELETE FROM languages WHERE id = ?', [(int) ($zweiteGruppe['language_id'] ?? 0)]);
+q('DELETE FROM courses   WHERE id = ?', [(int) ($zweiteGruppe['id'] ?? 0)]);
 
 /*
  * Eine zweite Klasse darf dieselbe Sprache haben - mit eigenen Unterlagen.
- * Angelegt wird sie in ihrer eigenen Klasse; einen Kurs "ohne Klasse" gibt
- * es ueber die Oberflaeche nicht mehr.
  */
 $zweiteKlasse = 'Kurs8' . bin2hex(random_bytes(2));
 $zweiteKlasseId = (int) (class_create(
     (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]), $zweiteKlasse,
 )['id'] ?? 0);
-$res = teacherRequest($base . '/teacher/class.php?id=' . $zweiteKlasseId, [
-    'create_course' => '1', 'language' => 'Englisch',
-    'class_id'      => $zweiteKlasseId, 'csrf' => $lehrerCsrf,
+$res = teacherRequest($base . '/teacher/neu.php', [
+    'klasse' => $zweiteKlasseId, 'sprache' => 'Englisch', 'csrf' => $lehrerCsrf,
 ]);
 $zweiter = q1('SELECT * FROM courses WHERE name = ?', ['Englisch - ' . $zweiteKlasse]);
 ok('Eine zweite Gruppe darf dieselbe Sprache lernen', $zweiter !== null,
@@ -4075,6 +4140,66 @@ ok('Eine zweite Gruppe darf dieselbe Sprache lernen', $zweiter !== null,
 ok('Und bekommt dafuer eine eigene Sprachzeile',
    $zweiter !== null
    && (int) $zweiter['language_id'] !== (int) ($neuerKurs['language_id'] ?? 0));
+
+// ---- Und ein Kurs ganz ohne Klasse.
+
+/*
+ * Ueber die Oberflaeche gab es ihn eine Zeit lang nicht mehr, obwohl das
+ * Datenmodell ihn kann: Kurse entstanden nur noch in einer Klasse. Fuer
+ * eine Arbeitsgemeinschaft quer durch die Jahrgaenge ist das die falsche
+ * Form - jetzt ist es wieder eine Kachel wie jede andere.
+ */
+$ohneName = 'Ohnisch' . bin2hex(random_bytes(2));
+$res = teacherRequest($base . '/teacher/neu.php', [
+    'klasse' => '0', 'sprache' => $ohneName, 'csrf' => $lehrerCsrf,
+]);
+$ohneKurs = q1('SELECT * FROM courses WHERE name = ?', [$ohneName]);
+ok('Ein Kurs ohne Klasse laesst sich anlegen', $ohneKurs !== null, $ohneName);
+ok('Er haengt an keiner Klasse',
+   $ohneKurs !== null && $ohneKurs['class_id'] === null);
+ok('Und heisst nur nach der Sprache', ($ohneKurs['name'] ?? '') === $ohneName);
+ok('Drin ist erst einmal nur die Lehrkraft',
+   count(course_members_list((int) ($ohneKurs['id'] ?? 0))) === 1,
+   'Kinder nimmt man einzeln auf');
+ok('Eine freie Sprache bekommt die Weltkugel',
+   (string) qv('SELECT flag_emoji FROM languages WHERE id = ?',
+               [(int) ($ohneKurs['language_id'] ?? 0)]) === "\u{1F310}");
+
+$res = teacherGet('course.php?id=' . (int) ($ohneKurs['id'] ?? 0));
+ok('Auch er fuehrt in die Klassenverwaltung',
+   str_contains($res['body'], 'classes.php'),
+   'von der Hauptansicht aus muss alles erreichbar sein');
+ok('Und er bietet an, Kinder der Schule einzeln aufzunehmen',
+   str_contains($res['body'], 'name="add_member_by_name"')
+   && str_contains($res['body'], 'list="kandidaten"'),
+   'sonst bleibt ein Kurs ohne Klasse fuer immer leer');
+ok('Die Vorschlagsliste nennt Kinder der Schule',
+   str_contains($res['body'], '<option value="Ida B."'),
+   'wer schon im Kurs ist, steht nicht darin - Ida ist es nicht');
+
+q('DELETE FROM languages WHERE id = ?', [(int) ($ohneKurs['language_id'] ?? 0)]);
+q('DELETE FROM courses   WHERE id = ?', [(int) ($ohneKurs['id'] ?? 0)]);
+
+// ---- Die Grenze: eine Klasse einer anderen Schule.
+
+q("INSERT IGNORE INTO schools (name) VALUES ('Fremde Schule 9')");
+$fremdeSchule9 = (int) qv("SELECT id FROM schools WHERE name = 'Fremde Schule 9'");
+$fremdeKlasse9 = class_create($fremdeSchule9, 'Fremdklasse9');
+$fremdeKlasse9Id = (int) ($fremdeKlasse9['id'] ?? 0);
+
+$kurseVorher = (int) qv('SELECT COUNT(*) FROM courses');
+$res = teacherRequest($base . '/teacher/neu.php', [
+    'klasse' => $fremdeKlasse9Id, 'sprache' => 'Englisch', 'csrf' => $lehrerCsrf,
+]);
+ok('Fuer eine Klasse einer anderen Schule entsteht kein Kurs',
+   (int) qv('SELECT COUNT(*) FROM courses') === $kurseVorher);
+ok('Und es heisst nur, dass es sie nicht gibt',
+   str_contains($res['body'], 'Diese Klasse gibt es nicht'),
+   'wer sie nicht sehen darf, soll nicht erfahren, dass es sie gibt');
+
+q('DELETE FROM classes WHERE id = ?', [$fremdeKlasse9Id]);
+q('DELETE FROM schools WHERE id = ?', [$fremdeSchule9]);
+q('DELETE FROM classes WHERE id = ?', [$assiKlasseId]);
 
 // ---- Mitglieder im Kurs pflegen.
 
@@ -5491,7 +5616,9 @@ ok('Die Kurse stehen ueber den Kindern',
    "Kurse $posKurse, Kinder $posKinder");
 
 ok('Die Kurstabelle hat eine Anlegezeile',
-   preg_match('/<tr class="newrow">.*?name="create_course"/s', $res['body']) === 1);
+   preg_match('/<tr class="newrow">.*?neu\.php\?klasse=' . $umbauKlasseId . '/s',
+              $res['body']) === 1,
+   'sie legt nicht mehr selbst an, sondern fuehrt in den Assistenten');
 ok('Und die Kindertabelle auch',
    str_contains($res['body'], 'id="neuesKind"'));
 
@@ -5545,8 +5672,20 @@ ok('Ein Kurs in dieser Klasse', $umbauKursId > 0,
 
 $res = teacherGet('course.php?id=' . $umbauKursId);
 
-ok('Der Pfad fuehrt ueber die Klasse zurueck',
-   preg_match('/<a class="crumb" href="[^"]*class\.php\?id=' . $umbauKlasseId . '"/', $res['body']) === 1);
+/*
+ * Der Pfad ist kurz: Schule, Kurs. Die Klasse stand einmal dazwischen -
+ * eine Ebene, die man nur durchquerte. Jetzt ist sie ein Ziel und steht
+ * dort, wo es um ihre Kinder geht.
+ */
+ok('Der Pfad fuehrt nicht mehr ueber die Klasse',
+   preg_match('/<a class="crumb" href="[^"]*class\.php\?id=/', $res['body']) === 0,
+   'Schule > Klasse > Kurs war eine Ebene zu viel');
+ok('Sondern geradewegs von der Schule zum Kurs',
+   substr_count($res['body'], 'class="crumbsep"') === 1,
+   substr_count($res['body'], 'class="crumbsep"') . ' Trenner im Pfad');
+ok('Die Klasse ist von hier aus trotzdem erreichbar',
+   str_contains($res['body'], 'class.php?id=' . $umbauKlasseId . '&amp;kurs=' . $umbauKursId),
+   'und nimmt den Kurs mit, damit der Weg zurueck steht');
 
 /*
  * Der QR-Code im leeren Kurs fuehrt in die Einleseansicht dieses Kurses -

@@ -297,14 +297,6 @@ function teacher_crumbs(array $crumbs): void
 }
 
 /**
- * Das erste Glied des Pfades: die Schule.
- *
- * Es steht auf jeder Seite und fuehrt zur Uebersicht aller Klassen. Damit
- * ist die Schule zugleich die Wurzel der Navigation - eine Lehrkraft
- * arbeitet immer in genau einer, und ein Reiter "Klassen" neben dem Namen
- * der Schule waere dasselbe zweimal.
- */
-/**
  * Der Krumen fuer einen Kurs - mit der Liste der eigenen Kurse daran.
  *
  * Gebraucht von course.php und unit.php. Wer keinen zweiten eigenen Kurs
@@ -337,10 +329,23 @@ function teacher_course_crumb(array $user, array $kurs, bool $aktuell): array
         'label' => 'Alle Kurse der Schule',
         'href'  => teacher_url('index.php'),
     ];
+    // Und der Weg zu einem, den es noch nicht gibt - aus jedem Kurs heraus.
+    $krumen['menu'][] = [
+        'label' => '+ Neuer Kurs',
+        'href'  => teacher_url('neu.php'),
+    ];
 
     return $krumen;
 }
 
+/**
+ * Das erste Glied des Pfades: die Schule.
+ *
+ * Es steht auf jeder Seite und fuehrt auf die eigenen Kurse. Damit ist die
+ * Schule die Wurzel der Navigation - eine Lehrkraft arbeitet immer in genau
+ * einer -, und die Wurzel ist zugleich der Arbeitsplatz. Was daran haengt,
+ * sind Ziele und keine Durchgaenge: der Kurs, und von ihm aus die Klasse.
+ */
 function teacher_school_crumb(array $user): array
 {
     $name = (string) qv('SELECT name FROM schools WHERE id = ?',

@@ -30,8 +30,12 @@ export async function pruefe(f, aus) {
            'naturalWidth ' + kurs.breit + ' - die Datei fehlt');
         ok('Es ist die britische', kurs.quelle === '1f1ec-1f1e7.svg', kurs.quelle);
 
-        // ---- Das Auswahlfeld beim Anlegen eines Kurses.
-
+        /*
+         * Das Auswahlfeld steht jetzt im Kursassistenten, nicht mehr in der
+         * Anlegezeile der Klasse: Ein Kurs entsteht in zwei Schritten, und
+         * die Sprache ist der zweite.
+         */
+        await b.geh(f.basis + '/teacher/neu.php?klasse=' + f.klasse, 1400);
         await b.js(`document.querySelector('.pickbtn').click()`);
         await schlafe(600);
 

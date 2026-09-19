@@ -30,6 +30,7 @@ import { pruefe as vokabeln } from './vokabeln.mjs';
 import { pruefe as fahnen }   from './fahnen.mjs';
 import { pruefe as klasse }   from './klasse.mjs';
 import { pruefe as mobil }    from './mobil.mjs';
+import { pruefe as kursanlegen } from './kursanlegen.mjs';
 
 const hier  = dirname(fileURLToPath(import.meta.url));
 const wurzel = resolve(hier, '..', '..');
@@ -62,6 +63,8 @@ try {
     await fahnen(f, aus);
     await klasse(f, aus);
     await mobil(f, aus);
+    // Zuletzt: legt einen Kurs an, und die Navigation zaehlt vorher Karten.
+    await kursanlegen(f, aus);
 } finally {
     if (selbstAngelegt) {
         execFileSync('php', [resolve(hier, 'fixture.php'), 'weg'],

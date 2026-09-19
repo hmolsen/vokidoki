@@ -16,7 +16,23 @@ if ($klasse === null) {
     teacher_redirect('classes.php');
 }
 
-$zurück = 'class.php?id=' . $classId;
+/*
+ * Aus welchem Kurs kommt man?
+ *
+ * Die Klasse ist keine Ebene der Navigation mehr, sondern ein Ziel: Man
+ * kommt hierher, weil ein Kind fehlt oder ein Zettel gebraucht wird - und
+ * zwar fast immer aus einem Kurs. Der reist deshalb in der Adresse mit,
+ * damit der Pfad oben wieder dorthin zurueckfuehrt statt irgendwohin.
+ */
+$ausKurs = course_in_school((int) ($_GET['kurs'] ?? $_POST['kurs'] ?? 0), $schoolId);
+$anhang  = $ausKurs === null ? '' : '&kurs=' . (int) $ausKurs['id'];
+
+// Damit jedes Formular der Seite ihn mitnimmt, auch das abgeschickte.
+$kursFeld = $ausKurs === null
+    ? ''
+    : '<input type="hidden" name="kurs" value="' . (int) $ausKurs['id'] . '">';
+
+$zurück = 'class.php?id=' . $classId . $anhang;
 
 /**
  * Will der Aufrufer eine Zeile statt einer Seite?
@@ -131,39 +147,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_students'
     teacher_redirect($zurück);
 }
 
-/*
- * Einen Kurs anlegen - jetzt hier statt auf einer eigenen Kursseite.
- *
- * Die Klasse steht fest: Man ist in ihr. Auszuwaehlen bleibt die Sprache,
- * und der Name ergibt sich aus beidem, solange die Lehrkraft nichts anderes
- * eintraegt. Die Flagge kommt ebenfalls aus der Sprachliste - sie ist eine
- * Eigenschaft der Sprache und keine Entscheidung, die jemand treffen soll.
- */
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['create_course'])) {
-    teacher_csrf_check();
-
-    $sprache  = (string) ($_POST['language'] ?? '');
-    $ergebnis = course_create(
-        $user,
-        $sprache,
-        language_flag($sprache),
-        $classId,
-        (string) ($_POST['name'] ?? ''),
-    );
-
-    if (is_string($ergebnis)) {
-        teacher_flash($ergebnis, 'bad');
-        teacher_redirect($zurück);
-    }
-
-    $drin = (int) qv('SELECT COUNT(*) FROM course_members WHERE course_id = ?',
-                     [(int) $ergebnis['id']]);
-    teacher_flash(sprintf(
-        'Kurs "%s" angelegt, %d Kinder sind dabei.', $ergebnis['name'], $drin,
-    ));
-    teacher_redirect('course.php?id=' . (int) $ergebnis['id']);
-}
-
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['unlock'])) {
     teacher_csrf_check();
 
@@ -231,9 +214,16 @@ $gesperrt  = login_locked_usernames(array_column($kinder, 'username'));
 $frisch    = array_flip((array) ($_SESSION['teacher_fresh'] ?? []));
 unset($_SESSION['teacher_fresh']);
 
-teacher_head('Klasse ' . $klasse['name'], $user, [
-    ['label' => 'Klasse ' . $klasse['name'], 'href' => null],
-]);
+$pfad = $ausKurs === null
+    ? [['label' => 'Klassen', 'href' => teacher_url('classes.php')]]
+    : [teacher_course_crumb($user, $ausKurs, false)];
+$pfad[] = ['label' => 'Klasse ' . $klasse['name'], 'href' => null];
+
+teacher_head('Klasse ' . $klasse['name'], $user, $pfad,
+    $ausKurs === null ? '' : sprintf(
+        '<a class="btn small secondary" href="%s">&#8249; Zurück zum Kurs</a>',
+        h(teacher_url('course.php') . '?id=' . (int) $ausKurs['id']),
+    ));
 teacher_flash_render();
 ?>
 
@@ -292,60 +282,33 @@ teacher_flash_render();
 
     <?php
     /*
-     * Die Anlegezeile, wie in jeder anderen Tabelle auch. Die Klasse muss
-     * hier nicht mehr ausgewaehlt werden - man steht ja in ihr. Uebrig
-     * bleibt die Sprache, und der Name ergibt sich daraus.
+     * Die Anlegezeile fuehrt in den Assistenten, statt selbst eine zu sein.
+     *
+     * Hier stand einmal das ganze Formular: ein Sprachfeld, der Kursname als
+     * Text mit einem Stift daneben, ein Anlegeknopf - in einer Tabellenzeile
+     * mit vier Spalten. Es funktionierte, aber es war der einzige Ort der
+     * Anwendung, an dem ein Kurs entstehen konnte, und man musste ihn erst
+     * finden. Jetzt entsteht ein Kurs von der Startseite aus; der Weg von
+     * hier ist derselbe, nur mit der Klasse schon gesetzt.
      */
     ?>
     <tr class="newrow">
-        <td data-label="Neuer Kurs">
-            <span class="coursetitle">
+        <td colspan="5" data-label="Neuer Kurs">
+            <span class="coursetitle addbuttons">
                 <span class="cflag plus">+</span>
-                <select name="language" form="newcourse" data-picker required>
-                    <?php foreach (language_choices() as $s): ?>
-                        <option value="<?= h($s['name']) ?>"
-                                data-flag="<?= h($s['flag']) ?>"
-                                data-top="<?= $s['top'] ? '1' : '0' ?>">
-                            <?= h($s['flag'] . ' ' . $s['name']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
+                <a class="btn small" href="<?= h(teacher_url('neu.php')
+                    . '?klasse=' . $classId) ?>">
+                    Neuer Kurs für diese Klasse
+                </a>
             </span>
-        </td>
-        <td colspan="3" data-label="Name">
-            <div class="coursename">
-                <strong data-coursename></strong>
-                <button type="button" class="iconbtn" data-editname
-                        title="Namen selbst wählen" aria-label="Namen selbst wählen">&#9998;</button>
-                <input type="text" name="name" form="newcourse" maxlength="128" hidden>
-            </div>
-        </td>
-        <td class="actions">
-            <button class="iconaction primary" form="newcourse"
-                    name="create_course" value="1" title="Kurs anlegen">
-                <span aria-hidden="true">+</span> Anlegen
-            </button>
         </td>
     </tr>
 </table>
 
-<?php
-/*
- * Das Formular liegt neben der Tabelle: In HTML kann es sich nicht ueber
- * mehrere Zellen spannen. Die Klasse reist als verstecktes Feld mit, und
- * data-classname sagt dem Skript, woraus es den Namen bilden soll.
- */
-?>
-<form method="post" id="newcourse" data-coursform
-      data-classname="<?= h($klasse['name']) ?>" hidden>
-    <?= teacher_csrf_field() ?>
-    <input type="hidden" name="class_id" value="<?= $classId ?>">
-</form>
-
 <p class="tiny muted">
     Eine Zeile anklicken öffnet den Kurs. Der Name ergibt sich aus Sprache
-    und Klasse; der Stift macht ihn frei wählbar. Die Kinder dieser Klasse
-    kommen beim Anlegen gleich mit in den Kurs.
+    und Klasse. Die Kinder dieser Klasse kommen beim Anlegen gleich mit in
+    den Kurs.
     <strong>Jeder Kurs hat seine eigenen Unterlagen:</strong> „Englisch - 5B"
     und „Englisch - 6A" teilen sich nichts.
 </p>
@@ -387,7 +350,7 @@ teacher_flash_render();
                 <?php if (isset($gesperrt[$k['username']])): ?>
                 <form method="post" class="compact">
                     <?= teacher_csrf_field() ?>
-                    <input type="hidden" name="class_id" value="<?= $classId ?>">
+                    <input type="hidden" name="class_id" value="<?= $classId ?>"><?= $kursFeld ?>
                     <button class="iconaction" name="unlock"
                             value="<?= (int) $k['id'] ?>" title="Konto wieder freigeben">
                         <span aria-hidden="true">&#128275;</span> Entsperren
@@ -396,7 +359,7 @@ teacher_flash_render();
                 <?php endif; ?>
                 <form method="post" class="compact">
                     <?= teacher_csrf_field() ?>
-                    <input type="hidden" name="class_id" value="<?= $classId ?>">
+                    <input type="hidden" name="class_id" value="<?= $classId ?>"><?= $kursFeld ?>
                     <?php
                     /*
                      * Der Name steht in einem data-Attribut statt im
@@ -465,7 +428,7 @@ teacher_flash_render();
       data-print-user="<?= h(teacher_url('print.php') . '?class=' . $classId . '&user=') ?>"
       hidden>
     <?= teacher_csrf_field() ?>
-    <input type="hidden" name="class_id" value="<?= $classId ?>">
+    <input type="hidden" name="class_id" value="<?= $classId ?>"><?= $kursFeld ?>
 </form>
 
 <?php
@@ -514,7 +477,7 @@ teacher_flash_render();
 
 <form method="post" class="card" style="max-width:560px">
     <?= teacher_csrf_field() ?>
-    <input type="hidden" name="class_id" value="<?= $classId ?>">
+    <input type="hidden" name="class_id" value="<?= $classId ?>"><?= $kursFeld ?>
     <label for="names">Ein Name je Zeile</label>
     <textarea id="names" name="names" rows="12"
               placeholder="Lilli Molsen&#10;Schmidt, Anna-Lena&#10;Max"></textarea>

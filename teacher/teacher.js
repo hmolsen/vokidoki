@@ -246,64 +246,6 @@ function initLanguagePicker(root) {
     setzen(select.value || options[0].name);
 }
 
-// ------------------------------------------------------------ Kursname
-
-/**
- * Der Name ergibt sich aus Sprache und Klasse und steht als Text da.
- *
- * Ein Eingabefeld, das fast immer denselben Wert enthält, ist eine Aufgabe
- * ohne Entscheidung. Wer doch etwas anderes will, klickt auf den Stift -
- * dann wird aus dem Text ein Feld, und ab da bleibt es dabei: Was jemand von
- * Hand geschrieben hat, darf ihm die Sprachwahl nicht wieder wegnehmen.
- */
-function initCourseName(root) {
-    const anzeige = root.querySelector('[data-coursename]');
-    const feld    = root.querySelector('input[name="name"]');
-    const stift   = root.querySelector('[data-editname]');
-    const select  = root.querySelector('select[data-picker]');
-
-    /*
-     * Die Klasse steht fest.
-     *
-     * Kurse entstehen jetzt in der Klasse, nicht mehr auf einer eigenen
-     * Kursseite - auszuwaehlen gibt es sie also nicht mehr, und ihr Name
-     * reist am Formular mit. Das alte Auswahlfeld wird trotzdem noch
-     * gelesen, falls irgendwo eines stehen bleibt.
-     */
-    const klasse  = root.querySelector('select[name="class_id"]');
-    const fest    = root.querySelector('form[data-classname]')?.dataset.classname
-                 ?? document.querySelector('form[data-classname]')?.dataset.classname
-                 ?? '';
-    if (!anzeige || !feld || !stift) return;
-
-    let vonHand = false;
-
-    const bauen = () => {
-        if (vonHand) return;
-        const sprache = select ? select.value : '';
-        const k = klasse && klasse.selectedOptions[0]
-            ? (klasse.selectedOptions[0].dataset.name || '')
-            : fest;
-        const name = k === '' ? sprache : `${sprache} - ${k}`;
-        anzeige.textContent = name;
-        feld.value = name;
-    };
-
-    if (select) select.addEventListener('change', bauen);
-    if (klasse) klasse.addEventListener('change', bauen);
-
-    stift.addEventListener('click', () => {
-        vonHand = true;
-        anzeige.hidden = true;
-        stift.hidden = true;
-        feld.hidden = false;
-        feld.focus();
-        feld.select();
-    });
-
-    bauen();
-}
-
 function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -352,16 +294,16 @@ document.addEventListener('error', (e) => {
 }, true);
 
 /*
- * Gesucht wird im ganzen Dokument, nicht im Formular.
+ * Das durchsuchbare Sprachfeld, wo eines steht.
  *
- * Die Felder stehen in der Tabellenzeile und gehoeren ueber form="newcourse"
- * dazu - ein Formular kann sich in HTML nicht ueber mehrere Zellen spannen.
- * Das Formular selbst ist damit leer, und ein querySelector darin faende
- * nichts.
+ * Vorher hing der Start an einem Formular mit data-coursform - dem
+ * Kursformular in der Anlegezeile der Klasse. Das gibt es nicht mehr; der
+ * Kurs entsteht jetzt im Assistenten, und dort steht das Feld in einem
+ * gewoehnlichen Formular. Also fragen wir nach dem, worum es geht: nach
+ * dem Feld selbst.
  */
-if (document.querySelector('[data-coursform]')) {
+if (document.querySelector('select[data-picker]')) {
     initLanguagePicker(document);
-    initCourseName(document);
 }
 
 // --------------------------------------------------- Zeile als Knopf

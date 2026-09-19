@@ -14,8 +14,9 @@ require_once __DIR__ . '/_boot.php';
  * Lerneinheit verlinkte.
  *
  * Jetzt liegt der Alltag vorn: je Kurs eine Karte mit den beiden Handgriffen,
- * die staendig gebraucht werden - einlesen und freigeben. Klassen, Kinder und
- * Zettel sind Verwaltung und stehen darunter.
+ * die staendig gebraucht werden - einlesen und freigeben -, und als letzte
+ * Kachel der Weg zu einem neuen Kurs. Klassen, Kinder und Zettel sind
+ * Verwaltung und stehen darunter.
  */
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['teacher_logout'])) {
@@ -109,17 +110,33 @@ teacher_flash_render();
 
 <?php if ($meine === []): ?>
     <?= teacher_leer(
-        'Du unterrichtest noch keinen Kurs. Ein Kurs gehört zu einer Klasse: '
-        . 'Leg zuerst die Klasse an, dann darin den Kurs &ndash; die Kinder '
-        . 'der Klasse kommen gleich mit hinein.',
-        sprintf('<a class="btn small" href="%s">Zu den Klassen</a>',
-                h(teacher_url('classes.php'))),
+        'Du unterrichtest noch keinen Kurs. Zwei Fragen, dann steht er: '
+        . 'für welche Klasse, für welche Sprache. Die Kinder der Klasse '
+        . 'kommen gleich mit hinein.',
+        sprintf('<a class="btn small" href="%s">Kurs anlegen</a>',
+                h(teacher_url('neu.php'))),
     ) ?>
 <?php else: ?>
+    <?php
+    /*
+     * Die Kurse, und als letzte Kachel der Weg zu einem neuen.
+     *
+     * Anlegen gehoert zur Liste - so wie in jeder Tabelle die letzte Zeile
+     * die neue ist. Vorher lag der Weg dorthin drei Seiten tief in der
+     * Verwaltung: Klassen, Klasse, Anlegezeile.
+     */
+    ?>
     <div class="kurskarten">
         <?php foreach ($meine as $c): ?>
             <?= kurskarte($c, true) ?>
         <?php endforeach; ?>
+        <a class="card wahlkarte neuerkurs" href="<?= h(teacher_url('neu.php')) ?>">
+            <span class="cflag plus">+</span>
+            <span class="wahltext">
+                <strong>Neuer Kurs</strong>
+                <span class="tiny muted">Klasse wählen, Sprache wählen, fertig</span>
+            </span>
+        </a>
     </div>
 <?php endif; ?>
 
@@ -153,7 +170,9 @@ teacher_flash_render();
 <p class="verwaltung tiny muted">
     <strong>Verwaltung:</strong>
     <a href="<?= h(teacher_url('classes.php')) ?>">Klassen und Kinder</a>
-    &middot; Zettel mit den Zugangsdaten druckst du in der Klasse.
+    &middot; Dort legst du Klassen an, trägst Kinder ein und druckst die
+    Zettel mit den Zugangsdaten. Zum Unterrichten brauchst du das nur beim
+    ersten Mal.
 </p>
 
 <?php endif; ?>

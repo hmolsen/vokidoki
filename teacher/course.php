@@ -15,7 +15,7 @@ if ($kurs === null) {
     // Bewusst dieselbe Meldung wie bei einem Kurs, den es gar nicht gibt:
     // Wer ihn nicht sehen darf, soll nicht erfahren, dass er existiert.
     teacher_flash('Diesen Kurs gibt es nicht.', 'bad');
-    teacher_redirect('classes.php');
+    teacher_redirect('index.php');
 }
 
 $zurueck = 'course.php?id=' . $courseId;
@@ -165,9 +165,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['delete_course
         . 'Lernstaenden von %d Kindern.',
         $name, $verlust['units'], $verlust['vocab'], $verlust['students'],
     ));
-    teacher_redirect($kurs['class_id'] === null
-        ? 'classes.php'
-        : 'class.php?id=' . (int) $kurs['class_id']);
+    /*
+     * Zurueck auf die Startseite, nicht in die Klasse: Der Kurs ist die
+     * Hauptansicht, und wer einen geloescht hat, will die uebrigen sehen.
+     */
+    teacher_redirect('index.php');
 }
 
 $mitglieder = course_members_list($courseId);
@@ -194,15 +196,17 @@ $importUrl  = url('/') . '#' . $importPfad;
  */
 $schuelerUrl = url('/') . '#/lang/' . (int) $kurs['language_id'];
 
-$pfad = [];
-if (($kurs['class_name'] ?? null) !== null && ($kurs['class_id'] ?? null) !== null) {
-    $pfad[] = [
-        'label' => 'Klasse ' . $kurs['class_name'],
-        'href'  => teacher_url('class.php') . '?id=' . (int) $kurs['class_id'],
-    ];
-}
-// Der Kurskrumen traegt die Liste der eigenen Kurse - ein Klick zum Wechseln.
-$pfad[] = teacher_course_crumb($user, $kurs, true);
+/*
+ * Der Pfad ist kurz geworden: Schule, Kurs. Mehr nicht.
+ *
+ * Vorher stand die Klasse dazwischen - Schule > Klasse 5B > Englisch - 5B.
+ * Das bildete die Datenstruktur ab, nicht den Weg: Eine Klasse oeffnet man
+ * zweimal im Jahr, einen Kurs jede Woche, und der Umweg ueber die Klasse
+ * war beim Wechseln zwischen zwei eigenen Kursen genau das - ein Umweg.
+ * Die Klasse ist deshalb kein Halt mehr, sondern ein Ziel wie jedes andere:
+ * Sie steht dort, wo es um ihre Kinder geht.
+ */
+$pfad = [teacher_course_crumb($user, $kurs, true)];
 
 teacher_head($kurs['name'], $user, $pfad, sprintf(
     '<a class="btn small secondary" href="%s" target="_blank" rel="noopener" '
@@ -424,6 +428,14 @@ teacher_flash_render();
 <?php endif; ?>
 
 <?php if (($kurs['class_name'] ?? null) !== null): ?>
+<?php
+/*
+ * Die beiden Wege, die mit der Klasse zu tun haben, stehen nebeneinander:
+ * nachtragen, wer seit dem Anlegen dazugekommen ist - und in die Klasse
+ * selbst, wo Kinder entstehen und Zettel gedruckt werden. Der Kurs traegt
+ * sich dabei mit: Von dort fuehrt der Pfad wieder hierher zurueck.
+ */
+?>
 <div class="buttonrow">
     <form method="post">
         <?= teacher_csrf_field() ?>
@@ -432,6 +444,16 @@ teacher_flash_render();
             Klasse <?= h($kurs['class_name']) ?> nachtragen
         </button>
     </form>
+    <a class="btn small secondary" href="<?= h(teacher_url('class.php')
+        . '?id=' . (int) $kurs['class_id'] . '&kurs=' . $courseId) ?>">
+        Klasse <?= h($kurs['class_name']) ?> verwalten
+    </a>
+</div>
+<?php else: ?>
+<div class="buttonrow">
+    <a class="btn small secondary" href="<?= h(teacher_url('classes.php')) ?>">
+        Klassen und Kinder
+    </a>
 </div>
 <?php endif; ?>
 

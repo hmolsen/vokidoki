@@ -14,6 +14,10 @@ const SEITEN = (f) => [
     ['Klasse',       '/teacher/class.php?id=' + f.klasse],
     ['Kurs',         '/teacher/course.php?id=' + f.kurs],
     ['Lerneinheit',  '/teacher/unit.php?id=' + f.unit],
+    // Der Assistent hat keine Tabelle - hier zaehlt nur, dass nichts
+    // seitwaerts laeuft und die Kacheln untereinander passen.
+    ['Neuer Kurs',   '/teacher/neu.php'],
+    ['Sprachwahl',   '/teacher/neu.php?klasse=' + f.klasse],
 ];
 
 export async function pruefe(f, aus) {
