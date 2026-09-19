@@ -71,6 +71,32 @@ export async function pruefe(f, aus) {
            drin.ort.includes('id=' + f.unit) && drin.balken, drin.ort + ' / ' + drin.h1);
 
         /*
+         * "So sieht es die Klasse" bleibt im selben Fenster.
+         *
+         * Der Knopf stand auf target="_blank" - damals war das der einzige
+         * Weg zurueck: Tab zu. Seit die Ansicht selbst einen Knopf zurueck
+         * traegt, ist der zweite Tab keine Hilfe mehr. Ob er einen oeffnet,
+         * sieht man hier daran, dass DIESES Fenster stehenbliebe.
+         */
+        await b.js(`[...document.querySelectorAll('.titelzeile a.btn')]
+                      .find((a) => a.textContent.includes('So sieht es die Klasse')).click()`);
+        await schlafe(2200);
+        const probe = await b.js(`({
+            ort:    location.pathname + location.hash,
+            banner: !!document.querySelector('.notice.pupilview'),
+        })`);
+        ok('Die Schüleransicht öffnet im selben Fenster',
+           probe.ort.includes('/unit/' + f.unit) && !probe.ort.includes('unit.php'),
+           probe.ort + ' - mit target=_blank stünde hier noch die Freigabe');
+        ok('Und sie ist die Schüleransicht', probe.banner);
+
+        await b.js(`document.querySelector('.notice.pupilview a.btn').click()`);
+        await schlafe(1800);
+        ok('Und der Knopf darin führt in dieselbe Lerneinheit zurück',
+           (await b.js(`location.pathname + location.search`))
+               .includes('unit.php?id=' + f.unit));
+
+        /*
          * Und einer wieder zurueck.
          *
          * Hierher kommt man mit einem Klick von der Startseite. Zurueck fuehrte

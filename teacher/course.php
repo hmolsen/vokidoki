@@ -208,8 +208,17 @@ $schuelerUrl = url('/') . '#/lang/' . (int) $kurs['language_id'];
  */
 $pfad = [teacher_course_crumb($user, $kurs, true)];
 
+/*
+ * Im selben Fenster, nicht in einem zweiten.
+ *
+ * Der Knopf stand einmal auf target="_blank" - damals war das der einzige
+ * Weg zurueck: Man schloss den Tab wieder. Seit die Schueleransicht selbst
+ * einen Knopf "Zurueck zur Verwaltung" traegt, der auf genau diese Seite
+ * zeigt, ist der zweite Tab keine Hilfe mehr, sondern eine Ablage: Wer
+ * zweimal nachsieht, hat drei Fenster offen und weiss in keinem, wo er ist.
+ */
 teacher_head($kurs['name'], $user, $pfad, sprintf(
-    '<a class="btn small secondary" href="%s" target="_blank" rel="noopener" '
+    '<a class="btn small secondary" href="%s" '
     . 'title="Die Ansicht, die deine Klasse sieht">'
     . '<span aria-hidden="true">&#128065;</span> So sieht es die Klasse</a>',
     h($schuelerUrl),

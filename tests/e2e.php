@@ -5837,6 +5837,22 @@ $res = teacherGet('unit.php?id=' . $fsUnit);
 ok('Die Lerneinheit ebenso',
    preg_match('/<div class="titelzeile">.*?href="[^"]*#\/unit\/' . $fsUnit . '"/s', $res['body']) === 1);
 
+/*
+ * Und sie oeffnet im selben Fenster.
+ *
+ * Der Knopf stand auf target="_blank" - damals war das der einzige Weg
+ * zurueck: Tab zu. Seit die Ansicht selbst einen Knopf zurueck traegt, der
+ * auf genau diese Seite zeigt, ist der zweite Tab keine Hilfe mehr.
+ */
+foreach ([['course.php?id=' . $fsKursId, 'Kurs'],
+          ['unit.php?id=' . $fsUnit,     'Lerneinheit']] as [$wo, $wie]) {
+    $sicht = teacherGet($wo);
+    ok("Die Schueleransicht oeffnet im selben Fenster ($wie)",
+       preg_match('/<a class="btn small secondary" href="[^"]*#\/(?:lang|unit)\/\d+" '
+                  . 'title="Die Ansicht, die deine Klasse sieht"/', $sicht['body']) === 1,
+       'kein target="_blank" mehr - der Weg zurueck steht in der Ansicht selbst');
+}
+
 $kern = http($base . '/core.js');
 ok('Die Schueleransicht erklaert sich der Lehrkraft',
    str_contains($kern['body'], 'export function pupilHint'));

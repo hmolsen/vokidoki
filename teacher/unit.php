@@ -330,10 +330,16 @@ $pfad[] = ['label' => (string) $unit['title'], 'href' => null];
  * Auf diese Seite kommt man von der Startseite mit einem Klick - "Freigeben"
  * auf der Kurskarte. Zurueck fuehrte bisher nur der Name der Schule im Pfad,
  * und der liest sich nicht wie "zurueck". Also ein Knopf, der es sagt.
+ *
+ * Und die Schueleransicht oeffnet im selben Fenster. Sie stand einmal auf
+ * target="_blank" - damals war das der einzige Weg zurueck: Man schloss den
+ * Tab wieder. Seit sie selbst einen Knopf "Zurueck zur Verwaltung" traegt,
+ * der auf genau diese Lerneinheit zeigt, ist der zweite Tab keine Hilfe
+ * mehr, sondern eine Ablage.
  */
 teacher_head($unit['title'], $user, $pfad, sprintf(
     '<a class="btn small secondary" href="%s">&#8249; Meine Kurse</a>'
-    . '<a class="btn small secondary" href="%s" target="_blank" rel="noopener" '
+    . '<a class="btn small secondary" href="%s" '
     . 'title="Die Ansicht, die deine Klasse sieht">'
     . '<span aria-hidden="true">&#128065;</span> So sieht es die Klasse</a>',
     h(teacher_url('index.php')),
