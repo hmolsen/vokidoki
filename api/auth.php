@@ -53,17 +53,34 @@ switch (action()) {
 
         login_user((int) $user['id']);
 
-        // Frischer Geräte-Token für genau diese Installation. index.php
-        // rendert daraus den Manifest-Link für "Zum Home-Bildschirm".
-        $token = device_token_create(
-            (int) $user['id'],
-            substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? 'Unbekanntes Gerät'), 0, 128),
-        );
-        $_SESSION['device_token'] = $token;
+        /*
+         * Wohin nach der Anmeldung?
+         *
+         * Für ein Kind ist die App selbst das Ziel, und dafür braucht es
+         * einen frischen Geräte-Token für genau diese Installation:
+         * index.php rendert daraus den Manifest-Link für "Zum
+         * Home-Bildschirm".
+         *
+         * Eine Lehrkraft arbeitet dagegen in der Verwaltung - Lerneinheiten
+         * anlegen, Vokabeln freigeben. Die Kachelansicht ist die Ansicht
+         * der Klasse; dorthin kommt sie weiterhin über "So sieht es die
+         * Klasse". Ein Geräte-Token entsteht deshalb hier keiner; braucht
+         * sie doch einmal die App, legt index.php ihn beim Aufruf an.
+         */
+        if (user_is_teacher($user)) {
+            $ziel = url('/teacher/');
+        } else {
+            $token = device_token_create(
+                (int) $user['id'],
+                substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? 'Unbekanntes Gerät'), 0, 128),
+            );
+            $_SESSION['device_token'] = $token;
+            $ziel = url('/?t=' . urlencode($token));
+        }
 
         json_out([
             'ok'       => true,
-            'redirect' => url('/?t=' . urlencode($token)),
+            'redirect' => $ziel,
             'user'     => [
                 'id'        => (int) $user['id'],
                 'name'      => $user['display_name'],

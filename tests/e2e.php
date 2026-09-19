@@ -5310,6 +5310,83 @@ q('DELETE FROM users   WHERE id IN (?, ?)', [$zweiteId, $einzelId]);
 q('DELETE FROM classes WHERE id IN (?, ?)',
   [(int) $startKlasse['id'], (int) $fremdeKlasse['id']]);
 
+section('Nach der Anmeldung: die Lehrkraft in die Verwaltung');
+
+/*
+ * Die Anmeldung der App kannte nur ein Ziel: die Kachelansicht. Eine
+ * Lehrkraft landete damit in der Ansicht ihrer Klasse und musste sich von
+ * dort erst in die Verwaltung durchklicken - obwohl sie genau dafuer kommt.
+ *
+ * Geprueft wird beides, denn beides haengt an derselben Antwort: dass die
+ * Lehrkraft in den Lehrkraft-Bereich geschickt wird und dass das Kind
+ * weiterhin in die App geht - mit Geraete-Token, sonst gibt es kein "Zum
+ * Home-Bildschirm".
+ */
+
+$naJar    = tempnam(sys_get_temp_dir(), 'vtna');
+$naVorher = (int) qv('SELECT COUNT(*) FROM device_tokens WHERE user_id = ?', [$lehrerId]);
+
+$naLehrer = apiAls($naJar, static function () use ($lehrerName): array {
+    [$d] = apiCall('auth', 'login',
+                   ['username' => $lehrerName, 'password' => 'lehrerin123']);
+    return $d ?? [];
+});
+
+ok('Die Lehrkraft meldet sich in der App an',
+   ($naLehrer['ok'] ?? false) === true, $naLehrer['error'] ?? '');
+ok('Und wird als Lehrkraft erkannt',
+   ($naLehrer['user']['isTeacher'] ?? false) === true);
+ok('Das Ziel ist die Verwaltung',
+   (string) ($naLehrer['redirect'] ?? '') === url('/teacher/'),
+   (string) ($naLehrer['redirect'] ?? '(fehlt)'));
+
+/*
+ * Ein Geraete-Token entsteht dabei keiner. Er ist der Schluessel fuer die
+ * installierte App; wer in die Verwaltung geht, braucht ihn nicht, und
+ * ungenutzte Tokens sammeln sich sonst bei jeder Anmeldung an.
+ */
+ok('Und es entsteht kein Geraete-Token dafuer',
+   (int) qv('SELECT COUNT(*) FROM device_tokens WHERE user_id = ?', [$lehrerId]) === $naVorher,
+   (string) qv('SELECT COUNT(*) FROM device_tokens WHERE user_id = ?', [$lehrerId])
+   . ' statt ' . $naVorher);
+
+// Und das Ziel traegt wirklich die Verwaltung, nicht nur den Pfad dorthin.
+$naSeite = apiAls($naJar, static function (): array {
+    global $base;
+    return http($base . '/teacher/');
+});
+ok('Dort steht die Startseite der Verwaltung',
+   str_contains($naSeite['body'], '<h1>Meine Kurse</h1>'),
+   'Status ' . $naSeite['status']);
+
+/*
+ * Die Kinderansicht bleibt der Lehrkraft offen - sie ist der Weg zu "So
+ * sieht es die Klasse". Weitergeleitet wird nach der Anmeldung, nicht bei
+ * jedem Aufruf der App.
+ */
+$naApp = apiAls($naJar, static function (): array {
+    global $base;
+    return http($base . '/');
+});
+ok('Die App selbst bleibt fuer sie erreichbar',
+   $naApp['status'] === 200 && str_contains($naApp['body'], 'window.VT'),
+   'Status ' . $naApp['status']);
+
+// ---- Die Gegenprobe: ein Kind geht weiterhin in die App.
+
+$naKind = apiAls($naJar, static function () use ($username): array {
+    [$d] = apiCall('auth', 'login',
+                   ['username' => $username, 'password' => 'geheim123']);
+    return $d ?? [];
+});
+ok('Ein Kind landet weiterhin in der App',
+   str_contains((string) ($naKind['redirect'] ?? ''), '/?t='),
+   (string) ($naKind['redirect'] ?? '(fehlt)'));
+ok('Und bekommt seinen Geraete-Token',
+   (int) qv('SELECT COUNT(*) FROM device_tokens WHERE user_id = ?', [$userId]) > 0);
+
+@unlink($naJar);
+
 section('Klasse als Mittelpunkt');
 
 /*

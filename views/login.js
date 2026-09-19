@@ -45,7 +45,8 @@ export async function loginView() {
                 // Bewusst eine echte Seitennavigation statt eines SPA-Wechsels:
                 // Erst dadurch liefert index.php den personalisierten
                 // <link rel="manifest"> aus, den iOS beim Hinzufügen zum
-                // Home-Bildschirm liest.
+                // Home-Bildschirm liest. Und wohin es geht, sagt der Server:
+                // ein Kind in die App, eine Lehrkraft in die Verwaltung.
                 window.location.href = data.redirect;
 
                 // Warten, bis die Navigation greift - sonst blinkt der Button zurück.
