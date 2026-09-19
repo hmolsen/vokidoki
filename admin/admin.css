@@ -106,6 +106,14 @@ body.admin { background: var(--bg); }
     white-space: nowrap;
 }
 a.crumb:hover { background: var(--surface-2); color: var(--text); }
+
+/* Der erste Krumen ist ein Haeuschen, kein Wort: quadratisch statt breit,
+   und das Sinnbild eine Spur groesser, damit es nicht verloren aussieht. */
+a.crumb.crumbhaus {
+    padding: 6px 10px;
+    font-size: 1.05rem;
+    line-height: 1.1;
+}
 .crumb.on {
     background: none;
     border-color: transparent;
@@ -735,6 +743,23 @@ table.courses tr.newrow .picker { margin: 0; min-width: 190px; }
  * Der eingeklappte Rahmen (border-collapse) reist beim Kleben nicht mit,
  * deshalb die untere Linie als Schatten.
  */
+/*
+ * Die Fahne im Tabellenkopf.
+ *
+ * Klein und vor dem Namen: "Englisch" und "Deutsch" statt "FREMDSPRACHE"
+ * und "DEUTSCH" - die Spalte sagt damit, was in ihr steht, statt was sie
+ * ist. Fehlt die Datei, tritt das Emoji an ihre Stelle (teacher.js), also
+ * braucht auch die span-Form ihren Abstand.
+ */
+img.kopfflagge, span.kopfflagge { margin-right: 6px; }
+img.kopfflagge {
+    width: 18px;
+    height: 13px;
+    object-fit: contain;
+    border-radius: 2px;
+    vertical-align: -1px;
+}
+
 table.release { overflow: clip; }
 table.release thead th {
     position: sticky;
@@ -762,7 +787,20 @@ table.release tr.locked td:first-child { box-shadow: inset 3px 0 0 var(--border)
 table.release tr.released td:first-child { box-shadow: inset 3px 0 0 var(--good); }
 
 table.release.draggable tr[data-pos] { cursor: pointer; }
-table.release.draggable tr[data-pos]:hover td { outline: 1px solid var(--border); }
+
+/*
+ * Der Rahmen unter dem Zeiger - nur wo es einen Zeiger gibt.
+ *
+ * Auf einem Telefon bleibt :hover nach einer Beruehrung haengen, und beim
+ * Rollen wandert er unter dem Finger von Zeile zu Zeile mit: Ein Kaestchen
+ * um jede Zelle, das beim Scrollen springt. Gemeint war es als Vorschau
+ * fuer den Klick, und einen Klick gibt es dort gar nicht in dem Sinn.
+ * (hover: hover) fragt genau das ab - hat das Geraet einen Zeiger, der
+ * ueber etwas stehen kann, ohne es zu beruehren?
+ */
+@media (hover: hover) {
+    table.release.draggable tr[data-pos]:hover td { outline: 1px solid var(--border); }
+}
 
 /* Das Umschlagen beim Ziehen. Kurz und klein - es soll zeigen, dass sich
    etwas geaendert hat, und nicht die Aufmerksamkeit auf sich ziehen. */
@@ -1030,7 +1068,12 @@ details.kursealle[open] > summary { margin-bottom: 12px; }
  * anklickbarer Bereich ohne jedes Zeichen ist eine Falle.
  */
 table.rowlink tr[data-href] { cursor: pointer; }
-table.rowlink tr[data-href]:hover td { background: var(--surface-2); }
+
+/* Aus demselben Grund wie beim Freigabebalken: Auf einem Telefon bleibt
+   :hover nach der Beruehrung haengen und wandert beim Rollen mit. */
+@media (hover: hover) {
+    table.rowlink tr[data-href]:hover td { background: var(--surface-2); }
+}
 
 /* Der Haken sitzt in der Aktionsspalte - eine Spalte, ein Name. .chev ist
    nur das Aussehen. */
@@ -1229,7 +1272,15 @@ a.rowmain:hover { text-decoration: underline; }
     table.data.release th.actions,
     table.data.release td.actions {
         display: table-cell;
-        width: 86px;
+        /*
+         * Breit genug fuer Stift und Muelleimer NEBENEINANDER.
+         *
+         * Als farbige Emoji sind sie breiter als ein Zeichen aus der
+         * Textschrift - je 42 px -, dazu 4 px Abstand, das Leerzeichen aus
+         * dem Quelltext und 6 px Innenabstand: zusammen rund 98. Bei 86 px
+         * brach der zweite in die naechste Zeile.
+         */
+        width: 100px;
         gap: 0;
         margin: 0;
         padding: 6px 6px 6px 0;
@@ -1243,6 +1294,7 @@ a.rowmain:hover { text-decoration: underline; }
         white-space: normal;
     }
     table.data.release .iconaction.nurbild { padding: 7px 9px; min-height: 38px; }
+    table.data.release td.actions .iconaction + .iconaction { margin-left: 4px; }
     table.data.release tr.newrow td.actions .iconaction { width: auto; }
 
     /* Der Pfad bekommt die ganze Zeile, Name und Abmelden die naechste -

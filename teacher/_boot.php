@@ -286,10 +286,23 @@ function teacher_crumbs(array $crumbs): void
             continue;
         }
 
+        /*
+         * Ein Krumen kann einen eigenen Namen tragen.
+         *
+         * Gebraucht vom ersten: Er zeigt ein Haeuschen, und ein Haeuschen
+         * hat fuer ein Vorleseprogramm keinen Namen. title= allein genuegt
+         * dafuer nicht - es haengt am Zeiger, und am Telefon gibt es keinen.
+         */
+        $nam = ($c['titel'] ?? '') === '' ? '' : sprintf(
+            ' title="%1$s" aria-label="%1$s"', h((string) $c['titel']),
+        );
+
         if (($c['href'] ?? null) === null) {
-            printf('<span class="crumb on" aria-current="page">%s</span>', $inhalt);
+            printf('<span class="crumb on" aria-current="page"%s>%s</span>', $nam, $inhalt);
         } else {
-            printf('<a class="crumb" href="%s">%s</a>', h((string) $c['href']), $inhalt);
+            printf('<a class="crumb%s" href="%s"%s>%s</a>',
+                   ($c['titel'] ?? '') === '' ? '' : ' crumbhaus',
+                   h((string) $c['href']), $nam, $inhalt);
         }
     }
     echo "</nav>
@@ -339,12 +352,17 @@ function teacher_course_crumb(array $user, array $kurs, bool $aktuell): array
 }
 
 /**
- * Das erste Glied des Pfades: die Schule.
+ * Das erste Glied des Pfades: nach Hause.
  *
- * Es steht auf jeder Seite und fuehrt auf die eigenen Kurse. Damit ist die
- * Schule die Wurzel der Navigation - eine Lehrkraft arbeitet immer in genau
- * einer -, und die Wurzel ist zugleich der Arbeitsplatz. Was daran haengt,
- * sind Ziele und keine Durchgaenge: der Kurs, und von ihm aus die Klasse.
+ * Es stand einmal der Name der Schule darin - "Grundschule Musterhausen" -,
+ * und das war richtig, solange die Wurzel die Schule war. Inzwischen fuehrt
+ * es auf die eigenen Kurse, und ein Knopf mit dem Namen der Schule sagt
+ * nicht, dass er dorthin fuehrt: Man liest ihn als Beschriftung, nicht als
+ * Weg. Ein Haeuschen sagt es.
+ *
+ * In welcher Schule man ist, ist beim Arbeiten ohnehin keine Frage - eine
+ * Lehrkraft arbeitet immer in genau einer. Der Name steht deshalb nur noch
+ * im Titel des Knopfes, fuer den Zeiger und fuer das Vorleseprogramm.
  */
 function teacher_school_crumb(array $user): array
 {
@@ -352,7 +370,8 @@ function teacher_school_crumb(array $user): array
                         [(int) ($user['school_id'] ?? 0)]);
 
     return [
-        'label' => $name !== '' ? $name : 'Ohne Schule',
+        'label' => "\u{1F3E0}",
+        'titel' => 'Meine Kurse' . ($name === '' ? '' : ' - ' . $name),
         'href'  => teacher_url('index.php'),
     ];
 }

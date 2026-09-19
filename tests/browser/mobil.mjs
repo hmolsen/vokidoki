@@ -89,6 +89,19 @@ export async function pruefe(f, aus) {
                 tabelle: getComputedStyle(t).display,
                 spalten: zeile.children.length,
                 kopf:    [...t.querySelectorAll('thead th')].map((e) => e.textContent.trim()),
+                fahnen:  t.querySelectorAll('thead img.kopfflagge').length,
+                fahnenDa: [...t.querySelectorAll('thead img.kopfflagge')]
+                             .every((i) => i.naturalWidth > 0),
+                knoepfe: (() => {
+                    const b = [...zeile.querySelectorAll('td.actions .iconaction')]
+                        .filter((e) => getComputedStyle(e).display !== 'none');
+                    return {
+                        zahl:   b.length,
+                        zeilen: new Set(b.map((e) => Math.round(
+                            e.getBoundingClientRect().top))).size,
+                    };
+                })(),
+                zeiger:  matchMedia('(hover: hover)').matches,
                 kopfda:  getComputedStyle(t.querySelector('thead th')).display !== 'none',
                 zelle:   getComputedStyle(erste).display,
                 zelle2:  getComputedStyle(zweite).display,
@@ -100,8 +113,20 @@ export async function pruefe(f, aus) {
         ok('Die Freigabetabelle bleibt eine Tabelle', tab.tabelle === 'table', tab.tabelle);
         ok('Mit drei Spalten', tab.spalten === 3,
            tab.spalten + ' - Nummer und Satzzahl kosteten die Breite der Woerter');
-        ok('Fremdsprache, Deutsch, Handgriffe',
-           tab.kopf.join('|') === 'Fremdsprache|Deutsch|', tab.kopf.join('|'));
+        ok('Im Kopf steht die Sprache, nicht das Wort "Fremdsprache"',
+           tab.kopf.join('|') === 'Englisch|Deutsch|', tab.kopf.join('|'));
+        ok('Und vor beiden steht eine Fahne', tab.fahnen === 2, String(tab.fahnen));
+        ok('Die auch wirklich ankommt', tab.fahnenDa,
+           'ein <img> mit kaputtem src sieht im Quelltext genauso aus');
+
+        /*
+         * Stift und Muelleimer nebeneinander, nicht untereinander. Als
+         * farbige Emoji sind sie breiter als ein Zeichen aus der
+         * Textschrift; bei 86 px brach der zweite um.
+         */
+        ok('Stift und Mülleimer stehen in einer Zeile',
+           tab.knoepfe.zahl === 2 && tab.knoepfe.zeilen === 1,
+           tab.knoepfe.zahl + ' Knöpfe auf ' + tab.knoepfe.zeilen + ' Zeilen');
         ok('Der Kopf steht auch am Telefon da', tab.kopfda,
            'die Kartenregel blendet ihn aus - hier soll er bleiben');
         ok('Die Zellen sind Zellen, keine Karten',

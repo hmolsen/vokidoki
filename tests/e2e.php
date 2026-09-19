@@ -2599,8 +2599,21 @@ ok('Der Tabellenkopf steht in einem <thead>', $kopf !== '',
    'ohne ihn kann er beim Rollen nicht stehenbleiben');
 $spalten = preg_match_all('/<th[\s>]/', $kopf);
 ok('Und traegt genau drei Spalten', $spalten === 3, $spalten . ' Spalten');
-ok('Fremdsprache und Deutsch',
-   str_contains($kopf, '<th>Fremdsprache</th>') && str_contains($kopf, '<th>Deutsch</th>'));
+/*
+ * Im Kopf steht die Sprache, nicht das Wort "Fremdsprache" - und vor beiden
+ * Spalten ihre Fahne. Die Spalte sagt damit, was in ihr steht, statt was
+ * sie ist.
+ */
+$kopfSprache = (string) qv('SELECT l.name FROM units t
+    JOIN languages l ON l.id = t.language_id WHERE t.id = ?', [$freiUnit]);
+ok('Im Kopf steht die Sprache des Kurses',
+   str_contains($kopf, '>' . h($kopfSprache) . '</th>'), $kopfSprache);
+ok('Und daneben Deutsch', str_contains($kopf, '>Deutsch</th>'));
+ok('Das Wort "Fremdsprache" steht nicht mehr da', !str_contains($kopf, 'Fremdsprache'));
+ok('Vor beiden steht eine Fahne', substr_count($kopf, 'kopfflagge') === 2,
+   substr_count($kopf, 'kopfflagge') . ' statt 2');
+ok('Und die deutsche ist die deutsche', str_contains($kopf, '1f1e9-1f1ea.svg'),
+   'die deutsche Seite heisst immer Deutsch');
 ok('Die laufende Nummer ist weg', !str_contains($kopf, '#'));
 ok('Und die Satzzahl auch', !str_contains($kopf, 'Sätze'));
 
@@ -2621,10 +2634,15 @@ ok('Keine Zelle traegt die Spaltenueberschrift noch einmal',
 
 // ---- Aendern und Loeschen sind Sinnbilder, keine Saetze.
 
+/*
+ * Beide als Emoji, also mit der Variantenwahl dahinter: Ohne sie waehlt der
+ * Browser die Textform, und dann steht neben einem farbigen Muelleimer ein
+ * blasser Strich, der ein Stift sein soll.
+ */
 ok('Aendern ist ein Stift', str_contains($zeile, 'iconaction quiet nurbild')
-   && str_contains($zeile, '&#9998;'));
+   && str_contains($zeile, '&#9999;&#65039;'));
 ok('Loeschen ist ein Muelleimer', str_contains($zeile, 'iconaction danger nurbild')
-   && str_contains($zeile, '&#128465;'));
+   && str_contains($zeile, '&#128465;&#65039;'));
 ok('Und jeder Knopf hat trotzdem einen Namen',
    substr_count($zeile, 'class="nurvorlesen"') === 4,
    substr_count($zeile, 'class="nurvorlesen"')
@@ -2654,6 +2672,26 @@ ok('Deren Hoehe misst das Skript',
 ok('Die Tabelle ist dafuer kein Rollbehaelter',
    preg_match('/table\.release\s*\{\s*overflow:\s*clip/s', $cssB) === 1,
    'mit overflow: hidden klebt der Kopf an der Tabelle statt am Fenster');
+/*
+ * Der Rahmen unter dem Zeiger nur da, wo es einen Zeiger gibt.
+ *
+ * Auf einem Telefon bleibt :hover nach einer Beruehrung haengen und wandert
+ * beim Rollen unter dem Finger von Zeile zu Zeile mit - ein Kaestchen um
+ * jede Zelle, das beim Scrollen springt. Gemeint war es als Vorschau fuer
+ * den Klick.
+ *
+ * Geprueft am Quelltext und nicht im Browser: Die Geraeteemulation von
+ * Chrome meldet weiterhin (hover: hover), der Fall laesst sich dort also
+ * gar nicht herstellen.
+ */
+ok('Der Zeilenrahmen haengt an einem Zeiger',
+   preg_match('/@media \(hover: hover\)\s*\{\s*table\.release\.draggable '
+              . 'tr\[data-pos\]:hover td/s', $cssB) === 1,
+   'sonst klebt er am Telefon nach der Beruehrung fest');
+ok('Und der Zeilenhintergrund der anderen Tabellen auch',
+   preg_match('/@media \(hover: hover\)\s*\{\s*table\.rowlink '
+              . 'tr\[data-href\]:hover td/s', $cssB) === 1);
+
 ok('Der Balken liegt unter dem Kopf, nicht darueber',
    preg_match('/\.releasebar\s*\{[^}]*z-index:\s*3/s', $cssB) === 1,
    'sonst schiebt er sich beim Rollen ueber die Spaltennamen');
@@ -3564,16 +3602,28 @@ ok('Die Lehrkraft kommt hinein',
  * Frueher stand hier ein fester Name im Test - der galt genau in einer
  * Datenbank und fiel in jeder anderen um.
  */
+/*
+ * Der erste Krumen ist ein Haeuschen.
+ *
+ * Er trug einmal den Namen der Schule, und das war richtig, solange die
+ * Wurzel die Schule war. Inzwischen fuehrt er auf die eigenen Kurse - und
+ * ein Knopf mit dem Namen der Schule sagt nicht, dass er dorthin fuehrt.
+ * Der Name steht noch im Titel, fuer den Zeiger und das Vorleseprogramm.
+ */
 $schulName = (string) qv('SELECT s.name FROM schools s
                             JOIN users u ON u.school_id = s.id WHERE u.id = ?', [$lehrerId]);
-ok('Und sieht ihre Schule im Pfad',
-   $schulName !== '' && str_contains($res['body'], h($schulName)), $schulName);
-/*
- * Die Wurzel der Navigation sind die eigenen Kurse, nicht die Klassen.
- * Eine Klasse legt man einmal im Schuljahr an; gearbeitet wird mit Kursen.
- */
-ok('Der Name der Schule fuehrt auf die eigenen Kurse',
-   preg_match('/<a class="crumb" href="[^"]*index\.php"/', $res['body']) === 1);
+ok('Der erste Krumen fuehrt auf die eigenen Kurse',
+   preg_match('/<a class="crumb crumbhaus" href="[^"]*index\.php"/',
+              $res['body']) === 1);
+ok('Und zeigt ein Haeuschen', str_contains($res['body'], '🏠'));
+ok('Der Name der Schule steht nicht mehr als Knopf da',
+   !str_contains($res['body'], '<span>' . h($schulName) . '</span>'), $schulName);
+ok('Sondern im Titel',
+   str_contains($res['body'], 'title="Meine Kurse - ' . h($schulName) . '"'),
+   'wer wissen will, wo er ist, faehrt darueber');
+ok('Und im Namen fuers Vorleseprogramm',
+   str_contains($res['body'], 'aria-label="Meine Kurse - ' . h($schulName) . '"'),
+   'ein Haeuschen hat sonst keinen Namen');
 
 $res = teacherGet('classes.php');
 ok('Sowie die Klassen der Schule',

@@ -307,9 +307,16 @@ Zuklappen von sich aus, mit Tastatur und Vorleseprogramm. Wer nur einen
 eigenen Kurs hat, bekommt keine Liste — ein Menü mit einem Eintrag ist eines
 zu viel.
 
-Die Navigation **ist** der Pfad, und er ist kurz: `Grundschule Musterhausen
-› Englisch - 5B › Unit 4`. Oben links der Name der Schule, er führt auf die
-eigenen Kurse; rechts davon wächst er mit. Feste Reiter gibt es nicht.
+Die Navigation **ist** der Pfad, und er ist kurz: `🏠 › Englisch - 5B ›
+Unit 4`. Feste Reiter gibt es nicht.
+
+Ganz links ein **Häuschen**. Dort stand der Name der Schule, und das war
+richtig, solange die Wurzel die Schule war — inzwischen führt der Knopf auf
+die eigenen Kurse, und „Grundschule Musterhausen" sagt nicht, dass er
+dorthin führt: Man liest ihn als Beschriftung, nicht als Weg. In welcher
+Schule man ist, ist beim Arbeiten ohnehin keine Frage; der Name steht noch
+im `title` und im `aria-label` — ein Häuschen hat für ein Vorleseprogramm
+sonst keinen Namen, und `title=` allein hängt am Zeiger.
 
 **Die Klasse steht nicht mehr darin.** Sie stand einmal dazwischen —
 `Schule › Klasse 5B › Englisch - 5B` —, und das bildete die Datenstruktur
@@ -417,7 +424,26 @@ weg — wie viel freigegeben ist, sagt die Blase am Balken, und wie viele
 Sätze fehlen, der Knopf „Sätze nachtragen". Ändern und Löschen sind nur noch
 Stift und Mülleimer; den Namen dazu bekommt das Vorleseprogramm über eine
 Spanne, die nur es sieht (`.nurvorlesen`) — `title=` allein hängt am Zeiger,
-und am Telefon gibt es keinen. Die Breite wird am Telefon fest verteilt
+und am Telefon gibt es keinen. Beide stehen als Emoji da, also mit der
+Variantenwahl `&#65039;` dahinter: Ohne sie wählt der Browser die Textform,
+und dann steht neben einem farbigen Mülleimer ein blasser Strich, der ein
+Stift sein soll. Dass sie **nebeneinander** stehen und nicht untereinander,
+hängt an vierzehn Pixeln: Als Emoji sind sie je 42 px breit, dazu Abstand,
+das Leerzeichen aus dem Quelltext und der Innenabstand der Zelle — zusammen
+rund 98, und die Spalte war 86 breit. Jetzt 100.
+
+**Im Kopf steht die Sprache, nicht das Wort „Fremdsprache".** `🇬🇧 Englisch`
+und `🇩🇪 Deutsch`, beide mit ihrer Fahne als SVG: Die Spalte sagt damit, was
+in ihr steht, statt was sie ist — und sie ist kürzer, denn „FREMDSPRACHE"
+ist ein Wort ohne Bruchstelle und passte bei 320 px gerade eben.
+
+**Und der Rahmen unter dem Zeiger nur da, wo es einen Zeiger gibt.** Auf
+einem Telefon bleibt `:hover` nach einer Berührung hängen und wandert beim
+Rollen unter dem Finger von Zeile zu Zeile mit — ein Kästchen um jede Zelle,
+das beim Scrollen springt. Beide Zeilen-Hover-Regeln stehen deshalb in
+`@media (hover: hover)`. Geprüft am Quelltext und nicht im Browser: Die
+Geräteemulation von Chrome meldet weiterhin `(hover: hover)`, der Fall
+lässt sich dort gar nicht herstellen. Die Breite wird am Telefon fest verteilt
 (`table-layout: fixed`): Wird eine Zeile zum Formular, stehen dort statt
 zweier Wörter zwei Eingabefelder, und die Spalten rutschten sonst unter dem
 Finger weg. Geprüft wird das bei 390, 375 und 320 px — im Ruhezustand und
@@ -716,7 +742,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-978 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+987 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
 Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
 Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
 hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
@@ -778,7 +804,7 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 1188 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 1197 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
 
@@ -796,7 +822,7 @@ Quelltext völlig richtig aussahen:
 - Der Zettel für die ganze Klasse wurde erst beim nächsten Laden anklickbar.
 
 ```bash
-node tests/browser/lauf.mjs --fixture            # 169 Prüfungen
+node tests/browser/lauf.mjs --fixture            # 172 Prüfungen
 node tests/browser/lauf.mjs --fixture bilder/    # dazu Bildschirmfotos
 ```
 

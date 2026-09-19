@@ -461,9 +461,23 @@ $fehlen = vocab_without_sentences($unitId);
 ?>
 <table class="data release" id="freigabe" data-released="<?= $frei ?>">
     <thead>
+        <?php
+        /*
+         * Im Kopf steht die Sprache, nicht das Wort "Fremdsprache".
+         *
+         * Welche Spalte welche ist, weiss man ohnehin - aber "Englisch" und
+         * "Deutsch" mit ihren Fahnen davor sagen es, ohne dass man es sich
+         * sagen muss. Und sie sind kuerzer: "FREMDSPRACHE" ist ein Wort ohne
+         * Bruchstelle und passte bei 320 px gerade eben.
+         *
+         * Die deutsche Seite heisst immer Deutsch - term_native ist in
+         * dieser Anwendung nicht verhandelbar.
+         */
+        ?>
         <tr>
-            <th>Fremdsprache</th>
-            <th>Deutsch</th>
+            <th><?= flag_html($unit['flag_emoji'] ?: FLAG_FALLBACK, 'kopfflagge') ?><?=
+                h((string) $unit['language_name']) ?></th>
+            <th><?= flag_html("\u{1F1E9}\u{1F1EA}", 'kopfflagge') ?>Deutsch</th>
             <th class="actions"></th>
         </tr>
     </thead>
@@ -488,7 +502,7 @@ $fehlen = vocab_without_sentences($unitId);
                 </button>
                 <button class="iconaction quiet nurbild" data-edit="<?= (int) $v['id'] ?>"
                         type="button" title="Diese Vokabel ändern">
-                    <span aria-hidden="true">&#9998;</span><span class="nurvorlesen">Ändern</span>
+                    <span aria-hidden="true">&#9999;&#65039;</span><span class="nurvorlesen">Ändern</span>
                 </button>
                 <button class="iconaction primary nurbild" form="vokabel<?= (int) $v['id'] ?>"
                         name="save_vocab" value="<?= (int) $v['id'] ?>"
@@ -499,7 +513,7 @@ $fehlen = vocab_without_sentences($unitId);
                         name="delete_vocab" value="<?= (int) $v['id'] ?>"
                         title="Diese Vokabel löschen"
                         data-confirm="&bdquo;<?= h($v['term_foreign']) ?>&ldquo; löschen? Die Lückensätze dazu und der Lernstand aller Kinder daran verschwinden mit.">
-                    <span aria-hidden="true">&#128465;</span><span class="nurvorlesen">Löschen</span>
+                    <span aria-hidden="true">&#128465;&#65039;</span><span class="nurvorlesen">Löschen</span>
                 </button>
             </td>
         </tr>
