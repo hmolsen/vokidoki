@@ -677,6 +677,36 @@ td.actions, th.actions { text-align: right; white-space: nowrap; width: 1%; }
 .iconaction.danger { color: var(--bad); border-color: transparent; background: none; }
 .iconaction.danger:hover { background: var(--bad-bg); border-color: var(--bad); }
 
+/*
+ * Ein Knopf, der nur ein Sinnbild traegt.
+ *
+ * In einer Vokabelzeile ist der Platz die Vokabel wert und nicht das Wort
+ * "Aendern" daneben - Stift und Muelleimer sind so gelaeufig, dass die
+ * Beschriftung nichts hinzufuegt. In einer Tabelle mit Klassen oder Kursen
+ * waere das anders: Dort steht hinter "Loeschen" mehr als ein Wort.
+ */
+.iconaction.nurbild { gap: 0; padding: 7px 11px; font-size: 1rem; }
+
+/*
+ * Und der Name dazu, der nur vorgelesen wird.
+ *
+ * Ein Knopf mit bloss einem Sinnbild hat sonst keinen: Ein
+ * Vorleseprogramm sagt "Schaltflaeche" und sonst nichts. Das title-
+ * Attribut reicht dafuer nicht - es haengt am Zeiger, und am Telefon gibt
+ * es keinen.
+ */
+.nurvorlesen {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
 /* Mehrere Aktionen in einer Zelle sollen nicht aneinanderkleben. */
 td.actions .iconaction + .iconaction,
 td.actions form.compact + .iconaction,
@@ -688,6 +718,27 @@ table.courses tr.newrow select,
 table.courses tr.newrow input[type=text] { margin: 0; min-height: 38px; width: auto; max-width: 190px; }
 table.courses tr.newrow .coursename { margin: 0; }
 table.courses tr.newrow .picker { margin: 0; min-width: 190px; }
+
+/*
+ * Der Kopf bleibt stehen.
+ *
+ * Eine Lerneinheit hat schnell hundert Vokabeln; wer unten steht, weiss
+ * sonst nicht mehr, welche Spalte die deutsche ist.
+ *
+ * Das Mass dafuer kommt von aussen: Die Leiste oben klebt selbst, und wie
+ * hoch sie ist, steht nirgends fest - am Telefon bricht sie um und wird
+ * doppelt so hoch. teacher.js misst sie und legt das Ergebnis als
+ * --barhoehe ab; ohne das steht der Kopf hinter der Leiste statt darunter.
+ *
+ * Der eingeklappte Rahmen (border-collapse) reist beim Kleben nicht mit,
+ * deshalb die untere Linie als Schatten.
+ */
+table.release thead th {
+    position: sticky;
+    top: var(--barhoehe, 0px);
+    z-index: 4;
+    box-shadow: inset 0 -1px 0 var(--border);
+}
 
 /* ------------------------------------------------------ Freigabe-Balken
  *
@@ -732,7 +783,9 @@ table.release tr.flip td { animation: releaseflip .18s ease-out; }
     right: 0;
     top: 0;
     height: 0;
-    z-index: 4;
+    /* Unter dem klebenden Tabellenkopf (4) und damit auch unter der
+       Leiste (5) - beim Rollen schiebt sich der Balken darunter weg. */
+    z-index: 3;
     cursor: grab;
     user-select: none;
     touch-action: none;   /* sonst scrollt das Handy beim Ziehen */
@@ -774,14 +827,15 @@ table.release tr.flip td { animation: releaseflip .18s ease-out; }
  * sieht aus wie ein Knopf und nicht wie eine Kante. Jetzt ist der Balken
  * eine Linie, und die Blase haengt daran.
  *
- * In der Mitte, nicht am Griff: Links stehen die Vokabeln, und eine Blase
- * dort deckte im Ruhezustand dauerhaft ein Wort zu. Zwischen der deutschen
- * Spalte und der Satzzahl ist Platz, der keiner Zeile gehoert.
+ * Rechts, nicht in der Mitte und nicht am Griff: Links steht das fremde
+ * Wort, in der Mitte das deutsche - eine Blase dort deckte im Ruhezustand
+ * dauerhaft eines von beiden zu. Rechts enden die Woerter vor dem Rand,
+ * und dort stehen nur die Knoepfe.
  */
 .releasebar .bubble {
     position: absolute;
-    left: 50%; top: 50%;
-    transform: translate(-50%, -50%);
+    right: 6px; top: 50%;
+    transform: translateY(-50%);
     padding: 3px 11px;
     border-radius: 999px;
     background: var(--accent);
@@ -794,7 +848,7 @@ table.release tr.flip td { animation: releaseflip .18s ease-out; }
 .releasebar.dragging .bubble {
     font-size: .84rem;
     padding: 4px 13px;
-    transform: translate(-50%, -50%);
+    transform: translateY(-50%);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1030,15 +1084,79 @@ a.rowmain:hover { text-decoration: underline; }
     table.data tr.newrow .coursetitle { width: 100%; }
     table.data tr.newrow .coursetitle > span:last-child { flex: 1; }
 
-    /* Freigabetabelle: Die Karten wären hier falsch - man vergleicht
-       Vokabeln zeilenweise, und der Balken braucht durchgehende Zeilen. */
-    table.release tr:has(> th) { display: table-row; }
-    table.release, table.release tr, table.release td, table.release th {
-        display: revert;
+    /*
+     * Freigabetabelle: Karten waeren hier falsch - man vergleicht Vokabeln
+     * zeilenweise, und der Balken braucht durchgehende Zeilen.
+     *
+     * Die Ausnahme stand schon da, sie griff nur nicht ganz: Zwei der
+     * Kartenregeln oben sind zweiklassig - table.data td[data-label]::before
+     * und table.data td:first-child - und wiegen damit schwerer als
+     * table.release td. Vor jedem Wort stand deshalb noch einmal
+     * "FREMDSPRACHE", und die erste Zelle war ein Block statt einer Zelle.
+     * Als table.data.release geschrieben wiegt die Ausnahme ueberall
+     * mindestens gleich viel, und die Beschriftung kommt gar nicht mehr
+     * vor: Die Zellen tragen kein data-label mehr.
+     */
+    table.data.release tr:has(> th) { display: table-row; }
+    table.data.release { display: table; width: 100%; background: var(--surface); }
+    table.data.release thead { display: table-header-group; }
+    table.data.release tbody { display: table-row-group; }
+    table.data.release tr {
+        display: table-row;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
     }
-    table.release { display: table; width: 100%; background: var(--surface); }
-    table.release td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
-    table.release td::before { content: none; }
+    /* Der Kopf schrumpft mit: "FREMDSPRACHE" ist ein Wort ohne
+       Bruchstelle, und bei 320 px stand sonst "FREMDSPRAC" da. */
+    table.data.release th {
+        display: table-cell;
+        padding: 7px 6px;
+        font-size: .7rem;
+        letter-spacing: 0;
+    }
+    table.data.release td,
+    table.data.release td:first-child {
+        display: table-cell;
+        padding: 8px 9px;
+        border: 0;
+        border-bottom: 1px solid var(--border);
+        font-size: .95rem;
+        text-align: left;
+        overflow-wrap: anywhere;
+    }
+    table.data.release td::before { content: none; }
+
+    /*
+     * Und die Breite wird verteilt, nicht erbeten.
+     *
+     * Bei table-layout: auto bestimmt der Inhalt die Spalten - und der
+     * Inhalt wechselt: Wird eine Zeile zum Formular, stehen dort statt
+     * zweier Woerter zwei Eingabefelder, und die Spalten rutschen unter
+     * dem Finger. Fest verteilt stehen sie still, und die beiden
+     * Wortspalten sind gleich breit statt so breit wie ihr laengstes
+     * Wort.
+     */
+    table.data.release { table-layout: fixed; }
+    table.data.release th.actions,
+    table.data.release td.actions {
+        display: table-cell;
+        width: 86px;
+        gap: 0;
+        margin: 0;
+        padding: 6px 6px 6px 0;
+        border-top: 0;
+        border-bottom: 1px solid var(--border);
+        text-align: right;
+        /* Ohne JavaScript steht hier ein dritter Knopf - der Rueckfallweg
+           "bis hier freigeben". Zu dritt passen sie nicht nebeneinander,
+           und umbrechen ist besser als abgeschnitten werden: table.data
+           traegt overflow: hidden - was zu breit ist, ist einfach weg. */
+        white-space: normal;
+    }
+    table.data.release .iconaction.nurbild { padding: 7px 9px; min-height: 38px; }
+    table.data.release tr.newrow td.actions .iconaction { width: auto; }
 
     /* Der Pfad bekommt die ganze Zeile, Name und Abmelden die naechste -
        sonst schieben sie sich ineinander, sobald der Pfad umbricht. */

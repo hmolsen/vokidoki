@@ -299,6 +299,35 @@ steht die Spaltenüberschrift vor dem Wert (aus `data-label` am `<td>`), die
 Aktionen liegen unten in der Karte, und nichts scrollt seitwärts. Am Rechner
 bleibt es eine Tabelle — dort vergleicht man Spalten.
 
+**Eine Tabelle bleibt eine Tabelle: die Freigabe.** Dort vergleicht man
+Vokabeln zeilenweise, und der Balken braucht durchgehende Zeilen — Karten
+wären falsch. Die Ausnahme stand von Anfang an da, sie griff nur nicht
+ganz: Zwei der Kartenregeln sind zweiklassig (`table.data
+td[data-label]::before` und `table.data td:first-child`) und wiegen damit
+schwerer als `table.release td`. Vor jedem deutschen Wort stand deshalb noch
+einmal „DEUTSCH", und die erste Zelle war ein Block statt einer Zelle. Am
+Quelltext sah die Ausnahme richtig aus; gerechnet wurde etwas anderes — das
+sieht nur ein Browser, und deshalb steht die Prüfung dafür in der fünften
+Suite.
+
+Dazu wurde die Tabelle auf das eingedampft, was ein Telefon trägt: **drei
+Spalten** statt fünf. Die laufende Nummer und die Zahl der Lückensätze sind
+weg — wie viel freigegeben ist, sagt die Blase am Balken, und wie viele
+Sätze fehlen, der Knopf „Sätze nachtragen". Ändern und Löschen sind nur noch
+Stift und Mülleimer; den Namen dazu bekommt das Vorleseprogramm über eine
+Spanne, die nur es sieht (`.nurvorlesen`) — `title=` allein hängt am Zeiger,
+und am Telefon gibt es keinen. Die Breite wird am Telefon fest verteilt
+(`table-layout: fixed`): Wird eine Zeile zum Formular, stehen dort statt
+zweier Wörter zwei Eingabefelder, und die Spalten rutschten sonst unter dem
+Finger weg. Geprüft wird das bei 390, 375 und 320 px — im Ruhezustand und
+mitten im Ändern.
+
+**Der Kopf bleibt beim Rollen stehen.** Das Maß dafür kommt von außen: Die
+Leiste oben klebt selbst, und wie hoch sie ist, weiß nur der Browser — am
+Telefon bricht sie um und wird doppelt so hoch. `teacher.js` misst sie und
+legt das Ergebnis als `--barhoehe` ab; ohne das stünde der Tabellenkopf
+hinter der Leiste statt darunter.
+
 ### Der QR-Code, der die Anmeldung ersetzt
 
 Eingelesen wird mit der Kamera, also am Telefon; verwaltet wird am Rechner.
@@ -575,7 +604,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-887 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+905 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
 Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
 Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
 hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
@@ -637,7 +666,7 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 1124 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 1115 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
 
@@ -655,7 +684,7 @@ Quelltext völlig richtig aussahen:
 - Der Zettel für die ganze Klasse wurde erst beim nächsten Laden anklickbar.
 
 ```bash
-node tests/browser/lauf.mjs --fixture            # 92 Prüfungen
+node tests/browser/lauf.mjs --fixture            # 113 Prüfungen
 node tests/browser/lauf.mjs --fixture bilder/    # dazu Bildschirmfotos
 ```
 

@@ -89,7 +89,7 @@ export async function pruefe(f, aus) {
 
         // Ein Klick auf die Zeile selbst soll sie weiterhin setzen.
         await b.js(`document.querySelectorAll('#freigabe tr[data-pos]')[2]
-                      .querySelector('td.num').click()`);
+                      .querySelector('td').click()`);
         await schlafe(900);
         ok('Ein Klick auf die Zeile setzt die Freigabe weiterhin',
            (await b.js(`location.search`)).includes('id=' + f.unit));
@@ -111,7 +111,7 @@ export async function pruefe(f, aus) {
 
         const nachher = await b.js(`({
             zeilen: document.querySelectorAll('#freigabe tr[data-pos]').length,
-            letzte: [...document.querySelectorAll('#freigabe tr[data-pos] td:nth-child(2)')]
+            letzte: [...document.querySelectorAll('#freigabe tr[data-pos] td:first-child')]
                       .pop()?.textContent?.trim() ?? '',
             meldung: document.querySelector('.notice')?.textContent?.trim() ?? '',
         })`);

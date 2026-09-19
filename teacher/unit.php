@@ -225,8 +225,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['delete_vocab'
 }
 
 $vokabeln = qa(
-    'SELECT v.id, v.position, v.term_foreign, v.term_native, v.word_type,
-            (SELECT COUNT(*) FROM sentences s WHERE s.vocab_id = v.id) AS saetze
+    'SELECT v.id, v.position, v.term_foreign, v.term_native, v.word_type
        FROM vocab v
       WHERE v.unit_id = ?
       ORDER BY v.position, v.id',
@@ -370,54 +369,56 @@ $fehlen = vocab_without_sentences($unitId);
  *
  * Ohne JavaScript bleibt er eine gewoehnliche Tabelle mit einem Knopf je
  * Zeile - das Formular darunter ist dasselbe.
+ *
+ * Drei Spalten, mehr nicht: das fremde Wort, das deutsche, die Handgriffe.
+ * Die laufende Nummer stand einmal davor und die Zahl der Lueckensaetze
+ * dahinter - am Telefon kostete beides die Breite, die die Woerter
+ * brauchen, und keines davon sagte etwas, das nicht anderswo steht: wie
+ * viel freigegeben ist, sagt die Blase am Balken, und wie viele Saetze
+ * fehlen, der Knopf "Saetze nachtragen" darueber.
  */
 ?>
 <table class="data release" id="freigabe" data-released="<?= $frei ?>">
-    <tr>
-        <th class="num">#</th>
-        <th>Fremdsprache</th>
-        <th>Deutsch</th>
-        <th class="num">Sätze</th>
-        <th class="actions"></th>
-    </tr>
+    <thead>
+        <tr>
+            <th>Fremdsprache</th>
+            <th>Deutsch</th>
+            <th class="actions"></th>
+        </tr>
+    </thead>
+    <tbody>
     <?php foreach ($vokabeln as $i => $v): ?>
         <?php $istFrei = $i < $frei; ?>
         <tr class="<?= $istFrei ? 'released' : 'locked' ?>" data-pos="<?= $i + 1 ?>">
-            <td class="num"><?= $i + 1 ?></td>
-            <td data-label="Fremdsprache">
+            <td>
                 <strong data-wort><?= h($v['term_foreign']) ?></strong>
                 <input type="text" name="edit_f" value="<?= h($v['term_foreign']) ?>"
                        form="vokabel<?= (int) $v['id'] ?>" maxlength="255" hidden>
             </td>
-            <td data-label="Deutsch">
+            <td>
                 <span data-wort><?= h($v['term_native']) ?></span>
                 <input type="text" name="edit_n" value="<?= h($v['term_native']) ?>"
                        form="vokabel<?= (int) $v['id'] ?>" maxlength="255" hidden>
             </td>
-            <td class="num" data-label="Sätze">
-                <?= (int) $v['saetze'] > 0
-                    ? (int) $v['saetze']
-                    : '<span class="muted" title="Für diese Vokabel gibt es noch keinen Lückensatz">&ndash;</span>' ?>
-            </td>
             <td class="actions">
-                <button class="iconaction quiet js-hide" name="release" value="<?= $i + 1 ?>"
-                        form="releaseform" title="Bis hier freigeben">
-                    <span aria-hidden="true">&#128275;</span> bis hier
+                <button class="iconaction quiet js-hide nurbild" name="release"
+                        value="<?= $i + 1 ?>" form="releaseform" title="Bis hier freigeben">
+                    <span aria-hidden="true">&#128275;</span><span class="nurvorlesen">Bis hier freigeben</span>
                 </button>
-                <button class="iconaction quiet" data-edit="<?= (int) $v['id'] ?>"
+                <button class="iconaction quiet nurbild" data-edit="<?= (int) $v['id'] ?>"
                         type="button" title="Diese Vokabel ändern">
-                    <span aria-hidden="true">&#9998;</span> Ändern
+                    <span aria-hidden="true">&#9998;</span><span class="nurvorlesen">Ändern</span>
                 </button>
-                <button class="iconaction primary" form="vokabel<?= (int) $v['id'] ?>"
+                <button class="iconaction primary nurbild" form="vokabel<?= (int) $v['id'] ?>"
                         name="save_vocab" value="<?= (int) $v['id'] ?>"
                         data-save="<?= (int) $v['id'] ?>" title="Änderung speichern" hidden>
-                    <span aria-hidden="true">&#10003;</span> Sichern
+                    <span aria-hidden="true">&#10003;</span><span class="nurvorlesen">Sichern</span>
                 </button>
-                <button class="iconaction danger" form="vokabel<?= (int) $v['id'] ?>"
+                <button class="iconaction danger nurbild" form="vokabel<?= (int) $v['id'] ?>"
                         name="delete_vocab" value="<?= (int) $v['id'] ?>"
                         title="Diese Vokabel löschen"
                         data-confirm="&bdquo;<?= h($v['term_foreign']) ?>&ldquo; löschen? Die Lückensätze dazu und der Lernstand aller Kinder daran verschwinden mit.">
-                    <span aria-hidden="true">&#10005;</span> Löschen
+                    <span aria-hidden="true">&#128465;</span><span class="nurvorlesen">Löschen</span>
                 </button>
             </td>
         </tr>
@@ -431,23 +432,22 @@ $fehlen = vocab_without_sentences($unitId);
      */
     ?>
     <tr class="newrow">
-        <td class="num"><span class="cflag plus">+</span></td>
-        <td data-label="Fremdsprache">
+        <td>
             <input type="text" name="new_f" form="neueVokabel" maxlength="255"
                    placeholder="apple" aria-label="Fremdsprache">
         </td>
-        <td data-label="Deutsch">
+        <td>
             <input type="text" name="new_n" form="neueVokabel" maxlength="255"
                    placeholder="Apfel" aria-label="Deutsch">
         </td>
-        <td></td>
         <td class="actions">
-            <button class="iconaction primary" form="neueVokabel"
+            <button class="iconaction primary nurbild" form="neueVokabel"
                     name="add_vocab" value="1" title="Vokabel hinzufügen">
-                <span aria-hidden="true">+</span> Hinzufügen
+                <span aria-hidden="true">+</span><span class="nurvorlesen">Hinzufügen</span>
             </button>
         </td>
     </tr>
+    </tbody>
 </table>
 
 <form method="post" id="releaseform">

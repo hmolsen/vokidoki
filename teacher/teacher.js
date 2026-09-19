@@ -15,6 +15,31 @@ document.addEventListener('click', (e) => {
     if (b && !confirm(b.dataset.confirm)) e.preventDefault();
 });
 
+// --------------------------------------------------------- Hoehe der Leiste
+
+/**
+ * Wie hoch die Leiste oben ist - als Mass fuer alles, was darunter klebt.
+ *
+ * Der Kopf der Freigabetabelle bleibt beim Rollen stehen; er muss dabei
+ * unter der Leiste stehenbleiben, nicht hinter ihr. Wie hoch die ist,
+ * weiss nur der Browser: Am Telefon bricht der Pfad um und sie wird
+ * doppelt so hoch. Also messen statt schaetzen - und erneut messen, wenn
+ * sich die Breite aendert.
+ */
+function initBarHoehe() {
+    const leiste = document.querySelector('.adminbar');
+    if (!leiste) return;
+
+    const messen = () => document.documentElement.style.setProperty(
+        '--barhoehe', leiste.offsetHeight + 'px');
+
+    messen();
+    window.addEventListener('resize', messen);
+    if (window.ResizeObserver) new ResizeObserver(messen).observe(leiste);
+}
+
+initBarHoehe();
+
 // ------------------------------------------------------ Sprachen-Auswahlfeld
 
 /**

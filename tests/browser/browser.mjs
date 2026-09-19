@@ -174,11 +174,24 @@ export async function browser({ port = 9400, breite = 1200, hoehe = 1000,
         await send('Input.dispatchKeyEvent', { type: 'keyUp', key, windowsVirtualKeyCode: code });
     };
 
+    /*
+     * Ein Bildschirmfoto - nur wenn ein Ordner dafuer angegeben wurde.
+     *
+     * send() liefert die ganze Antwort des Protokolls, nicht ihren Inhalt:
+     * Die Bilddaten stehen unter .result.data, nicht unter .data. Ohne den
+     * Zwischenschritt kam hier immer undefined an - gemerkt hat das lange
+     * niemand, weil ohne Ordner gar nicht fotografiert wird.
+     */
     const bild = async (name) => {
         if (!aus) return;
         const r = await send('Page.captureScreenshot',
                              { format: 'png', captureBeyondViewport: true });
-        writeFileSync(join(aus, name + '.png'), Buffer.from(r.data, 'base64'));
+        const daten = r.result?.data;
+        if (!daten) {
+            throw new Error('Bildschirmfoto "' + name + '" misslungen: '
+                            + JSON.stringify(r.error ?? r));
+        }
+        writeFileSync(join(aus, name + '.png'), Buffer.from(daten, 'base64'));
     };
 
     const groesse = (w, h) => send('Emulation.setDeviceMetricsOverride',

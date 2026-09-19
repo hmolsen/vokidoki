@@ -2542,7 +2542,7 @@ ok('Und jede Zeile sagt, die wievielte sie ist',
 ok('Die Marke steht an der Tabelle, damit das Skript sie findet',
    str_contains($res['body'], 'data-released="'));
 ok('Ohne JavaScript bleibt je Zeile ein Knopf',
-   str_contains($res['body'], 'class="iconaction quiet js-hide"')
+   str_contains($res['body'], 'js-hide')
    && str_contains($res['body'], 'form="releaseform"'),
    'sonst ist die Freigabe ohne Skript nicht bedienbar');
 
@@ -2579,6 +2579,84 @@ ok('Der Balken liegt darin absolut',
 ok('Und faengt den Zeiger auch auf dem Handy ab',
    preg_match('/\.releasebar\s*\{[^}]*touch-action:\s*none/s', $cssB) === 1,
    'sonst scrollt das Handy statt zu ziehen');
+
+
+// ---- Die Tabelle selbst: drei Spalten, mehr passt auf ein Telefon nicht.
+
+/*
+ * Vorher waren es fuenf: die laufende Nummer, das fremde Wort, das
+ * deutsche, die Zahl der Lueckensaetze und die Handgriffe. Am Telefon
+ * blieben fuer die Woerter damit keine sechzig Pixel - und keine der
+ * beiden Zahlen sagte etwas, das nicht anderswo steht: wie viel
+ * freigegeben ist, sagt die Blase am Balken, und wie viele Saetze fehlen,
+ * der Knopf "Saetze nachtragen".
+ */
+$res = freiPost($base . '/teacher/unit.php?id=' . $freiUnit, null);
+
+preg_match('/<thead>.*?<\/thead>/s', $res['body'], $km);
+$kopf = $km[0] ?? '';
+ok('Der Tabellenkopf steht in einem <thead>', $kopf !== '',
+   'ohne ihn kann er beim Rollen nicht stehenbleiben');
+$spalten = preg_match_all('/<th[\s>]/', $kopf);
+ok('Und traegt genau drei Spalten', $spalten === 3, $spalten . ' Spalten');
+ok('Fremdsprache und Deutsch',
+   str_contains($kopf, '<th>Fremdsprache</th>') && str_contains($kopf, '<th>Deutsch</th>'));
+ok('Die laufende Nummer ist weg', !str_contains($kopf, '#'));
+ok('Und die Satzzahl auch', !str_contains($kopf, 'Sätze'));
+
+preg_match('/<tr class="(?:released|locked)" data-pos="1">.*?<\/tr>/s', $res['body'], $zm);
+$zeile = $zm[0] ?? '';
+ok('Eine Vokabelzeile hat ebenso drei Zellen', substr_count($zeile, '<td') === 3,
+   substr_count($zeile, '<td') . ' Zellen');
+
+/*
+ * Und die Spaltenueberschrift steht im Kopf, nicht noch einmal in jeder
+ * Zelle. data-label ist das, woraus die Karten am Telefon ihre
+ * Beschriftung ziehen - in einer Tabelle, die eine Tabelle bleibt, stand
+ * dadurch vor jedem Wort noch einmal "FREMDSPRACHE".
+ */
+ok('Keine Zelle traegt die Spaltenueberschrift noch einmal',
+   !str_contains($zeile, 'data-label'),
+   'sie steht schon im Kopf');
+
+// ---- Aendern und Loeschen sind Sinnbilder, keine Saetze.
+
+ok('Aendern ist ein Stift', str_contains($zeile, 'iconaction quiet nurbild')
+   && str_contains($zeile, '&#9998;'));
+ok('Loeschen ist ein Muelleimer', str_contains($zeile, 'iconaction danger nurbild')
+   && str_contains($zeile, '&#128465;'));
+ok('Und jeder Knopf hat trotzdem einen Namen',
+   substr_count($zeile, 'class="nurvorlesen"') === 4,
+   substr_count($zeile, 'class="nurvorlesen"')
+   . ' von 4 - ein Knopf aus bloss einem Zeichen heisst sonst "Schaltflaeche"');
+ok('Der reine Sinnbildknopf hat eine eigene Regel',
+   preg_match('/\.iconaction\.nurbild\s*\{/', $cssB) === 1);
+ok('Und der vorgelesene Name wird wirklich versteckt',
+   preg_match('/\.nurvorlesen\s*\{[^}]*clip-path:/s', $cssB) === 1,
+   'display: none nimmt ihn auch dem Vorleseprogramm');
+
+// ---- Der Kopf bleibt beim Rollen stehen.
+
+ok('Der Tabellenkopf klebt',
+   preg_match('/table\.release thead th\s*\{[^}]*position:\s*sticky/s', $cssB) === 1);
+ok('Und zwar unter der Leiste, nicht hinter ihr',
+   preg_match('/table\.release thead th\s*\{[^}]*top:\s*var\(--barhoehe/s', $cssB) === 1);
+ok('Deren Hoehe misst das Skript',
+   str_contains($skriptB['body'], "'--barhoehe'")
+   && str_contains($skriptB['body'], 'function initBarHoehe'),
+   'am Telefon bricht die Leiste um und ist doppelt so hoch');
+ok('Der Balken liegt unter dem Kopf, nicht darueber',
+   preg_match('/\.releasebar\s*\{[^}]*z-index:\s*3/s', $cssB) === 1,
+   'sonst schiebt er sich beim Rollen ueber die Spaltennamen');
+
+// ---- Am Telefon bleibt sie eine Tabelle, und zwar eine passende.
+
+ok('Die Telefonregeln nehmen die Freigabetabelle aus',
+   preg_match('/table\.data\.release tr:has\(> th\)\s*\{\s*display:\s*table-row/s', $cssB) === 1,
+   'sonst wird auch hier jede Zeile zur Karte - und der Balken braucht Zeilen');
+ok('Und verteilen die Breite fest',
+   preg_match('/table\.data\.release\s*\{\s*table-layout:\s*fixed/s', $cssB) === 1,
+   'sonst rutschen die Spalten, sobald eine Zeile zum Formular wird');
 
 // ---- Der Kopf der Seite: Pfad, Knopfreihe, Meldung an der richtigen Stelle.
 
