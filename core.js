@@ -172,15 +172,29 @@ export function wireBack(root = document) {
  * das. Ohne einen Satz dazu ist es aber nur eine Seite, die weniger zeigt
  * als die Verwaltung, und das sieht nach einem Fehler aus.
  *
+ * Und der Weg zurueck gehoert dazu. Der Hinweis sagte bisher, wo man ist,
+ * aber nicht, wie man wieder herauskommt: Die App hat keine Adresszeile,
+ * wenn sie installiert ist, und ihr Zurueck fuehrt tiefer in die App statt
+ * heraus. Der Knopf zeigt auf genau die Stelle der Verwaltung, an der man
+ * war - auf den Kurs, auf die Lerneinheit -, nicht auf die Startseite.
+ *
+ * Eine echte Seitennavigation, kein Wechsel innerhalb der App: Der
+ * Lehrkraft-Bereich wird vom Server gebaut und ist kein Teil der PWA.
+ *
  * Fuer ein Kind steht dort nichts: Es braucht nicht erklaert zu bekommen,
  * dass es seine eigene App sieht.
  */
-export function pupilHint(text = 'So sieht deine Klasse das.') {
+export function pupilHint(text = 'So sieht deine Klasse das.', zurueck = '/teacher/') {
     if (!VT.user?.isTeacher) return '';
     return `<div class="notice pupilview">
-                <strong>Schüleransicht.</strong> ${esc(text)}
-                Freigegeben ist, was hier auftaucht &ndash; mehr sehen die
-                Kinder nicht.
+                <span>
+                    <strong>Schüleransicht.</strong> ${esc(text)}
+                    Freigegeben ist, was hier auftaucht &ndash; mehr sehen die
+                    Kinder nicht.
+                </span>
+                <a class="btn small secondary" href="${VT.base}${esc(zurueck)}">
+                    &#8249; Zurück zur Verwaltung
+                </a>
             </div>`;
 }
 

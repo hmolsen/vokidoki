@@ -5824,6 +5824,71 @@ ok('Die Sprachseite zeigt ihn', str_contains($spr['body'], 'pupilHint('));
 $lern = http($base . '/views/unit.js');
 ok('Die Lerneinheit auch', str_contains($lern['body'], 'pupilHint('));
 
+/*
+ * Und aus der Schueleransicht heraus fuehrt ein Weg zurueck.
+ *
+ * Der Hinweis sagte, wo man ist, aber nicht, wie man wieder herauskommt:
+ * Die installierte App hat keine Adresszeile, und ihr Zurueck fuehrt tiefer
+ * hinein statt heraus. Wer nur zum Ausprobieren da war, sass fest.
+ */
+ok('Der Hinweis traegt einen Weg zurueck',
+   str_contains($kern['body'], 'Zurück zur Verwaltung'));
+ok('Und zwar als echte Seitennavigation',
+   preg_match('/<a class="btn small secondary" href="\$\{VT\.base\}\$\{esc\(zurueck\)\}"/',
+              $kern['body']) === 1,
+   'der Lehrkraft-Bereich wird vom Server gebaut und ist kein Teil der PWA');
+
+ok('Die Lerneinheit zeigt auf genau diese Lerneinheit',
+   str_contains($lern['body'], '/teacher/unit.php?id=${unitId}'),
+   'nicht auf die Startseite - man war ja irgendwo');
+ok('Der Kurs zeigt auf genau diesen Kurs',
+   str_contains($spr['body'], '/teacher/course.php?id=${language.courseId}'));
+ok('Und ohne Kurs bleibt die Startseite der Rueckfall',
+   str_contains($spr['body'], "'/teacher/'"));
+
+/*
+ * Die Kennung des Kurses kommt aus der API - und nur fuer eine Lehrkraft.
+ * Einem Kind sagt sie nichts; der Lehrkraft-Bereich laesst es ohnehin nicht
+ * hinein, also steht sie dort auch nicht.
+ */
+$fsJar = tempnam(sys_get_temp_dir(), 'vtfs');
+$fsSicht = apiAls($fsJar, static function () use ($lehrerName, $fsSprache): array {
+    apiCall('auth', 'login', ['username' => $lehrerName, 'password' => 'lehrerin123']);
+    [$d] = apiCall('units', 'list', null, ['language_id' => $fsSprache]);
+    return $d['language'] ?? [];
+});
+ok('Die Lehrkraft bekommt die Kennung ihres Kurses',
+   (int) ($fsSicht['courseId'] ?? 0) === $fsKursId,
+   json_encode($fsSicht));
+@unlink($fsJar);
+
+// Und die Gegenprobe mit einem Kind desselben Kurses.
+$fsKindName = 'e2e_sichtkind';
+$fsKind     = makeUser($fsKindName, 'Sichtkind');
+user_assign_to_school($fsKind, (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]));
+course_add_member($fsKursId, $fsKind, COURSE_ROLE_STUDENT);
+
+$fsKindJar   = tempnam(sys_get_temp_dir(), 'vtfsk');
+$fsKindSicht = apiAls($fsKindJar, static function () use ($fsKindName, $fsSprache): array {
+    apiCall('auth', 'login', ['username' => $fsKindName, 'password' => 'geheim123']);
+    [$d] = apiCall('units', 'list', null, ['language_id' => $fsSprache]);
+    return $d['language'] ?? [];
+});
+ok('Ein Kind desselben Kurses bekommt sie nicht',
+   array_key_exists('courseId', $fsKindSicht) && $fsKindSicht['courseId'] === null,
+   json_encode($fsKindSicht));
+ok('Den Namen des Kurses sieht es dagegen weiterhin',
+   ($fsKindSicht['label'] ?? '') !== '', json_encode($fsKindSicht));
+@unlink($fsKindJar);
+q('DELETE FROM users WHERE id = ?', [$fsKind]);
+
+$stilF = (string) file_get_contents(__DIR__ . '/../style.css');
+ok('Satz und Knopf stehen nebeneinander',
+   preg_match('/\.notice\.pupilview\s*\{[^}]*display:\s*flex/s', $stilF) === 1);
+ok('Und am Telefon nimmt der Knopf die ganze Breite',
+   preg_match('/\.notice\.pupilview \.btn\s*\{[^}]*flex:\s*1 1 100%/s', $stilF) === 1,
+   'ein halbzeiliger Knopf am rechten Rand trifft sich mit dem Daumen schlecht');
+
 // ---- Die beiden Wege zum Einlesen stehen nebeneinander.
 
 $res = teacherGet('course.php?id=' . $fsKursId);

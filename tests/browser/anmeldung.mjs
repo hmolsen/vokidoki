@@ -62,6 +62,48 @@ export async function pruefe(f, aus) {
         ok('Die Ansicht der Klasse bleibt erreichbar',
            probe.ort.includes('/lang/' + f.sprache), probe.ort);
         ok('Und zeigt den Kurs', probe.titel !== '', probe.titel);
+
+        /*
+         * Und von dort wieder heraus.
+         *
+         * Der Hinweis sagte, wo man ist, aber nicht, wie man zurueckkommt.
+         * Die installierte App hat keine Adresszeile, und ihr Zurueck fuehrt
+         * tiefer hinein statt heraus - wer nur ausprobieren wollte, sass
+         * fest. Der Knopf zeigt auf genau die Stelle, an der man war.
+         */
+        const hinweis = await b.js(`(() => {
+            const k = document.querySelector('.notice.pupilview');
+            const a = k?.querySelector('a.btn');
+            return {
+                da:   !!k,
+                text: a?.textContent?.trim().replace(/\s+/g, ' ') ?? '',
+                ziel: a?.getAttribute('href') ?? '',
+            };
+        })()`);
+
+        ok('Die Schüleransicht sagt der Lehrkraft, was sie da sieht', hinweis.da);
+        ok('Und trägt einen Weg zurück in die Verwaltung',
+           hinweis.text.includes('Zurück zur Verwaltung'), hinweis.text);
+        ok('Der auf genau diesen Kurs zeigt',
+           hinweis.ziel.includes('/teacher/course.php?id=' + f.kurs), hinweis.ziel);
+
+        await b.js(`document.querySelector('.notice.pupilview a.btn').click()`);
+        await schlafe(1800);
+        const zurueck = await b.js(`({
+            ort:   location.pathname + location.search,
+            titel: document.querySelector('h1')?.textContent ?? '',
+        })`);
+        ok('Und ein Druck darauf führt wirklich dorthin',
+           zurueck.ort.includes('course.php?id=' + f.kurs), zurueck.ort);
+        ok('Nämlich auf die Kursseite', zurueck.titel !== '', zurueck.titel);
+
+        // In einer Lerneinheit zeigt er auf die Lerneinheit, nicht auf den Kurs.
+        await b.geh(f.basis + '/#/unit/' + f.unit, 2200);
+        ok('In der Lerneinheit zeigt er auf die Lerneinheit',
+           (await b.js(`document.querySelector('.notice.pupilview a.btn')
+                          ?.getAttribute('href') ?? ''`))
+               .includes('/teacher/unit.php?id=' + f.unit),
+           'nicht auf die Startseite - man war ja irgendwo');
     } finally {
         b.schliessen();
     }

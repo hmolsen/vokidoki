@@ -336,6 +336,16 @@ gerade die Schüleransicht vor sich hat — ohne diesen Satz ist es nur eine
 Seite, die weniger zeigt als die Verwaltung, und das sieht nach einem Fehler
 aus. Für Kinder steht dort nichts.
 
+**Und im selben Hinweis steht der Weg zurück.** Er sagte bisher, wo man ist,
+aber nicht, wie man wieder herauskommt: Die installierte App hat keine
+Adresszeile, und ihr Zurück führt tiefer hinein statt heraus. Der Knopf
+zeigt auf genau die Stelle der Verwaltung, an der man war — aus der
+Kursansicht auf `course.php?id=…`, aus einer Lerneinheit auf
+`unit.php?id=…`, und erst ohne beides auf die Startseite. Die Kennung des
+Kurses liefert `api/units.php` dafür mit, **nur an eine Lehrkraft**: Einem
+Kind sagt die Zahl nichts, und der Lehrkraft-Bereich lässt es ohnehin nicht
+hinein.
+
 Tabellenzeilen öffnen sich per Klick statt über einen „Öffnen"-Knopf in
 jeder Zeile. Der Name in der Zeile bleibt ein echter Link — für die
 Tastatur, fürs Aufklappen in einem neuen Tab und für alle, die keinen Zeiger
@@ -651,7 +661,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-934 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+944 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
 Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
 Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
 hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
@@ -713,7 +723,7 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 1144 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 1154 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
 
@@ -731,7 +741,7 @@ Quelltext völlig richtig aussahen:
 - Der Zettel für die ganze Klasse wurde erst beim nächsten Laden anklickbar.
 
 ```bash
-node tests/browser/lauf.mjs --fixture            # 141 Prüfungen
+node tests/browser/lauf.mjs --fixture            # 147 Prüfungen
 node tests/browser/lauf.mjs --fixture bilder/    # dazu Bildschirmfotos
 ```
 

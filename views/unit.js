@@ -43,7 +43,8 @@ export async function unitView(unitId) {
 
     render(`
         ${topbar(unit.title, { backTo: `/lang/${unit.language_id}` })}
-        ${pupilHint('Das ist diese Lerneinheit, wie ein Kind sie vor sich hat.')}
+        ${pupilHint('Das ist diese Lerneinheit, wie ein Kind sie vor sich hat.',
+                    `/teacher/unit.php?id=${unitId}`)}
         <div id="msg"></div>
 
         ${komplett ? '<div class="notice good">Diese Lerneinheit hast du in beiden Übungen geschafft!</div>' : ''}

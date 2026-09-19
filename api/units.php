@@ -99,13 +99,14 @@ switch (action()) {
          * nicht, in welchen Kurs das faellt. Bei einer Familie steht dort
          * dasselbe wie der Sprachname, bei einer Schule "Englisch - 5B".
          */
-        $kurs = qv(
-            'SELECT co.name FROM courses co
+        $kursZeile = q1(
+            'SELECT co.id, co.name FROM courses co
                JOIN course_members m ON m.course_id = co.id
               WHERE co.language_id = ? AND m.user_id = ?
               LIMIT 1',
             [(int) $lang['id'], $uid],
         );
+        $kurs = $kursZeile === null ? null : (string) $kursZeile['name'];
 
         /*
          * Wie auf der Kachel: Der Kursname steht nur da, wenn er etwas
@@ -123,13 +124,24 @@ switch (action()) {
         );
         $anzeige = $gleichnamig > 1 && $kurs !== null ? (string) $kurs : (string) $lang['name'];
 
+        /*
+         * Die Kennung des Kurses - nur fuer eine Lehrkraft.
+         *
+         * Sie braucht sie fuer den Weg zurueck: Der Hinweis "So sieht deine
+         * Klasse das" traegt einen Knopf in die Verwaltung, und der soll auf
+         * genau diesen Kurs zeigen und nicht auf die Startseite. Einem Kind
+         * sagt die Zahl nichts - der Lehrkraft-Bereich laesst es ohnehin
+         * nicht hinein -, also steht sie dort auch nicht.
+         */
         json_out(['ok' => true, 'language' => [
-            'id'     => (int) $lang['id'],
-            'name'   => $lang['name'],
-            'flag'   => $lang['flag_emoji'],
-            'course' => $kurs === null ? null : (string) $kurs,
+            'id'       => (int) $lang['id'],
+            'name'     => $lang['name'],
+            'flag'     => $lang['flag_emoji'],
+            'course'   => $kurs,
+            'courseId' => $kursZeile !== null && user_is_teacher($user)
+                ? (int) $kursZeile['id'] : null,
             // Was als Ueberschrift dastehen soll - Sprache oder Kurs.
-            'label'  => $anzeige,
+            'label'    => $anzeige,
         ], 'units' => $rows]);
 
     case 'get':

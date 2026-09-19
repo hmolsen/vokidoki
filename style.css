@@ -1012,10 +1012,27 @@ input.cloze-input[readonly] { opacity: 1; }
 /* Der Hinweis in der Schueleransicht - fuer Lehrkraefte, die von ihrem
    Bereich herkommen. Zurueckhaltend: Er erklaert die Seite, er ist nicht
    ihr Inhalt. */
+/*
+ * Der Hinweis fuer die Lehrkraft - Satz links, Weg zurueck rechts.
+ *
+ * Auf dem Telefon bricht der Knopf unter den Satz und nimmt die ganze
+ * Breite: Er ist dort das Wichtigere von beiden, und ein halbzeiliger
+ * Knopf am rechten Rand trifft sich mit dem Daumen schlecht.
+ */
 .notice.pupilview {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
     background: var(--surface-2);
     border-color: var(--border);
     color: var(--text-soft);
     font-size: .88rem;
 }
 .notice.pupilview strong { color: var(--text); }
+.notice.pupilview > span { flex: 1 1 220px; }
+.notice.pupilview .btn { margin: 0; flex: 0 0 auto; white-space: nowrap; }
+
+@media (max-width: 520px) {
+    .notice.pupilview .btn { flex: 1 1 100%; }
+}

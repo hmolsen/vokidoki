@@ -47,7 +47,10 @@ export async function languageView(languageId) {
         ${topbar(language.label || language.name,
                  { backTo: '/', lead: flagHtml(language.flag, 'flag lead') })}
         <div id="msg"></div>
-        ${pupilHint('Das ist die Ansicht deines Kurses, wie ein Kind sie hat.')}
+        ${pupilHint('Das ist die Ansicht deines Kurses, wie ein Kind sie hat.',
+                    language.courseId
+                        ? `/teacher/course.php?id=${language.courseId}`
+                        : '/teacher/')}
 
         ${units.length > 0 ? `
             <div class="card">
