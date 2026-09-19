@@ -159,7 +159,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['create_course
     $drin = (int) qv('SELECT COUNT(*) FROM course_members WHERE course_id = ?',
                      [(int) $ergebnis['id']]);
     teacher_flash(sprintf(
-        'Kurs "%s" angelegt, %d Teilnehmende.', $ergebnis['name'], $drin,
+        'Kurs "%s" angelegt, %d Kinder sind dabei.', $ergebnis['name'], $drin,
     ));
     teacher_redirect('course.php?id=' . (int) $ergebnis['id']);
 }
@@ -255,7 +255,7 @@ teacher_flash_render();
         <th class="num">Kinder</th>
         <th class="num">Lerneinheiten</th>
         <th class="num">Freigegeben</th>
-        <th class="chev"></th>
+        <th class="actions"></th>
     </tr>
 
     <?php foreach ($kurse as $c): ?>
@@ -266,7 +266,8 @@ teacher_flash_render();
                     <?= flag_html($c['flag_emoji'] ?: FLAG_FALLBACK, 'cflag') ?>
                     <span>
                         <a class="rowmain" href="<?= h($ziel) ?>"><?= h($c['name']) ?></a>
-                        <span class="tiny muted"><?= h($c['language_name']) ?></span>
+                        <span class="tiny muted"><?= h($c['language_name']) ?><?php
+                            if (!$c['active']) { echo ' &middot; stillgelegt'; } ?></span>
                     </span>
                 </span>
             </td>
@@ -285,7 +286,7 @@ teacher_flash_render();
                 }
                 ?>
             </td>
-            <td class="chev" aria-hidden="true">&#8250;</td>
+            <td class="actions chev" aria-hidden="true">&#8250;</td>
         </tr>
     <?php endforeach; ?>
 
@@ -368,6 +369,8 @@ teacher_flash_render();
                         <strong><?= h($k['display_name']) ?></strong>
                         <?php if (isset($gesperrt[$k['username']])): ?>
                             <span class="tiny" style="color:var(--bad)">gesperrt</span>
+                        <?php elseif (!$k['active']): ?>
+                            <span class="tiny muted">stillgelegt</span>
                         <?php endif; ?>
                     </span>
                 </span>
@@ -491,7 +494,7 @@ teacher_flash_render();
     Brinkmann" eintippen oder eine ganze Klassenliste einfügen &ndash;
     gespeichert wird daraus nur „Fritz B.". Den Nachnamen wirft die Anwendung
     beim Einlesen weg; er steht in keiner Tabelle und auf keinem Zettel.
-    Das Anfangspasswort steht im Klartext, damit sich das Anschreiben
+    Das Anfangspasswort steht im Klartext, damit sich der Zettel
     nachdrucken lässt; sobald ein Kind es selbst ändert, verschwindet es aus
     der Spalte.
 </p>

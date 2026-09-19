@@ -171,7 +171,7 @@ flash_render();
                 <input type="checkbox" name="active" value="1"<?= $s['active'] ? ' checked' : '' ?>
                        style="width:auto;min-height:auto;margin:0"> aktiv
             </label>
-            <button class="btn secondary small" name="update" value="1">Speichern</button>
+            <button class="btn small secondary" name="update" value="1">Speichern</button>
         </form>
 
         <form method="post" class="compact">

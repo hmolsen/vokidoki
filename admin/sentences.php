@@ -230,7 +230,7 @@ flash_render();
     <?php if (!$nurGemeldet): ?>
         <a class="btn small" href="<?= h(admin_url('sentences.php') . '?flagged=1') ?>">Nur gemeldete zeigen</a>
     <?php else: ?>
-        <a class="btn secondary small" href="<?= h(admin_url('sentences.php')) ?>">Alle Sätze zeigen</a>
+        <a class="btn small secondary" href="<?= h(admin_url('sentences.php')) ?>">Alle Sätze zeigen</a>
     <?php endif; ?>
 </div>
 <?php endif; ?>
@@ -264,7 +264,7 @@ flash_render();
             <?php endforeach; ?>
             <input type="text" name="q" value="<?= h($suche) ?>"
                    placeholder="Satz oder Vokabel" style="margin:0;width:200px">
-            <button class="btn secondary small">Suchen</button>
+            <button class="btn small secondary">Suchen</button>
             <?php if ($suche !== ''): ?>
                 <a class="chip" href="<?= h(admin_url('sentences.php') . '?' . http_build_query(
                     array_filter(['user' => $userId, 'language' => $langId, 'unit' => $unitId])

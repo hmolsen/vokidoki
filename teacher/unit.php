@@ -73,7 +73,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['release'])) {
      * Die Saetze entstehen beim Einlesen fuer die ganze Einheit - einmal,
      * zu einem Zeitpunkt, an dem niemand davorsitzt. Frueher haengte die
      * Erzeugung an dieser Stelle, und dann wartete die Lehrkraft nach jeder
-     * Portion eine halbe Minute, waehrend die Lektion fuer die Klasse halb
+     * Portion eine halbe Minute, waehrend die Lerneinheit fuer die Klasse halb
      * da war.
      *
      * Fehlt trotzdem etwas - ein abgebrochener Lauf, ein aufgebrauchtes
@@ -284,8 +284,23 @@ teacher_flash_render();
 
 <h2>Freigabe</h2>
 
+<?php
+/*
+ * Auch ohne Vokabeln wird die Tabelle gezeigt.
+ *
+ * Vorher verschluckte dieser Zweig alles - und seit unten eine Anlegezeile
+ * steht, war damit ausgerechnet in einer leeren Lerneinheit der einzige
+ * Weg verdeckt, eine Vokabel von Hand einzutragen.
+ */
+?>
 <?php if ($gesamt === 0): ?>
-    <p class="muted">Diese Lerneinheit hat noch keine Vokabeln.</p>
+    <?= teacher_leer(
+        'Diese Lerneinheit hat noch keine Vokabeln. Trag unten eine von Hand '
+        . 'ein, oder lies eine Buchseite ein.',
+        sprintf('<a class="btn small" href="%s" target="_blank" rel="noopener">'
+                . 'Vokabeln einlesen</a>',
+                h(url('/') . '#/lang/' . (int) $unit['language_id'] . '/import')),
+    ) ?>
 <?php else: ?>
 
 <p>
@@ -299,6 +314,7 @@ teacher_flash_render();
         Die Klasse übt bis „<?= h($vokabeln[$frei - 1]['term_foreign'] ?? '') ?>".
     <?php endif; ?>
 </p>
+<?php endif; ?>
 
 <?php
 /*
@@ -322,7 +338,7 @@ $fehlen = vocab_without_sentences($unitId);
     <div class="buttonrow">
         <button class="btn small" name="release" value="<?= $gesamt ?>"
                 <?= $alles ? 'disabled title="Es ist schon alles freigegeben."' : '' ?>
-                data-confirm="Alle <?= $gesamt ?> Vokabeln freigeben? Die Klasse sieht dann die ganze Lektion.">
+                data-confirm="Alle <?= $gesamt ?> Vokabeln freigeben? Die Klasse sieht dann die ganze Lerneinheit.">
             Alles freigeben
         </button>
 
@@ -465,13 +481,5 @@ $fehlen = vocab_without_sentences($unitId);
     Kinder ist beim nächsten Freigeben wieder da.
 </p>
 
-<?php endif; ?>
-
-<script>
-document.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-confirm]');
-    if (b && !confirm(b.dataset.confirm)) e.preventDefault();
-});
-</script>
 
 <?php teacher_foot(); ?>

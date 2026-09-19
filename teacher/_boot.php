@@ -352,6 +352,23 @@ function teacher_school_crumb(array $user): array
     ];
 }
 
+/**
+ * „Hier ist noch nichts" - immer gleich aussehend.
+ *
+ * Es gab vier Formen dafuer: eine Karte, ein grauer Absatz, ein Hinweisband
+ * und an einer Stelle gar nichts. Ein Leerzustand ist aber immer dasselbe:
+ * eine Feststellung und, wenn es einen gibt, der Weg heraus.
+ *
+ * Nicht zu verwechseln mit teacher_flash() und div.notice - die melden, was
+ * gerade geschehen ist oder schiefsteht. Das hier beschreibt einen Zustand.
+ */
+function teacher_leer(string $text, string $knoepfe = ''): string
+{
+    return '<div class="leer"><p>' . $text . '</p>'
+         . ($knoepfe === '' ? '' : '<div class="buttonrow">' . $knoepfe . '</div>')
+         . '</div>';
+}
+
 function teacher_head(string $title, array $user, array $crumbs = [], string $neben = ''): void
 {
     ?><!doctype html>

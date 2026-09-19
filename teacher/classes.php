@@ -65,7 +65,7 @@ teacher_flash_render();
         <th>Klasse</th>
         <th class="num">Kinder</th>
         <th class="num">Kurse</th>
-        <th class="chev"></th>
+        <th class="actions"></th>
     </tr>
 
     <?php foreach ($klassen as $k): ?>
@@ -92,7 +92,7 @@ teacher_flash_render();
                     ? '<span class="muted">&ndash;</span>'
                     : (int) $k['courses'] ?>
             </td>
-            <td class="chev" aria-hidden="true">&#8250;</td>
+            <td class="actions chev" aria-hidden="true">&#8250;</td>
         </tr>
     <?php endforeach; ?>
 
@@ -144,7 +144,7 @@ teacher_flash_render();
         <th>Kurs</th>
         <th class="num">Kinder</th>
         <th class="num">Lerneinheiten</th>
-        <th class="chev"></th>
+        <th class="actions"></th>
     </tr>
     <?php foreach ($ohneKlasse as $c): ?>
         <?php $ziel = teacher_url('course.php') . '?id=' . (int) $c['id']; ?>
@@ -154,13 +154,14 @@ teacher_flash_render();
                     <?= flag_html($c['flag_emoji'] ?: FLAG_FALLBACK, 'cflag') ?>
                     <span>
                         <a class="rowmain" href="<?= h($ziel) ?>"><?= h($c['name']) ?></a>
-                        <span class="tiny muted"><?= h($c['language_name']) ?></span>
+                        <span class="tiny muted"><?= h($c['language_name']) ?><?php
+                            if (!$c['active']) { echo ' &middot; stillgelegt'; } ?></span>
                     </span>
                 </span>
             </td>
             <td class="num" data-label="Kinder"><?= (int) $c['students'] ?></td>
             <td class="num" data-label="Lerneinheiten"><?= (int) $c['units'] ?></td>
-            <td class="chev" aria-hidden="true">&#8250;</td>
+            <td class="actions chev" aria-hidden="true">&#8250;</td>
         </tr>
     <?php endforeach; ?>
 </table>

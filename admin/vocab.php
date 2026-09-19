@@ -534,7 +534,7 @@ foreach ($languages as $l) {
         <span class="lbl">K&uuml;rzel</span>
         <input type="text" name="lang_code" value="<?= h((string) ($lang['code'] ?? '')) ?>"
                maxlength="8" placeholder="z. B. fr" style="margin:0;width:90px">
-        <button class="btn secondary small" name="save_language"
+        <button class="btn small secondary" name="save_language"
                 value="<?= (int) $lang['id'] ?>">Speichern</button>
     </form>
 
@@ -672,7 +672,7 @@ foreach ($languages as $l) {
     <input type="hidden" name="unit" value="<?= $unitId ?>">
     <input type="text" name="new_f" placeholder="Fremdsprache" maxlength="255" style="width:220px;margin:0">
     <input type="text" name="new_n" placeholder="Deutsch" maxlength="255" style="width:220px;margin:0">
-    <button class="btn secondary small" name="add_vocab" value="<?= (int) $unit['id'] ?>">Hinzufügen</button>
+    <button class="btn small secondary" name="add_vocab" value="<?= (int) $unit['id'] ?>">Hinzufügen</button>
 </form>
 
 <?php endif; ?>

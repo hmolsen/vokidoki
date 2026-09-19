@@ -153,8 +153,8 @@ body {
     <button onclick="window.print()">Drucken</button>
     <a href="<?= h(teacher_url('class.php') . '?id=' . $classId) ?>">zurück zur Klasse</a>
     <span class="grow">
-        <?= count($kinder) ?> <?= count($kinder) === 1 ? 'Blatt' : 'Blätter' ?>,
-        eines je Kind. Im Druckdialog lässt sich das auch als PDF sichern.
+        <?= count($kinder) ?> Zettel, einer je Kind.
+        Im Druckdialog lässt sich das auch als PDF sichern.
     </span>
 </div>
 

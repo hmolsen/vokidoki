@@ -114,7 +114,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['remove_member
     );
 
     if ($konto === null) {
-        teacher_flash('Diese Person ist gar nicht im Kurs.', 'bad');
+        teacher_flash('Wer das ist, steht gar nicht im Kurs.', 'bad');
         teacher_redirect($zurueck);
     }
 
@@ -227,30 +227,25 @@ teacher_flash_render();
  * einlesen"; ein zweiter Code daneben war einer zu viel.
  */
 ?>
-<div class="card">
-    <h3 style="margin:0 0 6px">Noch keine Lerneinheit</h3>
-    <p style="margin:0 0 12px">
-        Eingelesen wird <strong>am Handy</strong> &ndash; dort ist die Kamera.
-        Buchseite fotografieren, das Modell erkennt die Vokabeln, und die
-        Lektion landet in diesem Kurs.
-    </p>
-    <div class="buttonrow" style="margin:0">
-        <a class="btn small" href="<?= h($importUrl) ?>" target="_blank" rel="noopener">
-            Vokabeln einlesen
-        </a>
-        <button class="btn small secondary" type="button" data-handoff>
-            <span aria-hidden="true">&#128241;</span> Am Smartphone einlesen
-        </button>
-    </div>
-</div>
+<?= teacher_leer(
+    'Noch keine Lerneinheit. Eingelesen wird <strong>am Handy</strong> &ndash; '
+    . 'dort ist die Kamera. Buchseite fotografieren, das Modell erkennt die '
+    . 'Vokabeln, und die Lerneinheit landet in diesem Kurs.',
+    sprintf(
+        '<a class="btn small" href="%s" target="_blank" rel="noopener">Vokabeln einlesen</a>'
+        . '<button class="btn small secondary" type="button" data-handoff>'
+        . '<span aria-hidden="true">&#128241;</span> Am Smartphone einlesen</button>',
+        h($importUrl),
+    ),
+) ?>
 <?php else: ?>
-<table class="data rowlink" id="einheiten">
+<table class="data courses rowlink" id="einheiten">
     <tr>
         <th>Titel</th>
         <th class="num">Vokabeln</th>
         <th>Freigegeben</th>
         <th>Angelegt</th>
-        <th class="chev"></th>
+        <th class="actions"></th>
     </tr>
     <?php foreach ($einheiten as $e): ?>
         <?php $ziel = teacher_url('unit.php') . '?id=' . (int) $e['id']; ?>
@@ -275,7 +270,7 @@ teacher_flash_render();
                 ?>
             </td>
             <td class="tiny muted" data-label="Angelegt"><?= h(substr((string) $e['created_at'], 0, 10)) ?></td>
-            <td class="chev" aria-hidden="true">&#8250;</td>
+            <td class="actions chev" aria-hidden="true">&#8250;</td>
         </tr>
     <?php endforeach; ?>
 
@@ -350,7 +345,8 @@ teacher_flash_render();
         <tr<?= $m['active'] ? '' : ' class="dim"' ?>>
             <td data-label="Name"><?= h($m['display_name']) ?></td>
             <td data-label="Benutzername"><code class="token"><?= h($m['username']) ?></code></td>
-            <td data-label="Rolle"><?= $m['member_role'] === 'teacher' ? 'Lehrkraft' : 'SchülerIn' ?></td>
+            <td data-label="Rolle"><?= $m['member_role'] === 'teacher' ? 'Lehrkraft' : 'Kind' ?><?php
+                if (!$m['active']) { echo ' <span class="tiny muted">stillgelegt</span>'; } ?></td>
             <td class="actions">
                 <form method="post" class="compact">
                     <?= teacher_csrf_field() ?>
@@ -428,17 +424,15 @@ teacher_flash_render();
 <?php endif; ?>
 
 <?php if (($kurs['class_name'] ?? null) !== null): ?>
-<p class="buttonrow">
-    <span class="compactform">
-        <form method="post">
-            <?= teacher_csrf_field() ?>
-            <input type="hidden" name="course_id" value="<?= $courseId ?>">
-            <button class="btn secondary small" name="sync_class" value="1">
-                Klasse <?= h($kurs['class_name']) ?> nachtragen
-            </button>
-        </form>
-    </span>
-</p>
+<div class="buttonrow">
+    <form method="post">
+        <?= teacher_csrf_field() ?>
+        <input type="hidden" name="course_id" value="<?= $courseId ?>">
+        <button class="btn small secondary" name="sync_class" value="1">
+            Klasse <?= h($kurs['class_name']) ?> nachtragen
+        </button>
+    </form>
+</div>
 <?php endif; ?>
 
 <p class="tiny muted">
@@ -505,18 +499,11 @@ teacher_flash_render();
         <label for="pw_delete">Zum Bestätigen dein eigenes Passwort</label>
         <input type="password" id="pw_delete" name="password"
                autocomplete="current-password" required>
-        <button class="btn danger small" name="delete_course" value="1"
+        <button class="btn small danger" name="delete_course" value="1"
                 data-confirm="Kurs &quot;<?= h($kurs['name']) ?>&quot; mit allen Unterlagen und Lernständen endgültig löschen?">
             Endgültig löschen
         </button>
     </form>
 </details>
-
-<script>
-document.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-confirm]');
-    if (b && !confirm(b.dataset.confirm)) e.preventDefault();
-});
-</script>
 
 <?php teacher_foot(); ?>

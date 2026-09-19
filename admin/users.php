@@ -286,7 +286,7 @@ flash_render();
                 <input type="checkbox" name="can_import" value="1"<?= $u['can_import'] ? ' checked' : '' ?>
                        style="width:auto;min-height:auto;margin:0"> einlesen
             </label>
-            <button class="btn secondary small" name="update" value="1">Speichern</button>
+            <button class="btn small secondary" name="update" value="1">Speichern</button>
         </form>
 
         <form method="post" class="inline" style="margin-bottom:12px">
@@ -294,7 +294,7 @@ flash_render();
             <input type="hidden" name="id" value="<?= (int) $u['id'] ?>">
             <input type="text" name="password" placeholder="Neues Passwort" minlength="4"
                    style="width:180px;margin:0">
-            <button class="btn secondary small" name="set_password" value="1">Passwort setzen</button>
+            <button class="btn small secondary" name="set_password" value="1">Passwort setzen</button>
         </form>
 
         <details>

@@ -108,19 +108,13 @@ teacher_flash_render();
 <?php else: ?>
 
 <?php if ($meine === []): ?>
-    <div class="card">
-        <h3 style="margin:0 0 6px">Du unterrichtest noch keinen Kurs</h3>
-        <p style="margin:0 0 12px">
-            Ein Kurs gehört zu einer Klasse. Leg zuerst die Klasse an, dann
-            darin den Kurs &ndash; die Kinder der Klasse kommen gleich mit
-            hinein.
-        </p>
-        <div class="buttonrow">
-            <a class="btn small" href="<?= h(teacher_url('classes.php')) ?>">
-                Zu den Klassen
-            </a>
-        </div>
-    </div>
+    <?= teacher_leer(
+        'Du unterrichtest noch keinen Kurs. Ein Kurs gehört zu einer Klasse: '
+        . 'Leg zuerst die Klasse an, dann darin den Kurs &ndash; die Kinder '
+        . 'der Klasse kommen gleich mit hinein.',
+        sprintf('<a class="btn small" href="%s">Zu den Klassen</a>',
+                h(teacher_url('classes.php'))),
+    ) ?>
 <?php else: ?>
     <div class="kurskarten">
         <?php foreach ($meine as $c): ?>

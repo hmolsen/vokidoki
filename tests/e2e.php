@@ -5763,6 +5763,134 @@ q('DELETE FROM languages WHERE id IN (?, ?)',
 q('DELETE FROM classes WHERE id IN (?, ?)',
   [(int) $hvKlasse['id'], (int) $fremdKlasse['id']]);
 
+section('Eine Form, ein Wort');
+
+/*
+ * Dieser Abschnitt prueft Gleichfoermigkeit, und zwar am Quelltext.
+ *
+ * Das ist ungewoehnlich, aber hier richtig: Es geht nicht um Verhalten,
+ * sondern darum, dass dieselbe Sache ueberall gleich heisst und gleich
+ * aussieht. Ein Mensch sieht das beim Lesen nicht - er sieht drei Seiten
+ * nie nebeneinander. Eine Pruefung schon.
+ */
+
+$lehrerDateien = glob(__DIR__ . '/../teacher/*.php') ?: [];
+$lehrerQuelle  = '';
+foreach ($lehrerDateien as $datei) {
+    $lehrerQuelle .= (string) file_get_contents($datei);
+}
+ok('Der Lehrkraft-Bereich ist da', $lehrerQuelle !== '');
+
+// ---- Eine Reihenfolge fuer die Knopfklassen.
+
+$ausreisser = [];
+foreach (['btn secondary small', 'btn danger small', 'btn small small'] as $falsch) {
+    if (str_contains($lehrerQuelle, 'class="' . $falsch . '"')) {
+        $ausreisser[] = $falsch;
+    }
+}
+ok('Knopfklassen stehen immer in derselben Reihenfolge',
+   $ausreisser === [], implode(', ', $ausreisser)
+   . ' - erst btn, dann die Groesse, dann die Spielart');
+
+// ---- Der Hoerer fuer die Rueckfragen steht genau einmal.
+
+ok('Es gibt nur einen data-confirm-Hoerer',
+   substr_count($lehrerQuelle, "closest('[data-confirm]')") === 0,
+   'er gehoert nach teacher.js, nicht in jede Seite');
+ok('Und der steht im Skript',
+   str_contains((string) file_get_contents(__DIR__ . '/../teacher/teacher.js'),
+                "closest('[data-confirm]')"));
+
+// ---- Keine Klasse ohne Regel.
+
+$cssQuelle = (string) file_get_contents(__DIR__ . '/../admin/admin.css')
+           . (string) file_get_contents(__DIR__ . '/../style.css');
+ok('Die tote Klasse compactform ist weg',
+   !str_contains($lehrerQuelle, 'compactform'),
+   'sie hatte nirgends eine Regel');
+
+// ---- Jede Tabelle im selben Muster.
+
+$res = teacherGet('classes.php');
+ok('Die letzte Spalte heisst ueberall gleich',
+   !str_contains($res['body'], '<th class="chev">'),
+   'Kopf und Anlegezeile trugen zwei Namen fuer dieselbe Spalte');
+
+$efKlasse = class_create(
+    (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]),
+    'Einheit' . bin2hex(random_bytes(2)),
+);
+$efKurs = course_create(
+    q1('SELECT * FROM users WHERE id = ?', [$lehrerId]),
+    'Einheitlich' . bin2hex(random_bytes(2)), "\u{1F310}", (int) $efKlasse['id'], '',
+);
+$efKursId = is_string($efKurs) ? 0 : (int) $efKurs['id'];
+
+// ---- Leerzustaende sehen gleich aus.
+
+$res = teacherGet('course.php?id=' . $efKursId);
+ok('Der leere Kurs benutzt die eine Form',
+   str_contains($res['body'], '<div class="leer">'),
+   'es gab vier verschiedene dafuer');
+
+$efUnit = makeUnit($lehrerId, (int) $efKurs['language_id'], 'Leere Unit');
+
+// Mit einer Lerneinheit steht die Tabelle da - vorher der Leerzustand.
+$res = teacherGet('course.php?id=' . $efKursId);
+ok('Auch die Einheitentabelle traegt "courses"',
+   str_contains($res['body'], 'class="data courses rowlink" id="einheiten"'),
+   'ohne das ist ihre Anlegezeile als einzige nicht getoent');
+$res = teacherGet('unit.php?id=' . $efUnit);
+ok('Die leere Lerneinheit ebenso', str_contains($res['body'], '<div class="leer">'));
+
+/*
+ * Und der Grund, warum das mehr als Kosmetik ist: Frueher verschluckte der
+ * leere Zweig die ganze Tabelle - seit darin eine Anlegezeile steht, war
+ * damit ausgerechnet in einer leeren Lerneinheit der einzige Weg verdeckt,
+ * eine Vokabel von Hand einzutragen.
+ */
+ok('Auch ohne Vokabeln laesst sich eine von Hand eintragen',
+   str_contains($res['body'], 'name="new_f"') && str_contains($res['body'], 'name="add_vocab"'),
+   'sonst ist eine leere Lerneinheit eine Sackgasse');
+
+teacherRequest($base . '/teacher/unit.php?id=' . $efUnit, [
+    'add_vocab' => '1', 'unit_id' => $efUnit,
+    'new_f' => 'erste', 'new_n' => 'de-erste', 'csrf' => $lehrerCsrf,
+]);
+ok('Und es klappt auch wirklich',
+   (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$efUnit]) === 1);
+
+// ---- Stillgelegt steht dran, nicht nur blass.
+
+q('UPDATE courses SET active = 0 WHERE id = ?', [$efKursId]);
+$res = teacherGet('class.php?id=' . (int) $efKlasse['id']);
+ok('Ein stillgelegter Kurs sagt, dass er stillgelegt ist',
+   str_contains($res['body'], 'stillgelegt'),
+   'blass allein ist keine Auskunft');
+q('UPDATE courses SET active = 1 WHERE id = ?', [$efKursId]);
+
+// ---- Ein Wort je Sache.
+
+$verboten = [
+    'Teilnehmende' => 'Kind',
+    'Lektion'      => 'Lerneinheit',
+    'Anschreiben'  => 'Zettel',
+];
+$gefunden = [];
+foreach ($verboten as $falsch => $richtig) {
+    if (str_contains($lehrerQuelle, $falsch)) {
+        $gefunden[] = "$falsch (gemeint ist: $richtig)";
+    }
+}
+ok('Dieselbe Sache heisst ueberall gleich', $gefunden === [], implode('; ', $gefunden));
+
+ok('Das Glossar steht in der Beschreibung',
+   str_contains((string) file_get_contents(__DIR__ . '/../README.md'), 'Ein Wort je Sache'));
+
+q('DELETE FROM languages WHERE id = ?', [(int) $efKurs['language_id']]);
+q('DELETE FROM classes   WHERE id = ?', [(int) $efKlasse['id']]);
+
 section('Sprung ans Telefon');
 
 /*

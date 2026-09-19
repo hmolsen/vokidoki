@@ -207,6 +207,29 @@ die richtige Quizantwort ausschließlich serverseitig.
 
 ---
 
+## Ein Wort je Sache
+
+Dieselbe Sache hiess an verschiedenen Stellen verschieden — „Kurs" und
+„Sprache", „Lerneinheit" und „Lektion", „Kinder" und „SchülerInnen" und
+„Teilnehmende" und „Konten" und „Person". Das ist kein Schönheitsfehler:
+Wer „Teilnehmende" liest, fragt sich, ob das etwas anderes ist als die
+Kinder in der Zeile darüber.
+
+| Sache | Wort | *nicht* |
+|---|---|---|
+| die Gruppe, die zusammen lernt | **Klasse** | Gruppe |
+| Klasse + Sprache, mit eigenen Unterlagen | **Kurs** | Sprache, Fach |
+| eine Portion Vokabeln, meist eine Buchseite | **Lerneinheit** | Lektion, Unit |
+| wer lernt | **Kind** | SchülerIn, Teilnehmende, Konto, Person |
+| wer unterrichtet | **Lehrkraft** | Lehrer, Kollegin |
+| das gedruckte Blatt mit Zugangsdaten | **Zettel** | Blatt, Anschreiben |
+| das erzeugte erste Passwort | **Anfangspasswort** | Startpasswort |
+| aufmachen, was die Klasse sehen darf | **freigeben** | veröffentlichen |
+
+Im Quelltext bleiben die englischen Namen (`units`, `vocab`, `courses`) —
+sie stehen in der Datenbank und ändern sich nicht, weil eine Beschriftung
+sich ändert.
+
 ## Der Lehrkraft-Bereich beginnt bei der Arbeit
 
 **Die Startseite sind die eigenen Kurse.** Vorher war es die Klassenliste —
@@ -543,7 +566,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-865 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+879 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
 Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
 Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
 hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
@@ -605,7 +628,7 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 1102 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 1116 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
 

@@ -891,7 +891,9 @@ details.kursealle[open] > summary { margin-bottom: 12px; }
 table.rowlink tr[data-href] { cursor: pointer; }
 table.rowlink tr[data-href]:hover td { background: var(--surface-2); }
 
-table.data th.chev, table.data td.chev {
+/* Der Haken sitzt in der Aktionsspalte - eine Spalte, ein Name. .chev ist
+   nur das Aussehen. */
+table.data td.chev {
     width: 1px;
     padding-left: 0;
     padding-right: 14px;
@@ -1067,3 +1069,16 @@ table.release td input[type=text] {
 }
 table.release tr.newrow td { background: var(--surface-2); vertical-align: middle; }
 table.release tr.newrow input[type=text] { margin: 0; min-height: 34px; width: 100%; }
+
+/* Ein Leerzustand: eine Feststellung, und wenn es einen gibt, der Weg
+   heraus. Zurueckhaltend gezeichnet - er ist kein Fehler, sondern ein
+   Anfang. Nicht zu verwechseln mit .notice, das meldet. */
+.leer {
+    padding: 18px 20px;
+    margin-bottom: 18px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-soft);
+}
+.leer p { margin: 0; }
+.leer .buttonrow { margin: 14px 0 0; }
