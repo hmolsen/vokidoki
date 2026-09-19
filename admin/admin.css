@@ -721,9 +721,21 @@ table.courses tr.newrow .picker { margin: 0; min-width: 190px; }
  * doppelt so hoch. teacher.js misst sie und legt das Ergebnis als
  * --barhoehe ab; ohne das steht der Kopf hinter der Leiste statt darunter.
  *
+ * Und die Tabelle darf kein Rollbehaelter sein. table.data traegt
+ * overflow: hidden fuer die runden Ecken, und damit wird SIE der Bezug des
+ * Klebens statt des Fensters: Der Kopf stand dann um --barhoehe nach unten
+ * versetzt mitten in der Tabelle - zwischen der ersten und der zweiten
+ * Zeile - und blieb beim Rollen nicht stehen. overflow: clip schneidet
+ * genauso ab, ohne einen Rollbehaelter zu erzeugen.
+ *
+ * Am Telefon fiel das nicht auf: Dort setzt die Kartenregel ohnehin
+ * overflow: visible, und das Kleben ging von Anfang an. Geprueft werden
+ * muss es deshalb an beiden Groessen.
+ *
  * Der eingeklappte Rahmen (border-collapse) reist beim Kleben nicht mit,
  * deshalb die untere Linie als Schatten.
  */
+table.release { overflow: clip; }
 table.release thead th {
     position: sticky;
     top: var(--barhoehe, 0px);

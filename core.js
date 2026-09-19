@@ -192,10 +192,26 @@ export function pupilHint(text = 'So sieht deine Klasse das.', zurueck = '/teach
                     Freigegeben ist, was hier auftaucht &ndash; mehr sehen die
                     Kinder nicht.
                 </span>
-                <a class="btn small secondary" href="${VT.base}${esc(zurueck)}">
-                    &#8249; Zurück zur Verwaltung
-                </a>
+                ${teacherBack('Zurück zur Verwaltung', zurueck)}
             </div>`;
+}
+
+/**
+ * Der Weg aus der App zurueck in die Verwaltung - fuer eine Lehrkraft.
+ *
+ * Gebraucht ueberall dort, wo sie aus ihrem Bereich in die App gekommen
+ * ist: in der Schueleransicht (dort steckt er im Hinweis) und beim
+ * Einlesen. Der Weg dorthin war ein Knopf auf einer Kurskarte; der Weg
+ * zurueck darf nicht die Adresszeile sein, denn die installierte App hat
+ * keine.
+ *
+ * Fuer ein Kind ist er leer. Es gibt fuer es keine Verwaltung, und ein
+ * Knopf, der nur eine Absage holt, ist schlimmer als keiner.
+ */
+export function teacherBack(text = 'Meine Kurse', pfad = '/teacher/') {
+    if (!VT.user?.isTeacher) return '';
+    return `<a class="btn small secondary teacherback" href="${VT.base}${esc(pfad)}">`
+         + `&#8249; ${esc(text)}</a>`;
 }
 
 export function loading(text = 'Einen Moment...') {

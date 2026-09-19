@@ -15,7 +15,9 @@ import { browser, alsLehrkraft, ok, abschnitt, schlafe } from './browser.mjs';
 export async function pruefe(f, aus) {
     abschnitt('Vokabeln von Hand');
 
-    const b = await browser({ port: 9407, breite: 1300, hoehe: 1400, aus });
+    // Absichtlich niedriger als die Tabelle lang ist: Der klebende
+    // Tabellenkopf laesst sich nur an einer Seite pruefen, die rollt.
+    const b = await browser({ port: 9407, breite: 1300, hoehe: 900, aus });
     try {
         await alsLehrkraft(b, f.basis, f.lehrer, f.passwort);
         await b.geh(f.basis + '/teacher/unit.php?id=' + f.unit, 1500);
@@ -43,6 +45,50 @@ export async function pruefe(f, aus) {
            ruhe.sichern + ' sichtbar - [hidden] wird von display: inline-flex geschlagen');
         ok('Und die Eingabefelder auch nicht', ruhe.felder === 0, String(ruhe.felder));
         ok('Der Freigabebalken ist trotzdem da', ruhe.balken);
+
+        /*
+         * Der Kopf bleibt beim Rollen stehen - auch am Rechner.
+         *
+         * Das ist nicht dasselbe wie am Telefon, und deshalb steht es hier
+         * noch einmal: Dort setzt die Kartenregel overflow: visible, hier
+         * gilt das overflow von table.data. Steht es auf hidden, wird die
+         * Tabelle selbst zum Bezug des Klebens - der Kopf sitzt dann um die
+         * Leistenhoehe versetzt zwischen der ersten und der zweiten Zeile
+         * und rollt mit weg.
+         */
+        await b.js(`window.scrollTo(0, 0)`);
+        await schlafe(300);
+        const ruhig = await b.js(`(() => {
+            const th = document.querySelector('#freigabe thead th');
+            const t  = document.getElementById('freigabe');
+            return {
+                kopf:    Math.round(th.getBoundingClientRect().top),
+                tabelle: Math.round(t.getBoundingClientRect().top),
+            };
+        })()`);
+        ok('Ungerollt sitzt der Kopf oben in der Tabelle',
+           Math.abs(ruhig.kopf - ruhig.tabelle) <= 2,
+           ruhig.kopf + ' gegen ' + ruhig.tabelle
+           + ' - mit overflow: hidden rutscht er mitten hinein');
+
+        await b.js(`window.scrollTo(0, 600)`);
+        await schlafe(400);
+        const geklebt = await b.js(`(() => {
+            const th = document.querySelector('#freigabe thead th');
+            const leiste = document.querySelector('.adminbar');
+            return {
+                gerollt: Math.round(window.scrollY),
+                kopf:    Math.round(th.getBoundingClientRect().top),
+                leiste:  Math.round(leiste.getBoundingClientRect().bottom),
+            };
+        })()`);
+        ok('Die Seite laesst sich weit genug rollen', geklebt.gerollt > 300,
+           geklebt.gerollt + ' px');
+        ok('Und dann bleibt der Kopf unter der Leiste stehen',
+           geklebt.kopf >= geklebt.leiste - 2 && geklebt.kopf < 200,
+           geklebt.kopf + ' px gegen Leistenunterkante ' + geklebt.leiste);
+        await b.js(`window.scrollTo(0, 0)`);
+        await schlafe(300);
 
         // ---- Bearbeiten und abbrechen.
 

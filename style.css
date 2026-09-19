@@ -1002,12 +1002,25 @@ input.cloze-input[readonly] { opacity: 1; }
 
 /* Wessen Vokabeln hier eingelesen werden. Wichtig fuer alle, die ueber
    einen Link oder einen QR-Code direkt hier landen. */
+/*
+ * Welcher Kurs das hier ist - und fuer eine Lehrkraft der Weg zurueck.
+ *
+ * Sie kommt mit einem Klick von ihrer Startseite hierher ("+ Lerneinheit"
+ * auf der Kurskarte). Ohne einen Knopf zurueck bliebe ihr nur die
+ * Adresszeile, und die installierte App hat keine.
+ */
 .kurszeile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
     margin: -8px 0 14px;
     font-size: .9rem;
     color: var(--text-soft);
 }
 .kurszeile strong { color: var(--text); }
+.kurszeile > span { flex: 1 1 auto; }
+.kurszeile .btn { margin: 0; flex: 0 0 auto; white-space: nowrap; }
 
 /* Der Hinweis in der Schueleransicht - fuer Lehrkraefte, die von ihrem
    Bereich herkommen. Zurueckhaltend: Er erklaert die Seite, er ist nicht

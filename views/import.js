@@ -1,5 +1,6 @@
 import {
     api, render, esc, $, $$, go, topbar, wireBack, showError, clearError, withBusy,
+    teacherBack,
 } from '../core.js';
 
 const MAX_IMAGES = 6;
@@ -74,7 +75,10 @@ export async function importView(languageId) {
 function showCapture(languageId, images = []) {
     render(`
         ${topbar('Vokabeln einlesen', { backTo: `/lang/${languageId}` })}
-        <p class="kurszeile">Kurs: <strong id="kurs">${esc(kursName || '...')}</strong></p>
+        <p class="kurszeile">
+            <span>Kurs: <strong id="kurs">${esc(kursName || '...')}</strong></span>
+            ${teacherBack()}
+        </p>
         <div id="msg"></div>
 
         <p class="sub">
@@ -184,7 +188,10 @@ function showReview(languageId, title, entries, fromDraft) {
 
     render(`
         ${topbar('Stimmt das so?', { backTo: `/lang/${languageId}` })}
-        <p class="kurszeile">Kurs: <strong id="kurs">${esc(kursName || '...')}</strong></p>
+        <p class="kurszeile">
+            <span>Kurs: <strong id="kurs">${esc(kursName || '...')}</strong></span>
+            ${teacherBack()}
+        </p>
         <div id="msg"></div>
 
         ${fromDraft ? '<div class="notice info">Deine letzte Eingabe wurde wiederhergestellt.</div>' : ''}

@@ -9,6 +9,25 @@ const EXERCISES = [
     { mode: 'cloze', icon: '\u{270F}\u{FE0F}', title: 'Lückentext' },
 ];
 
+/**
+ * Wer benennt hier um und loescht?
+ *
+ * Eine Lehrkraft nicht - jedenfalls nicht von hier aus. Diese Seite ist die
+ * Ansicht ihrer Klasse, und die soll genau das sein: Was ein Kind nicht
+ * sieht, steht auch fuer sie nicht da. Umbenennen und Loeschen stehen im
+ * Lehrkraft-Bereich, auf derselben Lerneinheit.
+ *
+ * Fuer ein Kind mit Einlese-Recht bleibt es: In einer Familie legt es seine
+ * Lerneinheiten selbst an, und dann muss es sie auch wieder loswerden
+ * koennen. Dieselbe Regel wie beim Einlesen in der Kursansicht.
+ *
+ * Das Zuruecksetzen bleibt fuer alle: Der Lernstand gehoert dem Konto, das
+ * ihn erarbeitet hat.
+ */
+function selbstVerwalten() {
+    return VT.user.canImport && !VT.user.isTeacher;
+}
+
 /** Detailansicht einer Lerneinheit: Fortschritt, Wortliste, Aktionen. */
 export async function unitView(unitId) {
     render(loading());
@@ -69,11 +88,11 @@ export async function unitView(unitId) {
 
         <h2>Verwalten</h2>
         <div class="btn-row" style="margin-bottom:10px">
-            ${VT.user.canImport
+            ${selbstVerwalten()
                 ? '<button class="btn secondary small" id="rename">Umbenennen</button>' : ''}
             <button class="btn secondary small" id="reset">Fortschritt zurücksetzen</button>
         </div>
-        ${VT.user.canImport
+        ${selbstVerwalten()
             ? '<button class="btn ghost" id="delete">Lerneinheit löschen</button>' : ''}
     `);
 
@@ -84,10 +103,9 @@ export async function unitView(unitId) {
 
 
     /*
-     * Umbenennen und Loeschen gibt es nur mit der Befugnis, Inhalte
-     * anzulegen - dieselbe, die zum Einlesen berechtigt. Fuer ein Kind in
-     * einer Klasse waeren es Knoepfe, die nur eine Absage holen; die API
-     * lehnt beides ohnehin ab.
+     * Die Hoerer gibt es nur, wenn die Knoepfe da sind - siehe
+     * selbstVerwalten(). Fuer ein Kind in einer Klasse waeren es Knoepfe,
+     * die nur eine Absage holen; die API lehnt beides ohnehin ab.
      *
      * Das Zuruecksetzen bleibt: Der Lernstand gehoert dem Kind.
      */

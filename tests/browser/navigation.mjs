@@ -70,6 +70,24 @@ export async function pruefe(f, aus) {
         ok('Ein Klick, und die Freigabe steht da',
            drin.ort.includes('id=' + f.unit) && drin.balken, drin.ort + ' / ' + drin.h1);
 
+        /*
+         * Und einer wieder zurueck.
+         *
+         * Hierher kommt man mit einem Klick von der Startseite. Zurueck fuehrte
+         * nur der Name der Schule im Pfad, und der liest sich nicht wie
+         * "zurueck" - er liest sich wie der Name der Schule.
+         */
+        const raus = await b.js(`[...document.querySelectorAll('.titelzeile a.btn')]
+            .find((a) => a.textContent.includes('Meine Kurse'))?.getAttribute('href') ?? ''`);
+        ok('Neben der Überschrift steht der Weg zurück', raus !== '',
+           'sonst führt aus der Freigabe nur der Schulname heraus');
+
+        await b.js(`[...document.querySelectorAll('.titelzeile a.btn')]
+                      .find((a) => a.textContent.includes('Meine Kurse')).click()`);
+        await schlafe(1400);
+        ok('Und ein Druck darauf führt auf die Startseite',
+           (await b.js(`document.querySelector('h1')?.textContent ?? ''`)) === 'Meine Kurse');
+
         // ---- Der Kurswechsler.
 
         for (const [name, pfad] of [['Kurs', '/teacher/course.php?id=' + f.kurs],

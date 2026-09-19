@@ -97,13 +97,62 @@ export async function pruefe(f, aus) {
            zurueck.ort.includes('course.php?id=' + f.kurs), zurueck.ort);
         ok('Nämlich auf die Kursseite', zurueck.titel !== '', zurueck.titel);
 
+        /*
+         * Und sonst steht dort nichts, was ein Kind nicht auch sieht.
+         *
+         * "Vokabeln einlesen" hing an canImport, und das hat eine Lehrkraft.
+         * Die Probe zeigte ihr damit eine Seite, die es so gar nicht gibt -
+         * und der Knopf fuehrte ausgerechnet dorthin, wo sie ohnehin ueber
+         * ihren Bereich hinkommt.
+         */
+        await b.geh(f.basis + '/#/lang/' + f.sprache, 2200);
+        const sichtbar = await b.js(`(() => {
+            const text = document.getElementById('app')?.textContent ?? '';
+            return {
+                einlesen: text.includes('Vokabeln einlesen'),
+                banner:   !!document.querySelector('.notice.pupilview'),
+                zeilen:   document.querySelectorAll('[data-go]').length,
+            };
+        })()`);
+        ok('Kein Einlesen in der Schüleransicht', !sichtbar.einlesen,
+           'sie soll genau so aussehen wie die Schüleransicht');
+        ok('Der Hinweis bleibt als einziger Unterschied', sichtbar.banner);
+        ok('Und es steht keine Zeile mehr da, die ein Kind nicht hat',
+           sichtbar.zeilen === 0, String(sichtbar.zeilen));
+
         // In einer Lerneinheit zeigt er auf die Lerneinheit, nicht auf den Kurs.
         await b.geh(f.basis + '/#/unit/' + f.unit, 2200);
+        const inEinheit = await b.js(`(() => {
+            const text = document.getElementById('app')?.textContent ?? '';
+            return {
+                ziel:       document.querySelector('.notice.pupilview a.btn')
+                                ?.getAttribute('href') ?? '',
+                umbenennen: !!document.getElementById('rename'),
+                loeschen:   !!document.getElementById('delete'),
+                ruecksetzen: !!document.getElementById('reset'),
+                verwalten:  text.includes('Verwalten'),
+            };
+        })()`);
         ok('In der Lerneinheit zeigt er auf die Lerneinheit',
-           (await b.js(`document.querySelector('.notice.pupilview a.btn')
-                          ?.getAttribute('href') ?? ''`))
-               .includes('/teacher/unit.php?id=' + f.unit),
+           inEinheit.ziel.includes('/teacher/unit.php?id=' + f.unit),
            'nicht auf die Startseite - man war ja irgendwo');
+        ok('Umbenennen steht dort nicht mehr', !inEinheit.umbenennen,
+           'das gehört in den Lehrkraft-Bereich, auf dieselbe Lerneinheit');
+        ok('Löschen auch nicht', !inEinheit.loeschen);
+        ok('Das Zurücksetzen bleibt', inEinheit.ruecksetzen,
+           'der Lernstand gehört dem Konto, das ihn erarbeitet hat');
+
+        // Und dort, wo sie hingehören, sind sie.
+        await b.geh(f.basis + '/teacher/unit.php?id=' + f.unit, 1400);
+        const dort = await b.js(`({
+            umbenennen: !!document.querySelector('[name="rename_unit"]'),
+            loeschen:   !!document.querySelector('[name="delete_unit"]'),
+            zu:         document.querySelector('details.card')?.open === false,
+        })`);
+        ok('Im Lehrkraft-Bereich lässt sie sich umbenennen', dort.umbenennen);
+        ok('Und löschen', dort.loeschen);
+        ok('Das Löschen liegt zugeklappt', dort.zu,
+           'nichts, worüber man stolpert');
     } finally {
         b.schliessen();
     }

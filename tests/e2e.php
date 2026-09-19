@@ -2645,6 +2645,15 @@ ok('Deren Hoehe misst das Skript',
    str_contains($skriptB['body'], "'--barhoehe'")
    && str_contains($skriptB['body'], 'function initBarHoehe'),
    'am Telefon bricht die Leiste um und ist doppelt so hoch');
+/*
+ * Und die Tabelle darf kein Rollbehaelter sein: table.data traegt
+ * overflow: hidden fuer die runden Ecken, und damit wird SIE der Bezug des
+ * Klebens statt des Fensters. Der Kopf stand dann um die Leistenhoehe
+ * versetzt zwischen der ersten und der zweiten Zeile.
+ */
+ok('Die Tabelle ist dafuer kein Rollbehaelter',
+   preg_match('/table\.release\s*\{\s*overflow:\s*clip/s', $cssB) === 1,
+   'mit overflow: hidden klebt der Kopf an der Tabelle statt am Fenster');
 ok('Der Balken liegt unter dem Kopf, nicht darueber',
    preg_match('/\.releasebar\s*\{[^}]*z-index:\s*3/s', $cssB) === 1,
    'sonst schiebt er sich beim Rollen ueber die Spaltennamen');
@@ -3620,9 +3629,21 @@ $uiQuelle    = (string) file_get_contents(__DIR__ . '/../views/language.js');
 $listeQuelle = (string) file_get_contents(__DIR__ . '/../views/languages.js');
 
 ok('Einlesen erscheint nur mit Berechtigung',
-   preg_match('/VT\.user\.canImport \?\s*`\s*<button class="row" data-go="\/lang\/\$\{language\.id\}\/import"/s',
+   preg_match('/selbstEinlesen\(\) \?\s*`\s*<button class="row" data-go="\/lang\/\$\{language\.id\}\/import"/s',
               $uiQuelle) === 1,
    'der Knopf haengt an keiner Bedingung');
+/*
+ * Und fuer eine Lehrkraft erscheint er gar nicht.
+ *
+ * Diese Seite ist die Ansicht ihrer Klasse - "So sieht es die Klasse" -,
+ * und die soll genau das sein. Ein Knopf, den kein Kind dort hat, macht aus
+ * der Probe eine Seite, die es so nie gibt. Eingelesen wird aus dem
+ * Lehrkraft-Bereich heraus.
+ */
+ok('Und fuer eine Lehrkraft gar nicht',
+   preg_match('/function selbstEinlesen\(\)\s*\{\s*return VT\.user\.canImport && !VT\.user\.isTeacher;/s',
+              $uiQuelle) === 1,
+   'dieselbe Regel wie beim Anlegen einer Sprache in der Kachelliste');
 /*
  * Und das Anlegen einer Sprache: nur mit Einlese-Recht UND nicht als
  * Lehrkraft. Fuer sie heisst das Ding Kurs und entsteht in der Verwaltung -
@@ -3755,10 +3776,14 @@ $unitUi  = (string) file_get_contents(__DIR__ . '/../views/unit.js');
 $clozeUi = (string) file_get_contents(__DIR__ . '/../views/cloze.js');
 
 ok('Loeschen und Umbenennen erscheinen nur mit Befugnis',
-   substr_count($unitUi, 'VT.user.canImport') >= 2,
+   substr_count($unitUi, 'selbstVerwalten()') >= 2,
    'sonst holt ein Kind sich dort nur Absagen');
+ok('Und einer Lehrkraft gar nicht',
+   preg_match('/function selbstVerwalten\(\)\s*\{\s*return VT\.user\.canImport && !VT\.user\.isTeacher;/s',
+              $unitUi) === 1,
+   'sie verwaltet in ihrem Bereich, nicht in der Ansicht ihrer Klasse');
 ok('Das Zuruecksetzen bleibt fuer alle',
-   preg_match('/canImport[^
+   preg_match('/selbstVerwalten\(\)[^
 ]*id="reset"/', $unitUi) !== 1,
    'der Lernstand gehoert dem Kind');
 ok('Und ohne Befugnis erzeugt niemand Saetze auf Knopfdruck',
@@ -5834,9 +5859,16 @@ ok('Die Lerneinheit auch', str_contains($lern['body'], 'pupilHint('));
 ok('Der Hinweis traegt einen Weg zurueck',
    str_contains($kern['body'], 'Zurück zur Verwaltung'));
 ok('Und zwar als echte Seitennavigation',
-   preg_match('/<a class="btn small secondary" href="\$\{VT\.base\}\$\{esc\(zurueck\)\}"/',
-              $kern['body']) === 1,
+   preg_match('/href="\$\{VT\.base\}\$\{esc\(pfad\)\}"/', $kern['body']) === 1,
    'der Lehrkraft-Bereich wird vom Server gebaut und ist kein Teil der PWA');
+ok('Der Weg zurueck steht an einer Stelle',
+   str_contains($kern['body'], 'export function teacherBack')
+   && str_contains($kern['body'], "teacherBack('Zurück zur Verwaltung', zurueck)"),
+   'der Hinweis und das Einlesen brauchen denselben Knopf');
+ok('Und auch er nur fuer eine Lehrkraft',
+   preg_match('/function teacherBack\([^)]*\)\s*\{\s*if \(!VT\.user\?\.isTeacher\) return .{2};/s',
+              $kern['body']) === 1,
+   'fuer ein Kind gibt es keine Verwaltung');
 
 ok('Die Lerneinheit zeigt auf genau diese Lerneinheit',
    str_contains($lern['body'], '/teacher/unit.php?id=${unitId}'),
@@ -6121,6 +6153,137 @@ q('DELETE FROM languages WHERE id IN (?, ?)',
   [(int) $hvKurs['language_id'], (int) $fremdKurs['language_id']]);
 q('DELETE FROM classes WHERE id IN (?, ?)',
   [(int) $hvKlasse['id'], (int) $fremdKlasse['id']]);
+
+section('Die Lerneinheit verwalten');
+
+/*
+ * Umbenennen und Loeschen standen in der Schueleransicht, unter "Verwalten",
+ * und waren fuer eine Lehrkraft der einzige Weg dorthin. Nur ist die
+ * Schueleransicht das, was die Klasse sieht - wer sie aufmacht, um
+ * auszuprobieren, wie eine Lerneinheit ankommt, soll genau das sehen und
+ * nicht zwei Knoepfe mehr. Jetzt stehen sie dort, wo verwaltet wird.
+ */
+
+$lvKlasse = class_create(
+    (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]),
+    'LvK' . bin2hex(random_bytes(2)),
+);
+$lvKurs = course_create(
+    q1('SELECT * FROM users WHERE id = ?', [$lehrerId]),
+    'Verwaltisch' . bin2hex(random_bytes(2)), "\u{1F310}", (int) $lvKlasse['id'], '',
+);
+$lvKursId = is_string($lvKurs) ? 0 : (int) $lvKurs['id'];
+$lvUnit   = makeUnit($lehrerId, (int) $lvKurs['language_id'], 'Unit vorher');
+ok('Eine Lerneinheit zum Verwalten', $lvUnit > 0);
+
+// ---- Der Weg zurueck auf die Startseite.
+
+$res = teacherGet('unit.php?id=' . $lvUnit);
+ok('Neben der Ueberschrift steht der Weg zurueck',
+   preg_match('/<div class="titelzeile">.*?href="[^"]*teacher\/index\.php"/s',
+              $res['body']) === 1,
+   'von hier kommt man mit einem Klick von der Startseite - und zurueck nur ueber den Schulnamen');
+ok('Und er heisst nach dem, wohin er fuehrt',
+   str_contains($res['body'], 'Meine Kurse'));
+
+// ---- Umbenennen.
+
+ok('Die Seite bietet das Umbenennen an',
+   str_contains($res['body'], 'name="rename_unit"')
+   && str_contains($res['body'], 'name="title"'));
+
+teacherRequest($base . '/teacher/unit.php?id=' . $lvUnit, [
+    'rename_unit' => '1', 'unit_id' => $lvUnit,
+    'title' => '  Unit   nachher  ', 'csrf' => $lehrerCsrf,
+]);
+ok('Der Titel laesst sich aendern',
+   (string) qv('SELECT title FROM units WHERE id = ?', [$lvUnit]) === 'Unit nachher',
+   (string) qv('SELECT title FROM units WHERE id = ?', [$lvUnit]));
+
+$res = teacherRequest($base . '/teacher/unit.php?id=' . $lvUnit, [
+    'rename_unit' => '1', 'unit_id' => $lvUnit, 'title' => '   ', 'csrf' => $lehrerCsrf,
+]);
+ok('Ein leerer Titel wird abgelehnt',
+   (string) qv('SELECT title FROM units WHERE id = ?', [$lvUnit]) === 'Unit nachher'
+   && str_contains($res['body'], 'braucht einen Titel'));
+
+// ---- Loeschen, mit allem, was daran haengt.
+
+foreach (['alpha', 'bravo'] as $i => $w) {
+    q('INSERT INTO vocab (unit_id, position, term_foreign, term_native)
+       VALUES (?, ?, ?, ?)', [$lvUnit, $i, $w, 'de-' . $w]);
+}
+$lvVokabel = (int) qv('SELECT id FROM vocab WHERE unit_id = ? ORDER BY position LIMIT 1',
+                      [$lvUnit]);
+q('INSERT INTO sentences (vocab_id, native_text, foreign_text, answer)
+   VALUES (?, ?, ?, ?)', [$lvVokabel, 'Eins.', '{} .', 'alpha']);
+record_answer($lehrerId, $lvVokabel, MODE_CHOICE, true);
+
+$res = teacherGet('unit.php?id=' . $lvUnit);
+ok('Die Seite bietet das Loeschen an', str_contains($res['body'], 'name="delete_unit"'));
+ok('Zugeklappt, nicht im Weg',
+   preg_match('/<details class="card">\s*<summary[^>]*>\s*Diese Lerneinheit l\xC3\xB6schen/s',
+              $res['body']) === 1,
+   'Loeschen ist nichts, worueber man stolpert');
+ok('Die Rueckfrage nennt die Folgen',
+   str_contains($res['body'], 'dem Lernstand aller Kinder daran'));
+
+$res = teacherRequest($base . '/teacher/unit.php?id=' . $lvUnit, [
+    'delete_unit' => '1', 'unit_id' => $lvUnit, 'csrf' => $lehrerCsrf,
+]);
+ok('Die Lerneinheit ist weg',
+   q1('SELECT id FROM units WHERE id = ?', [$lvUnit]) === null);
+ok('Die Vokabeln auch',
+   (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$lvUnit]) === 0);
+ok('Die Lueckensaetze auch',
+   (int) qv('SELECT COUNT(*) FROM sentences WHERE vocab_id = ?', [$lvVokabel]) === 0);
+ok('Und die Lernstaende',
+   (int) qv('SELECT COUNT(*) FROM progress WHERE vocab_id = ?', [$lvVokabel]) === 0);
+ok('Die Meldung sagt, was mitgegangen ist',
+   str_contains($res['body'], '2 Vokabeln') && str_contains($res['body'], 'Lückensätzen'),
+   'sonst steht da nur "geloescht" und man raet, was das hiess');
+ok('Und man steht danach im Kurs',
+   str_contains($res['body'], 'Lerneinheiten') && str_contains($res['body'], 'Wer im Kurs ist'),
+   'nicht auf einer Seite, die es nicht mehr gibt');
+
+// ---- Die Grenze: eine Lerneinheit einer anderen Schule.
+
+/*
+ * Ein zweites Konto genuegt dafuer nicht: Es gehoert zur selben Schule, und
+ * dort darf die Lehrkraft arbeiten - das ist die Vertretungsregel, und sie
+ * ist Absicht. Die Grenze ist die Schule, also muss der Kurs ueber sie
+ * hinweg.
+ */
+$lvFremdLang = makeLanguage($otherId, 'Fremdverwalt' . bin2hex(random_bytes(2)));
+$lvFremdUnit = makeUnit($otherId, $lvFremdLang, 'Fremde Unit');
+
+q("INSERT IGNORE INTO schools (name) VALUES ('Fremde Schule 11')");
+$lvFremdeSchule = (int) qv("SELECT id FROM schools WHERE name = 'Fremde Schule 11'");
+$lvEigeneSchule = (int) qv('SELECT school_id FROM courses WHERE language_id = ?',
+                           [$lvFremdLang]);
+q('UPDATE courses SET school_id = ? WHERE language_id = ?',
+  [$lvFremdeSchule, $lvFremdLang]);
+
+teacherRequest($base . '/teacher/unit.php?id=' . $lvFremdUnit, [
+    'rename_unit' => '1', 'unit_id' => $lvFremdUnit,
+    'title' => 'gekapert', 'csrf' => $lehrerCsrf,
+]);
+ok('Eine fremde Lerneinheit laesst sich nicht umbenennen',
+   (string) qv('SELECT title FROM units WHERE id = ?', [$lvFremdUnit]) === 'Fremde Unit');
+
+teacherRequest($base . '/teacher/unit.php?id=' . $lvFremdUnit, [
+    'delete_unit' => '1', 'unit_id' => $lvFremdUnit, 'csrf' => $lehrerCsrf,
+]);
+ok('Und nicht loeschen',
+   q1('SELECT id FROM units WHERE id = ?', [$lvFremdUnit]) !== null);
+
+q('UPDATE courses SET school_id = ? WHERE language_id = ?',
+  [$lvEigeneSchule, $lvFremdLang]);
+q('DELETE FROM schools WHERE id = ?', [$lvFremdeSchule]);
+
+q('DELETE FROM languages WHERE id IN (?, ?)',
+  [(int) $lvKurs['language_id'], $lvFremdLang]);
+q('DELETE FROM classes WHERE id = ?', [(int) $lvKlasse['id']]);
 
 section('Eine Form, ein Wort');
 

@@ -43,6 +43,23 @@ export async function pruefe(f, aus) {
         })`);
 
         ok('Der Prüfschritt steht da', start.titel === 'Stimmt das so?', start.titel);
+
+        /*
+         * Hierher kommt eine Lehrkraft mit einem Klick von ihrer Startseite
+         * ("+ Lerneinheit" auf der Kurskarte). Zurueck fuehrte von hier gar
+         * nichts: Der Pfeil oben geht in die Schueleransicht, und die
+         * installierte App hat keine Adresszeile.
+         */
+        const heim = await b.js(
+            `document.querySelector('.kurszeile a.btn')?.getAttribute('href') ?? ''`);
+        ok('Und trägt einen Weg zurück in die Verwaltung',
+           heim.endsWith('/teacher/'), heim || '(keiner)');
+
+        await b.js(`document.querySelector('.kurszeile a.btn').click()`);
+        await schlafe(1600);
+        ok('Der auf die Startseite der Lehrkraft führt',
+           (await b.js(`document.querySelector('h1')?.textContent ?? ''`)) === 'Meine Kurse');
+        await b.geh(f.basis + '/#/lang/' + f.sprache + '/import', 2200);
         ok('Und lässt die Wahl, wohin', start.wahl,
            'ohne sie legt jedes Einlesen eine neue Lerneinheit an');
         ok('Die vorhandene Lerneinheit steht zur Auswahl',

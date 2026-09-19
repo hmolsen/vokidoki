@@ -131,6 +131,74 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['catch_up'])) 
 }
 
 /*
+ * Umbenennen und Loeschen - jetzt hier statt in der App.
+ *
+ * Beides stand in der Schueleransicht, unter "Verwalten", und war fuer eine
+ * Lehrkraft der einzige Weg dorthin. Nur ist die Schueleransicht das, was
+ * die Klasse sieht: Wer sie aufmacht, um auszuprobieren, wie eine
+ * Lerneinheit ankommt, soll genau das sehen und nicht zwei Knoepfe mehr.
+ * Also stehen sie dort, wo verwaltet wird - auf derselben Lerneinheit.
+ *
+ * Wie beim Aendern einer Vokabel gilt die SCHULE als Regel, nicht die
+ * Kursmitgliedschaft: Eine Vertretung muss arbeiten koennen.
+ */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['rename_unit'])) {
+    teacher_csrf_check();
+
+    $titel = trim(preg_replace('/\s+/u', ' ', (string) ($_POST['title'] ?? '')) ?? '');
+    if ($titel === '') {
+        teacher_flash('Die Lerneinheit braucht einen Titel.', 'bad');
+        teacher_redirect($zurueck);
+    }
+    $titel = mb_substr($titel, 0, 128);
+
+    if ($titel === (string) $unit['title']) {
+        teacher_flash('Der Titel war schon so.');
+        teacher_redirect($zurueck);
+    }
+
+    q('UPDATE units SET title = ? WHERE id = ?', [$titel, $unitId]);
+    teacher_flash(sprintf('Heisst jetzt „%s“.', $titel));
+    teacher_redirect($zurueck);
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['delete_unit'])) {
+    teacher_csrf_check();
+
+    /*
+     * Was mitgeht, wird vorher gezaehlt - danach ist es weg, und die
+     * Meldung soll sagen, was wirklich verschwunden ist.
+     *
+     * Geloescht wird nur die Zeile in units: Vokabeln haengen per
+     * ON DELETE CASCADE daran, Saetze und Lernstaende wiederum an den
+     * Vokabeln.
+     */
+    $weg = q1(
+        'SELECT (SELECT COUNT(*) FROM vocab v WHERE v.unit_id = t.id) AS vokabeln,
+                (SELECT COUNT(*) FROM sentences s
+                   JOIN vocab v2 ON v2.id = s.vocab_id
+                  WHERE v2.unit_id = t.id) AS saetze,
+                (SELECT COUNT(*) FROM progress p
+                   JOIN vocab v3 ON v3.id = p.vocab_id
+                  WHERE v3.unit_id = t.id) AS staende
+           FROM units t WHERE t.id = ?',
+        [$unitId],
+    ) ?? ['vokabeln' => 0, 'saetze' => 0, 'staende' => 0];
+
+    $titel = (string) $unit['title'];
+    $kurs  = (int) $unit['course_id'];
+
+    q('DELETE FROM units WHERE id = ?', [$unitId]);
+
+    teacher_flash(sprintf(
+        '„%s“ ist gelöscht - mit %d Vokabeln, %d Lückensätzen und den '
+        . 'Lernständen von %d Kindern daran.',
+        $titel, (int) $weg['vokabeln'], (int) $weg['saetze'], (int) $weg['staende'],
+    ));
+    teacher_redirect('course.php?id=' . $kurs);
+}
+
+/*
  * Vokabeln von Hand: hinzufuegen, aendern, loeschen.
  *
  * Bisher konnte das nur der Betreiber im Admin. Eine Lehrkraft sah in ihrer
@@ -256,10 +324,19 @@ $pfad[] = teacher_course_crumb($user, [
 ], false);
 $pfad[] = ['label' => (string) $unit['title'], 'href' => null];
 
+/*
+ * Neben der Ueberschrift zwei Wege hinaus.
+ *
+ * Auf diese Seite kommt man von der Startseite mit einem Klick - "Freigeben"
+ * auf der Kurskarte. Zurueck fuehrte bisher nur der Name der Schule im Pfad,
+ * und der liest sich nicht wie "zurueck". Also ein Knopf, der es sagt.
+ */
 teacher_head($unit['title'], $user, $pfad, sprintf(
-    '<a class="btn small secondary" href="%s" target="_blank" rel="noopener" '
+    '<a class="btn small secondary" href="%s">&#8249; Meine Kurse</a>'
+    . '<a class="btn small secondary" href="%s" target="_blank" rel="noopener" '
     . 'title="Die Ansicht, die deine Klasse sieht">'
     . '<span aria-hidden="true">&#128065;</span> So sieht es die Klasse</a>',
+    h(teacher_url('index.php')),
     h(url('/') . '#/unit/' . $unitId),
 ));
 teacher_flash_render();
@@ -478,6 +555,63 @@ $fehlen = vocab_without_sentences($unitId);
     Zurücknehmen kostet nichts: Die Sätze bleiben, und der Lernstand der
     Kinder ist beim nächsten Freigeben wieder da.
 </p>
+
+<h2>Diese Lerneinheit</h2>
+
+<?php
+/*
+ * Umbenennen: eine Zeile, wie überall. Der Titel ist das, was die Klasse
+ * in ihrer Liste liest - "Unit 4" aus dem Buch, oder was die Lehrkraft
+ * daraus macht.
+ */
+?>
+<form method="post" class="card anlegezeile">
+    <?= teacher_csrf_field() ?>
+    <input type="hidden" name="unit_id" value="<?= $unitId ?>">
+    <span class="coursetitle">
+        <span class="cflag">&#128218;</span>
+        <input type="text" name="title" maxlength="128" required
+               value="<?= h((string) $unit['title']) ?>" aria-label="Titel der Lerneinheit">
+    </span>
+    <button class="btn small secondary" name="rename_unit" value="1">Umbenennen</button>
+</form>
+
+<?php
+/*
+ * Zugeklappt, und das ist der Punkt: Loeschen ist nichts, worueber man
+ * stolpert. Wer es sucht, findet es; wer die Seite ueberfliegt, nicht.
+ *
+ * Ohne Passwortabfrage - anders als beim Kurs. Eine Lerneinheit ist eine
+ * Buchseite, kein Schuljahr; die Rueckfrage nennt die Zahlen, und das
+ * reicht als Zaesur.
+ */
+?>
+<details class="card">
+    <summary style="cursor:pointer;font-weight:600">
+        Diese Lerneinheit löschen
+    </summary>
+
+    <div class="notice bad" style="margin-top:14px">
+        <strong>Das lässt sich nicht rückgängig machen.</strong>
+        Mit der Lerneinheit gehen ihre <?= $gesamt ?> Vokabeln, die
+        Lückensätze dazu und alles, was die Kinder daran gelernt haben.
+    </div>
+
+    <p class="tiny muted">
+        Soll die Klasse nur aufhören, damit zu arbeiten, ist „Nichts
+        freigeben" das mildere Mittel: Die Lerneinheit verschwindet aus der
+        App, Unterlagen und Lernstände bleiben.
+    </p>
+
+    <form method="post">
+        <?= teacher_csrf_field() ?>
+        <input type="hidden" name="unit_id" value="<?= $unitId ?>">
+        <button class="btn small danger" name="delete_unit" value="1"
+                data-confirm="&bdquo;<?= h((string) $unit['title']) ?>&ldquo; mit <?= $gesamt ?> Vokabeln, den Lückensätzen und dem Lernstand aller Kinder daran endgültig löschen?">
+            Endgültig löschen
+        </button>
+    </form>
+</details>
 
 
 <?php teacher_foot(); ?>

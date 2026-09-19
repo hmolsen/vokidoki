@@ -9,6 +9,25 @@ import { VT, api, render, esc, on, go, topbar, loading, wireBack, progressBar, f
  * Menüpunkt, der nur zu einer Liste führt, ist ein Klick ohne Entscheidung;
  * die Liste steht jetzt direkt hier.
  */
+/**
+ * Wer liest hier selbst ein?
+ *
+ * Eine Lehrkraft nicht - jedenfalls nicht von hier aus. Diese Seite ist die
+ * Ansicht ihrer Klasse, und die soll genau das sein: Was ein Kind nicht
+ * sieht, steht auch fuer sie nicht da. Sonst probiert sie eine Seite aus,
+ * die es so gar nicht gibt.
+ *
+ * Eingelesen wird aus ihrem Bereich heraus - "+ Lerneinheit" auf der
+ * Kurskarte und "Vokabeln einlesen" im Kurs fuehren in dieselbe Ansicht.
+ *
+ * Fuer ein Kind mit Einlese-Recht bleibt es: In einer Familie ist genau das
+ * der Weg, und es gibt dort niemanden, der Kurse verwaltet. Dieselbe Regel
+ * wie darfAnlegen() in der Kachelliste.
+ */
+function selbstEinlesen() {
+    return VT.user.canImport && !VT.user.isTeacher;
+}
+
 export async function languageView(languageId) {
     render(loading());
 
@@ -63,7 +82,7 @@ export async function languageView(languageId) {
                 </div>
             </div>` : ''}
 
-        ${VT.user.canImport ? `
+        ${selbstEinlesen() ? `
             <button class="row" data-go="/lang/${language.id}/import">
                 <span class="lead">\u{1F4F7}</span>
                 <span class="body">
@@ -76,7 +95,7 @@ export async function languageView(languageId) {
         ${units.length === 0 ? `
             <div class="empty">
                 <span class="big">\u{1F4D6}</span>
-                ${VT.user.canImport
+                ${selbstEinlesen()
                     ? 'Fotografiere deine erste Vokabelseite,<br>dann kann es losgehen.'
                     : 'Hier ist noch nichts freigegeben.<br>Deine Lehrkraft macht die erste Lektion auf.'}
             </div>

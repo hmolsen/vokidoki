@@ -330,11 +330,31 @@ Abmelden. Das Zahnrad führt in dieselben Einstellungen wie in der App
 Seite man kommt, und eine zweite Fassung davon wären bald zwei
 verschiedene.
 
+Neben der Überschrift einer Lerneinheit steht **„‹ Meine Kurse"** — der Weg
+zurück auf die Startseite. Dorthin führte vorher nur der Name der Schule im
+Pfad, und der liest sich nicht wie „zurück", sondern wie der Name der
+Schule. Hierher kommt man mit **einem** Klick von der Startseite
+(„Freigeben" auf der Kurskarte); hinaus soll es genauso gehen. Dasselbe gilt
+für das Einlesen: Die Ansicht trägt neben dem Kursnamen denselben Knopf.
+
 Von Kurs und Lerneinheit führt ein Knopf **in der Zeile der Überschrift** in
 die Schüleransicht: „So sieht es die Klasse". Die App sagt dort, dass man
 gerade die Schüleransicht vor sich hat — ohne diesen Satz ist es nur eine
 Seite, die weniger zeigt als die Verwaltung, und das sieht nach einem Fehler
 aus. Für Kinder steht dort nichts.
+
+**Und sonst steht dort nichts, was ein Kind nicht auch sieht.** „Vokabeln
+einlesen" hing an `canImport`, und das hat eine Lehrkraft — die Probe zeigte
+ihr damit eine Seite, die es so gar nicht gibt. Ebenso „Umbenennen" und
+„Lerneinheit löschen" in der Lerneinheit. Beides gilt jetzt nur noch für
+`canImport && !isTeacher`, also für ein Kind in einer Familie, das seine
+Lerneinheiten selbst anlegt.
+
+Umbenennen und Löschen sind dabei nicht verschwunden, sondern umgezogen: Sie
+stehen unter „Diese Lerneinheit" im Lehrkraft-Bereich, auf derselben
+Lerneinheit — Umbenennen als Zeile, Löschen zugeklappt mit den Zahlen in der
+Rückfrage. Das Zurücksetzen des Lernstands bleibt in der App: Der Stand
+gehört dem Konto, das ihn erarbeitet hat.
 
 **Und im selben Hinweis steht der Weg zurück.** Er sagte bisher, wo man ist,
 aber nicht, wie man wieder herauskommt: Die installierte App hat keine
@@ -384,6 +404,17 @@ Leiste oben klebt selbst, und wie hoch sie ist, weiß nur der Browser — am
 Telefon bricht sie um und wird doppelt so hoch. `teacher.js` misst sie und
 legt das Ergebnis als `--barhoehe` ab; ohne das stünde der Tabellenkopf
 hinter der Leiste statt darunter.
+
+Dazu gehört eine zweite Zeile, die nicht danach aussieht: `table.release {
+overflow: clip }`. `table.data` trägt `overflow: hidden` für die runden
+Ecken, und damit wird **die Tabelle** der Bezug des Klebens statt des
+Fensters — der Kopf saß dann um die Leistenhöhe versetzt zwischen der
+ersten und der zweiten Zeile und rollte mit weg. `overflow: clip`
+schneidet genauso ab, ohne einen Rollbehälter zu erzeugen. Am Telefon fiel
+das nie auf: Dort setzt die Kartenregel ohnehin `overflow: visible`.
+**Geprüft wird es deshalb an beiden Größen** — die erste Fassung der
+Prüfung lief nur bei 390 px und blieb grün, während der Kopf am Rechner
+mitten in der Tabelle stand.
 
 ### Der QR-Code, der die Anmeldung ersetzt
 
@@ -661,7 +692,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-944 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+966 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
 Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
 Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
 hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
@@ -723,7 +754,7 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 1154 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 1176 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
 
@@ -741,7 +772,7 @@ Quelltext völlig richtig aussahen:
 - Der Zettel für die ganze Klasse wurde erst beim nächsten Laden anklickbar.
 
 ```bash
-node tests/browser/lauf.mjs --fixture            # 147 Prüfungen
+node tests/browser/lauf.mjs --fixture            # 163 Prüfungen
 node tests/browser/lauf.mjs --fixture bilder/    # dazu Bildschirmfotos
 ```
 
