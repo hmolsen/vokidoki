@@ -62,7 +62,25 @@ function json_out_and_continue(array $data): void
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
     header('Content-Length: ' . strlen($body));
-    header('Connection: close');
+    /*
+     * Kein "Connection: close".
+     *
+     * Es stand hier, damit der Browser merkt, wo die Antwort aufhoert,
+     * wenn der Vorgang danach noch weiterarbeitet. Dafuer ist aber die
+     * Laengenangabe darueber zustaendig, und die steht da.
+     *
+     * Was es stattdessen tat: Die Seite laeuft ueber HTTP/1.1, und dort
+     * heisst der Header "wirf diese Verbindung danach weg". Bei jedem
+     * einzelnen Aufruf. Beim Ueben sind das viele kurz hintereinander -
+     * Frage holen, Antwort schicken, naechste Frage -, und jede einzelne
+     * brauchte damit einen neuen TCP- und TLS-Handschlag. Das ist nicht
+     * nur langsam: Es haelt den Verbindungsvorrat des Browsers dauernd in
+     * Bewegung, und genau dort sitzt ein altbekanntes Wettrennen - der
+     * Browser schickt eine Anfrage auf eine Verbindung, die der Server
+     * gerade zumacht. Die faellt dann ohne Status um, und in der App las
+     * sich das als "Keine Verbindung. Bist du online?", mitten im besten
+     * Netz.
+     */
     echo $body;
 
     // Die Sitzung freigeben, sonst warten alle weiteren Anfragen desselben

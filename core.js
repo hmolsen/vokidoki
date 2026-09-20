@@ -21,16 +21,42 @@ export async function api(file, action, opts = {}) {
     const headers = { 'X-Vokabeltrainer': '1' };
     if (opts.body) headers['Content-Type'] = 'application/json';
 
+    const senden = () => fetch(url, {
+        method: opts.body ? 'POST' : 'GET',
+        headers,
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+        credentials: 'same-origin',
+    });
+
+    /*
+     * Faellt der Abruf ohne Status um, einmal nachfassen.
+     *
+     * "Ohne Status" heisst: Es kam gar keine Antwort - die Verbindung ist
+     * nicht zustandegekommen oder mittendrin weggebrochen. Das passiert
+     * auch im besten Netz: Der Browser haelt Verbindungen offen und
+     * benutzt sie wieder, der Server macht sie nach einer Weile zu, und
+     * wenn beides im selben Augenblick geschieht, faellt genau eine
+     * Anfrage um. Beim Ueben trifft das oft genug, dass es auffaellt -
+     * dort gehen viele kurz hintereinander raus.
+     *
+     * Ein zweiter Versuch auf einer frischen Verbindung laeuft dann
+     * durch. Genau einer: Ist wirklich kein Netz da, soll das Kind das
+     * nach einem Wimpernschlag erfahren und nicht nach einer Minute.
+     *
+     * Wiederholt wird nur dieser Fall. Eine Antwort, die ankam und "nein"
+     * sagte, wird nicht noch einmal geschickt - bei einem POST waere das
+     * dieselbe Anderung zweimal.
+     */
     let res;
     try {
-        res = await fetch(url, {
-            method: opts.body ? 'POST' : 'GET',
-            headers,
-            body: opts.body ? JSON.stringify(opts.body) : undefined,
-            credentials: 'same-origin',
-        });
+        res = await senden();
     } catch {
-        throw new ApiError('Keine Verbindung. Bist du online?', 0);
+        await new Promise((fertig) => setTimeout(fertig, 400));
+        try {
+            res = await senden();
+        } catch {
+            throw new ApiError('Keine Verbindung. Bist du online?', 0);
+        }
     }
 
     let data;
@@ -237,13 +263,29 @@ export function progressBar(known, total) {
  * erscheinen.
  */
 export function showError(message, kind = '', root = document) {
-    const box = $('#msg', root);
-    if (box) {
-        box.innerHTML = notice(message, kind);
-        box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    } else {
-        alert(message);
+    let box = $('#msg', root);
+
+    /*
+     * Und wenn keiner da ist, wird einer angelegt.
+     *
+     * Hier stand sonst ein alert(). Dieselbe Stoerung sah dadurch
+     * verschieden aus, je nachdem, wann sie auftrat: Faellt der Abruf um,
+     * waehrend die Ansicht schon steht, gab es einen roten Kasten - faellt
+     * er beim Laden um, stand da noch der Ladepunkt ohne #msg, und es
+     * wurde ein Popup, das man wegdruecken muss. Zwei Gestalten fuer
+     * dieselbe Nachricht, und die haesslichere ausgerechnet im
+     * haeufigeren Fall.
+     */
+    if (!box) {
+        const app = (root.getElementById ? root : document).getElementById('app');
+        if (!app) return;
+        box = document.createElement('div');
+        box.id = 'msg';
+        app.prepend(box);
     }
+
+    box.innerHTML = notice(message, kind);
+    box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 export function clearError(root = document) {

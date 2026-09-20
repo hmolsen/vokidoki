@@ -107,7 +107,7 @@ function teacher_redirect_and_continue(string $file): void
     http_response_code(303);
     header('Location: ' . teacher_url($file));
     header('Content-Length: 0');
-    header('Connection: close');
+    // Kein "Connection: close" - der Grund steht in lib/json.php.
 
     // Die Sitzung freigeben, sonst wartet die weitergeleitete Anfrage
     // derselben Lehrkraft auf das Ende dieses Vorgangs.
@@ -136,7 +136,7 @@ function teacher_redirect_and_continue(string $file): void
 function teacher_flush_and_continue(): void
 {
     ignore_user_abort(true);
-    header('Connection: close');
+    // Kein "Connection: close" - der Grund steht in lib/json.php.
 
     if (session_status() === PHP_SESSION_ACTIVE) {
         session_write_close();

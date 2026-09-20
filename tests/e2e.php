@@ -7430,6 +7430,66 @@ ok('Abmelden führt zurück zur Anmeldung',
 q('DELETE FROM users WHERE id = ?', [$lehrerId]);
 @unlink($lehrerJar);
 
+section('Verbindungen bleiben stehen');
+
+/*
+ * Jede API-Antwort trug "Connection: close".
+ *
+ * Gedacht war das als Teil von "antworten und dann weiterarbeiten": Der
+ * Browser sollte merken, wo die Antwort aufhoert. Dafuer ist aber die
+ * Laengenangabe zustaendig, und die steht dabei.
+ *
+ * Was der Header wirklich tat: Die Seite laeuft ueber HTTP/1.1, und dort
+ * heisst er "wirf diese Verbindung danach weg" - bei jedem einzelnen
+ * Aufruf. Beim Ueben gehen viele kurz hintereinander raus, Frage holen,
+ * Antwort schicken, naechste Frage, und jede brauchte damit einen neuen
+ * TCP- und TLS-Handschlag. Das haelt den Verbindungsvorrat des Browsers
+ * dauernd in Bewegung, und genau dort sitzt das Wettrennen: Der Browser
+ * schickt auf eine Verbindung, die der Server gerade zumacht. Die faellt
+ * ohne Status um, und in der App las sich das als "Keine Verbindung. Bist
+ * du online?" - mitten im besten Netz.
+ *
+ * Geprueft wird am Quelltext, nicht an der Antwort: Der Entwicklungsserver
+ * von PHP setzt den Header von sich aus, weil er ohnehin nur eine Anfrage
+ * zugleich kann. An ihm liesse sich der Unterschied gar nicht sehen.
+ */
+foreach (['lib/json.php', 'teacher/_boot.php', 'api/import.php'] as $datei) {
+    $quelle = (string) file_get_contents(__DIR__ . '/../' . $datei);
+    ok($datei . ' setzt kein Connection: close',
+       preg_match('/header\s*\(\s*.Connection:/i', $quelle) !== 1,
+       'die Laengenangabe sagt schon, wo die Antwort aufhoert');
+}
+
+ok('Die Laengenangabe steht dafuer weiterhin da',
+   str_contains((string) file_get_contents(__DIR__ . '/../lib/json.php'),
+                'Content-Length: '),
+   'ohne sie wartet der Browser doch wieder auf das Ende der Verbindung');
+
+/*
+ * Und der Guertel dazu: Faellt ein Abruf ohne Status um, fasst die App
+ * genau einmal nach. Ein zweiter Versuch auf frischer Verbindung laeuft
+ * durch; ist wirklich kein Netz da, erfaehrt das Kind es nach einem
+ * Wimpernschlag und nicht nach einer Minute.
+ */
+$kern = (string) file_get_contents(__DIR__ . '/../core.js');
+ok('Ein Abruf ohne Status wird einmal wiederholt',
+   preg_match('/catch \{.*?setTimeout.*?res = await senden\(\);/s', $kern) === 1,
+   'ein Wettrennen um eine Verbindung faellt beim zweiten Mal nicht mehr auf');
+ok('Aber nur dieser Fall',
+   substr_count($kern, 'res = await senden();') === 2,
+   'eine Antwort, die ankam und "nein" sagte, wird nicht noch einmal geschickt');
+
+/*
+ * Und eine Stoerung sieht immer gleich aus. Vorher hing die Gestalt davon
+ * ab, wann sie auftrat: Stand die Ansicht schon, gab es einen roten
+ * Kasten; fiel der Abruf beim Laden um, stand dort noch der Ladepunkt ohne
+ * #msg - und daraus wurde ein Popup zum Wegdruecken.
+ */
+ok('Eine Meldung ist immer ein Kasten, nie ein Popup',
+   !str_contains($kern, 'alert(message)')
+   && str_contains($kern, "box.id = 'msg';"),
+   'zwei Gestalten fuer dieselbe Nachricht, und die haesslichere im haeufigeren Fall');
+
 section('Fahnen als Bild');
 
 /*
