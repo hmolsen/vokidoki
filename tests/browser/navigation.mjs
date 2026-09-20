@@ -129,24 +129,34 @@ export async function pruefe(f, aus) {
            (await b.js(`location.search`)).includes('id=' + f.kurs));
         await b.geh(f.basis + '/teacher/unit.php?id=' + f.unit, 1400);
 
-        // ---- Der Kurswechsler.
+        // ---- Das Menue links: Haus, die eigenen Kurse, alles andere.
 
+        /*
+         * Hier stand ein Pfad aus Knoepfen - Haus > Kurs > Lerneinheit -,
+         * und am Rechner war das richtig. Auf einem Telefon nicht: Drei
+         * Knoepfe mit Kursnamen darin brauchen zwei Zeilen, und die Leiste
+         * war damit so hoch wie der halbe Bildschirm.
+         */
         for (const [name, pfad] of [['Kurs', '/teacher/course.php?id=' + f.kurs],
                                     ['Lerneinheit', '/teacher/unit.php?id=' + f.unit]]) {
             await b.geh(f.basis + pfad, 1300);
 
             const menue = await b.js(`(() => {
-                const d = document.querySelector('details.crumbmenu');
+                const d = document.getElementById('menuLinks');
                 if (!d) return null;
                 return {
-                    offen: d.open,
-                    ziele: [...d.querySelectorAll('a')].map((a) => a.textContent.trim()),
-                    hier:  d.querySelector('a.on')?.textContent.trim() ?? '',
+                    offen:  d.open,
+                    pfad:   !!document.querySelector('.crumbs'),
+                    ziele:  [...d.querySelectorAll('.mitem')].map((a) => a.textContent.trim()),
+                    hier:   d.querySelector('.mitem.on')?.textContent.trim() ?? '',
+                    breite: Math.round(
+                        document.querySelector('.adminbar').getBoundingClientRect().height),
                 };
             })()`);
 
-            ok(`${name}: der Kurskrumen klappt auf`, menue !== null,
-               'ohne ihn führt der Wechsel wieder über die Schule');
+            ok(`${name}: oben links steht ein Menü`, menue !== null);
+            ok(`${name}: und kein Pfad mehr`, menue?.pfad === false,
+               'drei Knöpfe mit Kursnamen darin brauchen am Telefon zwei Zeilen');
             ok(`${name}: zugeklappt, bis jemand darauf drückt`, menue?.offen === false);
             ok(`${name}: beide eigenen Kurse stehen darin`,
                (menue?.ziele ?? []).some((z) => z.includes('Englisch'))
@@ -154,17 +164,37 @@ export async function pruefe(f, aus) {
                (menue?.ziele ?? []).join(' | '));
             ok(`${name}: und der Weg zu allen Kursen der Schule`,
                (menue?.ziele ?? []).some((z) => z.includes('Alle Kurse')));
+            ok(`${name}: sowie zur Klassenverwaltung`,
+               (menue?.ziele ?? []).some((z) => z.includes('Klassen und Kinder')));
+            ok(`${name}: die Leiste bleibt eine Zeile`, (menue?.breite ?? 999) < 70,
+               menue?.breite + ' px hoch');
         }
 
         // Aufklappen und wechseln - ohne Skript, nur <details>.
         await b.geh(f.basis + '/teacher/course.php?id=' + f.kurs, 1300);
-        await b.js(`document.querySelector('details.crumbmenu > summary').click()`);
+        await b.js(`document.querySelector('#menuLinks > summary').click()`);
         await schlafe(400);
-        ok('Ein Druck klappt ihn auf',
-           await b.js(`document.querySelector('details.crumbmenu').open`));
-        await b.bild('kurswechsler');
 
-        await b.js(`[...document.querySelectorAll('details.crumbmenu a')]
+        const auf = await b.js(`(() => {
+            const d = document.getElementById('menuLinks');
+            const s = d.querySelector('.schublade').getBoundingClientRect();
+            return {
+                offen:    d.open,
+                links:    Math.round(s.left),
+                breite:   Math.round(s.width),
+                schleier: !!d.querySelector('.schleier'),
+                markiert: d.querySelector('.mitem.on')?.textContent.trim() ?? '',
+            };
+        })()`);
+        ok('Ein Druck klappt es auf', auf.offen);
+        ok('Die Leiste schiebt sich von links herein', auf.links === 0 && auf.breite > 200,
+           auf.links + ' / ' + auf.breite);
+        ok('Und legt einen Schleier über die Seite', auf.schleier);
+        ok('Der aktuelle Kurs ist darin markiert',
+           auf.markiert.includes('Englisch'), auf.markiert);
+        await b.bild('menue');
+
+        await b.js(`[...document.querySelectorAll('#menuLinks .mitem')]
                       .find((a) => a.textContent.includes('Französisch')).click()`);
         await schlafe(1400);
         const gewechselt = await b.js(`({
@@ -174,11 +204,49 @@ export async function pruefe(f, aus) {
         ok('Und ein Klick wechselt den Kurs',
            gewechselt.ort.includes('id=' + f.kurs2), gewechselt.ort + ' / ' + gewechselt.h1);
 
+        // ---- Rechts das eigene Konto.
+
+        await b.js(`document.querySelector('#menuRechts > summary').click()`);
+        await schlafe(400);
+        const rechts = await b.js(`(() => {
+            const d = document.getElementById('menuRechts');
+            const s = d.querySelector('.schublade').getBoundingClientRect();
+            return {
+                offen:  d.open,
+                links:  !document.getElementById('menuLinks').open,
+                rand:   Math.round(window.innerWidth - s.right),
+                ziele:  [...d.querySelectorAll('.mitem')].map((a) => a.textContent.trim()),
+            };
+        })()`);
+        ok('Rechts öffnet das eigene Konto', rechts.offen);
+        ok('Und das linke Menü schliesst sich dabei', rechts.links,
+           'zwei offene Schubladen wären zwei Navigationen');
+        ok('Die Leiste kommt von rechts', rechts.rand === 0, String(rechts.rand));
+        ok('Darin stehen Profil, Passwort und Abmelden',
+           rechts.ziele.some((z) => z.includes('Profil'))
+           && rechts.ziele.some((z) => z.includes('Passwort'))
+           && rechts.ziele.some((z) => z.includes('Abmelden')),
+           rechts.ziele.join(' | '));
+
+        // Escape schliesst - und ein Druck auf den Schleier auch.
+        await b.taste('Escape', 27);
+        await schlafe(300);
+        ok('Escape schliesst das Menü',
+           (await b.js(`document.getElementById('menuRechts').open`)) === false);
+
+        await b.js(`document.querySelector('#menuLinks > summary').click()`);
+        await schlafe(300);
+        await b.js(`document.querySelector('#menuLinks .schleier').click()`);
+        await schlafe(300);
+        ok('Und ein Druck daneben ebenso',
+           (await b.js(`document.getElementById('menuLinks').open`)) === false);
+
         // ---- Die Wurzel ist die Startseite, nicht mehr die Klassenliste.
 
+        await b.geh(f.basis + '/teacher/course.php?id=' + f.kurs, 1300);
         const wurzel = await b.js(
-            `document.querySelector('.adminbar .crumb')?.getAttribute('href') ?? ''`);
-        ok('Der Name der Schule führt auf die eigenen Kurse',
+            `document.querySelector('#menuLinks .mitem.haupt')?.getAttribute('href') ?? ''`);
+        ok('Das Häuschen im Menü führt auf die eigenen Kurse',
            wurzel.endsWith('/teacher/index.php'), wurzel);
     } finally {
         b.schliessen();

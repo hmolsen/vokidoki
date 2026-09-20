@@ -214,16 +214,11 @@ $gesperrt  = login_locked_usernames(array_column($kinder, 'username'));
 $frisch    = array_flip((array) ($_SESSION['teacher_fresh'] ?? []));
 unset($_SESSION['teacher_fresh']);
 
-$pfad = $ausKurs === null
-    ? [['label' => 'Klassen', 'href' => teacher_url('classes.php')]]
-    : [teacher_course_crumb($user, $ausKurs, false)];
-$pfad[] = ['label' => 'Klasse ' . $klasse['name'], 'href' => null];
-
-teacher_head('Klasse ' . $klasse['name'], $user, $pfad,
+teacher_head('Klasse ' . $klasse['name'], $user,
     $ausKurs === null ? '' : sprintf(
         '<a class="btn small secondary" href="%s">&#8249; Zurück zum Kurs</a>',
         h(teacher_url('course.php') . '?id=' . (int) $ausKurs['id']),
-    ));
+    ), '', $ausKurs === null ? null : (int) $ausKurs['id']);
 teacher_flash_render();
 ?>
 

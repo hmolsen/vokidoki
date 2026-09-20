@@ -80,8 +80,7 @@ export async function pruefe(f, aus) {
                 titel:   document.querySelector('h1')?.textContent ?? '',
                 schritt: document.querySelector('.schritt')?.textContent?.trim() ?? '',
                 namen:   kacheln.map((k) => k.value),
-                pfad:    [...document.querySelectorAll('.crumbs .crumb')]
-                            .map((e) => e.textContent.trim().replace(/\\s+/g, ' ')),
+                ueber:   document.querySelector('h1')?.textContent?.trim() ?? '',
                 frei:    !!document.querySelector('select[data-picker]'),
             };
         })()`);
@@ -92,8 +91,9 @@ export async function pruefe(f, aus) {
         ok('Die fünf Schulsprachen stehen als Kacheln da',
            zwei.namen.length === 5, zwei.namen.join(', '));
         ok('Latein ist eine davon', zwei.namen.includes('Latein'), zwei.namen.join(', '));
-        ok('Die gewählte Klasse steht im Pfad',
-           zwei.pfad.some((t) => t.startsWith('Klasse ')), zwei.pfad.join(' › '));
+        ok('Die gewählte Klasse steht auf den Kacheln',
+           zwei.namen.length === 5 && zwei.ueber === 'Für welche Sprache?',
+           zwei.ueber);
         ok('Und alle übrigen Sprachen stehen darunter', zwei.frei);
 
         await b.bild('kurs-schritt2');
@@ -115,8 +115,8 @@ export async function pruefe(f, aus) {
             titel:   document.querySelector('h1')?.textContent ?? '',
             meldung: document.querySelector('.notice')?.textContent?.trim()
                         .replace(/\\s+/g, ' ') ?? '',
-            trenner: document.querySelectorAll('.crumbs .crumbsep').length,
-            klasse:  !![...document.querySelectorAll('.crumbs a')]
+            pfad:    !!document.querySelector('.crumbs'),
+            klasse:  !![...document.querySelectorAll('.adminbar a')]
                         .find((a) => (a.getAttribute('href') ?? '').includes('class.php')),
             zurKlasse: [...document.querySelectorAll('a.btn')]
                         .find((a) => a.textContent.includes('verwalten'))
@@ -129,9 +129,9 @@ export async function pruefe(f, aus) {
         ok('Und die Seite sagt, dass die Kinder schon drin sind',
            kurs.meldung.includes('Die Kinder der Klasse'), kurs.meldung);
 
-        ok('Der Pfad ist zwei Glieder lang: Schule, Kurs', kurs.trenner === 1,
-           kurs.trenner + ' Trenner - die Klasse war eine Ebene zu viel');
-        ok('Die Klasse steht nicht mehr darin', !kurs.klasse);
+        ok('Einen Pfad gibt es nicht mehr', !kurs.pfad,
+           'drei Knöpfe mit Kursnamen darin brauchen am Telefon zwei Zeilen');
+        ok('Und die Klasse steht auch nicht in der Leiste', !kurs.klasse);
         ok('Sie ist von hier aus trotzdem erreichbar', kurs.zurKlasse !== '',
            'von der Hauptansicht aus muss alles erreichbar sein');
 
@@ -164,15 +164,15 @@ export async function pruefe(f, aus) {
             return {
                 titel:   document.querySelector('h1')?.textContent ?? '',
                 zurueck: zurueck?.getAttribute('href') ?? '',
-                imPfad:  [...document.querySelectorAll('.crumbs .crumb')]
+                imMenue: [...document.querySelectorAll('#menuLinks .mitem')]
                             .some((e) => e.textContent.includes('Latein - ')),
             };
         })()`);
 
         ok('Von der Kursseite kommt man in die Klasse',
            inKlasse.titel.startsWith('Klasse '), inKlasse.titel);
-        ok('Der Pfad dort führt über den Kurs, aus dem man kam', inKlasse.imPfad,
-           'sonst hängt die Klasse wieder an der Klassenliste');
+        ok('Der neue Kurs steht im Menü links', inKlasse.imMenue,
+           'von jeder Seite aus derselbe Griff zum Wechseln');
         ok('Und ein Knopf führt direkt zurück', inKlasse.zurueck !== '',
            'sonst landet man über die Klassenliste wieder ganz oben');
 

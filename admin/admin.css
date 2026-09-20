@@ -2,11 +2,18 @@
 
 body.admin { background: var(--bg); }
 
+/* ------------------------------------------------ Die Leiste und ihre Menüs
+ *
+ * Zwei Knöpfe und ein Name. Hier stand ein Pfad aus Knöpfen - Haus › Kurs ›
+ * Lerneinheit -, und am Rechner war das richtig. Auf einem Telefon nicht:
+ * Drei Knöpfe mit Kursnamen darin brauchen zwei Zeilen, und die Leiste war
+ * damit so hoch wie der halbe Bildschirm.
+ */
 .adminbar {
     display: flex;
     align-items: center;
-    gap: 20px;
-    padding: 12px 20px;
+    gap: 12px;
+    padding: 10px 16px;
     background: var(--surface);
     border-bottom: 1px solid var(--border);
     position: sticky;
@@ -14,6 +21,12 @@ body.admin { background: var(--bg); }
     z-index: 5;
     flex-wrap: wrap;
 }
+
+/*
+ * Dieselbe Leiste benutzt auch der Betreiber-Admin - dort mit festen
+ * Reitern, weil es dort wirklich Bereiche gibt (Konten, Schulen, Kosten,
+ * Saetze) und keinen Ort, an dem man steht.
+ */
 .adminbar nav { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
 .adminbar nav a {
     padding: 8px 13px;
@@ -26,17 +39,130 @@ body.admin { background: var(--bg); }
 .adminbar nav a:hover { background: var(--surface-2); color: var(--text); }
 .adminbar nav a.on    { background: var(--accent); color: #fff; }
 .adminbar .logout { margin: 0; }
+.barname {
+    margin-left: auto;
+    color: var(--text-soft);
+    font-size: .92rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
-/* Name, Zahnrad und Abmelden gehoeren zusammen und stehen rechts. */
-.barright {
+/* Beide Knöpfe gleich: der linke öffnet die Navigation, der rechte das
+   eigene Konto. Gleiche Bauart, gleiche Erwartung. */
+.menue > .burger {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 1.15rem;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+.menue > .burger::-webkit-details-marker { display: none; }
+.menue > .burger:hover { background: var(--surface-2); }
+.menue[open] > .burger { background: var(--surface-2); border-color: var(--text-soft); }
+
+/*
+ * Der Schleier liegt über der Seite, damit klar ist, dass das Menü offen
+ * ist - und damit ein Druck daneben es wieder schliesst. Das Schliessen
+ * selbst macht teacher.js; ohne Skript schliesst der Knopf.
+ */
+.menue > .schleier {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(12, 16, 28, .38);
+    animation: schleierAuf .18s ease-out;
+}
+
+.menue > .schublade {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 41;
+    width: min(300px, 86vw);
+    padding: 14px 12px;
+    overflow-y: auto;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    box-shadow: 0 0 40px rgba(0, 0, 0, .16);
+    animation: schubladeLinks .18s ease-out;
+}
+.menue.rechts > .schublade {
+    left: auto;
+    right: 0;
+    border-right: 0;
+    border-left: 1px solid var(--border);
+    animation: schubladeRechts .18s ease-out;
+}
+
+/*
+ * Als Animation, nicht als Übergang: <details> blendet seinen Inhalt beim
+ * Schliessen aus, und ein transition läuft auf einem Element, das gerade
+ * erst entsteht, gar nicht erst an.
+ */
+@keyframes schubladeLinks  { from { transform: translateX(-100%); } }
+@keyframes schubladeRechts { from { transform: translateX(100%); } }
+@keyframes schleierAuf     { from { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+    .menue > .schublade, .menue > .schleier { animation: none; }
+}
+
+.mkopf {
+    margin: 4px 10px 12px;
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+.mitem {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-left: auto;
+    gap: 11px;
+    width: 100%;
+    padding: 10px 10px;
+    border: 0;
+    border-radius: 10px;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: .98rem;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
 }
-.barright form { margin: 0; }
-.barright a.iconbtn { text-decoration: none; width: 38px; height: 38px; font-size: 1rem; }
-.barright a.iconbtn:hover { background: var(--surface-2); color: var(--accent); }
+.mitem:hover { background: var(--surface-2); }
+.mitem.haupt { font-weight: 700; }
+.mitem.on { background: var(--surface-2); font-weight: 700; }
+.mitem > span:last-child { display: flex; flex-direction: column; min-width: 0; }
+.mitem .tiny { font-weight: 400; }
+
+.micon {
+    flex: none;
+    width: 26px;
+    display: grid;
+    place-items: center;
+    font-size: 1.05rem;
+}
+img.mflagge { width: 22px; height: 16px; object-fit: contain; border-radius: 2px; }
+
+/* Die eigenen Kurse eingerückt unter „Meine Kurse" - sie gehören dazu. */
+.mgruppe {
+    margin: 2px 0 6px 13px;
+    padding-left: 12px;
+    border-left: 2px solid var(--border);
+}
+.mleer { margin: 2px 0 6px 25px; }
+.mtrenner { margin: 10px 6px; border: 0; border-top: 1px solid var(--border); }
+.menue form { margin: 0; }
 
 .linkbtn {
     background: none;
@@ -128,88 +254,6 @@ body.admin { background: var(--bg); }
  * nach dem Lesen, und ein unterstrichenes Wort am Ende einer Fliesstextzeile
  * findet dafuer niemand.
  */
-.crumbs {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin-bottom: 10px;
-}
-.crumb {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 6px 12px;
-    border-radius: 999px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--text-soft);
-    text-decoration: none;
-    font-size: .88rem;
-    font-weight: 600;
-    white-space: nowrap;
-}
-a.crumb:hover { background: var(--surface-2); color: var(--text); }
-
-/* Der erste Krumen ist ein Haeuschen, kein Wort: quadratisch statt breit,
-   und das Sinnbild eine Spur groesser, damit es nicht verloren aussieht. */
-a.crumb.crumbhaus {
-    padding: 6px 10px;
-    font-size: 1.05rem;
-    line-height: 1.1;
-}
-.crumb.on {
-    background: none;
-    border-color: transparent;
-    color: var(--text);
-    padding-left: 4px;
-}
-.crumbsep { color: var(--text-soft); font-size: 1rem; }
-
-/* Ein Krumen, der aufklappt - der Weg zu den Geschwistern. Ganz ohne
-   Skript: <details> kann das, mit Tastatur und Vorleseprogramm. */
-details.crumbmenu { position: relative; padding: 0; }
-details.crumbmenu > summary {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 6px 10px 6px 12px;
-    cursor: pointer;
-    list-style: none;
-    white-space: nowrap;
-}
-details.crumbmenu > summary::-webkit-details-marker { display: none; }
-details.crumbmenu > summary:hover { color: var(--text); }
-.crumbchev { font-size: .75rem; opacity: .7; }
-details.crumbmenu[open] > summary .crumbchev { transform: rotate(180deg); }
-
-details.crumbmenu > div {
-    position: absolute;
-    z-index: 20;
-    top: calc(100% + 4px);
-    left: 0;
-    min-width: 240px;
-    padding: 6px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, .18);
-}
-details.crumbmenu > div a {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    padding: 9px 11px;
-    border-radius: 8px;
-    color: var(--text);
-    text-decoration: none;
-    font-weight: 500;
-    white-space: nowrap;
-}
-details.crumbmenu > div a:hover { background: var(--surface-2); }
-details.crumbmenu > div a.on { font-weight: 700; background: var(--surface-2); }
-img.crumbflag { width: 20px; height: 15px; object-fit: contain; border-radius: 2px; }
-
 /* Knoepfe nebeneinander, linksbuendig und umbrechend - nicht auf die
    Zeilenbreite verteilt wie .btn-row in der App. */
 .buttonrow {
@@ -1454,12 +1498,10 @@ a.rowmain:hover { text-decoration: underline; }
     table.data.release td.actions .iconaction + .iconaction { margin-left: 4px; }
     table.data.release tr.newrow td.actions .iconaction { width: auto; }
 
-    /* Der Pfad bekommt die ganze Zeile, Name und Abmelden die naechste -
-       sonst schieben sie sich ineinander, sobald der Pfad umbricht. */
-    .crumbs { gap: 2px; width: 100%; }
-    .crumb { padding: 5px 9px; font-size: .8rem; }
-    .adminbar { padding: 10px 12px; gap: 6px; }
-    .adminbar .tiny { margin-left: 0 !important; }
+    /* Die Leiste ist eine Zeile, und sie bleibt eine: zwei Knoepfe und ein
+       Name dazwischen. Genau dafuer ist sie so gebaut. */
+    .adminbar { padding: 8px 12px; gap: 10px; }
+    .barname { font-size: .88rem; }
 }
 
 /*

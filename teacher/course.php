@@ -196,33 +196,12 @@ $importUrl  = url('/') . '#' . $importPfad;
  */
 $schuelerUrl = url('/') . '#/lang/' . (int) $kurs['language_id'];
 
-/*
- * Der Pfad ist kurz geworden: Schule, Kurs. Mehr nicht.
- *
- * Vorher stand die Klasse dazwischen - Schule > Klasse 5B > Englisch - 5B.
- * Das bildete die Datenstruktur ab, nicht den Weg: Eine Klasse oeffnet man
- * zweimal im Jahr, einen Kurs jede Woche, und der Umweg ueber die Klasse
- * war beim Wechseln zwischen zwei eigenen Kursen genau das - ein Umweg.
- * Die Klasse ist deshalb kein Halt mehr, sondern ein Ziel wie jedes andere:
- * Sie steht dort, wo es um ihre Kinder geht.
- */
-$pfad = [teacher_course_crumb($user, $kurs, true)];
-
-/*
- * Im selben Fenster, nicht in einem zweiten.
- *
- * Der Knopf stand einmal auf target="_blank" - damals war das der einzige
- * Weg zurueck: Man schloss den Tab wieder. Seit die Schueleransicht selbst
- * einen Knopf "Zurueck zur Verwaltung" traegt, der auf genau diese Seite
- * zeigt, ist der zweite Tab keine Hilfe mehr, sondern eine Ablage: Wer
- * zweimal nachsieht, hat drei Fenster offen und weiss in keinem, wo er ist.
- */
-teacher_head($kurs['name'], $user, $pfad, sprintf(
+teacher_head($kurs['name'], $user, sprintf(
     '<a class="btn small secondary" href="%s" '
     . 'title="Die Ansicht, die deine Klasse sieht">'
     . '<span aria-hidden="true">&#128065;</span> So sieht es die Klasse</a>',
     h($schuelerUrl),
-));
+), '', $courseId);
 teacher_flash_render();
 ?>
 

@@ -15,6 +15,41 @@ document.addEventListener('click', (e) => {
     if (b && !confirm(b.dataset.confirm)) e.preventDefault();
 });
 
+// ------------------------------------------------------------------ Menues
+
+/**
+ * Die beiden Schubladen links und rechts.
+ *
+ * Das Auf- und Zuklappen macht <details> von selbst - hier kommt nur
+ * dazu, was der Browser nicht wissen kann: dass die beiden einander
+ * ausschliessen, dass ein Druck auf den Schleier daneben schliesst, und
+ * dass Escape schliesst. Ohne Skript bleibt der Knopf selbst der Weg
+ * zurueck; das ist einer mehr, aber keiner weniger.
+ */
+function initMenues() {
+    const menues = [...document.querySelectorAll('details.menue')];
+    if (menues.length === 0) return;
+
+    menues.forEach((m) => {
+        // Zwei offene Schubladen zugleich waeren zwei Navigationen.
+        m.addEventListener('toggle', () => {
+            if (!m.open) return;
+            menues.forEach((a) => { if (a !== m) a.open = false; });
+        });
+        m.querySelector('[data-zu]')?.addEventListener('click', () => { m.open = false; });
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const offen = menues.find((m) => m.open);
+        if (!offen) return;
+        offen.open = false;
+        offen.querySelector('summary')?.focus();
+    });
+}
+
+initMenues();
+
 // --------------------------------------------------------- Hoehe der Leiste
 
 /**

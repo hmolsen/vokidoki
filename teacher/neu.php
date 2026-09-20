@@ -131,15 +131,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['sprache'])) {
 
 // ------------------------------------------------------------------ Anzeige
 
-$pfad = [['label' => 'Neuer Kurs', 'href' => $schritt2 ? teacher_url('neu.php') : null]];
-if ($schritt2) {
-    $pfad[] = [
-        'label' => $klasse === null ? 'Ohne Klasse' : 'Klasse ' . (string) $klasse['name'],
-        'href'  => null,
-    ];
-}
-
-teacher_head($schritt2 ? 'Für welche Sprache?' : 'Für welche Klasse?', $user, $pfad);
+teacher_head($schritt2 ? 'Für welche Sprache?' : 'Für welche Klasse?', $user);
 teacher_flash_render();
 
 if ($fehler !== '') {

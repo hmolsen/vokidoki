@@ -308,26 +308,6 @@ $alles  = $frei >= $gesamt;
 $zustand = sentence_status($unitId, (int) $user['id']);
 
 /*
- * Der Pfad statt einer Fliesstextzeile.
- *
- * Schule, Kurs, Lerneinheit - und der Kurs klappt zu den anderen eigenen
- * auf. Vorher stand dasselbe als "Englisch - Klasse 7b - zurueck zum Kurs"
- * untereinander, wobei nur das letzte Stueck ein Link war und als solcher
- * kaum zu erkennen.
- *
- * Die Klasse stand hier einmal davor. Sie ist keine Ebene mehr: Von einer
- * Lerneinheit fuehrt kein Weg zur Klassenliste, den jemand gehen wollte -
- * gemeint ist immer der Kurs.
- */
-$pfad = [];
-$pfad[] = teacher_course_crumb($user, [
-    'id'         => (int) $unit['course_id'],
-    'name'       => (string) $unit['course_name'],
-    'flag_emoji' => (string) $unit['flag_emoji'],
-], false);
-$pfad[] = ['label' => (string) $unit['title'], 'href' => null];
-
-/*
  * Die Ueberschrift ist der Weg zurueck - und das Umbenennen.
  *
  * Sie lautet "Englisch - 5B > Unit 4": Der Kurs davor ist ein Knopf, der
@@ -366,12 +346,12 @@ $titelHtml = sprintf(
     h((string) $unit['title']),
 );
 
-teacher_head($unit['title'], $user, $pfad, sprintf(
+teacher_head($unit['title'], $user, sprintf(
     '<a class="btn small secondary" href="%s" '
     . 'title="Die Ansicht, die deine Klasse sieht">'
     . '<span aria-hidden="true">&#128065;</span> So sieht es die Klasse</a>',
     h(url('/') . '#/unit/' . $unitId),
-), $titelHtml);
+), $titelHtml, (int) $unit['course_id']);
 
 teacher_flash_render();
 ?>

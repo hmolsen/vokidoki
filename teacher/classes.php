@@ -36,7 +36,7 @@ $klassen = $schoolId > 0 ? classes_for_school($schoolId) : [];
  * angelegt und Zettel gedruckt werden. Auch die Liste "Kurse ohne Klasse"
  * ist deshalb weg: Alle Kurse stehen auf der Startseite, mit und ohne.
  */
-teacher_head('Klassen', $user, [['label' => 'Klassen', 'href' => null]]);
+teacher_head('Klassen', $user);
 teacher_flash_render();
 ?>
 

@@ -25,6 +25,10 @@ const ROUTES = [
     [/^\/quiz\/(\d+)$/,           quizView],
     [/^\/cloze\/(\d+)$/,          clozeView],
     [/^\/konto$/,                 profileView],
+    // Dieselbe Seite, aber gleich beim Passwort: Der Lehrkraft-Bereich hat
+    // dafuer einen eigenen Knopf, und "erst suchen, dann tippen" ist kein
+    // Weg, den man zweimal geht.
+    [/^\/konto\/passwort$/,        () => profileView(true)],
 ];
 
 function currentPath() {

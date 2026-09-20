@@ -11,7 +11,14 @@ import {
  * Anfangspasswort behalten muss, weil niemand es ändern kann, hat ein
  * Passwort, das auf einem Zettel steht.
  */
-export async function profileView() {
+/**
+ * Das eigene Konto.
+ *
+ * @param zumPasswort  Gleich beim Passwort anfangen. Der Lehrkraft-Bereich
+ *                     hat dafuer einen eigenen Knopf - "erst suchen, dann
+ *                     tippen" ist kein Weg, den man zweimal geht.
+ */
+export async function profileView(zumPasswort = false) {
     render(loading());
 
     const { profile, palette } = await api('profile', 'get');
@@ -74,6 +81,12 @@ export async function profileView() {
     `);
 
     wireBack();
+
+    if (zumPasswort) {
+        const feld = $('#current');
+        feld?.scrollIntoView({ block: 'center' });
+        feld?.focus();
+    }
 
     // Die Farbe wirkt sofort - man soll sehen, was man waehlt.
     on('input[name="color"]', 'change', (e) => {

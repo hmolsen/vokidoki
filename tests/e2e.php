@@ -2771,12 +2771,14 @@ ok('Und ein Kind weiterhin in der App',
  * nach dem Lesen. Jetzt steht dort ein Pfad aus Knoepfen.
  */
 $res = freiPost($base . '/teacher/unit.php?id=' . $freiUnit, null);
-ok('Ueber dem Titel steht ein Pfad',
-   str_contains($res['body'], '<nav class="crumbs"'));
-ok('Er fuehrt zum Kurs',
-   preg_match('/<a class="crumb" href="[^"]*course\.php\?id=\d+"/', $res['body']) === 1);
-ok('Die Lerneinheit selbst ist kein Knopf, sondern die Stelle, an der man steht',
-   str_contains($res['body'], 'class="crumb on" aria-current="page"'));
+ok('Ueber dem Titel steht kein Pfad mehr',
+   !str_contains($res['body'], '<nav class="crumbs"'));
+ok('Sondern ein Burger links',
+   str_contains($res['body'], '<details class="menue" id="menuLinks">'));
+ok('Und das eigene Konto rechts',
+   str_contains($res['body'], '<details class="menue rechts" id="menuRechts">'));
+ok('Dazwischen steht der eigene Name',
+   str_contains($res['body'], '<span class="barname">'));
 ok('Und "zurueck zum Kurs" als Fliesstext ist weg',
    !str_contains($res['body'], 'zurück zum Kurs'));
 
@@ -2799,7 +2801,7 @@ ok('Beide bleiben stehen, auch wenn einer gerade nichts bewirkt',
 $mit = freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
     'release' => 2, 'unit_id' => $freiUnit, 'csrf' => $freiCsrf,
 ]);
-$posPfad = strpos($mit['body'], '<nav class="crumbs"');
+$posPfad = strpos($mit['body'], 'class="adminbar"');
 $posH1   = strpos($mit['body'], '<h1>');
 $posNote = strpos($mit['body'], '<div class="notice');
 $posH2   = strpos($mit['body'], '<h2>Freigabe</h2>');
@@ -2813,8 +2815,11 @@ freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
 ]);
 
 $cssK = $cssB;
-ok('Der Pfad ist als Knopfreihe gestaltet',
-   preg_match('/\.crumb\s*\{[^}]*border-radius:\s*999px/s', $cssK) === 1);
+ok('Die Schublade schiebt sich herein',
+   preg_match('/\.menue > \.schublade\s*\{[^}]*animation:\s*schubladeLinks/s', $cssK) === 1,
+   'als Animation, nicht als Uebergang - <details> blendet seinen Inhalt aus');
+ok('Und legt einen Schleier ueber die Seite',
+   preg_match('/\.menue > \.schleier\s*\{[^}]*position:\s*fixed/s', $cssK) === 1);
 ok('Und die Knopfreihe bricht um statt zu quetschen',
    preg_match('/\.buttonrow\s*\{[^}]*flex-wrap:\s*wrap/s', $cssK) === 1);
 
@@ -3669,18 +3674,15 @@ ok('Die Lehrkraft kommt hinein',
  */
 $schulName = (string) qv('SELECT s.name FROM schools s
                             JOIN users u ON u.school_id = s.id WHERE u.id = ?', [$lehrerId]);
-ok('Der erste Krumen fuehrt auf die eigenen Kurse',
-   preg_match('/<a class="crumb crumbhaus" href="[^"]*index\.php"/',
-              $res['body']) === 1);
-ok('Und zeigt ein Haeuschen', str_contains($res['body'], '🏠'));
-ok('Der Name der Schule steht nicht mehr als Knopf da',
+ok('Das Menue links fuehrt auf die eigenen Kurse',
+   str_contains($res['body'], '<a class="mitem haupt" href='));
+ok('Und zeigt ein Haeuschen dazu', str_contains($res['body'], '&#127968;'));
+ok('Darunter stehen alle Kurse der Schule',
+   str_contains($res['body'], 'Alle Kurse der Schule'));
+ok('Und der Weg in die Klassenverwaltung',
+   str_contains($res['body'], 'Klassen und Kinder'));
+ok('Der Name der Schule steht nicht mehr in der Leiste',
    !str_contains($res['body'], '<span>' . h($schulName) . '</span>'), $schulName);
-ok('Sondern im Titel',
-   str_contains($res['body'], 'title="Meine Kurse - ' . h($schulName) . '"'),
-   'wer wissen will, wo er ist, faehrt darueber');
-ok('Und im Namen fuers Vorleseprogramm',
-   str_contains($res['body'], 'aria-label="Meine Kurse - ' . h($schulName) . '"'),
-   'ein Haeuschen hat sonst keinen Namen');
 
 $res = teacherGet('classes.php');
 ok('Sowie die Klassen der Schule',
@@ -4127,7 +4129,9 @@ $res = teacherGet('neu.php?klasse=' . $kursKlasseId);
 ok('Schritt 2 fragt nach der Sprache',
    str_contains($res['body'], '<h1>Für welche Sprache?</h1>'));
 ok('Und sagt, wo man steht', str_contains($res['body'], 'Schritt 2 von 2'));
-ok('Die Klasse steht im Pfad', str_contains($res['body'], 'Klasse ' . h($kursKlasse)));
+ok('Die Klasse steht auf den Kacheln',
+   str_contains($res['body'], h($kursKlasse)),
+   'sonst weiss man auf Schritt 2 nicht mehr, fuer wen');
 
 /*
  * Die fuenf Schulsprachen als Kacheln - so wie in der Familien-App. Jede
@@ -4710,10 +4714,12 @@ ok('Die Tabelle zeigt auch, wie viele Kurse an der Klasse haengen',
 $navQuelle = (string) file_get_contents(__DIR__ . '/../teacher/_boot.php');
 ok('Es gibt keine festen Reiter mehr',
    !str_contains($navQuelle, "'index.php'   => 'Kurse'"));
-ok('Der Pfad steht in der Leiste',
-   preg_match('/adminbar.*?teacher_crumbs/s', $navQuelle) === 1);
-ok('Und faengt bei der Schule an',
-   str_contains($navQuelle, 'teacher_school_crumb'));
+ok('Die Leiste traegt die beiden Menues',
+   preg_match('/adminbar.*?menuLinks.*?menuRechts/s', $navQuelle) === 1);
+ok('Und keinen Pfad mehr',
+   !str_contains($navQuelle, 'teacher_crumbs')
+   && !str_contains($navQuelle, 'teacher_school_crumb'),
+   'drei Knoepfe mit Kursnamen darin brauchen am Telefon zwei Zeilen');
 
 $res2 = teacherGet('index.php');
 ok('Die alte Kursliste leitet auf die Klassen',
@@ -5650,24 +5656,29 @@ ok('Ohne Lerneinheit ist der Freigeben-Knopf abgeblendet',
    preg_match('/<span class="btn small secondary aus"[^>]*>Freigeben<\/span>/', $res['body']) === 1,
    'er soll dastehen, nicht fehlen');
 
-// ---- Der Kurswechsler im Pfad.
+// ---- Der Kurswechsler steht im Menue links.
 
+/*
+ * Wer Englisch in der 5a und Franzoesisch in der 7b gibt, wechselt
+ * dauernd. Das konnte der Kurskrumen im Pfad; seit der Pfad weg ist,
+ * stehen die eigenen Kurse eingerueckt unter "Meine Kurse" - von jeder
+ * Seite aus derselbe Griff.
+ */
 $res = teacherGet('course.php?id=' . $startKursId);
-ok('Der Kurskrumen ist ein Menue',
-   str_contains($res['body'], 'details class="crumb crumbmenu"'));
-ok('Er nennt die eigenen Kurse',
-   substr_count($res['body'], 'crumbmenu') > 0
-   && str_contains($res['body'], h((string) $leererKurs['name'])),
-   'sonst fuehrt der Wechsel wieder ueber die Schule');
+ok('Das Menue nennt die eigenen Kurse',
+   str_contains($res['body'], h((string) $leererKurs['name']))
+   && str_contains($res['body'], h((string) $startKurs['name'])),
+   'sonst fuehrt der Wechsel wieder ueber die Startseite');
 ok('Und den Weg zu allen Kursen der Schule',
    str_contains($res['body'], 'Alle Kurse der Schule'));
 ok('Der aktuelle Kurs ist darin markiert',
-   preg_match('/<a href="[^"]*course\.php\?id=' . $startKursId
-              . '" class="on" aria-current="page"/', $res['body']) === 1);
+   str_contains($res['body'], 'class="mitem on"')
+   && str_contains($res['body'], 'aria-current="page"'));
 
 $res = teacherGet('unit.php?id=' . $startUnit);
-ok('In der Lerneinheit steht er auch',
-   str_contains($res['body'], 'details class="crumb crumbmenu"'));
+ok('In der Lerneinheit steht dasselbe Menue',
+   str_contains($res['body'], 'id="menuLinks"')
+   && str_contains($res['body'], h((string) $leererKurs['name'])));
 
 /*
  * Ein Menue mit einem Eintrag ist ein Menue zu viel: Wer nur einen Kurs
@@ -5893,12 +5904,9 @@ $res = teacherGet('course.php?id=' . $umbauKursId);
  * eine Ebene, die man nur durchquerte. Jetzt ist sie ein Ziel und steht
  * dort, wo es um ihre Kinder geht.
  */
-ok('Der Pfad fuehrt nicht mehr ueber die Klasse',
-   preg_match('/<a class="crumb" href="[^"]*class\.php\?id=/', $res['body']) === 0,
-   'Schule > Klasse > Kurs war eine Ebene zu viel');
-ok('Sondern geradewegs von der Schule zum Kurs',
-   substr_count($res['body'], 'class="crumbsep"') === 1,
-   substr_count($res['body'], 'class="crumbsep"') . ' Trenner im Pfad');
+ok('Es gibt keinen Pfad mehr, ueber den man die Klasse durchquert',
+   !str_contains($res['body'], 'class="crumbs"'),
+   'Schule > Klasse > Kurs war eine Ebene zu viel - und am Telefon zwei Zeilen');
 ok('Die Klasse ist von hier aus trotzdem erreichbar',
    str_contains($res['body'], 'class.php?id=' . $umbauKlasseId . '&amp;kurs=' . $umbauKursId),
    'und nimmt den Kurs mit, damit der Weg zurueck steht');
@@ -5992,11 +6000,16 @@ section('Feinschliff im Lehrkraft-Bereich');
 
 $res = teacherGet('classes.php');
 ok('Abmelden ist ein Knopf, kein unterstrichenes Wort',
-   preg_match('/<button class="btn small secondary" name="teacher_logout"/', $res['body']) === 1
+   preg_match('/<button class="mitem" name="teacher_logout"/', $res['body']) === 1
    && !preg_match('/class="linkbtn" name="teacher_logout"/', $res['body']),
    'es tut etwas, statt woandershin zu fuehren');
-ok('Daneben steht ein Zahnrad',
-   preg_match('/<a class="iconbtn" href="[^"]*#\/konto"/', $res['body']) === 1);
+ok('Es steht im Menue rechts, zusammen mit dem eigenen Konto',
+   preg_match('/id="menuRechts".*?name="teacher_logout"/s', $res['body']) === 1);
+ok('Darin auch der Weg zum Profil',
+   preg_match('/<a class="mitem" href="[^"]*#\/konto">/', $res['body']) === 1);
+ok('Und einer geradewegs zum Passwort',
+   preg_match('/<a class="mitem" href="[^"]*#\/konto\/passwort">/', $res['body']) === 1,
+   'erst suchen und dann tippen ist kein Weg, den man zweimal geht');
 ok('Es fuehrt in dieselben Einstellungen wie in der App',
    str_contains($res['body'], '#/konto'),
    'zwei Fassungen derselben Sache waeren bald zwei verschiedene');

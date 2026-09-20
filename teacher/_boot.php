@@ -229,151 +229,123 @@ function teacher_blocked_page(): never
 }
 
 /**
- * Der Pfad, und er ist zugleich die Navigation.
+ * Die Leiste oben: zwei Menüs und ein Name.
  *
- * Schule > Klasse > Kurs > Lerneinheit. Vorher standen oben zwei feste
- * Reiter ("Klassen", "Kurse") und darunter, auf manchen Seiten, ein Pfad -
- * zwei Navigationen uebereinander, die dasselbe meinten. Jetzt gibt es eine:
- * Der Pfad steht in der Leiste, und sein erstes Glied ist die Schule. Wer
- * dorthin klickt, sieht alle Klassen.
+ * Hier stand ein Pfad aus Knöpfen - Haus › Kurs › Lerneinheit -, und am
+ * Rechner war das richtig. Auf einem Telefon nicht: Drei Knöpfe mit
+ * Kursnamen darin brauchen zwei Zeilen, und die Leiste war damit so hoch
+ * wie der halbe Bildschirm. Was man selten braucht, darf nicht dauernd
+ * dastehen.
  *
- * Jeder Eintrag: ['label' => ..., 'href' => ... oder null, 'flag' => ...].
- * Ohne href wird daraus die aktuelle Seite - kein Knopf, sondern die
- * Beschriftung, die zeigt, wo man steht.
+ * Jetzt links ein Burger, rechts der eigene Name und ein zweiter Knopf
+ * derselben Bauart. Beide schieben eine Leiste herein: links die
+ * Navigation, rechts das eigene Konto.
+ *
+ * Gebaut als <details>, nicht als Skript: Der Browser kann das Auf- und
+ * Zuklappen von selbst, mit Tastatur und Vorleseprogramm, und ohne
+ * JavaScript funktioniert es genauso - nur ohne das Hereinschieben und
+ * ohne den Schleier, der sich wegklicken lässt.
  */
-function teacher_crumbs(array $crumbs): void
+function teacher_nav(array $user, ?int $kursId = null): void
 {
-    if ($crumbs === []) {
-        return;
-    }
-
-    echo '<nav class="crumbs" aria-label="Pfad">';
-    $erster = true;
-    foreach ($crumbs as $c) {
-        if (!$erster) {
-            echo '<span class="crumbsep" aria-hidden="true">&#8250;</span>';
-        }
-        $erster = false;
-
-        $inhalt = (($c['flag'] ?? '') !== '' ? flag_html((string) $c['flag'], 'crumbflag') : '')
-                . '<span>' . h($c['label']) . '</span>';
-
-        /*
-         * Ein Krumen mit Menü: der Weg zu den Geschwistern.
-         *
-         * Wer Englisch in der 5a und Französisch in der 7b gibt, musste
-         * bisher hoch zur Schule und durch eine andere Klasse wieder
-         * hinunter. Hier hängt die Liste am Namen des Kurses selbst.
-         *
-         * <details> und kein Skript: Der Browser kann das Auf- und Zuklappen
-         * von sich aus, mit Tastatur und Vorleseprogramm. Ein eigenes Panel
-         * müsste seine Lage von Hand berechnen, wie beim Sprachfeld - das
-         * lohnt für eine Liste, die nur aufklappt, nicht.
-         */
-        if (($c['menu'] ?? []) !== []) {
-            echo '<details class="crumb crumbmenu"><summary>' . $inhalt
-               . '<span class="crumbchev" aria-hidden="true">&#9662;</span></summary><div>';
-            foreach ($c['menu'] as $m) {
-                printf(
-                    '<a href="%s"%s>%s%s</a>',
-                    h((string) $m['href']),
-                    ($m['on'] ?? false) ? ' class="on" aria-current="page"' : '',
-                    ($m['flag'] ?? '') !== '' ? flag_html((string) $m['flag'], 'crumbflag') : '',
-                    h((string) $m['label']),
-                );
-            }
-            echo '</div></details>';
-            continue;
-        }
-
-        /*
-         * Ein Krumen kann einen eigenen Namen tragen.
-         *
-         * Gebraucht vom ersten: Er zeigt ein Haeuschen, und ein Haeuschen
-         * hat fuer ein Vorleseprogramm keinen Namen. title= allein genuegt
-         * dafuer nicht - es haengt am Zeiger, und am Telefon gibt es keinen.
-         */
-        $nam = ($c['titel'] ?? '') === '' ? '' : sprintf(
-            ' title="%1$s" aria-label="%1$s"', h((string) $c['titel']),
-        );
-
-        if (($c['href'] ?? null) === null) {
-            printf('<span class="crumb on" aria-current="page"%s>%s</span>', $nam, $inhalt);
-        } else {
-            printf('<a class="crumb%s" href="%s"%s>%s</a>',
-                   ($c['titel'] ?? '') === '' ? '' : ' crumbhaus',
-                   h((string) $c['href']), $nam, $inhalt);
-        }
-    }
-    echo "</nav>
-";
-}
-
-/**
- * Der Krumen fuer einen Kurs - mit der Liste der eigenen Kurse daran.
- *
- * Gebraucht von course.php und unit.php. Wer keinen zweiten eigenen Kurs
- * hat, bekommt keine Liste: Ein Menue mit einem Eintrag ist ein Menue zu
- * viel.
- */
-function teacher_course_crumb(array $user, array $kurs, bool $aktuell): array
-{
-    $krumen = [
-        'label' => (string) $kurs['name'],
-        'href'  => $aktuell ? null : teacher_url('course.php') . '?id=' . (int) $kurs['id'],
-        'flag'  => (string) ($kurs['flag_emoji'] ?? ''),
-    ];
-
     $meine = courses_for_teacher((int) $user['id'], (int) ($user['school_id'] ?? 0));
-    if (count($meine) < 2) {
-        return $krumen;
-    }
+    ?>
+<div class="adminbar">
+    <details class="menue" id="menuLinks">
+        <summary class="burger" aria-label="Menü" title="Menü">
+            <span aria-hidden="true">&#9776;</span>
+        </summary>
+        <span class="schleier" data-zu></span>
+        <nav class="schublade" aria-label="Navigation">
+            <a class="mitem haupt" href="<?= h(teacher_url('index.php')) ?>">
+                <span class="micon" aria-hidden="true">&#127968;</span>
+                <span>Meine Kurse</span>
+            </a>
 
-    $krumen['menu'] = [];
-    foreach ($meine as $k) {
-        $krumen['menu'][] = [
-            'label' => (string) $k['name'],
-            'href'  => teacher_url('course.php') . '?id=' . (int) $k['id'],
-            'flag'  => (string) $k['flag_emoji'],
-            'on'    => (int) $k['id'] === (int) $kurs['id'],
-        ];
-    }
-    $krumen['menu'][] = [
-        'label' => 'Alle Kurse der Schule',
-        'href'  => teacher_url('index.php'),
-    ];
-    // Und der Weg zu einem, den es noch nicht gibt - aus jedem Kurs heraus.
-    $krumen['menu'][] = [
-        'label' => '+ Neuer Kurs',
-        'href'  => teacher_url('neu.php'),
-    ];
+            <?php
+            /*
+             * Die eigenen Kurse eingerückt darunter - der Wechsel von
+             * "Englisch - 5a" nach "Französisch - 7b" ist von jeder Seite
+             * aus ein Griff. Genau das konnte vorher der Kurskrumen, und
+             * genau das ist von ihm übriggeblieben.
+             */
+            ?>
+            <?php if ($meine === []): ?>
+                <p class="mleer tiny muted">Noch kein eigener Kurs.</p>
+            <?php else: ?>
+                <div class="mgruppe">
+                    <?php foreach ($meine as $k): ?>
+                        <a class="mitem<?= (int) $k['id'] === (int) $kursId ? ' on' : '' ?>"
+                           href="<?= h(teacher_url('course.php') . '?id=' . (int) $k['id']) ?>"
+                           <?= (int) $k['id'] === (int) $kursId ? 'aria-current="page"' : '' ?>>
+                            <span class="micon" aria-hidden="true"><?=
+                                flag_html((string) $k['flag_emoji'] ?: FLAG_FALLBACK, 'mflagge')
+                            ?></span>
+                            <span><?= h((string) $k['name']) ?></span>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
 
-    return $krumen;
-}
+            <a class="mitem" href="<?= h(teacher_url('index.php') . '#alle') ?>">
+                <span class="micon" aria-hidden="true">&#127979;</span>
+                <span>Alle Kurse der Schule</span>
+            </a>
 
-/**
- * Das erste Glied des Pfades: nach Hause.
- *
- * Es stand einmal der Name der Schule darin - "Grundschule Musterhausen" -,
- * und das war richtig, solange die Wurzel die Schule war. Inzwischen fuehrt
- * es auf die eigenen Kurse, und ein Knopf mit dem Namen der Schule sagt
- * nicht, dass er dorthin fuehrt: Man liest ihn als Beschriftung, nicht als
- * Weg. Ein Haeuschen sagt es.
- *
- * In welcher Schule man ist, ist beim Arbeiten ohnehin keine Frage - eine
- * Lehrkraft arbeitet immer in genau einer. Der Name steht deshalb nur noch
- * im Titel des Knopfes, fuer den Zeiger und fuer das Vorleseprogramm.
- */
-function teacher_school_crumb(array $user): array
-{
-    $name = (string) qv('SELECT name FROM schools WHERE id = ?',
-                        [(int) ($user['school_id'] ?? 0)]);
+            <hr class="mtrenner">
 
-    return [
-        'label' => "\u{1F3E0}",
-        'titel' => 'Meine Kurse' . ($name === '' ? '' : ' - ' . $name),
-        'href'  => teacher_url('index.php'),
-    ];
+            <a class="mitem" href="<?= h(teacher_url('classes.php')) ?>">
+                <span class="micon" aria-hidden="true">&#128101;</span>
+                <span>Klassen und Kinder</span>
+            </a>
+        </nav>
+    </details>
+
+    <span class="barname"><?= h($user['display_name']) ?></span>
+
+    <?php
+    /*
+     * Rechts dasselbe noch einmal, für das eigene Konto.
+     *
+     * Die Einstellungen liegen in der App, nicht hier - Name, Farbe und
+     * Passwort sind dieselben, egal von welcher Seite man kommt, und eine
+     * zweite Fassung davon im Lehrkraft-Bereich wären zwei Orte für eine
+     * Sache.
+     *
+     * Und Abmelden ist ein Knopf, kein unterstrichenes Wort: Es tut etwas,
+     * statt woandershin zu führen.
+     */
+    ?>
+    <details class="menue rechts" id="menuRechts">
+        <summary class="burger" aria-label="Einstellungen" title="Einstellungen">
+            <span aria-hidden="true">&#9881;</span>
+        </summary>
+        <span class="schleier" data-zu></span>
+        <nav class="schublade" aria-label="Einstellungen">
+            <p class="mkopf"><?= h($user['display_name']) ?></p>
+
+            <a class="mitem" href="<?= h(url('/') . '#/konto') ?>">
+                <span class="micon" aria-hidden="true">&#128100;</span>
+                <span>Mein Profil<span class="tiny muted">Name und Farbe</span></span>
+            </a>
+            <a class="mitem" href="<?= h(url('/') . '#/konto/passwort') ?>">
+                <span class="micon" aria-hidden="true">&#128273;</span>
+                <span>Passwort ändern</span>
+            </a>
+
+            <hr class="mtrenner">
+
+            <form method="post" action="<?= h(teacher_url('index.php')) ?>">
+                <?= teacher_csrf_field() ?>
+                <button class="mitem" name="teacher_logout" value="1">
+                    <span class="micon" aria-hidden="true">&#9099;</span>
+                    <span>Abmelden</span>
+                </button>
+            </form>
+        </nav>
+    </details>
+</div>
+    <?php
 }
 
 /**
@@ -401,13 +373,15 @@ function teacher_leer(string $text, string $knoepfe = ''): string
  * eigenen Namen und den Stift zum Umbenennen hinein. $title bleibt
  * trotzdem noetig: Er steht im Titel des Fensters, und dort hat Auszeichnung
  * nichts zu suchen.
+ *
+ * $kursId markiert den aktuellen Kurs im Menue links.
  */
 function teacher_head(
     string $title,
     array $user,
-    array $crumbs = [],
     string $neben = '',
     string $titelHtml = '',
+    ?int $kursId = null,
 ): void {
     ?><!doctype html>
 <html lang="de"><head>
@@ -416,33 +390,7 @@ function teacher_head(
 <link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
 <link rel="stylesheet" href="<?= h(url('/admin/admin.css')) ?>">
 </head><body class="admin" data-base="<?= h(base_path()) ?>">
-<div class="adminbar">
-    <?php teacher_crumbs(array_merge([teacher_school_crumb($user)], $crumbs)); ?>
-    <?php
-    /*
-     * Rechts das eigene Konto.
-     *
-     * Die Einstellungen liegen in der App, nicht hier - Name, Farbe und
-     * Passwort sind dieselben, egal von welcher Seite man kommt, und eine
-     * zweite Fassung davon im Lehrkraft-Bereich waeren zwei Orte fuer eine
-     * Sache. Das Zahnrad ist dasselbe wie in der App.
-     *
-     * Und Abmelden ist ein Knopf, kein unterstrichenes Wort: Es tut etwas,
-     * statt woandershin zu fuehren.
-     */
-    ?>
-    <span class="barright">
-        <span class="tiny muted"><?= h($user['display_name']) ?></span>
-        <a class="iconbtn" href="<?= h(url('/') . '#/konto') ?>"
-           title="Mein Konto: Name, Farbe, Passwort" aria-label="Mein Konto">&#9881;</a>
-        <form method="post" action="<?= h(teacher_url('index.php')) ?>" class="compact">
-            <?= teacher_csrf_field() ?>
-            <button class="btn small secondary" name="teacher_logout" value="1">
-                Abmelden
-            </button>
-        </form>
-    </span>
-</div>
+<?php teacher_nav($user, $kursId); ?>
 <main class="adminmain">
 <?php
 /*

@@ -298,25 +298,37 @@ Klasse bleibt ihr offen, aber als eigener Griff: „So sieht es die Klasse“.
 Ein Geräte-Token entsteht dabei keiner — der ist der Schlüssel der
 installierten App, und wer in die Verwaltung geht, braucht ihn nicht.
 
-**Der Kurswechsel hängt am Pfad.** Wer Englisch in der 5a und Französisch in
+**Der Kurswechsel steht im Menü.** Wer Englisch in der 5a und Französisch in
 der 7b gibt, musste hoch zur Schule und durch eine andere Klasse wieder
-hinunter. Jetzt klappt der Kursname im Pfad auf und zeigt die eigenen Kurse
-— ein Klick von jeder Kurs- und Lerneinheitsseite aus. Gebaut als
-`<details>`, ohne eine Zeile JavaScript: Der Browser kann das Auf- und
-Zuklappen von sich aus, mit Tastatur und Vorleseprogramm. Wer nur einen
-eigenen Kurs hat, bekommt keine Liste — ein Menü mit einem Eintrag ist eines
-zu viel.
+hinunter. Jetzt stehen die eigenen Kurse eingerückt unter „Meine Kurse" —
+ein Griff von jeder Seite aus.
 
-Die Navigation **ist** der Pfad, und er ist kurz: `🏠 › Englisch - 5B ›
-Unit 4`. Feste Reiter gibt es nicht.
+Die Navigation ist **ein Burger links und ein zweiter rechts** — sonst
+steht in der Leiste nur der eigene Name. Hier war einmal ein Pfad aus
+Knöpfen (`🏠 › Englisch - 5B › Unit 4`), und am Rechner war das
+richtig. Auf einem Telefon nicht: Drei Knöpfe mit Kursnamen darin brauchen
+zwei Zeilen, und die Leiste war damit so hoch wie der halbe Bildschirm. Was
+man selten braucht, darf nicht dauernd dastehen.
 
-Ganz links ein **Häuschen**. Dort stand der Name der Schule, und das war
-richtig, solange die Wurzel die Schule war — inzwischen führt der Knopf auf
-die eigenen Kurse, und „Grundschule Musterhausen" sagt nicht, dass er
-dorthin führt: Man liest ihn als Beschriftung, nicht als Weg. In welcher
-Schule man ist, ist beim Arbeiten ohnehin keine Frage; der Name steht noch
-im `title` und im `aria-label` — ein Häuschen hat für ein Vorleseprogramm
-sonst keinen Namen, und `title=` allein hängt am Zeiger.
+Links schiebt sich die Navigation herein, hierarchisch: **🏠 Meine Kurse**,
+darunter eingerückt die eigenen Kurse mit ihren Fahnen (der aktuelle
+markiert), darunter **Alle Kurse der Schule**, und nach einem Trennstrich
+**Klassen und Kinder**. Rechts dasselbe noch einmal für das eigene Konto:
+Profil, Passwort ändern, Abmelden — und „Passwort ändern" führt auf
+`#/konto/passwort`, also gleich ans Feld statt auf die Seite, auf der es
+irgendwo steht.
+
+Gebaut als `<details>`, nicht als Skript: Der Browser kann das Auf- und
+Zuklappen von selbst, mit Tastatur und Vorleseprogramm, und ohne JavaScript
+funktioniert es genauso — nur ohne das Hereinschieben und ohne den Schleier,
+der sich wegklicken lässt. Das Hereinschieben ist eine **Animation** und
+kein Übergang: `<details>` blendet seinen Inhalt beim Schliessen aus, und
+ein `transition` läuft auf einem Element, das gerade erst entsteht, gar
+nicht an.
+
+`teacher.js` legt drei Dinge dazu, die der Browser nicht wissen kann: dass
+die beiden Schubladen einander ausschliessen, dass ein Druck auf den
+Schleier schliesst, und dass Escape schliesst.
 
 **Die Klasse steht nicht mehr darin.** Sie stand einmal dazwischen —
 `Schule › Klasse 5B › Englisch - 5B` —, und das bildete die Datenstruktur
@@ -377,7 +389,7 @@ verschiedene.
 Umbenennen.** Sie lautet „Englisch - 5B › Unit 4": Der Kurs davor ist ein
 Knopf, und er sieht auch nach einem aus; ein unterstrichenes Wort in einer
 Überschrift liest man als Überschrift. Eine Ebene höher will man von hier
-aus öfter als ganz nach oben, und ganz nach oben führt das Häuschen.
+aus öfter als ganz nach oben, und ganz nach oben führt das Menü links.
 Daneben ein Stift: Der Titel wird an Ort und Stelle zum Eingabefeld, mit
 Haken zum Sichern und Kreuz zum Verwerfen. Er stand vorher als eigenes
 Formular am Fuß der Seite — dieselbe Sache an zwei Stellen, zwei
@@ -781,7 +793,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-1010 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+1012 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
 Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
 Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
 hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
@@ -843,7 +855,7 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 1220 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 1222 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
 
@@ -861,7 +873,7 @@ Quelltext völlig richtig aussahen:
 - Der Zettel für die ganze Klasse wurde erst beim nächsten Laden anklickbar.
 
 ```bash
-node tests/browser/lauf.mjs --fixture            # 199 Prüfungen
+node tests/browser/lauf.mjs --fixture            # 214 Prüfungen
 node tests/browser/lauf.mjs --fixture bilder/    # dazu Bildschirmfotos
 ```
 
