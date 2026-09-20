@@ -53,7 +53,7 @@ teacher_flash_render();
  * Anlegen gehoert zur Liste: Man legt eine Klasse an, um sie dort zu haben.
  */
 ?>
-<table class="data courses rowlink">
+<table class="data courses rowlink kompakt" id="klassenliste">
     <tr>
         <th>Klasse</th>
         <th class="num">Kinder</th>
@@ -97,19 +97,28 @@ teacher_flash_render();
      */
     ?>
     <tr class="newrow">
-        <td data-label="Neue Klasse">
-            <span class="coursetitle">
-                <span class="cflag plus">+</span>
-                <input type="text" name="name" form="newclass" placeholder="5B"
-                       maxlength="32" required aria-label="Name der neuen Klasse">
+        <?php
+        /*
+         * Eine Zelle ueber alle Spalten, nicht drei nebeneinander.
+         *
+         * Das Anlegen IST eine Sache und keine drei: ein Feld und ein
+         * Knopf. In Spalten zerlegt musste der Knopf in die Spalte des
+         * Hakens passen - am Telefon zwanzig Pixel breit -, und dort stand
+         * "Anlegen" dann senkrecht.
+         */
+        ?>
+        <td colspan="4" data-label="Neue Klasse">
+            <span class="anlegezeile">
+                <span class="coursetitle">
+                    <span class="cflag plus">+</span>
+                    <input type="text" name="name" form="newclass" placeholder="5B"
+                           maxlength="32" required aria-label="Name der neuen Klasse">
+                </span>
+                <button class="iconaction primary" form="newclass"
+                        name="create_class" value="1" title="Klasse anlegen">
+                    <span aria-hidden="true">+</span> Anlegen
+                </button>
             </span>
-        </td>
-        <td colspan="2"></td>
-        <td class="actions">
-            <button class="iconaction primary" form="newclass"
-                    name="create_class" value="1" title="Klasse anlegen">
-                <span aria-hidden="true">+</span> Anlegen
-            </button>
         </td>
     </tr>
 </table>

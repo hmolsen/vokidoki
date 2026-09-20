@@ -1565,10 +1565,29 @@ a.rowmain:hover { text-decoration: underline; }
      * mindestens gleich viel, und die Beschriftung kommt gar nicht mehr
      * vor: Die Zellen tragen kein data-label mehr.
      */
+    /*
+     * Und dasselbe fuer die kurzen Tabellen.
+     *
+     * Eine Klassenliste ist "8c, 24 Kinder, 2 Kurse" - drei Angaben, von
+     * denen zwei Zahlen sind. Als Karte nahm das einen halben Bildschirm
+     * ein, mit einer Beschriftung ueber jedem Wert, und nach vier Klassen
+     * war Schluss. Als Zeile passt dieselbe Auskunft in eine Zeile, und man
+     * sieht zwoelf davon auf einmal - und kann sie vergleichen, worum es
+     * bei einer Tabelle geht.
+     *
+     * Die Kinderliste einer Klasse bleibt eine Karte: Dort steht neben dem
+     * Namen ein Benutzername, ein Anfangspasswort und drei Handgriffe, und
+     * das ist keine Zeile mehr.
+     */
+    table.data.kompakt tr:has(> th),
     table.data.release tr:has(> th) { display: table-row; }
+    table.data.kompakt,
     table.data.release { display: table; width: 100%; background: var(--surface); }
+    table.data.kompakt thead,
     table.data.release thead { display: table-header-group; }
+    table.data.kompakt tbody,
     table.data.release tbody { display: table-row-group; }
+    table.data.kompakt tr,
     table.data.release tr {
         display: table-row;
         margin: 0;
@@ -1578,12 +1597,15 @@ a.rowmain:hover { text-decoration: underline; }
     }
     /* Der Kopf schrumpft mit: "FREMDSPRACHE" ist ein Wort ohne
        Bruchstelle, und bei 320 px stand sonst "FREMDSPRAC" da. */
+    table.data.kompakt th,
     table.data.release th {
         display: table-cell;
         padding: 7px 6px;
         font-size: .7rem;
         letter-spacing: 0;
     }
+    table.data.kompakt td,
+    table.data.kompakt td:first-child,
     table.data.release td,
     table.data.release td:first-child {
         display: table-cell;
@@ -1594,7 +1616,221 @@ a.rowmain:hover { text-decoration: underline; }
         text-align: left;
         overflow-wrap: anywhere;
     }
+    table.data.kompakt td::before,
     table.data.release td::before { content: none; }
+
+    /* ---- Was nur die kurzen Tabellen brauchen. */
+
+    /*
+     * Die Breiten werden verteilt, nicht erbeten.
+     *
+     * Ohne Zahlen entschied der Inhalt, und der ist hier unberechenbar:
+     * "Lerneinheiten" ist ein Wort ohne Bruchstelle und zog seine Spalte auf
+     * achtundneunzig Pixel fuer eine einstellige Zahl, "browsertest_lehr"
+     * tat dasselbe daneben. Was das einfaengt, sind die Zahlen weiter unten
+     * und die Umbruchregeln: schmale Spalten bekommen eine Breite, der Name
+     * bekommt den Rest.
+     *
+     * Das feste Layout kommt dazu, damit die Spaltenkanten eine Sache des
+     * Stylesheets bleiben und keine der Daten - sonst sitzt dieselbe
+     * Tabelle bei zwoelf Klassen anders als bei dreien. Ehrlich gesagt: Die
+     * Browser-Pruefung stellt die beiden Verteilungen nicht auseinander,
+     * auch nicht mit einem fuenfzig Zeichen langen Wort in der Namensspalte.
+     * Geprueft ist das Ergebnis - eine Zeile, buendige Spalten, nichts laeuft
+     * ueber -, nicht dieser Weg dorthin.
+     */
+    table.data.kompakt { table-layout: fixed; }
+    table.data.kompakt td,
+    table.data.kompakt td:first-child { padding: 8px 6px; font-size: .9rem; }
+
+    /*
+     * Zahlenspalten so schmal wie ihre Zahl. "1 %" heisst fuer einen
+     * Tabellenlayouter: so wenig wie moeglich - und der Rest bleibt fuer
+     * die Spalte, in der die Namen stehen.
+     */
+    table.data.kompakt th.num,
+    table.data.kompakt td.num { text-align: right; }
+
+    /* Im Kopf darf gebrochen und getrennt werden - zwei Zeilen im kleinen
+       Versalkopf kosten nichts. In den Werten nicht: Eine Zahl, die
+       umbricht, ist keine Zahl mehr. */
+    table.data.kompakt th {
+        white-space: normal;
+        overflow-wrap: break-word;
+        hyphens: auto;
+    }
+    table.data.kompakt td.num { white-space: nowrap; }
+
+    /* Der Benutzername bricht, wo es sein muss: "browsertest_lehr" teilt
+       kein Browser von sich aus. */
+    table.data.kompakt code.token {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        font-size: .74rem;
+    }
+
+    /* ---- Und nun je Tabelle, wo die Kanten liegen. */
+
+    /*
+     * Die Namensspalte fordert den Rest ausdruecklich an.
+     *
+     * "width: 100%" heisst bei fester Verteilung nicht "die ganze
+     * Tabelle", sondern "alles, was nach den festen Spalten uebrig ist".
+     * Ohne das bekam sie nur ihren rechnerischen Anteil - bei den Kursen
+     * hunderteins statt zweihundertzwei Pixel, und die Kopfzeile hoerte
+     * mitten in der Tabelle auf.
+     */
+    table.data.kompakt th:first-child { width: 100%; }
+    table.data.kompakt#einheiten th:nth-child(2) { width: 100%; }
+
+    /* Klassenliste: Name, zwei Zahlen, der Haken. */
+    /* 58 px, nicht 48: Bei 48 brach "KINDER" in "KINDE" und "R". */
+    table.data.kompakt#klassenliste th:nth-child(2),
+    table.data.kompakt#klassenliste th:nth-child(3) { width: 58px; }
+
+    /*
+     * Kurse einer Klasse: fuenf Spalten sind am Telefon eine zu viel.
+     *
+     * "Lerneinheiten" faellt weg - von den drei Zahlen ist sie die, die
+     * man am seltensten braucht, und sie steht einen Fingerdruck weiter
+     * auf der Kursseite. Kinder und Freigabe bleiben: Das eine sagt, ob
+     * der Kurs besetzt ist, das andere, ob er laeuft.
+     */
+    table.data.kompakt#kurse th:nth-child(3),
+    table.data.kompakt#kurse td:nth-child(3) { display: none; }
+    table.data.kompakt#kurse th:nth-child(2) { width: 58px; }
+    table.data.kompakt#kurse th:nth-child(4) { width: 86px; }
+
+    /*
+     * Lerneinheiten: Griff, Titel, Freigabe, Haken.
+     *
+     * Am Telefon wird nicht gezogen - dort stehen die beiden Pfeile, und
+     * die brauchen Platz. In sechsundzwanzig Pixeln lagen sie uebereinander
+     * und ragten in den Titel.
+     */
+    table.data.kompakt#einheiten th:nth-child(1) { width: 34px; }
+    table.data.kompakt#einheiten th:nth-child(3) { width: 86px; }
+    table.data.kompakt#einheiten td.griff {
+        padding: 4px 0 4px 2px;
+        text-align: center;
+    }
+    table.data.kompakt#einheiten td.griff .iconaction {
+        display: block;
+        width: 28px;
+        min-height: 26px;
+        margin: 0 auto;
+        padding: 0;
+    }
+
+    /* Wer im Kurs ist: Name, Benutzername, Klasse, Hinauswurf. */
+    table.data.kompakt#mitglieder th:nth-child(2) { width: 78px; }
+    /* Breit genug fuer "Lehrkraft" in einer Zeile - das Wort steht in
+       jeder Kursliste mindestens einmal. */
+    table.data.kompakt#mitglieder th:nth-child(3) { width: 74px; }
+    table.data.kompakt#mitglieder th:nth-child(4) { width: 36px; }
+
+    /* Der Haken bleibt - er ist der Hinweis, dass die Zeile irgendwohin
+       fuehrt, und kostet als Zeichen kaum Platz. */
+    table.data.kompakt th.chev,
+    table.data.kompakt td.chev {
+        display: table-cell;
+        width: 20px;
+        padding: 8px 6px 8px 0;
+        color: var(--text-soft);
+        text-align: right;
+    }
+    table.data.kompakt th.actions,
+    table.data.kompakt td.actions {
+        display: table-cell;
+        width: 20px;
+        gap: 0;
+        margin: 0;
+        padding: 6px 6px 6px 0;
+        border-top: 0;
+        border-bottom: 1px solid var(--border);
+        text-align: right;
+        white-space: nowrap;
+    }
+    table.data.kompakt td.actions form { display: inline; }
+
+    /*
+     * Die Fahne wird kleiner, und der Name darf umbrechen.
+     *
+     * Sie steht in einer Zeile mit Zahlen; 30 px daneben waeren ein
+     * Drittel der Spalte fuer ein Bild, das nur sagt, welche Sprache
+     * gemeint ist.
+     */
+    table.data.kompakt .cflag { width: 22px; height: 22px; font-size: .95rem; }
+    table.data.kompakt .coursetitle { gap: 7px; }
+    table.data.kompakt .coursetitle .tiny { font-size: .72rem; }
+
+    /*
+     * Und die Beschriftung an einem Knopf wird vorgelesen statt gezeigt.
+     *
+     * "Entfernen" neben dem Kreuz kostet neunzig Pixel - in einer Zeile mit
+     * drei anderen Spalten ist das die Haelfte des Namens. Das Zeichen sagt
+     * dasselbe, und wer die Seite vorgelesen bekommt, hoert weiterhin das
+     * Wort.
+     */
+    table.data.kompakt .nurbreit {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+    }
+    table.data.kompakt .iconaction { min-height: 34px; padding: 4px 8px; }
+
+    /*
+     * Die Anlegezeile bleibt eine Zeile - sie spannt sich ohnehin ueber
+     * alle Spalten.
+     *
+     * Erst stand hier display: block, damit die Felder die ganze Breite
+     * bekommen. Das ging schief: In einer Tabelle mit fester Verteilung
+     * wird aus einer Zeile, die ein Block sein will, ein Block IN einer
+     * Spalte - und "Lerneinheit hinzufuegen" stand danach senkrecht in
+     * sechsundzwanzig Pixeln. Ein td mit colspan ist von sich aus so breit
+     * wie die Tabelle; es braucht nur Luft und Felder, die mitwachsen.
+     */
+    /*
+     * Die Anlegezeile spannt sich ueber alle Spalten - sie ist eine Zelle
+     * mit colspan, seit Feld und Knopf zusammengehoeren. Damit greift die
+     * feste Verteilung darauf gar nicht, und es braucht nur Luft.
+     */
+    table.data.kompakt tr.newrow td,
+    table.data.kompakt tr.newrow td:first-child {
+        padding: 10px 8px;
+        white-space: normal;
+    }
+    /*
+     * Untereinander - und die Grundgroessen zurueckgesetzt.
+     *
+     * "flex: 1 1 200px" heisst in einer Spalte nicht "mindestens 200 px
+     * breit", sondern "200 px HOCH, und waechst". Die Anlegezeile war
+     * damit zweihundertsechzig Pixel hoch, mit dem Feld irgendwo in der
+     * Mitte.
+     */
+    table.data.kompakt tr.newrow .anlegezeile {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    table.data.kompakt tr.newrow .anlegezeile > * { flex: 0 0 auto; }
+    table.data.kompakt tr.newrow input[type=text] {
+        width: 100%;
+        max-width: none;
+        margin: 0;
+    }
+    table.data.kompakt tr.newrow .iconaction { justify-content: center; }
+    table.data.kompakt tr.newrow input[type=text] {
+        width: 100%;
+        max-width: none;
+        margin: 0;
+    }
+    table.data.kompakt tr.newrow .btn { white-space: nowrap; }
 
     /*
      * Und die Breite wird verteilt, nicht erbeten.
@@ -1693,3 +1929,21 @@ table.release tr.newrow input[type=text] { margin: 0; min-height: 34px; width: 1
 }
 .leer p { margin: 0; }
 .leer .buttonrow { margin: 14px 0 0; }
+
+/*
+ * Die Anlegezeile: Feld und Knopf in einer Zelle.
+ *
+ * Sie standen in eigenen Spalten, und der Knopf musste damit in die Spalte
+ * des Hakens passen - am Telefon zwanzig Pixel breit. Jetzt ist die ganze
+ * Zeile eine Zelle mit colspan; am Rechner stehen die beiden nebeneinander,
+ * am Telefon untereinander.
+ */
+.anlegezeile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.anlegezeile .coursetitle { flex: 1 1 200px; min-width: 0; }
+.anlegezeile .suchfeld { flex: 1 1 240px; }
+.anlegezeile > .iconaction { flex: none; }

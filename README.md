@@ -932,7 +932,7 @@ Quelltext völlig richtig aussahen:
 - Der Zettel für die ganze Klasse wurde erst beim nächsten Laden anklickbar.
 
 ```bash
-node tests/browser/lauf.mjs --fixture            # 330 Prüfungen
+node tests/browser/lauf.mjs --fixture            # 375 Prüfungen
 node tests/browser/lauf.mjs --fixture bilder/    # dazu Bildschirmfotos
 ```
 
@@ -959,3 +959,19 @@ testweise entfernt wurde — bei kleinen Schritten bleibt der Balken unter dem
 Zeiger, also treffen die Ereignisse ihn auch ohne Bindung. Erst ein
 **zügiger** Zug, bei dem der Zeiger den Balken überholt, fällt um. Eine
 Prüfung, die bei entferntem Riegel grün bleibt, prüft den Riegel nicht.
+
+Dieselbe Lehre noch einmal, bei den kompakten Tabellen: Die Prüfung mass
+`tbody tr` — und traf damit die **Kopfzeile** mit, denn diese Tabellen tragen
+kein `<thead>`; der Kopf steht als gewöhnliche `<tr>` in dem `<tbody>`, das
+der Browser selbst ergänzt. Verglichen wurde also der Kopf mit sich selbst,
+und das stimmt immer. Drei Proben blieben deshalb grün, bevor auffiel, dass
+gar nicht das gemessen wurde, worum es ging. Seit die Prüfung ausdrücklich
+`tr:not(:has(> th)):not(.newrow)` nimmt, fällt sie um, sobald aus den Zeilen
+wieder Karten werden.
+
+Und eine Ehrlichkeit dazu: `table-layout: fixed` bei diesen Tabellen liess
+sich **nicht** festnageln. Auf `auto` umgestellt blieben alle Prüfungen grün,
+auch mit einem fünfzig Zeichen langen Wort in der Namensspalte — die
+ausdrücklichen Spaltenbreiten und die Umbruchregeln tragen das offenbar
+allein. Geprüft ist darum das Ergebnis (eine Zeile, bündige Spalten, nichts
+läuft über), nicht der Weg dorthin. Das steht so auch im Stylesheet.

@@ -20,8 +20,94 @@ const SEITEN = (f) => [
     ['Sprachwahl',   '/teacher/neu.php?klasse=' + f.klasse],
 ];
 
+/*
+ * Wie eine kurze Tabelle vermessen wird - einmal aufgeschrieben,
+ * zweimal gebraucht: bei 390 px und noch einmal bei 320 px.
+ */
+const KOMPAKTMESSUNG = `[...document.querySelectorAll('table.data.kompakt')].map((t) => {
+                        /*
+                         * Eine DATENZEILE, ausdruecklich. "tbody tr" traf
+                         * die Kopfzeile mit - die Tabellen tragen kein
+                         * <thead>, der Kopf steht als gewoehnliche <tr> im
+                         * vom Browser ergaenzten <tbody>. Gemessen wurde
+                         * dann der Kopf gegen sich selbst, und das stimmt
+                         * immer.
+                         */
+                        const tr = t.querySelector(
+                            'tr:not(:has(> th)):not(.newrow)');
+                        const zellen = tr === null ? []
+                            : [...tr.children].filter(
+                                (td) => getComputedStyle(td).display !== 'none');
+                        const kopf = t.querySelector('tr:has(> th)');
+                        const kopfzellen = kopf === null ? []
+                            : [...kopf.children].filter(
+                                (th) => getComputedStyle(th).display !== 'none');
+                        const kante = (el) => Math.round(el.getBoundingClientRect().left);
+                        return {
+                            id: t.id,
+                            anzeige: getComputedStyle(t).display,
+                            zeilenart: tr === null ? '' : getComputedStyle(tr).display,
+                            zeile: Math.round(tr?.getBoundingClientRect().height ?? 0),
+                            passt: t.scrollWidth <= t.clientWidth + 1,
+                            /*
+                             * Der eigentliche Punkt: Alle Zellen einer
+                             * Zeile stehen NEBENEINANDER. Nur die Hoehe zu
+                             * messen genuegt nicht - eine Zeile, deren
+                             * Zellen untereinander stehen, kann trotzdem
+                             * flach sein, wenn wenig darin steht.
+                             */
+                            nebeneinander: zellen.length > 1 && zellen.every(
+                                (td) => Math.abs(td.getBoundingClientRect().top
+                                              - zellen[0].getBoundingClientRect().top) < 2),
+                            spalten: zellen.length,
+                            /*
+                             * Und das ist die Probe darauf, dass es eine
+                             * Tabelle IST und nicht bloss so aussieht: Die
+                             * Spalte unter "KINDER" faengt dort an, wo
+                             * "KINDER" anfaengt. Zerfiele die Zeile in einen
+                             * eigenen kleinen Block, saessen ihre Zellen
+                             * weiterhin nebeneinander und weiterhin flach -
+                             * nur eben jede Zeile an einer anderen Kante.
+                             */
+                            buendig: kopfzellen.length > 1
+                                && kopfzellen.length === zellen.length
+                                && zellen.every((td, i) => Math.abs(
+                                       kante(td) - kante(kopfzellen[i])) < 2),
+                            kanten: zellen.map(kante).join(',')
+                                + ' vs ' + kopfzellen.map(kante).join(','),
+
+                        };
+                    })`;
+
 export async function pruefe(f, aus) {
     abschnitt('Am Telefon (390 px)');
+
+    /*
+     * Die kurzen Tabellen bleiben Tabellen.
+     *
+     * Eine Klassenliste ist „8c, 24 Kinder, 2 Kurse" - drei Angaben, von
+     * denen zwei Zahlen sind. Als Karte nahm das hundertachtzig Pixel ein,
+     * mit einer Beschriftung über jedem Wert; nach vier Klassen war der
+     * Bildschirm voll. Als Zeile passt dieselbe Auskunft in vierzig, und
+     * man kann zwölf davon vergleichen - worum es bei einer Tabelle geht.
+     */
+    const kompaktPruefen = (name, liste) => {
+        for (const t of liste) {
+            ok(`${name}: ${t.id || 'kompakt'} bleibt eine Tabelle`,
+               t.anzeige === 'table' && t.zeilenart === 'table-row',
+               t.anzeige + ' / ' + t.zeilenart);
+            ok(`${name}: ${t.id || 'kompakt'} steht in EINER Zeile`,
+               t.nebeneinander,
+               t.spalten + ' Zellen - untereinander statt nebeneinander');
+            ok(`${name}: ${t.id || 'kompakt'} steht in Spalten`,
+               t.buendig, t.kanten);
+            ok(`${name}: ${t.id || 'kompakt'} passt in die Breite`, t.passt,
+               'sonst muesste man seitwaerts schieben');
+            ok(`${name}: ${t.id || 'kompakt'} braucht je Zeile wenig Höhe`,
+               t.zeile > 0 && t.zeile <= 70,
+               t.zeile + ' px - eine Karte brauchte das Zwei- bis Dreifache');
+        }
+    };
 
     const b = await browser({ port: 9404, breite: 390, hoehe: 844, handy: true, aus });
     try {
@@ -31,21 +117,36 @@ export async function pruefe(f, aus) {
             await b.geh(f.basis + pfad, 1200);
 
             /*
-             * table.release ist bewusst ausgenommen - dort vergleicht man
-             * Vokabeln zeilenweise, und der Balken braucht durchgehende
-             * Zeilen. Geprüft wird das zwei Abschnitte weiter unten; hier
-             * würde es als Fehler erscheinen, obwohl es die Absicht ist.
+             * Zwei Sorten sind bewusst ausgenommen.
+             *
+             * table.release: Dort vergleicht man Vokabeln zeilenweise, und
+             * der Balken braucht durchgehende Zeilen.
+             *
+             * table.kompakt: Die kurzen Tabellen - Klassenliste, Kurse
+             * einer Klasse, Lerneinheiten, Wer im Kurs ist. Drei Angaben,
+             * davon zwei Zahlen; als Karte war das ein halber Bildschirm
+             * je Zeile. Sie werden weiter unten eigens geprueft, hier
+             * erschienen sie als Fehler, obwohl es die Absicht ist.
              */
             const lage = await b.js(`(() => {
-                const zeilen = [...document.querySelectorAll('table.data:not(.release) tr')];
+                const zeilen = [...document.querySelectorAll(
+                    'table.data:not(.release):not(.kompakt) tr')];
                 return {
                     quer:    document.documentElement.scrollWidth > window.innerWidth + 1,
                     breit:   document.documentElement.scrollWidth,
                     fenster: window.innerWidth,
-                    tabellen: document.querySelectorAll('table.data:not(.release)').length,
+                    tabellen: document.querySelectorAll(
+                                  'table.data:not(.release):not(.kompakt)').length,
                     karten:  zeilen.filter((t) => getComputedStyle(t).display === 'block').length,
                     kopf:    zeilen.filter((t) => t.querySelector('th')
                                                && getComputedStyle(t).display !== 'none').length,
+                    /*
+                     * Und was die kurzen Tabellen angeht: Sie bleiben
+                     * Tabellen. Gezaehlt wird hier nur, wie hoch eine
+                     * Datenzeile ist - eine Karte war zwei- bis dreimal so
+                     * hoch wie die Zeile, die dieselbe Auskunft traegt.
+                     */
+                    kompakt: ${KOMPAKTMESSUNG},
                 };
             })()`);
 
@@ -58,7 +159,99 @@ export async function pruefe(f, aus) {
                    lage.kopf + ' sichtbare Kopfzeilen - sie gehören am Telefon nicht dorthin');
             }
 
+            /*
+             * Die kurzen Tabellen bleiben Tabellen.
+             *
+             * Eine Klassenliste ist „8c, 24 Kinder, 2 Kurse" - drei
+             * Angaben, von denen zwei Zahlen sind. Als Karte nahm das
+             * hundertachtzig Pixel ein, mit einer Beschriftung über jedem
+             * Wert; nach vier Klassen war der Bildschirm voll. Als Zeile
+             * passt dieselbe Auskunft in vierzig, und man kann zwölf
+             * davon vergleichen - worum es bei einer Tabelle geht.
+             */
+            kompaktPruefen(name, lage.kompakt);
+
             await b.bild('mobil-' + name.toLowerCase());
+        }
+
+        /*
+         * Und dasselbe noch einmal auf dem schmalsten Gerät, mit dem
+         * jemand hier ankommt.
+         *
+         * Bei 390 px geht fast alles auf; eng wird es bei 320. Dort
+         * entschied sich die feste Spaltenverteilung: "Lerneinheiten" ist
+         * ein Wort ohne Bruchstelle und zog seine Spalte auf
+         * achtundneunzig Pixel für eine einstellige Zahl, "browsertest_lehr"
+         * daneben tat dasselbe. Wer das hier nicht misst, misst die
+         * Entscheidung nicht - bei 390 px passt auch die lose Verteilung.
+         */
+        abschnitt('Und auf einem schmalen Gerät (320 px)');
+        await b.groesse(320, 568);
+
+        for (const [name, pfad] of SEITEN(f)) {
+            await b.geh(f.basis + pfad, 1200);
+            const eng = await b.js(`(() => ({
+                quer:    document.documentElement.scrollWidth > window.innerWidth + 1,
+                breit:   document.documentElement.scrollWidth,
+                fenster: window.innerWidth,
+                kompakt: ${KOMPAKTMESSUNG},
+            }))()`);
+
+            if (eng.kompakt.length === 0) continue;
+
+            ok(`${name} (320): nichts scrollt seitwärts`, !eng.quer,
+               eng.breit + ' px in einem ' + eng.fenster + ' px breiten Fenster');
+            kompaktPruefen(name + ' (320)', eng.kompakt);
+            await b.bild('mobil320-' + name.toLowerCase());
+
+            /*
+             * Und jetzt kommt ein langes Wort in die Tabelle.
+             *
+             * Darauf beruht die feste Spaltenverteilung: Bei loser
+             * Verteilung entscheidet der Inhalt, und ein Kurs namens
+             * „Donaudampfschifffahrtsgesellschaft" oder ein Benutzername
+             * ohne Bruchstelle zieht seine Spalte auf und nimmt den Platz
+             * dem, worauf es ankommt. Mit kurzen Testdaten sieht man das
+             * nie - also wird hier eins hineingeschrieben.
+             */
+            const lang = await b.js(`(() => {
+                const raus = [];
+                for (const t of document.querySelectorAll('table.data.kompakt')) {
+                    const tr = t.querySelector('tr:not(:has(> th)):not(.newrow)');
+                    if (tr === null) continue;
+                    const zellen = [...tr.children].filter(
+                        (td) => getComputedStyle(td).display !== 'none');
+                    if (zellen.length < 3) continue;
+                    /* Die breiteste Spalte ist die, in der der Name steht. */
+                    const name = zellen.reduce((a, c) =>
+                        c.getBoundingClientRect().width
+                        > a.getBoundingClientRect().width ? c : a);
+                    const breiten = () => zellen.map(
+                        (td) => Math.round(td.getBoundingClientRect().width));
+                    const vorher = breiten();
+                    const alt = name.textContent;
+                    name.textContent = 'Donaudampfschifffahrtsgesellschaftskapitaensmuetze';
+                    const nachher = breiten();
+                    const passt = t.scrollWidth <= t.clientWidth + 1;
+                    const quer = document.documentElement.scrollWidth
+                                 > window.innerWidth + 1;
+                    name.textContent = alt;
+                    /* Die anderen Spalten - die Zahlen - bleiben, wo sie sind. */
+                    const andere = zellen.every((td, i) => td === name
+                        || Math.abs(vorher[i] - nachher[i]) <= 2);
+                    raus.push({ id: t.id, passt, quer, andere,
+                                vorher: vorher.join(','), nachher: nachher.join(',') });
+                }
+                return raus;
+            })()`);
+
+            for (const t of lang) {
+                ok(`${name} (320): ${t.id} hält die Spalten, auch bei einem langen Wort`,
+                   t.andere && t.passt && !t.quer,
+                   t.vorher + ' -> ' + t.nachher
+                   + (t.passt ? '' : ', Tabelle laeuft ueber')
+                   + (t.quer ? ', Seite scrollt seitwaerts' : ''));
+            }
         }
 
         /*

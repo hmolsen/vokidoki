@@ -234,7 +234,7 @@ teacher_flash_render();
 ?>
 <h2>Kurse dieser Klasse</h2>
 
-<table class="data courses rowlink" id="kurse">
+<table class="data courses rowlink kompakt" id="kurse">
     <tr>
         <th>Kurs</th>
         <th class="num">Kinder</th>

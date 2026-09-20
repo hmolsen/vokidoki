@@ -7112,7 +7112,7 @@ $efUnit = makeUnit($lehrerId, (int) $efKurs['language_id'], 'Leere Unit');
 // Mit einer Lerneinheit steht die Tabelle da - vorher der Leerzustand.
 $res = teacherGet('course.php?id=' . $efKursId);
 ok('Auch die Einheitentabelle traegt "courses"',
-   str_contains($res['body'], 'class="data courses rowlink" id="einheiten"'),
+   str_contains($res['body'], 'class="data courses rowlink kompakt" id="einheiten"'),
    'ohne das ist ihre Anlegezeile als einzige nicht getoent');
 
 // ---- Die Lerneinheiten-Tabelle sagt eine Sache, und zwar immer dieselbe.
@@ -7141,7 +7141,7 @@ q('UPDATE units SET released_position = 2 WHERE id = ?', [$efHalb]);
 q('UPDATE units SET released_position = 4 WHERE id = ?', [$efGanz]);
 
 $res = teacherGet('course.php?id=' . $efKursId);
-preg_match('/<table class="data courses rowlink" id="einheiten">.*?<\/table>/s',
+preg_match('/<table class="data courses rowlink kompakt" id="einheiten">.*?<\/table>/s',
            $res['body'], $etm);
 $etab = $etm[0] ?? '';
 

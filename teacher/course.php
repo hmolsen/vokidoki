@@ -286,7 +286,7 @@ teacher_flash_render();
     . 'Lerneinheit hinzuf&uuml;gen</button>',
 ) ?>
 <?php else: ?>
-<table class="data courses rowlink" id="einheiten">
+<table class="data courses rowlink kompakt" id="einheiten">
     <?php
     /*
      * Zwei Spalten weniger.
@@ -433,7 +433,7 @@ teacher_flash_render();
 ?>
 <h2>Wer im Kurs ist</h2>
 
-<table class="data" id="mitglieder">
+<table class="data kompakt" id="mitglieder">
     <tr>
         <th>Name</th>
         <th>Benutzername</th>
@@ -465,7 +465,8 @@ teacher_flash_render();
                     <button class="iconaction danger" name="remove_member"
                             value="<?= (int) $m['id'] ?>" title="Aus dem Kurs nehmen"
                             data-confirm="<?= h($m['display_name']) ?> aus dem Kurs nehmen? Der Lernstand bleibt erhalten.">
-                        <span aria-hidden="true">&#10005;</span> Entfernen
+                        <span aria-hidden="true">&#10005;</span>
+                        <span class="nurbreit"> Entfernen</span>
                     </button>
                 </form>
             </td>
@@ -495,7 +496,15 @@ teacher_flash_render();
      */
     ?>
     <tr class="newrow">
-        <td colspan="3" data-label="Aufnehmen">
+        <?php
+        /*
+         * Eine Zelle ueber alle Spalten: Suchfeld und Knopf gehoeren
+         * zusammen, und in Spalten zerlegt musste der Knopf in die Spalte
+         * des Hinauswurfs passen - am Telefon sechsunddreissig Pixel.
+         */
+        ?>
+        <td colspan="4" data-label="Aufnehmen">
+            <span class="anlegezeile">
             <?php if ($offene === []): ?>
                 <span class="tiny muted">
                     Alle Konten dieser Schule sind schon im Kurs. Neue Kinder
@@ -544,15 +553,12 @@ teacher_flash_render();
                                 label="<?= h($zusatz) ?>"></option>
                     <?php endforeach; ?>
                 </datalist>
-            <?php endif; ?>
-        </td>
-        <td class="actions">
-            <?php if ($offene !== []): ?>
                 <button class="iconaction primary" form="newmember"
                         name="add_member_by_name" value="1" title="In den Kurs aufnehmen">
                     <span aria-hidden="true">+</span> Aufnehmen
                 </button>
             <?php endif; ?>
+            </span>
         </td>
     </tr>
 </table>
