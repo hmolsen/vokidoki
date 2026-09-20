@@ -231,6 +231,99 @@ export async function pruefe(f, aus) {
            auf.markiert.includes('Englisch'), auf.markiert);
         await b.bild('menue');
 
+        /*
+         * Und wieder hinaus - das kann <details> von sich aus nicht.
+         *
+         * open = false nimmt den Inhalt sofort weg; es bleibt nichts uebrig,
+         * das hinausfliegen koennte. teacher.js setzt deshalb erst .zu,
+         * wartet die Animation ab und schliesst dann. Bis dahin muss das
+         * Menue noch offen sein, sonst war die Animation umsonst.
+         */
+        const raus = await b.js(`(() => {
+            const d = document.getElementById('menuLinks');
+            d.querySelector('[data-zu]').click();
+            const an = d.querySelector('.schublade').getAnimations();
+            return {
+                name:   an[0]?.animationName ?? '',
+                laeuft: an[0]?.playState ?? '',
+                offen:  d.open,
+                zu:     d.classList.contains('zu'),
+            };
+        })()`);
+        ok('Ein Druck daneben laesst sie wieder hinausfliegen',
+           raus.name === 'schubladeRausLinks', raus.name || '(keine Animation)');
+        ok('Und waehrend sie fliegt, ist das Menue noch offen',
+           raus.offen && raus.zu && raus.laeuft === 'running',
+           raus.offen + ' / ' + raus.zu + ' / ' + raus.laeuft);
+
+        await schlafe(500);
+        ok('Danach ist es zu', (await b.js(`({
+            offen: document.getElementById('menuLinks').open,
+            zu:    document.getElementById('menuLinks').classList.contains('zu'),
+        })`)).offen === false, 'sonst bliebe es nach der Animation haengen');
+
+        /*
+         * Und beim zweiten Mal fliegt sie genauso herein.
+         *
+         * Genau das tat sie lange nicht: Ein geschlossenes <details> nimmt
+         * seinen Inhalt nicht mehr aus dem Baum, sondern versteckt ihn per
+         * content-visibility. Das Element bleibt dasselbe, seine Animation
+         * ist abgelaufen, und wieder sichtbar zu werden ist kein Grund,
+         * von vorn anzufangen. Ab dem zweiten Druck stand die Schublade
+         * einfach da. Im Quelltext sah alles richtig aus.
+         */
+        const nochmal = await b.js(`(() => {
+            const d = document.getElementById('menuLinks');
+            d.querySelector('summary').click();
+            const el = d.querySelector('.schublade');
+            const an = el.getAnimations();
+            return {
+                name:   an[0]?.animationName ?? '',
+                laeuft: an[0]?.playState ?? '',
+                weg:    getComputedStyle(el).transform,
+            };
+        })()`);
+        ok('Beim zweiten Oeffnen fliegt sie wieder herein',
+           nochmal.name === 'schubladeLinks' && nochmal.laeuft === 'running',
+           nochmal.name + ' / ' + nochmal.laeuft
+           + ' - eine abgelaufene Animation faengt nicht von selbst neu an');
+        ok('Und steht im ersten Augenblick wieder draussen',
+           nochmal.weg !== 'none' && nochmal.weg.includes('-'), nochmal.weg);
+
+        await schlafe(500);
+
+        /*
+         * Und auch dann, wenn es vom anderen Menue verdraengt wurde.
+         *
+         * Das ist der zweite Weg, auf dem eine Schublade zugeht, und er
+         * laeuft ohne .zu: Wer rechts oeffnet, macht links hart zu - eine
+         * Schublade, die hinausfliegt, waehrend die andere hereinkommt,
+         * waere Unruhe ohne Aussage. Weil dabei aber keine Klasse wechselt,
+         * wechselt auch der Animationsname nicht, und ohne das Zuruecksetzen
+         * in teacher.js stuende sie beim naechsten Oeffnen wieder bloss da.
+         */
+        await b.js(`document.querySelector('#menuRechts summary').click()`);
+        await schlafe(450);
+        const verdraengt = await b.js(`(() => {
+            const links = document.getElementById('menuLinks');
+            const vorher = links.open;
+            links.querySelector('summary').click();
+            const an = links.querySelector('.schublade').getAnimations();
+            return {
+                warZu:  vorher === false,
+                name:   an[0]?.animationName ?? '',
+                laeuft: an[0]?.playState ?? '',
+            };
+        })()`);
+        ok('Das rechte Menue macht das linke hart zu', verdraengt.warZu,
+           'zwei Schubladen in Bewegung zugleich waeren Unruhe ohne Aussage');
+        ok('Und danach fliegt das linke trotzdem wieder herein',
+           verdraengt.name === 'schubladeLinks' && verdraengt.laeuft === 'running',
+           verdraengt.name + ' / ' + verdraengt.laeuft);
+
+        await b.js(`document.querySelector('#menuLinks [data-zu]').click()`);
+        await schlafe(450);
+
         await b.js(`[...document.querySelectorAll('#menuLinks .mitem')]
                       .find((a) => a.textContent.includes('Französisch')).click()`);
         await schlafe(1400);

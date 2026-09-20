@@ -217,6 +217,21 @@ export async function pruefe(f, aus) {
             geladen: window.__marke !== 'steht',
             leer:    document.querySelector('#handzeile input[name="new_f"]').value === '',
             fokus:   document.activeElement?.name ?? '',
+            /*
+             * Der Knopf "Saetze nachtragen" steht immer im HTML und ist
+             * ausgeblendet, solange nichts fehlt. Jede getippte Vokabel
+             * ist eine ohne Lueckensatz - die Zahl dahinter muss also
+             * mitwachsen, ohne dass die Seite neu laedt.
+             */
+            nachtragen: (() => {
+                const k = document.getElementById('nachtragen');
+                return {
+                    da:     !!k,
+                    offen:  k ? !k.hidden : false,
+                    zahl:   k?.querySelector('[data-zahl]')?.textContent ?? '',
+                    frage:  k?.hasAttribute('data-confirm') ?? true,
+                };
+            })(),
         })`);
 
         ok('Eine Vokabel von Hand kommt dazu', nachher.zeilen === vorher + 1,
@@ -233,6 +248,25 @@ export async function pruefe(f, aus) {
         ok('Die Felder sind wieder leer', nachher.leer);
         ok('Und der Finger steht schon im ersten', nachher.fokus === 'new_f',
            nachher.fokus);
+
+        /*
+         * Und die Antwort zieht keine Arbeit mehr hinter sich her.
+         *
+         * Sie tat es lange: erst antworten, dann den Lueckensatz zur neuen
+         * Vokabel erzeugen. Das haelt nur, wenn die Antwort den Browser
+         * wirklich verlaesst, bevor der Vorgang endet - und legt der
+         * Webserver eine Komprimierung darueber, ersetzt er die
+         * Laengenangabe durch eine stueckweise Uebertragung, und der
+         * Browser wartet doch bis zum Schluss. Es las sich dann als "die
+         * Antwort kam nicht an", obwohl die Vokabel drinstand. Jetzt
+         * erzeugt sie der Knopf daneben, und der sagt, wie viele fehlen.
+         */
+        ok('Der Knopf "Saetze nachtragen" taucht auf', nachher.nachtragen.offen,
+           'er steht immer im HTML und ist bloss ausgeblendet');
+        ok('Und nennt die gewachsene Zahl', Number(nachher.nachtragen.zahl) > 0,
+           nachher.nachtragen.zahl);
+        ok('Die Rueckfrage stellt er nur einmal', nachher.nachtragen.frage === false,
+           'der allgemeine data-confirm-Hoerer wuerde sonst dasselbe noch einmal fragen');
 
         /*
          * Und dasselbe Wort ein zweites Mal: Es kommt nicht dazu, und die

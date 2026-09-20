@@ -3,6 +3,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/colors.php';
+// Die Regeln selbst stehen in lib/profile.php - der
+// Lehrkraft-Bereich aendert dasselbe ueber ein Formular.
+require_once __DIR__ . '/../lib/profile.php';
 
 /*
  * Das eigene Konto - Name, Farbe, Passwort.
@@ -27,8 +30,7 @@ switch (action()) {
                 'color'    => $user['color'],
                 // Steht das Anfangspasswort noch? Dann hat das Kind seines
                 // noch nicht geändert, und genau das soll die Seite sagen.
-                'initial'  => ($user['initial_password'] ?? null) !== null
-                              && $user['initial_password'] !== '',
+                'initial'  => profile_has_initial_password($user),
             ],
             'palette' => color_palette(),
         ]);
@@ -38,17 +40,10 @@ switch (action()) {
         require_post();
         $b = json_body();
 
-        $name  = body_str($b, 'name', 64);
-        $color = body_str($b, 'color', 16);
-
-        if ($name === '') {
-            json_fail('Bitte einen Namen angeben.');
+        $fehler = profile_save($uid, body_str($b, 'name', 64), body_str($b, 'color', 16));
+        if ($fehler !== null) {
+            json_fail($fehler);
         }
-
-        q(
-            'UPDATE users SET display_name = ?, color = ? WHERE id = ?',
-            [$name, valid_color($color), $uid],
-        );
 
         $frisch = q1('SELECT * FROM users WHERE id = ?', [$uid]);
         json_out([
@@ -67,40 +62,17 @@ switch (action()) {
         require_post();
         $b = json_body();
 
-        $alt = (string) ($b['current'] ?? '');
-        $neu = (string) ($b['password'] ?? '');
-
-        /*
-         * Das alte Passwort wird verlangt, obwohl die Sitzung angemeldet
-         * ist. Der Grund ist ein durchgereichtes Handy: Die App bleibt
-         * angemeldet, damit ein Kind nicht täglich tippen muss - dann darf
-         * aber nicht jeder, der sie in die Hand bekommt, das Passwort
-         * ändern und das Kind aussperren.
-         */
-        if (!password_verify($alt, (string) $user['password_hash'])) {
-            usleep(random_int(200_000, 500_000));
-            json_fail('Das bisherige Passwort stimmt nicht.', 403);
-        }
-
-        if (mb_strlen($neu) < 6) {
-            json_fail('Das neue Passwort braucht mindestens 6 Zeichen.');
-        }
-        if ($neu === $alt) {
-            json_fail('Das ist das bisherige Passwort.');
-        }
-
-        /*
-         * Und hier verschwindet das Anfangspasswort aus der Datenbank.
-         *
-         * Es steht dort im Klartext, damit das Anschreiben nachdruckbar
-         * bleibt - eine bewusste Abwägung. Sobald ein Kind sein eigenes
-         * gewählt hat, ist der gespeicherte Wert wertlos, und der Bestand
-         * offener Passwörter schrumpft mit der Zeit, statt zu wachsen.
-         */
-        q(
-            'UPDATE users SET password_hash = ?, initial_password = NULL WHERE id = ?',
-            [password_hash($neu, PASSWORD_DEFAULT), $uid],
+        $fehler = profile_change_password(
+            $user,
+            (string) ($b['current'] ?? ''),
+            (string) ($b['password'] ?? ''),
         );
+        if ($fehler !== null) {
+            // 403 nur für das falsche bisherige Passwort - die anderen
+            // beiden sind Eingabefehler und keine Abweisung.
+            json_fail($fehler,
+                      str_contains($fehler, 'bisherige Passwort stimmt') ? 403 : 400);
+        }
 
         json_out(['ok' => true]);
 

@@ -6315,14 +6315,101 @@ ok('Abmelden ist ein Knopf, kein unterstrichenes Wort',
    'es tut etwas, statt woandershin zu fuehren');
 ok('Es steht im Menue rechts, zusammen mit dem eigenen Konto',
    preg_match('/id="menuRechts".*?name="teacher_logout"/s', $res['body']) === 1);
+/*
+ * Das eigene Konto bleibt im Lehrkraft-Bereich.
+ *
+ * Der Menueeintrag fuehrte einmal in die App - Name, Farbe und Passwort
+ * sind dieselben, egal von welcher Seite man kommt, und eine zweite
+ * Fassung schien zwei Orte fuer eine Sache. In der Bedienung war es das
+ * Gegenteil: Wer hier drueckte, stand in einer anderen Anwendung, und der
+ * Zurueck-Knopf fuehrte an den Anfang der Kinderansicht.
+ */
 ok('Darin auch der Weg zum Profil',
-   preg_match('/<a class="mitem" href="[^"]*#\/konto">/', $res['body']) === 1);
+   preg_match('/<a class="mitem" href="[^"]*\/teacher\/konto\.php">/', $res['body']) === 1);
 ok('Und einer geradewegs zum Passwort',
-   preg_match('/<a class="mitem" href="[^"]*#\/konto\/passwort">/', $res['body']) === 1,
+   preg_match('/<a class="mitem" href="[^"]*\/teacher\/konto\.php#passwort">/',
+              $res['body']) === 1,
    'erst suchen und dann tippen ist kein Weg, den man zweimal geht');
-ok('Es fuehrt in dieselben Einstellungen wie in der App',
-   str_contains($res['body'], '#/konto'),
+ok('Und keiner mehr in die Kinderansicht',
+   !str_contains($res['body'], '#/konto'),
+   'von dort fuehrte der Zurueck-Knopf an den Anfang der App');
+
+// ---- Die Seite selbst: dieselbe Leiste, dieselben Regeln.
+
+$res = teacherGet('konto.php');
+ok('Die Kontoseite liegt im Lehrkraft-Bereich', $res['status'] === 200);
+ok('Und traegt dessen Leiste',
+   str_contains($res['body'], 'class="adminbar"')
+   && str_contains($res['body'], 'id="menuLinks"'),
+   'nahtlos heisst: dieselbe Navigation wie jede andere Seite hier');
+ok('Sie zeigt Name, Farbe und Passwort',
+   str_contains($res['body'], 'name="name"')
+   && str_contains($res['body'], 'class="colorpick"')
+   && str_contains($res['body'], 'name="change_password"'));
+ok('Und den eigenen Benutzernamen, der sich nicht aendern laesst',
+   str_contains($res['body'], '<code>' . h($lehrerName) . '</code>'),
+   $lehrerName);
+ok('Ohne JavaScript bedienbar: zwei gewoehnliche Formulare',
+   substr_count($res['body'], '<form method="post" class="card kontoform">') === 2);
+
+$altName = (string) qv('SELECT display_name FROM users WHERE id = ?', [$lehrerId]);
+$res = teacherRequest($base . '/teacher/konto.php', [
+    'save_profile' => '1', 'name' => 'Frau Umbenannt', 'color' => '#4f7cff',
+    'csrf' => $lehrerCsrf,
+]);
+ok('Der Name laesst sich hier aendern',
+   (string) qv('SELECT display_name FROM users WHERE id = ?', [$lehrerId])
+   === 'Frau Umbenannt');
+ok('Und steht danach gleich in der Leiste',
+   str_contains($res['body'], 'Frau Umbenannt'),
+   'sie traegt den Namen - sonst bliebe der alte stehen');
+
+$res = teacherRequest($base . '/teacher/konto.php', [
+    'save_profile' => '1', 'name' => '   ', 'color' => '#4f7cff', 'csrf' => $lehrerCsrf,
+]);
+ok('Ein leerer Name wird abgewiesen',
+   (string) qv('SELECT display_name FROM users WHERE id = ?', [$lehrerId])
+   === 'Frau Umbenannt'
+   && str_contains($res['body'], 'Bitte einen Namen angeben.'));
+
+$vorherHash = (string) qv('SELECT password_hash FROM users WHERE id = ?', [$lehrerId]);
+$res = teacherRequest($base . '/teacher/konto.php', [
+    'change_password' => '1', 'current' => 'falsch-falsch',
+    'password' => 'neuesgeheim', 'password2' => 'neuesgeheim', 'csrf' => $lehrerCsrf,
+]);
+ok('Ohne das bisherige Passwort geht nichts',
+   (string) qv('SELECT password_hash FROM users WHERE id = ?', [$lehrerId]) === $vorherHash
+   && str_contains($res['body'], 'Das bisherige Passwort stimmt nicht.'),
+   'ein liegengelassener Rechner im Lehrerzimmer ist kein Freibrief');
+
+$res = teacherRequest($base . '/teacher/konto.php', [
+    'change_password' => '1', 'current' => 'lehrerin123',
+    'password' => 'kurz', 'password2' => 'kurz', 'csrf' => $lehrerCsrf,
+]);
+ok('Und ein zu kurzes neues auch nicht',
+   (string) qv('SELECT password_hash FROM users WHERE id = ?', [$lehrerId]) === $vorherHash
+   && str_contains($res['body'], 'mindestens 6 Zeichen'));
+
+$res = teacherRequest($base . '/teacher/konto.php', [
+    'change_password' => '1', 'current' => 'lehrerin123',
+    'password' => 'einesneues1', 'password2' => 'einanderes2', 'csrf' => $lehrerCsrf,
+]);
+ok('Zwei verschiedene Eingaben ebenso wenig',
+   (string) qv('SELECT password_hash FROM users WHERE id = ?', [$lehrerId]) === $vorherHash
+   && str_contains($res['body'], 'nicht gleich'));
+
+/*
+ * Und die Regeln stehen nur einmal da - die App ruft dieselben auf. Sonst
+ * waere die Mindestlaenge hier sechs und dort irgendwann acht.
+ */
+ok('Beide Wege benutzen dieselben Regeln',
+   str_contains((string) file_get_contents(__DIR__ . '/../teacher/konto.php'),
+                'profile_change_password(')
+   && str_contains((string) file_get_contents(__DIR__ . '/../api/profile.php'),
+                   'profile_change_password('),
    'zwei Fassungen derselben Sache waeren bald zwei verschiedene');
+
+q('UPDATE users SET display_name = ? WHERE id = ?', [$altName, $lehrerId]);
 
 // ---- Der Weg in die Schueleransicht steht in der Zeile der Ueberschrift.
 

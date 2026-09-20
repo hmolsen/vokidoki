@@ -111,20 +111,60 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['release'])) {
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['catch_up'])) {
     teacher_csrf_check();
 
+    /*
+     * Derselbe Knopf, zwei Arten zu warten.
+     *
+     * Als Formular: antworten, weiterleiten, und waehrenddessen im
+     * Hintergrund die Saetze erzeugen. Als fetch aus dem Skript: gar nicht
+     * erst antworten, bevor es fertig ist - der Aufrufer wartet ohnehin
+     * nicht auf diese Antwort, er hat sie schon weggeworfen.
+     *
+     * Der Unterschied ist nicht Geschmack. "Antworten und weiterarbeiten"
+     * setzt voraus, dass die Antwort den Browser wirklich verlaesst,
+     * bevor der Vorgang endet - und genau das haelt nicht ueberall: Legt
+     * der Webserver eine Komprimierung darueber, ersetzt er die
+     * Laengenangabe durch eine stueckweise Uebertragung, und der Browser
+     * wartet trotzdem bis zum Schluss. Deshalb wartet hier niemand mehr
+     * auf eine Antwort, die noch Arbeit hinter sich herzieht.
+     */
+    $perSkript = unit_will_json();
+
     if (vocab_without_sentences($unitId) === 0) {
+        if ($perSkript) {
+            unit_json(['ok' => true, 'erzeugt' => 0, 'grund' => 'nichts offen']);
+        }
         teacher_flash('Es fehlt kein Satz.');
         teacher_redirect($zurueck);
     }
 
     $blocked = budget_block_reason((int) $user['id']);
     if ($blocked !== null) {
+        if ($perSkript) {
+            unit_json(['ok' => false, 'error' => $blocked], 429);
+        }
         teacher_flash($blocked, 'bad');
         teacher_redirect($zurueck);
     }
 
     if (!sentence_claim($unitId)) {
+        if ($perSkript) {
+            unit_json(['ok' => true, 'erzeugt' => 0, 'grund' => 'laeuft schon']);
+        }
         teacher_flash('Es läuft schon ein Satzlauf. Bitte abwarten.', 'bad');
         teacher_redirect($zurueck);
+    }
+
+    if ($perSkript) {
+        /*
+         * Das Skript hat diese Anfrage abgeschickt und sich nicht gemerkt.
+         * Sie darf also so lange dauern, wie sie dauert - aber sie darf
+         * nicht abbrechen, wenn der Tab zugeht, sonst bliebe die Einheit
+         * auf "laeuft" stehen.
+         */
+        ignore_user_abort(true);
+        set_time_limit(900);
+        generate_sentences_tracked($unitId);
+        unit_json(['ok' => true, 'erzeugt' => vocab_without_sentences($unitId) === 0 ? 1 : 0]);
     }
 
     teacher_flash('Die fehlenden Lückensätze entstehen gerade.');
@@ -313,31 +353,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_scanned']
      * Buchseite fotografiert ist ein Versehen, keine Absicht. Deshalb
      * werden zwei Zahlen zurueckgemeldet und nicht eine.
      */
-    $dazu     = vocab_append($unitId, $paare, $unit['code'] ?? null);
-    $doppelt  = count($paare) - $dazu;
-    $saetze   = $dazu > 0
-                && budget_block_reason((int) $user['id']) === null
-                && sentence_claim($unitId);
+    $dazu    = vocab_append($unitId, $paare, $unit['code'] ?? null);
+    $doppelt = count($paare) - $dazu;
 
-    $antwort = ['ok' => true, 'dazu' => $dazu, 'doppelt' => $doppelt];
-
-    if (!$saetze) {
-        unit_json($antwort);
-    }
-
-    // Antworten, dann weiterarbeiten: Die Lueckensaetze zu vierzig Vokabeln
-    // dauern Minuten, und solange soll niemand auf einen Spinner sehen.
-    $koerper = (string) json_encode($antwort, JSON_UNESCAPED_UNICODE);
-    http_response_code(200);
-    header('Content-Type: application/json; charset=utf-8');
-    header('Cache-Control: no-store');
-    header('Content-Length: ' . strlen($koerper));
-    echo $koerper;
-
-    teacher_flush_and_continue();
-    set_time_limit(900);
-    generate_sentences_tracked($unitId);
-    exit;
+    /*
+     * Und die Lueckensaetze? Hier nicht.
+     *
+     * Sie entstehen an genau einer Stelle: beim Knopf "Saetze nachtragen",
+     * der danebensteht und die fehlende Zahl nennt. Das ist dieselbe Regel
+     * wie beim Einlesen ueber die App - auch dort entsteht fuer eine
+     * Lehrkraft zunaechst kein Satz, weil sie erst spaeter freigibt.
+     *
+     * Und es ist die Regel, die haelt: Eine Antwort, hinter der noch eine
+     * halbe Minute Arbeit haengt, kommt nicht ueberall an. Sie braucht eine
+     * Laengenangabe, die unterwegs stehenbleibt, und eine Komprimierung im
+     * Webserver ersetzt die durch eine stueckweise Uebertragung - dann
+     * wartet der Browser bis zum Schluss und meldet irgendwann "keine
+     * Verbindung", obwohl alles gespeichert ist.
+     */
+    unit_json(['ok' => true, 'dazu' => $dazu, 'doppelt' => $doppelt,
+               'offen' => vocab_without_sentences($unitId)]);
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_vocab'])) {
@@ -382,41 +417,29 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_vocab']))
                       [$unitId]);
 
     /*
-     * Und gleich einen Lueckensatz dazu - sonst bleibt die neue Vokabel im
-     * Lueckentext stumm, und niemand sieht, warum. Dasselbe Muster wie
-     * "Saetze nachtragen": antworten, dann weiterarbeiten.
+     * Und hier hoert diese Anfrage auf.
+     *
+     * Sie hat einmal mehr getan: antworten, und dann noch den Lueckensatz
+     * zur neuen Vokabel erzeugen - eine halbe Minute Arbeit hinter einer
+     * Antwort, die angeblich schon draussen war. "Angeblich": Damit das
+     * traegt, muss die Antwort den Browser wirklich verlassen, bevor der
+     * Vorgang endet, und dafuer braucht es eine Laengenangabe, die
+     * unterwegs auch stehenbleibt. Legt der Webserver eine Komprimierung
+     * darueber, ersetzt er sie durch eine stueckweise Uebertragung, und
+     * der Browser wartet auf das Ende des Stroms - also bis der Satz
+     * fertig ist. Bei einem Zeitablauf dazwischen las sich das als "die
+     * Antwort kam nicht an", obwohl die Vokabel laengst drinstand. Wer das
+     * sah, tippte sie noch einmal.
+     *
+     * Jetzt zieht diese Antwort nichts mehr hinter sich her. Die Saetze
+     * holt eine zweite, eigene Anfrage - das Skript schickt sie ab und
+     * wartet nicht darauf, und ohne Skript holt sie der Knopf "Saetze
+     * nachtragen", der die fehlende Zahl ohnehin nennt.
      */
-    $saetze = budget_block_reason((int) $user['id']) === null && sentence_claim($unitId);
+    $offen = vocab_without_sentences($unitId);
 
     if (unit_will_json()) {
-        if (!$saetze) {
-            unit_json(['ok' => true, 'vokabel' => $neueVokabel]);
-        }
-
-        /*
-         * Antworten, dann weiterarbeiten: Die Zeile steht beim Tippenden
-         * schon, waehrend der Satz dazu noch entsteht.
-         */
-        $koerper = (string) json_encode(['ok' => true, 'vokabel' => $neueVokabel],
-                                        JSON_UNESCAPED_UNICODE);
-        http_response_code(200);
-        header('Content-Type: application/json; charset=utf-8');
-        header('Cache-Control: no-store');
-        header('Content-Length: ' . strlen($koerper));
-        echo $koerper;
-
-        teacher_flush_and_continue();
-        set_time_limit(900);
-        generate_sentences_tracked($unitId);
-        exit;
-    }
-
-    if ($saetze) {
-        teacher_flash(sprintf('„%s" ist dabei. Der Lückensatz entsteht gerade.', $f));
-        teacher_redirect_and_continue($zurueck);
-        set_time_limit(900);
-        generate_sentences_tracked($unitId);
-        exit;
+        unit_json(['ok' => true, 'vokabel' => $neueVokabel, 'offen' => $offen]);
     }
 
     teacher_flash(sprintf('„%s" ist dabei.', $f));
@@ -652,12 +675,23 @@ $fehlen = vocab_without_sentences($unitId);
             Nichts freigeben
         </button>
 
-        <?php if ($fehlen > 0 && $zustand['status'] !== SENTENCE_RUNNING): ?>
-            <button class="btn small secondary" name="catch_up" value="1"
-                    data-confirm="Für <?= $fehlen ?> Vokabeln fehlen noch Lückensätze. Jetzt nachholen? Das kostet.">
-                Sätze nachtragen (<?= $fehlen ?>)
-            </button>
-        <?php endif; ?>
+        <?php
+        /*
+         * Der Knopf steht immer da und ist ausgeblendet, wenn nichts
+         * fehlt - nicht weggelassen. Beim Tippen waechst die Zahl
+         * dahinter mit: Jede Vokabel, die dazukommt, hat noch keinen
+         * Lueckensatz, und das Skript traegt das nach, ohne die Seite neu
+         * zu laden. Einen Knopf, den es im HTML gar nicht gibt, kann es
+         * nicht einblenden.
+         */
+        $zeigen = $fehlen > 0 && $zustand['status'] !== SENTENCE_RUNNING;
+        ?>
+        <button class="btn small secondary" name="catch_up" value="1" id="nachtragen"
+                data-fehlen="<?= $fehlen ?>"
+                data-confirm="F&uuml;r <?= $fehlen ?> Vokabeln fehlen noch L&uuml;ckens&auml;tze. Jetzt nachholen? Das kostet."
+                <?= $zeigen ? '' : 'hidden' ?>>
+            S&auml;tze nachtragen (<span data-zahl><?= $fehlen ?></span>)
+        </button>
     </div>
 </form>
 <?php endif; /* $gesamt > 0 */ ?>

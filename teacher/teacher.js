@@ -30,20 +30,82 @@ function initMenues() {
     const menues = [...document.querySelectorAll('details.menue')];
     if (menues.length === 0) return;
 
-    menues.forEach((m) => {
-        // Zwei offene Schubladen zugleich waeren zwei Navigationen.
-        m.addEventListener('toggle', () => {
-            if (!m.open) return;
-            menues.forEach((a) => { if (a !== m) a.open = false; });
+    const teile = (m) => [m.querySelector('.schublade'), m.querySelector('.schleier')]
+        .filter(Boolean);
+
+    /*
+     * Vor jedem Oeffnen die Animation zuruecksetzen.
+     *
+     * Sie lief sonst genau einmal je Seite. Ein geschlossenes <details>
+     * nimmt seinen Inhalt inzwischen nicht mehr aus dem Baum, sondern
+     * versteckt ihn per content-visibility: Das Element bleibt dasselbe,
+     * seine Animation ist abgelaufen, und wieder sichtbar zu werden ist
+     * kein Grund, von vorn anzufangen. Beim zweiten Oeffnen stand die
+     * Schublade darum einfach da.
+     *
+     * animation: none, ein erzwungener Umbruch, dann zurueck auf die Regel
+     * aus dem Stilblatt - das ist der Weg, eine CSS-Animation neu zu
+     * starten, und er ist so alt wie CSS-Animationen.
+     */
+    const oeffnen = (m) => {
+        menues.forEach((a) => { if (a !== m && a.open) schliessen(a, true); });
+        m.classList.remove('zu');
+        m.open = true;
+        teile(m).forEach((el) => {
+            el.style.animation = 'none';
+            void el.offsetWidth;
+            el.style.animation = '';
         });
-        m.querySelector('[data-zu]')?.addEventListener('click', () => { m.open = false; });
+    };
+
+    /*
+     * Und wieder hinaus - das kann <details> von sich aus nicht.
+     *
+     * open = false nimmt den Inhalt sofort weg; es gibt dann nichts mehr,
+     * was hinausfliegen koennte. Also erst .zu setzen, die Animation
+     * abwarten und dann schliessen. Laeuft keine (reduzierte Bewegung,
+     * oder ein Browser, der getAnimations nicht kennt), passiert es
+     * sofort - eine Schublade, die haengenbleibt, waere schlimmer als
+     * eine, die springt.
+     */
+    const schliessen = (m, sofort = false) => {
+        if (!m.open || m.dataset.schliesst === '1') return;
+
+        const fertig = () => {
+            m.classList.remove('zu');
+            delete m.dataset.schliesst;
+            m.open = false;
+        };
+
+        if (sofort) { fertig(); return; }
+
+        m.dataset.schliesst = '1';
+        m.classList.add('zu');
+
+        const laeuft = teile(m).flatMap((el) => el.getAnimations?.() ?? []);
+        if (laeuft.length === 0) { fertig(); return; }
+        Promise.all(laeuft.map((a) => a.finished)).then(fertig, fertig);
+    };
+
+    menues.forEach((m) => {
+        /*
+         * Den Klick auf den Knopf selbst uebernehmen: Der Browser wuerde
+         * open sofort umlegen, und damit waere das Zuklappen vorbei, bevor
+         * es angefangen hat. Ohne Skript bleibt genau dieses Umlegen der
+         * Weg - hier wird es nur aufgeschoben, nicht ersetzt.
+         */
+        m.querySelector('summary')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (m.open) schliessen(m); else oeffnen(m);
+        });
+        m.querySelector('[data-zu]')?.addEventListener('click', () => schliessen(m));
     });
 
     document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
         const offen = menues.find((m) => m.open);
         if (!offen) return;
-        offen.open = false;
+        schliessen(offen);
         offen.querySelector('summary')?.focus();
     });
 }
@@ -833,6 +895,9 @@ function initVocabAdd() {
                 return;
             }
             einhaengen(json.vokabel);
+            // Jede neue Vokabel ist eine ohne Lueckensatz. Der Knopf
+            // daneben nennt die Zahl und taucht auf, sobald es eine gibt.
+            offeneSaetze(json.offen);
             fremd.value = '';
             deutsch.value = '';
             fremd.focus();
@@ -927,7 +992,94 @@ function initVocabAdd() {
     });
 }
 
+/**
+ * Wie viele Vokabeln noch ohne Lueckensatz sind.
+ *
+ * Der Knopf "Saetze nachtragen" steht immer im HTML und ist ausgeblendet,
+ * solange nichts fehlt. Beim Tippen waechst die Zahl mit - ohne das
+ * stuende nach zehn abgetippten Woertern immer noch "(0)" da, oder gar
+ * nichts.
+ */
+function offeneSaetze(anzahl) {
+    const knopf = document.getElementById('nachtragen');
+    if (!knopf || typeof anzahl !== 'number') return;
+
+    knopf.dataset.fehlen = String(anzahl);
+    knopf.hidden = anzahl === 0;
+    const zahl = knopf.querySelector('[data-zahl]');
+    if (zahl) zahl.textContent = String(anzahl);
+}
+
+/** Die Rueckfrage - sie nennt die Zahl, und die Zahl aendert sich. */
+const nachtragenFrage = (anzahl) =>
+    `Für ${anzahl} Vokabeln fehlen noch Lückensätze. Jetzt nachholen? Das kostet.`;
+
+/**
+ * Saetze nachtragen, ohne dass die Seite dabei haengt.
+ *
+ * Ohne Skript ist das ein gewoehnliches Formular: abschicken, weiterleiten,
+ * und der Server erzeugt die Saetze danach weiter. Mit Skript wird daraus
+ * eine Anfrage, auf deren Antwort wirklich gewartet wird - mit einem
+ * Spinner am Knopf, damit sichtbar ist, dass etwas laeuft.
+ *
+ * Der Umweg ueber "antworten und dann weiterarbeiten" ist hier
+ * ausdruecklich nicht gewollt. Er setzt voraus, dass die Antwort den
+ * Browser verlaesst, bevor der Vorgang endet, und das haelt nicht ueberall:
+ * Legt der Webserver eine Komprimierung darueber, ersetzt er die
+ * Laengenangabe durch eine stueckweise Uebertragung, und der Browser wartet
+ * trotzdem bis zum Schluss - nur ohne zu wissen, worauf.
+ */
+function initCatchUp() {
+    const knopf = document.getElementById('nachtragen');
+    const form  = knopf?.closest('form');
+    if (!knopf || !form) return;
+
+    /*
+     * Das data-confirm weg, sobald dieses Skript laeuft: Sonst fragt der
+     * allgemeine Hoerer oben UND dieser hier, also zweimal dasselbe. Im
+     * HTML bleibt es stehen, weil es dort die Rueckfrage fuer den Fall
+     * ohne Skript beschreibt.
+     */
+    knopf.removeAttribute('data-confirm');
+
+    knopf.addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (!confirm(nachtragenFrage(Number(knopf.dataset.fehlen) || 0))) return;
+
+        const text = knopf.innerHTML;
+        knopf.disabled = true;
+        knopf.classList.add('laeuft');
+        knopf.textContent = 'Die Sätze entstehen …';
+
+        const daten = new FormData(form);
+        daten.set('catch_up', '1');
+
+        try {
+            const res = await fetch(location.pathname + location.search, {
+                method: 'POST',
+                body: daten,
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'fetch' },
+            });
+            const json = await res.json();
+            if (!json.ok) alert(json.error || 'Das hat nicht geklappt.');
+        } catch {
+            /*
+             * Hier steht bewusst keine Behauptung darueber, was passiert
+             * ist: Die Anfrage kann durchgegangen und nur die Antwort
+             * verlorengegangen sein, und dann laufen die Saetze gerade.
+             */
+            alert('Die Antwort kam nicht an. Ein Neuladen zeigt, wie weit es ist.');
+        }
+        knopf.innerHTML = text;
+        knopf.classList.remove('laeuft');
+        knopf.disabled = false;
+        location.reload();
+    });
+}
+
 initVocabAdd();
+initCatchUp();
 
 // ------------------------------------------ Vokabel aendern
 

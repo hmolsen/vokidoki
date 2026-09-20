@@ -113,13 +113,39 @@ body.admin { background: var(--bg); }
  * Als Animation, nicht als Übergang: <details> blendet seinen Inhalt beim
  * Schliessen aus, und ein transition läuft auf einem Element, das gerade
  * erst entsteht, gar nicht erst an.
+ *
+ * Nur lief sie genau einmal je Seite. Ein geschlossenes <details> nimmt
+ * seinen Inhalt inzwischen nicht mehr aus dem Baum, sondern versteckt ihn
+ * per content-visibility - das Element bleibt dasselbe, und eine
+ * abgelaufene Animation fängt nicht von vorn an, bloss weil es wieder
+ * sichtbar wird. Beim zweiten Öffnen stand die Schublade also einfach da.
+ * teacher.js setzt sie deshalb vor jedem Öffnen zurück.
  */
 @keyframes schubladeLinks  { from { transform: translateX(-100%); } }
 @keyframes schubladeRechts { from { transform: translateX(100%); } }
 @keyframes schleierAuf     { from { opacity: 0; } }
 
+/*
+ * Und wieder hinaus.
+ *
+ * Das kann <details> von sich aus nicht: Beim Schliessen ist der Inhalt
+ * sofort weg, es gibt nichts mehr, was hinausfliegen könnte. Also macht
+ * teacher.js das Zuklappen selbst - erst .zu, dann, wenn die Animation
+ * durch ist, open = false. Ohne Skript bleibt es beim harten Schliessen,
+ * und das ist richtig so: Ein Menü, das sich ohne JavaScript nicht mehr
+ * zumachen liesse, wäre schlimmer als eines ohne Animation.
+ */
+.menue.zu > .schublade { animation: schubladeRausLinks .22s ease-in forwards; }
+.menue.zu.rechts > .schublade { animation: schubladeRausRechts .22s ease-in forwards; }
+.menue.zu > .schleier { animation: schleierZu .22s ease-in forwards; }
+
+@keyframes schubladeRausLinks  { to { transform: translateX(-100%); } }
+@keyframes schubladeRausRechts { to { transform: translateX(100%); } }
+@keyframes schleierZu          { to { opacity: 0; } }
+
 @media (prefers-reduced-motion: reduce) {
-    .menue > .schublade, .menue > .schleier { animation: none; }
+    .menue > .schublade, .menue > .schleier,
+    .menue.zu > .schublade, .menue.zu > .schleier { animation: none; }
 }
 
 /*
@@ -1346,6 +1372,37 @@ a.erweiternkarte, button.erweiternkarte {
     border-radius: var(--radius-sm);
 }
 .lupe form { margin: 0; text-align: center; }
+
+/* ------------------------------------------------- Das eigene Konto
+ *
+ * Zwei Formulare in Karten, Felder untereinander. Es lag einmal in der App;
+ * wer aus dem Menü dorthin ging, stand in einer anderen Anwendung, und der
+ * Zurück-Knopf führte an den Anfang der Kinderansicht.
+ */
+.kontoform label {
+    display: block;
+    margin: 0 0 4px;
+    font-weight: 600;
+    font-size: .92rem;
+}
+.kontoform label + p.tiny { margin-top: -6px; }
+/* display: block, damit der Knopf darunter beginnt und nicht neben dem
+   letzten Feld steht - ein <input> ist von Haus aus inline. */
+.kontoform input[type=text],
+.kontoform input[type=password] {
+    display: block;
+    width: 100%;
+    max-width: 380px;
+    margin: 0 0 14px;
+}
+.kontoform p.tiny { margin: 0 0 16px; max-width: 46em; }
+/* .btn ist in der App eine Zeile breit - dort steht je Karte genau einer.
+   Hier steht er unter einem Feld von 380 px und soll nicht laenger sein
+   als das, worauf er sich bezieht. */
+.kontoform .btn { display: inline-flex; width: auto; margin: 0; }
+
+/* Der Farbwähler klappt nach unten auf und darf die Karte nicht sprengen. */
+.kontofarbe { position: relative; margin: 0 0 16px; }
 
 /* ------------------------------------------------- Wen aufnehmen?
  *

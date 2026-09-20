@@ -334,10 +334,13 @@ function teacher_nav(array $user, ?int $kursId = null): void
     /*
      * Rechts dasselbe noch einmal, für das eigene Konto.
      *
-     * Die Einstellungen liegen in der App, nicht hier - Name, Farbe und
-     * Passwort sind dieselben, egal von welcher Seite man kommt, und eine
-     * zweite Fassung davon im Lehrkraft-Bereich wären zwei Orte für eine
-     * Sache.
+     * Es lag einmal in der App - Name, Farbe und Passwort sind dieselben,
+     * egal von welcher Seite man kommt, und eine zweite Fassung davon
+     * schien zwei Orte für eine Sache. In der Bedienung war es das
+     * Gegenteil: Wer hier drückte, stand in einer anderen Anwendung, und
+     * der Zurück-Knopf führte an den Anfang der Kinderansicht. Jetzt
+     * bleibt man hier; doppelt ist nur die Oberfläche, die Regeln stehen
+     * einmal in lib/profile.php.
      *
      * Und Abmelden ist ein Knopf, kein unterstrichenes Wort: Es tut etwas,
      * statt woandershin zu führen.
@@ -349,11 +352,11 @@ function teacher_nav(array $user, ?int $kursId = null): void
         </summary>
         <span class="schleier" data-zu></span>
         <nav class="schublade" aria-label="Einstellungen">
-            <a class="mitem" href="<?= h(url('/') . '#/konto') ?>">
+            <a class="mitem" href="<?= h(teacher_url('konto.php')) ?>">
                 <span class="micon" aria-hidden="true">&#128100;</span>
                 <span>Mein Profil</span>
             </a>
-            <a class="mitem" href="<?= h(url('/') . '#/konto/passwort') ?>">
+            <a class="mitem" href="<?= h(teacher_url('konto.php') . '#passwort') ?>">
                 <span class="micon" aria-hidden="true">&#128273;</span>
                 <span>Passwort ändern</span>
             </a>
