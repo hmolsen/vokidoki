@@ -171,8 +171,15 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 
-// Service Worker nur unter HTTPS bzw. localhost registrieren.
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+/*
+ * Service Worker nur in einem sicheren Kontext registrieren.
+ *
+ * Hier stand "https: oder localhost" - eine Aufzaehlung, die genau das
+ * nachbaut, was der Browser selbst schon weiss, und dabei 127.0.0.1
+ * vergisst. Der ist ebenfalls sicher, und ohne ihn liess sich der Kaltstart
+ * gar nicht pruefen: Die Browser-Suite laeuft unter dieser Adresse.
+ */
+if ('serviceWorker' in navigator && window.isSecureContext) {
     window.addEventListener('load', () => {
         navigator.serviceWorker
             // updateViaCache: 'none' ist hier das Entscheidende. Ohne das holt

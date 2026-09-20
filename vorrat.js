@@ -165,13 +165,25 @@ export function vorratAlter() {
     return Math.max(0, Math.floor(Date.now() / 1000) - (v.daten.geholt ?? 0));
 }
 
-/** Beim Abmelden fällt der Vorrat weg - er gehört diesem Kind. */
+/**
+ * Beim Abmelden fällt der Vorrat weg - er gehört diesem Kind.
+ *
+ * Und der gespeicherte Seitenrahmen mit. Er trägt den Namen dieses Kindes;
+ * wer sich abmeldet, soll ihn beim nächsten Start nicht wiedersehen, auch
+ * nicht ohne Netz.
+ */
 export function vorratVergessen() {
     try {
         localStorage.removeItem(vorratSchluessel());
         localStorage.removeItem(warteSchluessel());
     } catch { /* egal */ }
     vorrat = null;
+
+    try {
+        // Der Service Worker fängt diese Adresse ab und räumt; ohne ihn
+        // läuft sie ins Leere, und das ist dann auch richtig so.
+        fetch(`${VT.base}/?rahmen-weg=1`, { credentials: 'same-origin' }).catch(() => {});
+    } catch { /* egal */ }
 }
 
 // ----------------------------------------------------------------- Abfragen

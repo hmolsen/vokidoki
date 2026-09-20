@@ -11,6 +11,10 @@
  * einmal, auch wenn derselbe Stapel zweimal unterwegs war.
  */
 
+import { spawn } from 'node:child_process';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { browser, alsKind, ok, abschnitt, schlafe } from './browser.mjs';
 
 export async function pruefe(f, aus) {
@@ -157,7 +161,96 @@ export async function pruefe(f, aus) {
            nachher + ' liegen noch');
 
         if (aus) await b.bild('vorrat-offline');
+
+        await flugmodus(false);
     } finally {
         b.schliessen();
+    }
+}
+
+/*
+ * Kaltstart: Die App oeffnet auch ohne Server.
+ *
+ * Das braucht einen eigenen Abschnitt, einen eigenen Server und eine eigene
+ * Portnummer - und zwar aus einem Grund, der eine Stunde gekostet hat:
+ * Network.emulateNetworkConditions schaltet nur die SEITE in den Flugmodus,
+ * nicht den Service Worker. Der hat seinen eigenen Netzzugang und erreichte
+ * den Server munter weiter. Der Abschnitt darueber lief deshalb in der
+ * ersten Fassung gruen durch, auch als der Rueckfall auf den
+ * zwischengespeicherten Rahmen testweise ganz entfernt war - er prueft das
+ * Ueben ohne Netz, nicht das Oeffnen.
+ *
+ * Hier wird der Server also wirklich abgeschaltet. Dafuer ein eigener: Den
+ * auf 8123 teilen sich alle anderen Pruefungen, und ein eigener Port ist
+ * ausserdem eine eigene Herkunft - die Registrierung des Service Workers
+ * faellt damit nicht mit der aus dem Abschnitt darueber zusammen.
+ */
+export async function pruefeKaltstart(f, aus) {
+    abschnitt('Kaltstart ohne Server');
+
+    const wurzel = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+    const port   = 8131;
+    const basis  = `http://127.0.0.1:${port}`;
+
+    const server = spawn('php', ['-S', `127.0.0.1:${port}`, '-t', wurzel],
+                         { cwd: wurzel, stdio: 'ignore' });
+    let laeuft = true;
+    const serverWeg = () => { if (laeuft) { laeuft = false; server.kill(); } };
+
+    // Dem Server einen Augenblick geben, sonst laeuft der erste Abruf ins Leere.
+    await schlafe(900);
+
+    const b = await browser({ port: 9413, breite: 420, hoehe: 900, aus });
+    try {
+        await alsKind(b, basis, f.kind, f.passwort);
+        await b.geh(basis + '/', 2200);
+
+        const bereit = await b.js(`navigator.serviceWorker.ready
+            .then(() => 'da').catch(() => 'keiner')`);
+        ok('Ein Service Worker uebernimmt die Seite', bereit === 'da', bereit);
+
+        // Noch einmal laden: Beim ersten Mal lief der Abruf am Service
+        // Worker vorbei, er uebernimmt erst danach.
+        await b.neuLaden(2000);
+
+        ok('Der Seitenrahmen liegt im Zwischenspeicher',
+           (await b.js(`caches.open('vokabeltrainer-v5')
+                .then((c) => c.match('./?rahmen')).then((r) => !!r)`)) === true,
+           'ohne ihn laedt ohne Netz nicht einmal die erste Seite');
+        ok('Und der Vorrat auch',
+           (await b.js(`Object.keys(localStorage).some((k) => k.startsWith('vt-vorrat-'))`))
+           === true);
+
+        // ---- Und jetzt ist der Server weg. Wirklich weg.
+
+        serverWeg();
+        await schlafe(1200);
+        const tot = await b.js(`fetch('${basis}/api/meta.php?action=version',
+            { headers: { 'X-Vokabeltrainer': '1' } })
+            .then(() => 'kam durch').catch(() => 'nichts mehr da')`);
+        ok('Der Server ist wirklich aus', tot === 'nichts mehr da', tot);
+
+        await b.neuLaden(3000);
+        const kalt = await b.js(`({
+            titel:   document.title,
+            kacheln: document.querySelectorAll('.tile[data-lang]').length,
+            angemeldet: !!window.VT?.user,
+        })`);
+
+        ok('Die App oeffnet trotzdem',
+           kalt.angemeldet && !kalt.titel.includes('Keine Verbindung'),
+           kalt.titel);
+        ok('Und die Kurse stehen da', kalt.kacheln > 0,
+           kalt.kacheln + ' Kacheln - der Vorrat traegt sie');
+
+        await b.geh(basis + '/#/quiz/' + f.unit, 2000);
+        ok('Auch Ueben laeuft ohne Server',
+           (await b.js(`document.querySelectorAll('.option').length`)) > 0,
+           'vom Kaltstart bis zur ersten Frage ohne eine einzige Anfrage');
+
+        if (aus) await b.bild('kaltstart');
+    } finally {
+        b.schliessen();
+        serverWeg();
     }
 }
