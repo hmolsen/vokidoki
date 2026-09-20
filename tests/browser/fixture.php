@@ -161,6 +161,8 @@ echo json_encode([
     'kurs2'      => $kurs2Id,
     'sprache'    => (int) $kurs['language_id'],
     'kind'       => 'nora.w',
+    // Fuer den Abschnitt, der im Admin filtert.
+    'adminPasswort' => (string) cfg('admin_bootstrap_password', ''),
     'unit'       => $unitId,
     'vokabeln'   => count($woerter),
     'frei'       => 5,

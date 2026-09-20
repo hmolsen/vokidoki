@@ -108,7 +108,7 @@ switch (action()) {
                JOIN courses co ON co.id = u.course_id
                JOIN course_members m ON m.course_id = co.id AND m.user_id = ?
               WHERE u.language_id IN ($platz)
-              ORDER BY u.created_at DESC, u.id DESC",
+              ORDER BY u.position, u.id",
             array_merge([$uid], $sprachIds),
         );
 

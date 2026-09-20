@@ -66,8 +66,23 @@ function password_generate(array $vermeiden = []): ?string
         $a = $adjektive[random_int(0, count($adjektive) - 1)];
         $t = $tiere[random_int(0, count($tiere) - 1)];
 
+        /*
+         * Bindestrich statt Leerzeichen.
+         *
+         * Ein Leerzeichen im Passwort ist auf einer Tablet-Tastatur die
+         * grosse Taste unten, und wer sie zweimal trifft, kommt nicht
+         * hinein. Der Bindestrich steht daneben und laesst sich nicht
+         * verdoppeln, ohne dass man es sieht. Ausserdem markiert ein
+         * Doppelklick das ganze Wort statt nur der Haelfte - auf dem Zettel
+         * steht es damit als EIN Wort da.
+         *
+         * Nur fuer neue: Was vergeben ist, bleibt, wie es ist. Ein Kind mit
+         * "mueder Gepard" auf dem Zettel soll sich weiter anmelden koennen,
+         * und password_tidy() kuemmert sich unveraendert um die
+         * Leerzeichen darin.
+         */
         $wort = $a['word'] . password_ending((string) ($t['gender'] ?? 'm'))
-              . ' ' . $t['word'];
+              . '-' . $t['word'];
 
         if (!in_array($wort, $vermeiden, true)) {
             return $wort;

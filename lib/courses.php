@@ -462,7 +462,7 @@ function courses_for_teacher(int $userId, int $schoolId): array
                     AND v.position < t.released_position) AS released,
                 (SELECT t.id FROM units t
                   WHERE t.course_id = co.id
-                  ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS latest_unit
+                  ORDER BY t.position DESC, t.id DESC LIMIT 1) AS latest_unit
            FROM courses co
            JOIN course_members mine ON mine.course_id = co.id
                                    AND mine.user_id = ?
@@ -584,7 +584,90 @@ function course_units_list(int $courseId): array
                   WHERE v.unit_id = t.id AND v.position < t.released_position) AS released_count
            FROM units t
           WHERE t.course_id = ?
-          ORDER BY t.created_at DESC',
+          ORDER BY t.position, t.id',
         [$courseId],
     );
+}
+
+/**
+ * Die nächste freie Position in einem Kurs.
+ *
+ * Eine neue Lerneinheit kommt ans Ende - dorthin, wo man sie sucht. Die
+ * Reihenfolge in der Tabelle ist dieselbe, die die Klasse in ihrer App
+ * sieht, und was zuletzt entstanden ist, ist meistens auch das, was zuletzt
+ * drankommt.
+ *
+ * Ein Kurs ohne Kennung (der Altbestand aus der Familienzeit) bekommt
+ * ebenfalls eine laufende Nummer - sonst stünden dort alle auf null und
+ * sortierten sich nach Zufall.
+ */
+function unit_next_position(?int $courseId): int
+{
+    $max = $courseId === null
+        ? qv('SELECT MAX(position) FROM units WHERE course_id IS NULL')
+        : qv('SELECT MAX(position) FROM units WHERE course_id = ?', [$courseId]);
+
+    return ((int) ($max ?? 0)) + 1;
+}
+
+/**
+ * Die Lerneinheiten eines Kurses in eine neue Reihenfolge bringen.
+ *
+ * Bekommt die Kennungen in der gewünschten Reihenfolge. Was nicht zu diesem
+ * Kurs gehört, wird übergangen - die Liste kommt aus dem Browser, und was
+ * von dort kommt, darf nie bestimmen, WELCHE Zeilen angefasst werden,
+ * sondern nur, in welcher Reihenfolge die eigenen stehen.
+ *
+ * Fehlt etwas in der Liste (zwei Lehrkräfte sortieren gleichzeitig, eine
+ * legt dabei eine neue an), hängt es hinten an. Verlorengehen darf nichts.
+ *
+ * @param int[] $reihenfolge
+ * @return int Wie viele Einheiten neu numeriert wurden.
+ */
+function course_units_reorder(int $courseId, array $reihenfolge): int
+{
+    $eigene = [];
+    foreach (qa('SELECT id FROM units WHERE course_id = ? ORDER BY position, id',
+                [$courseId]) as $r) {
+        $eigene[(int) $r['id']] = true;
+    }
+
+    $sortiert = [];
+    foreach ($reihenfolge as $id) {
+        $id = (int) $id;
+        if (isset($eigene[$id]) && !in_array($id, $sortiert, true)) {
+            $sortiert[] = $id;
+        }
+    }
+    // Was die Liste nicht nannte, hinten dran - in der bisherigen Ordnung.
+    foreach (array_keys($eigene) as $id) {
+        if (!in_array($id, $sortiert, true)) {
+            $sortiert[] = $id;
+        }
+    }
+
+    if ($sortiert === []) {
+        return 0;
+    }
+
+    $pdo = db();
+    $eigen = !$pdo->inTransaction();
+    if ($eigen) {
+        $pdo->beginTransaction();
+    }
+    try {
+        $st = $pdo->prepare('UPDATE units SET position = ? WHERE id = ? AND course_id = ?');
+        foreach ($sortiert as $i => $id) {
+            $st->execute([$i + 1, $id, $courseId]);
+        }
+        if ($eigen) {
+            $pdo->commit();
+        }
+        return count($sortiert);
+    } catch (Throwable $e) {
+        if ($eigen && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
 }

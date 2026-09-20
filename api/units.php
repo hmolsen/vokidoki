@@ -71,7 +71,7 @@ switch (action()) {
                FROM units u
                JOIN course_members m ON m.course_id = u.course_id AND m.user_id = ?
               WHERE u.language_id = ?
-              ORDER BY u.created_at DESC",
+              ORDER BY u.position, u.id",
             [$uid, $uid, $uid, $uid, $uid, (int) $lang['id']],
         );
         foreach ($rows as &$r) {

@@ -626,7 +626,15 @@ img.cflag {
  */
 .pill.bad  { background: var(--bad-bg);  color: var(--bad); }
 .pill.halb { background: var(--warn-bg); color: var(--warn); }
-.pill.leer { font-weight: 400; }
+/*
+ * "noch keine Vokabeln" ist eine Blase wie die anderen, nur unbetont.
+ *
+ * Sie hiess einmal .pill.leer - und .leer gehoert schon dem gestrichelten
+ * Kasten fuer Leerzustaende, mit 18 px Polster und einem Rahmen. Die Blase
+ * erbte das und war doppelt so hoch wie ihre Nachbarn; im Quelltext sah man
+ * es nicht, in der Tabelle sofort.
+ */
+.pill.ohne { font-weight: 400; }
 
 /*
  * Aktionen als Knoepfe statt als Textlinks.
@@ -1105,6 +1113,43 @@ a.erweiternkarte, button.erweiternkarte {
 .handform label { display: block; margin-bottom: 4px; }
 .handform input[type=text] { margin: 0 0 12px; width: 100%; }
 .handform .btn { margin: 0; }
+
+/* ------------------------------------------------- Lerneinheiten sortieren
+ *
+ * Die Reihenfolge in dieser Tabelle ist die, in der die Klasse ihre
+ * Lerneinheiten sieht. Der Griff steht ganz vorn in einer eigenen Spalte -
+ * damit klar ist, woran man zieht, und damit ein Druck darauf nicht die
+ * Zeile öffnet.
+ */
+/* Die Spalte so breit wie ihr Inhalt: Mit Skript steht dort nur der Griff,
+   ohne Skript zwei Pfeile. Eine feste Breite waere fuer das eine zu viel
+   und fuer das andere zu wenig. */
+th.griffspalte { width: 1%; }
+td.griff {
+    white-space: nowrap;
+    color: var(--text-soft);
+}
+.anfasser {
+    display: none;
+    font-size: 1.15rem;
+    line-height: 1;
+    padding: 0 10px 0 2px;
+    cursor: grab;
+    user-select: none;
+}
+.anfasser:active { cursor: grabbing; }
+tr:hover > .griff .anfasser { color: var(--text); }
+/* Erst wenn das Skript läuft - ohne es wird nicht gezogen, sondern
+   gedrückt, und ein Griff, der nichts tut, ist eine Falle. */
+table.sortierbar .anfasser { display: inline-block; }
+table.sortierbar tr[data-unit] { cursor: default; }
+table.sortierbar tr.zieht { opacity: .4; }
+table.sortierbar.sichert { opacity: .7; }
+
+@media (max-width: 720px) {
+    /* Am Telefon wird nicht gezogen - dort bleiben die Pfeile stehen. */
+    th.griffspalte { width: auto; }
+}
 
 /* ------------------------------------------------- Die Ablage vor dem Einlesen
  *

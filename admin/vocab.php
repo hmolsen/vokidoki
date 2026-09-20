@@ -360,7 +360,14 @@ $languages = $userId > 0
     ? qa(
         // Wie in admin/sentences.php: "Kind" meint jetzt Mitgliedschaft,
         // nicht Besitz.
-        'SELECT DISTINCT l.id, l.name, l.flag_emoji, l.code,
+        /*
+         * Sortiert und beschriftet nach KURS, nicht nach Sprache.
+         *
+         * Im Admin heisst das Ding seit dem Schulumbau Kurs: "Englisch - 8c"
+         * unterscheidet sich von "Englisch - 9a", "Englisch" nicht. Wer zwei
+         * gleichnamige Sprachen vor sich hatte, musste raten.
+         */
+        'SELECT DISTINCT l.id, COALESCE(co.name, l.name) AS name, l.flag_emoji, l.code,
                 (SELECT COUNT(*) FROM units t WHERE t.language_id = l.id) AS units,
                 (SELECT COUNT(*) FROM vocab v
                    JOIN units t2 ON t2.id = v.unit_id
@@ -369,7 +376,7 @@ $languages = $userId > 0
            JOIN courses co       ON co.language_id = l.id
            JOIN course_members m ON m.course_id = co.id
           WHERE m.user_id = ?
-          ORDER BY l.name',
+          ORDER BY name',
         [$userId],
       )
     : [];
@@ -380,7 +387,7 @@ $units = $langId > 0
            FROM units u LEFT JOIN vocab v ON v.unit_id = u.id
           WHERE u.language_id = ?
           GROUP BY u.id, u.title
-          ORDER BY u.created_at DESC',
+          ORDER BY u.position, u.id',
         [$langId],
       )
     : [];
@@ -494,7 +501,7 @@ foreach ($languages as $l) {
             ['id' => (int) $u['id'], 'label' => $u['display_name']], $users),
         $userId, [], 'user') ?>
 
-    <?= filter_chips('Sprache',
+    <?= filter_chips('Kurs',
         array_map(static fn (array $l): array => [
             'id'    => (int) $l['id'],
             'label' => (string) $l['name'],
@@ -577,13 +584,43 @@ foreach ($languages as $l) {
                maxlength="128" style="width:280px;margin:0">
     </div>
 
-    <table class="data">
+    <?php
+    /*
+     * Eine Suche gab es hier gar nicht - bei einer Lerneinheit mit
+     * zweihundert Vokabeln hiess "die eine finden" scrollen und lesen.
+     *
+     * Sie filtert im Browser und schickt nichts ab: Was hier steht, IST die
+     * ganze Lerneinheit, es gibt also keine zweite Seite, auf der noch
+     * etwas liegen koennte. Ohne JavaScript steht das Feld da und tut
+     * nichts - dann ist die Liste eben so lang, wie sie ist, und
+     * vollstaendig.
+     */
+    ?>
+    <div class="inline" style="margin-bottom:10px">
+        <label for="vokabelsuche" style="margin:0">Suche</label>
+        <input type="search" id="vokabelsuche" placeholder="Wort, Hinweis oder Kategorie"
+               style="width:260px;margin:0" autocomplete="off"
+               data-filter-ziel="vokabelliste" data-filter-zaehler="vokabelzaehler">
+        <span class="tiny muted" id="vokabelzaehler"></span>
+    </div>
+
+    <table class="data" id="vokabelliste">
         <tr>
             <th>Fremdsprache</th><th>Deutsch</th><th>Kategorie</th><th>Hinweis</th>
             <th class="num">richtig</th><th class="num">falsch</th><th>Stand</th><th></th>
         </tr>
         <?php foreach ($vocab as $v): ?>
-            <tr>
+            <?php
+            // Wonach der Sofortfilter sucht - als Attribut, weil in den
+            // Zellen Eingabefelder stehen und deren Inhalt nicht zum Text
+            // des Elements gehoert.
+            $suchtext = mb_strtolower(implode(' ', [
+                (string) $v['term_foreign'], (string) $v['term_native'],
+                (string) ($v['note'] ?? ''),
+                (string) (WORD_TYPES[$v['word_type'] ?? '']['label'] ?? ''),
+            ]));
+            ?>
+            <tr data-suchtext="<?= h($suchtext) ?>">
                 <td><input type="text" name="f[<?= (int) $v['id'] ?>]" value="<?= h($v['term_foreign']) ?>" maxlength="255"></td>
                 <td><input type="text" name="n[<?= (int) $v['id'] ?>]" value="<?= h($v['term_native']) ?>" maxlength="255"></td>
                 <td class="wtcell">

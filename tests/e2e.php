@@ -1647,11 +1647,16 @@ ok('Gemeldetes steht vor dem Rest',
    $posGemeldet !== false, 'keine gemeldete Zeile gefunden');
 
 $nur = http($base . '/admin/sentences.php?flagged=1')['body'];
+/*
+ * Die Zeilen tragen jetzt ihren Suchtext mit - fuer den Sofortfilter, der
+ * beim Tippen filtert, statt die Seite neu zu laden. Gezaehlt wird deshalb
+ * ueber data-suchtext und nicht mehr ueber den rohen Zeilenanfang.
+ */
 ok('Der Filter zeigt nur Gemeldetes',
-   substr_count($nur, '<tr class="flagged"') === 1
-   && substr_count($nur, '<tr>') <= 1,
-   substr_count($nur, '<tr class="flagged"') . ' gemeldet, '
-   . substr_count($nur, '<tr>') . ' uebrige');
+   substr_count($nur, 'class="flagged"') === 1
+   && substr_count($nur, '<tr data-suchtext=') === 1,
+   substr_count($nur, 'class="flagged"') . ' gemeldet, '
+   . substr_count($nur, '<tr data-suchtext=') . ' Zeilen');
 
 // Eine Meldung kann auch unbegruendet sein.
 $res = adminPost('sentences.php', ['clear_flags' => $flagSatz]);
@@ -1861,9 +1866,14 @@ $zeile = static function (string $body, string $label): array {
     return array_map(static fn (string $l): string => html_entity_decode($l), $links[1]);
 };
 
-$sprachLinks = $zeile($res['body'], 'Sprache');
-ok('Die Sprachzeile hat Knoepfe', $sprachLinks !== []);
-ok('Beim Sprachwechsel faellt die Lerneinheit weg',
+/*
+ * Die Zeile heisst "Kurs", nicht "Sprache": Im Admin ist das Ding seit dem
+ * Schulumbau ein Kurs, und "Englisch - 8c" unterscheidet sich von
+ * "Englisch - 9a", waehrend "Englisch" das nicht tut.
+ */
+$sprachLinks = $zeile($res['body'], 'Kurs');
+ok('Die Kurszeile hat Knoepfe', $sprachLinks !== []);
+ok('Beim Kurswechsel faellt die Lerneinheit weg',
    $sprachLinks !== [] && !array_filter($sprachLinks,
        static fn (string $l): bool => str_contains($l, 'unit=')),
    implode(' ', $sprachLinks));
@@ -2170,13 +2180,24 @@ $genus   = array_column($tiere, 'gender', 'word');
 $erzeugt = [];
 $falsch  = null;
 
+/*
+ * Bindestrich statt Leerzeichen.
+ *
+ * Ein Leerzeichen im Passwort ist auf einer Tablet-Tastatur die grosse
+ * Taste unten, und wer sie zweimal trifft, kommt nicht hinein. Der
+ * Bindestrich laesst sich nicht unsichtbar verdoppeln, und ein Doppelklick
+ * markiert das ganze Wort statt nur der Haelfte.
+ *
+ * Nur fuer neue: Was vergeben ist, bleibt. Weiter unten steht die Probe
+ * dafuer.
+ */
 for ($i = 0; $i < 300; $i++) {
     $pw = password_generate();
-    if ($pw === null || !str_contains($pw, ' ')) {
+    if ($pw === null || !str_contains($pw, '-')) {
         $falsch = var_export($pw, true);
         break;
     }
-    [$adj, $tier] = explode(' ', $pw, 2);
+    [$adj, $tier] = explode('-', $pw, 2);
     if (!isset($genus[$tier])) {
         $falsch = $pw;
         break;
@@ -2190,11 +2211,23 @@ for ($i = 0; $i < 300; $i++) {
 }
 
 ok('300 Passwörter sind grammatisch richtig gebeugt', $falsch === null, (string) $falsch);
-ok('Sie bestehen aus genau zwei Wörtern ohne Ziffern',
+ok('Sie bestehen aus zwei Wörtern mit Bindestrich, ohne Ziffern',
    $erzeugt !== [] && array_filter($erzeugt,
-       static fn ($p) => preg_match('/^\p{L}+ \p{L}+$/u', $p) !== 1) === []);
+       static fn ($p) => preg_match('/^\p{L}+-\p{L}+$/u', $p) !== 1) === []);
+ok('Und keines trägt noch ein Leerzeichen',
+   array_filter($erzeugt, static fn ($p) => str_contains($p, ' ')) === [],
+   'auf einer Tablet-Tastatur die grosse Taste unten - zweimal getroffen, und das Kind kommt nicht hinein');
 ok('Sie wiederholen sich nicht ständig',
    count(array_unique($erzeugt)) > 250, count(array_unique($erzeugt)) . ' verschiedene');
+
+/*
+ * Was vergeben ist, bleibt. password_tidy() raeumt weiterhin Leerzeichen
+ * auf - ein Kind, dessen Zettel "mueder Gepard" nennt, muss sich damit
+ * weiter anmelden koennen, auch wenn neue Passwörter anders aussehen.
+ */
+ok('Ein altes Passwort mit Leerzeichen bleibt tippbar',
+   password_tidy('  müder   Gepard ') === 'müder Gepard',
+   '[' . password_tidy('  müder   Gepard ') . ']');
 
 // Eine Klassenliste soll keine zwei gleichen Passwörter enthalten.
 $klasse = [];
@@ -2940,8 +2973,14 @@ ok('Das Feld heisst nach der Sprache, nicht "Fremdsprache"',
  * die Tabelle von oben sehen. Das Formular antwortet auf ein fetch mit
  * der frischen Zeile.
  */
+/*
+ * Die beiden Helfer stehen jetzt in _boot.php, nicht mehr in unit.php:
+ * Seit die Kursseite ihre Reihenfolge per fetch sichert, brauchen zwei
+ * Seiten sie - und zwei Abschriften waeren bald zwei verschiedene
+ * Antworten.
+ */
 ok('Das Anlegen antwortet auch mit einer Zeile statt einer Seite',
-   str_contains((string) file_get_contents(__DIR__ . '/../teacher/unit.php'),
+   str_contains((string) file_get_contents(__DIR__ . '/../teacher/_boot.php'),
                 'function unit_will_json'));
 $jsonAntwort = freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
     'add_vocab' => '1', 'unit_id' => $freiUnit,
@@ -5149,7 +5188,7 @@ ok('Die Antwort ist die frische Zeile, keine ganze Seite',
 ok('Mit Name, Benutzername und Anfangspasswort',
    ($res['json']['kind']['name'] ?? '') === 'Fritz B.'
    && preg_match('/^fritz\.b\d*$/', (string) ($res['json']['kind']['username'] ?? '')) === 1
-   && preg_match('/^\p{L}+ \p{L}+$/u', (string) ($res['json']['kind']['password'] ?? '')) === 1,
+   && preg_match('/^\p{L}+-\p{L}+$/u', (string) ($res['json']['kind']['password'] ?? '')) === 1,
    json_encode($res['json']['kind'] ?? null));
 ok('Und das Kind ist wirklich in der Klasse',
    count(class_members_list($klasseId)) === $vorher + 1);
@@ -7071,9 +7110,14 @@ preg_match('/<table class="data courses rowlink" id="einheiten">.*?<\/table>/s',
            $res['body'], $etm);
 $etab = $etm[0] ?? '';
 
-ok('Drei Spalten, nicht fuenf',
-   preg_match_all('/<th[\s>]/', $etab) === 3,
-   preg_match_all('/<th[\s>]/', $etab) . ' statt 3');
+/*
+ * Vier Spalten: Griff, Titel, Freigegeben, Pfeil. Der Griff kam dazu, als
+ * die Reihenfolge von Hand legbar wurde - sie ist dieselbe, in der die
+ * Klasse die Lerneinheiten sieht.
+ */
+ok('Vier Spalten, nicht fuenf',
+   preg_match_all('/<th[\s>]/', $etab) === 4,
+   preg_match_all('/<th[\s>]/', $etab) . ' statt 4');
 ok('Die Vokabelzahl steht nicht mehr als eigene Spalte da',
    !str_contains($etab, '>Vokabeln</th>'),
    'sie steht in "n von m" schon drin');
@@ -7089,8 +7133,17 @@ ok('Und "alle" steht nirgends mehr',
    !str_contains($etab, '>alle<') && !str_contains($etab, 'noch keine</span>'),
    'eine Form fuer eine Auskunft');
 ok('Eine Lerneinheit ohne Vokabeln sagt das statt einer Zahl',
-   str_contains($etab, '<span class="pill leer">noch keine Vokabeln</span>'),
+   str_contains($etab, '<span class="pill ohne">noch keine Vokabeln</span>'),
    '"0 von 0" waere keine Antwort');
+/*
+ * Nicht ".pill.leer": .leer gehoert schon dem gestrichelten Kasten fuer
+ * Leerzustaende, mit 18 px Polster und einem Rahmen. Die Blase erbte das
+ * und war doppelt so hoch wie ihre Nachbarn - im Quelltext sah man es
+ * nicht, in der Tabelle sofort.
+ */
+ok('Und erbt dabei nicht den Leerzustands-Kasten',
+   !str_contains($etab, 'pill leer'),
+   'zwei Bedeutungen fuer einen Klassennamen');
 
 /*
  * Und der Titel: Die Sprache stand als eigene Zeile unter dem Kursnamen -
@@ -7604,6 +7657,237 @@ ok('Ein anderes Konto bekommt sein eigenes Buendel',
 
 q('DELETE FROM answer_receipts WHERE user_id = ?', [$userId]);
 
+section('Die Reihenfolge der Lerneinheiten');
+
+/*
+ * Sie sortierten sich nach dem Anlegedatum, neueste zuerst. Das ist die
+ * Reihenfolge, in der sie ENTSTANDEN sind, und die hat mit der Reihenfolge,
+ * in der sie DRANKOMMEN, nichts zu tun: Wer Unit 7 vor Unit 3 fotografiert,
+ * weil die Seite gerade aufgeschlagen war, bekam sie auch so vorgesetzt -
+ * und die Klasse sah sie genauso.
+ */
+$roLehrer = 'rolehr_' . bin2hex(random_bytes(3));
+q('INSERT INTO users (school_id, username, display_name, password_hash, color, role, can_import)
+   VALUES (?, ?, ?, ?, ?, ?, 1)',
+  [(int) qv('SELECT school_id FROM users WHERE id = ?', [$userId]),
+   $roLehrer, 'Frau Reihe', password_hash('lehrerin123', PASSWORD_DEFAULT),
+   '#4f7cff', ROLE_TEACHER]);
+$roLehrerId = (int) db()->lastInsertId();
+
+$roKlasse = class_create((int) qv('SELECT school_id FROM users WHERE id = ?', [$userId]),
+                         'Reihe' . bin2hex(random_bytes(2)));
+$roKurs = course_create(q1('SELECT * FROM users WHERE id = ?', [$roLehrerId]),
+                        'Reihisch' . bin2hex(random_bytes(2)), "\u{1F310}",
+                        (int) $roKlasse['id'], '');
+$roKursId = (int) $roKurs['id'];
+$roLang   = (int) $roKurs['language_id'];
+
+/*
+ * Drei Einheiten, absichtlich in der "falschen" Reihenfolge angelegt -
+ * created_at zaehlt aufwaerts, die Namen nicht.
+ */
+$roIds = [];
+foreach (['Unit 7', 'Unit 3', 'Unit 5'] as $titel) {
+    q('INSERT INTO units (language_id, course_id, title, released_position, position)
+       VALUES (?, ?, ?, 0, ?)',
+      [$roLang, $roKursId, $titel, unit_next_position($roKursId)]);
+    $roIds[$titel] = (int) db()->lastInsertId();
+    // Ein paar Sekunden Abstand, damit created_at sich unterscheidet.
+    q('UPDATE units SET created_at = DATE_ADD(created_at, INTERVAL ? SECOND) WHERE id = ?',
+      [count($roIds), $roIds[$titel]]);
+}
+
+$reihe = static fn (): array => array_column(
+    course_units_list($roKursId), 'title');
+
+ok('Neue Lerneinheiten stehen hinten',
+   $reihe() === ['Unit 7', 'Unit 3', 'Unit 5'],
+   implode(', ', $reihe()) . ' - wer eine anlegt, sucht sie am Ende');
+
+ok('Und zwar mit laufender Nummer',
+   array_column(course_units_list($roKursId), 'position') === [1, 2, 3],
+   implode(',', array_column(course_units_list($roKursId), 'position')));
+
+// ---- Umsortieren.
+
+$neueReihe = [$roIds['Unit 3'], $roIds['Unit 5'], $roIds['Unit 7']];
+ok('Drei Einheiten lassen sich neu ordnen',
+   course_units_reorder($roKursId, $neueReihe) === 3);
+ok('Und stehen danach so da', $reihe() === ['Unit 3', 'Unit 5', 'Unit 7'],
+   implode(', ', $reihe()));
+
+/*
+ * Was die Liste nicht nennt, geht nicht verloren. Zwei Lehrkraefte
+ * sortieren gleichzeitig, eine legt dabei eine neue an - die faellt sonst
+ * auf Position null und landet stillschweigend ganz oben.
+ */
+q('INSERT INTO units (language_id, course_id, title, released_position, position)
+   VALUES (?, ?, ?, 0, ?)',
+  [$roLang, $roKursId, 'Unit 9', unit_next_position($roKursId)]);
+$roIds['Unit 9'] = (int) db()->lastInsertId();
+
+course_units_reorder($roKursId, [$roIds['Unit 5'], $roIds['Unit 3']]);
+ok('Was die Liste nicht nennt, haengt hinten an',
+   $reihe() === ['Unit 5', 'Unit 3', 'Unit 7', 'Unit 9'],
+   implode(', ', $reihe()));
+
+/*
+ * Und eine untergeschobene Kennung aendert nichts. Die Liste kommt aus dem
+ * Browser, und was von dort kommt, darf nie bestimmen, WELCHE Zeilen
+ * angefasst werden - nur, in welcher Reihenfolge die eigenen stehen.
+ */
+$roFremdUnit = makeUnit($otherId, makeLanguage($otherId, 'Fremdreihe' . bin2hex(random_bytes(2))),
+                        'Fremde Reihe');
+$vorherFremd = (int) qv('SELECT position FROM units WHERE id = ?', [$roFremdUnit]);
+course_units_reorder($roKursId, [$roFremdUnit, $roIds['Unit 3']]);
+ok('Eine fremde Lerneinheit wird uebergangen',
+   (int) qv('SELECT position FROM units WHERE id = ?', [$roFremdUnit]) === $vorherFremd
+   && count($reihe()) === 4,
+   implode(', ', $reihe()));
+
+// ---- Und die Kinder sehen dieselbe Reihenfolge.
+
+$roKind = makeUser('rokind_' . bin2hex(random_bytes(3)), 'Reihekind');
+course_add_member($roKursId, $roKind, 'student');
+foreach ($roIds as $titel => $uid2) {
+    q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, 0)',
+      [$uid2, 'w-' . $titel, 'de-' . $titel]);
+    q('UPDATE units SET released_position = 1 WHERE id = ?', [$uid2]);
+}
+
+$roJar = tempnam(sys_get_temp_dir(), 'vtreihe');
+$ausSicht = apiAls($roJar, static function () use ($roKind, $roLang): array {
+    apiCall('auth', 'login',
+            ['username' => (string) qv('SELECT username FROM users WHERE id = ?', [$roKind]),
+             'password' => 'geheim123']);
+    [$liste] = apiCall('units', 'list', null, ['language_id' => $roLang]);
+    [$buendel] = apiCall('bundle', 'get');
+    return [
+        'liste'   => array_column($liste['units'] ?? [], 'title'),
+        'buendel' => array_column(array_filter($buendel['einheiten'] ?? [],
+                        static fn (array $u): bool => $u['l'] === $roLang), 't'),
+    ];
+});
+@unlink($roJar);
+
+ok('Die Klasse sieht dieselbe Reihenfolge wie die Lehrkraft',
+   $ausSicht['liste'] === $reihe(),
+   implode(', ', $ausSicht['liste']) . ' gegen ' . implode(', ', $reihe()));
+ok('Und der Vorrat bringt sie genauso mit',
+   $ausSicht['buendel'] === $reihe(),
+   implode(', ', $ausSicht['buendel']));
+
+// ---- Der Weg ueber die Oberflaeche.
+
+q('DELETE FROM login_attempts');
+teacherLogin($roLehrer, 'lehrerin123');
+$res = teacherGet('course.php?id=' . $roKursId);
+
+ok('Jede Zeile traegt einen Anfasser',
+   substr_count($res['body'], 'class="anfasser"') === 4,
+   substr_count($res['body'], 'class="anfasser"') . ' statt 4');
+ok('Und ist ziehbar', substr_count($res['body'], 'draggable="true"') === 4);
+ok('Ohne Skript tun es zwei Pfeile je Zeile',
+   substr_count($res['body'], 'form="sortierform"') === 8,
+   substr_count($res['body'], 'form="sortierform"') . ' statt 8');
+ok('Die erste Zeile kann nicht weiter nach oben',
+   preg_match('/data-unit="' . $roIds['Unit 5'] . '".*?Nach oben.*?disabled/s',
+              str_replace('disabled', 'disabled', $res['body'])) === 1
+   || str_contains($res['body'], 'title="Nach oben" disabled'),
+   'ein Knopf, der nichts tut, gehoert abgeblendet');
+ok('Die Seite sagt, wozu die Reihenfolge gut ist',
+   str_contains($res['body'], 'in der deine Klasse die Lerneinheiten'));
+
+$res = teacherRequest($base . '/teacher/course.php?id=' . $roKursId, [
+    'reorder_units' => '1', 'course_id' => $roKursId,
+    'reihenfolge' => implode(',', [$roIds['Unit 9'], $roIds['Unit 7'],
+                                   $roIds['Unit 5'], $roIds['Unit 3']]),
+    'csrf' => (function () use ($roKursId): string {
+        preg_match('/name="csrf" value="([a-f0-9]+)"/',
+                   teacherGet('course.php?id=' . $roKursId)['body'], $m);
+        return $m[1] ?? '';
+    })(),
+]);
+ok('Umsortieren geht auch ohne Skript',
+   $reihe() === ['Unit 9', 'Unit 7', 'Unit 5', 'Unit 3'],
+   implode(', ', $reihe()));
+
+/*
+ * Und eine fremde Lehrkraft kann das nicht. Die Kursseite prueft auf die
+ * Schule - wer nicht hineindarf, kommt gar nicht bis hierher.
+ */
+$roFremdeSchule = (int) qv('SELECT id FROM schools WHERE id <> ? LIMIT 1',
+                           [(int) qv('SELECT school_id FROM users WHERE id = ?', [$roLehrerId])]);
+if ($roFremdeSchule > 0) {
+    q('UPDATE users SET school_id = ? WHERE id = ?', [$roFremdeSchule, $roLehrerId]);
+    $vorherReihe = $reihe();
+    teacherRequest($base . '/teacher/course.php?id=' . $roKursId, [
+        'reorder_units' => '1', 'course_id' => $roKursId,
+        'reihenfolge' => implode(',', array_values($roIds)), 'csrf' => 'egal',
+    ]);
+    ok('Eine Lehrkraft einer anderen Schule sortiert nichts um',
+       $reihe() === $vorherReihe, implode(', ', $reihe()));
+}
+
+q('DELETE FROM users WHERE id IN (?, ?)', [$roLehrerId, $roKind]);
+
+section('Sofort filtern statt abschicken');
+
+/*
+ * Die Suche im Admin war ein Formular: tippen, abschicken, warten, Seite
+ * neu. Bei zweihundert Saetzen sucht man aber nicht einmal, sondern
+ * zehnmal hintereinander - und jedesmal war der Bildschirm kurz weg.
+ */
+$satzSeite = http($base . '/admin/sentences.php')['body'];
+ok('Das Suchfeld filtert im Browser',
+   str_contains($satzSeite, 'data-filter-ziel="satzliste"'));
+ok('Und die Zeilen sagen, wonach zu suchen ist',
+   preg_match('/<tr data-suchtext="[^"]+"/', $satzSeite) === 1,
+   'in den Zellen stehen Eingabefelder - deren Inhalt gehoert nicht zum Text der Zeile');
+ok('Der Knopf fuehrt weiterhin in den ganzen Bestand',
+   str_contains($satzSeite, 'Im ganzen Bestand suchen'),
+   'der Sofortfilter sieht nur diese Seite - und ohne Skript ist er der einzige Weg');
+
+$vocabSeite = http($base . '/admin/vocab.php')['body'];
+ok('Auch die Vokabeln haben jetzt eine Suche',
+   str_contains($vocabSeite, 'data-filter-ziel="vokabelliste"')
+   || str_contains(
+        (string) file_get_contents(__DIR__ . '/../admin/vocab.php'),
+        'data-filter-ziel="vokabelliste"'),
+   'bei zweihundert Vokabeln hiess "die eine finden" scrollen und lesen');
+
+$bootJs = (string) file_get_contents(__DIR__ . '/../admin/_boot.php');
+ok('Der Filter versteckt Zeilen, statt sie zu loeschen',
+   str_contains($bootJs, 'tr.hidden = !passt'),
+   'wer das Suchwort wieder leert, soll alles wiederbekommen');
+ok('Und sagt, wie viele von wie vielen zu sehen sind',
+   str_contains($bootJs, "' von ' + zeilen.length"),
+   'sonst haelt man eine gefilterte Liste fuer die ganze');
+
+section('Keine Rede von Geld');
+
+/*
+ * Was die Bilderkennung kostet, geht den Betreiber etwas an - nicht die
+ * Lehrkraft und schon gar nicht das Kind. Eine Rueckfrage, die "das kostet"
+ * sagt, macht aus einer fachlichen Entscheidung eine finanzielle, und die
+ * kann eine Lehrkraft gar nicht treffen.
+ */
+foreach (['teacher/course.php', 'teacher/unit.php', 'teacher/index.php',
+          'teacher/classes.php', 'teacher/class.php', 'teacher/konto.php',
+          'teacher/teacher.js', 'core.js'] as $datei) {
+    $quelle = (string) file_get_contents(__DIR__ . '/../' . $datei);
+    // Nur sichtbarer Text, keine Kommentare - die duerfen erklaeren, warum.
+    $ohneKommentar = preg_replace('#/\*.*?\*/|^\s*//.*$#ms', '', $quelle) ?? $quelle;
+    ok($datei . ' spricht nicht von Kosten',
+       preg_match('/kostet|bezahlt|Monatsbudget|Rechnung|\bEUR\b|USD/i', $ohneKommentar) !== 1,
+       'das geht den Betreiber etwas an, nicht die Lehrkraft');
+}
+
+ok('Auch die Absage der Bilderkennung nennt keine Zahlen',
+   !str_contains((string) file_get_contents(__DIR__ . '/../lib/cost.php'),
+                 'Monatsbudget f\u00fcr die Bilderkennung ist'),
+   'sie sagt, dass es gerade nicht geht - nicht, warum es Geld kostet');
+
 section('Hell, dunkel, automatisch');
 
 require_once __DIR__ . '/../lib/thema.php';
@@ -7910,12 +8194,14 @@ ok('Widerrufener Token meldet niemanden mehr an',
  * (fk_course_language, fk_unit_language).
  */
 foreach ([$languageId ?? 0, $otherLang ?? 0, $fremdLang ?? 0, $freiLang ?? 0,
-          $buLang ?? 0, $buFremdLang ?? 0] as $lid) {
+          $buLang ?? 0, $buFremdLang ?? 0, $roLang ?? 0] as $lid) {
     if ((int) $lid > 0) {
         q('DELETE FROM languages WHERE id = ?', [(int) $lid]);
     }
 }
 q("DELETE FROM languages WHERE name IN ('Testisch', 'Fremdisch', 'Spanisch', 'Klingonisch')");
+q("DELETE FROM languages WHERE name LIKE 'Reihisch%' OR name LIKE 'Fremdreihe%'");
+q("DELETE FROM classes WHERE name LIKE 'Reihe%'");
 
 q('DELETE FROM users WHERE id = ?', [$userId]);
 q("DELETE FROM users WHERE username IN ('e2e_other')");

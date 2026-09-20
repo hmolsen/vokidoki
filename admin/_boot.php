@@ -314,6 +314,62 @@ function admin_foot(): void
             if (!picker.contains(event.target)) picker.open = false;
         });
     });
+
+    /*
+     * Sofortfilter fuer lange Tabellen.
+     *
+     * Vorher war die Suche ein Formular: tippen, abschicken, warten, Seite
+     * neu. Bei zweihundert Saetzen sucht man aber nicht einmal, sondern
+     * zehnmal hintereinander - und jedesmal war der Bildschirm kurz weg und
+     * die Stelle, an der man war, auch.
+     *
+     * Gefiltert wird ueber data-suchtext, nicht ueber den Text der Zeile:
+     * In den Zellen stehen Eingabefelder, und deren Inhalt steht nicht im
+     * Text des Elements. Die Seite schreibt deshalb hinein, wonach gesucht
+     * werden soll.
+     *
+     * Was das NICHT kann: ueber die Seitengrenze hinaussehen. Deshalb sagt
+     * die Zeile darunter, wie viele von wie vielen gerade zu sehen sind,
+     * und daneben steht der Weg zur Suche im ganzen Bestand.
+     */
+    document.querySelectorAll('[data-filter-ziel]').forEach((feld) => {
+        const tabelle = document.getElementById(feld.dataset.filterZiel);
+        const zaehler = document.getElementById(feld.dataset.filterZaehler || '');
+        if (!tabelle) return;
+
+        const zeilen = [...tabelle.querySelectorAll('tr[data-suchtext]')];
+
+        const filtern = () => {
+            const wort = feld.value.trim().toLowerCase();
+            let sichtbar = 0;
+
+            zeilen.forEach((tr) => {
+                const passt = wort === '' || tr.dataset.suchtext.includes(wort);
+                tr.hidden = !passt;
+                if (passt) sichtbar++;
+            });
+
+            if (zaehler) {
+                zaehler.textContent = wort === ''
+                    ? ''
+                    : sichtbar + ' von ' + zeilen.length + ' auf dieser Seite';
+            }
+        };
+
+        feld.addEventListener('input', filtern);
+        /*
+         * Enter schickt nicht ab, sondern filtert nur: Wer tippt, will die
+         * Liste kuerzer sehen, nicht die Seite neu. Der Knopf daneben
+         * bleibt der Weg in den ganzen Bestand.
+         */
+        feld.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            filtern();
+        });
+
+        filtern();
+    });
     </script>
     </main></body></html>
     <?php

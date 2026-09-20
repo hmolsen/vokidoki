@@ -36,12 +36,51 @@ $zurueck = 'course.php?id=' . $courseId;
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_unit'])) {
     teacher_csrf_check();
 
-    q('INSERT INTO units (language_id, course_id, title, released_position)
-       VALUES (?, ?, ?, 0)',
-      [(int) $kurs['language_id'], $courseId, 'Unbenannte Lerneinheit']);
+    // Ans Ende - dorthin, wo man sie sucht. Die Reihenfolge in der Tabelle
+    // ist dieselbe, die die Klasse in ihrer App sieht.
+    q('INSERT INTO units (language_id, course_id, title, released_position, position)
+       VALUES (?, ?, ?, 0, ?)',
+      [(int) $kurs['language_id'], $courseId, 'Unbenannte Lerneinheit',
+       unit_next_position($courseId)]);
 
     teacher_flash('Leere Lerneinheit angelegt. Gib ihr einen Namen und füll sie.');
     teacher_redirect('unit.php?id=' . (int) db()->lastInsertId());
+}
+
+/*
+ * Die Lerneinheiten umsortieren.
+ *
+ * Die Reihenfolge in der Tabelle ist die, in der die Klasse sie in ihrer App
+ * sieht. Bis hierher war es die Entstehungsreihenfolge, neueste zuerst - wer
+ * Unit 7 vor Unit 3 fotografierte, weil die Seite gerade aufgeschlagen war,
+ * bekam sie auch so vorgesetzt.
+ *
+ * Mit Skript kommt die Liste per fetch und die Seite bleibt stehen. Ohne
+ * Skript tun es die beiden Pfeile je Zeile: Sie schicken dieselbe Liste als
+ * gewoehnliches Formular, nur eben mit vertauschten Nachbarn.
+ */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['reorder_units'])) {
+    teacher_csrf_check();
+
+    $roh = (string) ($_POST['reihenfolge'] ?? '');
+    $ids = array_filter(array_map('intval', explode(',', $roh)));
+
+    if ($ids === []) {
+        if (unit_will_json()) {
+            unit_json(['ok' => false, 'error' => 'Keine Reihenfolge angekommen.'], 422);
+        }
+        teacher_flash('Keine Reihenfolge angekommen.', 'bad');
+        teacher_redirect($zurueck);
+    }
+
+    $wie_viele = course_units_reorder($courseId, $ids);
+
+    if (unit_will_json()) {
+        unit_json(['ok' => true, 'sortiert' => $wie_viele]);
+    }
+
+    teacher_flash('Reihenfolge gespeichert.');
+    teacher_redirect($zurueck);
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['sync_class'])) {
@@ -258,13 +297,50 @@ teacher_flash_render();
      */
     ?>
     <tr>
+        <th class="griffspalte"><span class="nurvorlesen">Reihenfolge</span></th>
         <th>Titel</th>
         <th>Freigegeben</th>
         <th class="actions"></th>
     </tr>
-    <?php foreach ($einheiten as $e): ?>
+    <?php foreach ($einheiten as $i => $e): ?>
         <?php $ziel = teacher_url('unit.php') . '?id=' . (int) $e['id']; ?>
-        <tr data-href="<?= h($ziel) ?>">
+        <tr data-href="<?= h($ziel) ?>" data-unit="<?= (int) $e['id'] ?>" draggable="true">
+            <?php
+            /*
+             * Der Anfasser. Ein eigenes Feld ganz vorn, damit klar ist,
+             * woran man zieht - und damit ein Druck darauf nicht die Zeile
+             * oeffnet.
+             *
+             * Daneben zwei Pfeile fuer alle, die nicht ziehen koennen oder
+             * wollen: ohne Skript, mit der Tastatur, auf einem Telefon. Sie
+             * schicken dieselbe Liste als gewoehnliches Formular.
+             */
+            $nachOben  = $einheiten;
+            $nachUnten = $einheiten;
+            if ($i > 0) {
+                [$nachOben[$i - 1], $nachOben[$i]] = [$nachOben[$i], $nachOben[$i - 1]];
+            }
+            if ($i < count($einheiten) - 1) {
+                [$nachUnten[$i + 1], $nachUnten[$i]] = [$nachUnten[$i], $nachUnten[$i + 1]];
+            }
+            $alsListe = static fn (array $liste): string => implode(',', array_map(
+                static fn (array $u): int => (int) $u['id'], $liste));
+            ?>
+            <td class="griff" data-label="Reihenfolge">
+                <span class="anfasser" aria-hidden="true" title="Zum Sortieren ziehen">&#10303;</span>
+                <button class="iconaction quiet js-hide" form="sortierform"
+                        name="reihenfolge" value="<?= h($alsListe($nachOben)) ?>"
+                        title="Nach oben" <?= $i === 0 ? 'disabled' : '' ?>>
+                    <span aria-hidden="true">&#9650;</span>
+                    <span class="nurvorlesen">Nach oben</span>
+                </button>
+                <button class="iconaction quiet js-hide" form="sortierform"
+                        name="reihenfolge" value="<?= h($alsListe($nachUnten)) ?>"
+                        title="Nach unten" <?= $i === count($einheiten) - 1 ? 'disabled' : '' ?>>
+                    <span aria-hidden="true">&#9660;</span>
+                    <span class="nurvorlesen">Nach unten</span>
+                </button>
+            </td>
             <td data-label="Titel">
                 <a class="rowmain" href="<?= h($ziel) ?>"><?= h($e['title']) ?></a>
             </td>
@@ -282,7 +358,7 @@ teacher_flash_render();
             ?>
             <td data-label="Freigegeben">
                 <?php if ($gesamt === 0): ?>
-                    <span class="pill leer">noch keine Vokabeln</span>
+                    <span class="pill ohne">noch keine Vokabeln</span>
                 <?php else: ?>
                     <span class="pill <?= $ton ?>"><?= $frei ?> von <?= $gesamt ?></span>
                 <?php endif; ?>
@@ -311,7 +387,7 @@ teacher_flash_render();
      */
     ?>
     <tr class="newrow">
-        <td colspan="3" data-label="Neue Lerneinheit">
+        <td colspan="4" data-label="Neue Lerneinheit">
             <span class="coursetitle addbuttons">
                 <span class="cflag plus">+</span>
                 <button class="btn small" form="neueEinheit"
@@ -321,7 +397,24 @@ teacher_flash_render();
     </tr>
 </table>
 
+<?php
+/*
+ * Das Formular fuer die Pfeile. Es liegt ausserhalb der Tabelle - ein
+ * <form> darf sich nicht ueber mehrere Zellen spannen -, und die Knoepfe
+ * gehoeren ueber form= dazu.
+ */
+?>
+<form method="post" id="sortierform"
+      action="<?= h(teacher_url('course.php') . '?id=' . $courseId) ?>">
+    <?= teacher_csrf_field() ?>
+    <input type="hidden" name="course_id" value="<?= $courseId ?>">
+    <input type="hidden" name="reorder_units" value="1">
+</form>
+
 <p class="tiny muted">
+    Die Reihenfolge hier ist die, in der deine Klasse die Lerneinheiten
+    sieht &ndash; zieh sie am Griff links dorthin, wo sie hingeh&ouml;ren.
+    Neue kommen immer ans Ende.
     Eine Zeile anklicken öffnet die Freigabe. Freigegeben wird portionsweise:
     Die Klasse sieht nur, was aufgemacht ist. Gefüllt wird eine Lerneinheit
     auf ihrer eigenen Seite &ndash; von Hand, aus Dateien oder mit dem Telefon
@@ -570,7 +663,7 @@ $fehlende = course_class_missing($courseId);
             <td class="num"><?= $verlust['vocab'] ?></td>
         </tr>
         <tr>
-            <td>Lückensätze <span class="tiny muted">(erzeugt und bezahlt)</span></td>
+            <td>Lückensätze</td>
             <td class="num"><?= $verlust['sentences'] ?></td>
         </tr>
         <tr>

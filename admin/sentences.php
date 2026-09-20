@@ -115,16 +115,20 @@ $users = qa('SELECT id, display_name FROM users ORDER BY display_name');
  * eine Klasse die einzig sinnvolle.
  */
 $languages = $userId > 0
-    ? qa('SELECT DISTINCT l.id, l.name, l.flag_emoji
+    /*
+     * Nach Kurs, nicht nach Sprache: "Englisch - 8c" unterscheidet sich von
+     * "Englisch - 9a", "Englisch" nicht.
+     */
+    ? qa('SELECT DISTINCT l.id, COALESCE(co.name, l.name) AS name, l.flag_emoji
             FROM languages l
             JOIN courses co       ON co.language_id = l.id
             JOIN course_members m ON m.course_id = co.id
            WHERE m.user_id = ?
-           ORDER BY l.name', [$userId])
+           ORDER BY name', [$userId])
     : [];
 
 $units = $langId > 0
-    ? qa('SELECT id, title FROM units WHERE language_id = ? ORDER BY created_at DESC', [$langId])
+    ? qa('SELECT id, title FROM units WHERE language_id = ? ORDER BY position, id', [$langId])
     : [];
 
 $where  = [];
@@ -183,7 +187,7 @@ $rows = qa(
        JOIN units t ON t.id = v.unit_id
        JOIN languages l ON l.id = t.language_id
        LEFT JOIN courses co ON co.id = t.course_id' . $sql . '
-      ORDER BY flags DESC, co.name, l.name, t.created_at DESC, v.position, s.id
+      ORDER BY flags DESC, co.name, l.name, t.position, t.id, v.position, s.id
       LIMIT ' . PER_PAGE . ' OFFSET ' . $offset,
     $params,
 );
@@ -241,7 +245,7 @@ flash_render();
             ['id' => (int) $u['id'], 'label' => $u['display_name']], $users),
         $userId, ['q' => $suche], 'user', ['language', 'unit', 'p'], 'alle') ?>
 
-    <?= filter_chips('Sprache',
+    <?= filter_chips('Kurs',
         array_map(static fn (array $l): array => [
             'id'    => (int) $l['id'],
             'label' => (string) $l['name'],
@@ -262,9 +266,23 @@ flash_render();
                     <input type="hidden" name="<?= h($k) ?>" value="<?= (int) $v ?>">
                 <?php endif; ?>
             <?php endforeach; ?>
+            <?php
+            /*
+             * Tippen filtert sofort, ohne die Seite neu zu laden - bei
+             * zweihundert Saetzen sucht man nicht einmal, sondern zehnmal
+             * hintereinander, und jedesmal war der Bildschirm kurz weg.
+             *
+             * Der Knopf bleibt trotzdem: Der Sofortfilter sieht nur, was
+             * auf dieser Seite steht. Wer im ganzen Bestand sucht, schickt
+             * ab - und ohne JavaScript ist das ohnehin der einzige Weg.
+             */
+            ?>
             <input type="text" name="q" value="<?= h($suche) ?>"
-                   placeholder="Satz oder Vokabel" style="margin:0;width:200px">
-            <button class="btn small secondary">Suchen</button>
+                   placeholder="Satz oder Vokabel" style="margin:0;width:200px"
+                   data-filter-ziel="satzliste" data-filter-zaehler="satzzaehler"
+                   autocomplete="off">
+            <button class="btn small secondary">Im ganzen Bestand suchen</button>
+            <span class="tiny muted" id="satzzaehler"></span>
             <?php if ($suche !== ''): ?>
                 <a class="chip" href="<?= h(admin_url('sentences.php') . '?' . http_build_query(
                     array_filter(['user' => $userId, 'language' => $langId, 'unit' => $unitId])
@@ -288,14 +306,29 @@ flash_render();
         <input type="hidden" name="<?= h($k) ?>" value="<?= h((string) $v) ?>">
     <?php endforeach; ?>
 
-    <table class="data">
+    <table class="data" id="satzliste">
         <tr>
             <th>Wo</th><th>Vokabel</th><th>Deutscher Satz</th>
             <th>Fremdsprache (<code>{}</code> = Lücke)</th><th>Lösung</th>
             <th>Gemeldet</th><th></th>
         </tr>
         <?php foreach ($rows as $s): ?>
-            <tr<?= (int) $s['flags'] > 0 ? ' class="flagged"' : '' ?>>
+            <?php
+            /*
+             * Wonach der Sofortfilter sucht. Es steht als Attribut da und
+             * nicht im Text der Zeile, weil in den Zellen Eingabefelder
+             * stehen - und deren Inhalt gehoert nicht zum Text des
+             * Elements. Der Kurs ist mit dabei: Danach sortiert die Liste,
+             * und danach sucht man auch.
+             */
+            $suchtext = mb_strtolower(implode(' ', [
+                (string) ($s['display_name'] ?? ''), (string) $s['language'],
+                (string) $s['unit_title'], (string) $s['term_foreign'],
+                (string) $s['term_native'], (string) $s['native_text'],
+                (string) $s['foreign_text'], (string) $s['answer'],
+            ]));
+            ?>
+            <tr data-suchtext="<?= h($suchtext) ?>"<?= (int) $s['flags'] > 0 ? ' class="flagged"' : '' ?>>
                 <td class="tiny muted">
                     <?= h((string) ($s['display_name'] ?? '&ndash;')) ?><br>
                     <?= h($s['language']) ?> &middot; <?= h($s['unit_title']) ?>

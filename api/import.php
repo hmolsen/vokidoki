@@ -191,11 +191,15 @@ switch (action()) {
                 // Die Lerneinheit gehoert dem Kurs. Ohne course_id waere sie
                 // nach der Umstellung der Zugriffsregeln fuer niemanden sichtbar.
                 $kurs = course_for_language((int) $lang['id']);
+                $kursId = $kurs === null ? null : (int) $kurs['id'];
                 q(
-                    'INSERT INTO units (language_id, course_id, title, released_position)
-                     VALUES (?, ?, ?, ?)',
-                    [(int) $lang['id'], $kurs === null ? null : (int) $kurs['id'], $title,
-                     initial_released_position($user)],
+                    'INSERT INTO units (language_id, course_id, title,
+                                        released_position, position)
+                     VALUES (?, ?, ?, ?, ?)',
+                    [(int) $lang['id'], $kursId, $title,
+                     initial_released_position($user),
+                     // Ans Ende der Liste, nicht an den Anfang.
+                     unit_next_position($kursId)],
                 );
                 $unitId = (int) $pdo->lastInsertId();
                 vocab_append($unitId, $paare, $lang['code'] ?? null);

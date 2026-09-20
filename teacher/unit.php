@@ -14,10 +14,9 @@ require_once __DIR__ . '/../lib/wordtypes.php';
  * Eine Lerneinheit aus Sicht der Lehrkraft - und die Stelle, an der
  * freigegeben wird.
  *
- * Der Sinn der portionsweisen Freigabe ist nicht Paedagogik, sondern Geld:
- * Zu jeder freigegebenen Vokabel entstehen Lueckensaetze, und die kosten.
- * Deshalb wird eine ganze Unit auf einmal eingelesen - das Fotografieren
- * lohnt sich seitenweise - aber nur das aufgemacht, was gerade dran ist.
+ * Freigegeben wird portionsweise: Eingelesen wird eine ganze Unit auf
+ * einmal - das Fotografieren lohnt sich seitenweise -, aufgemacht aber nur
+ * das, was gerade dran ist.
  */
 
 $user     = teacher_require();
@@ -259,45 +258,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['delete_unit']
  * und bleibt so: Eine Vertretung muss an den Unterlagen ihrer Kollegin
  * arbeiten koennen, und genau dafuer ist der Lehrkraft-Bereich da.
  */
-/**
- * Will der Aufrufer eine Zeile statt einer Seite?
- *
- * Das Formular funktioniert ohne JavaScript ganz gewoehnlich: abschicken,
- * weiterleiten, neue Seite. Mit JavaScript wird daraus ein Zug - Wort,
- * Tab, Wort, Enter, naechste Vokabel -, und dafuer braucht es die frische
- * Zeile als Antwort statt einer ganzen Seite. Dasselbe Muster wie beim
- * Eintragen einer Klassenliste.
- */
-function unit_will_json(): bool
-{
-    return ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'fetch';
-}
-
-/**
- * Eine JSON-Antwort - mit Laenge.
- *
- * Content-Length ist hier nicht Beiwerk, sondern der Unterschied zwischen
- * "angekommen" und "haengt": Wenn der Vorgang nach dem Abschicken noch
- * weiterarbeitet (die Lueckensaetze), bleibt die Verbindung offen. Ohne
- * Laengenangabe weiss der Browser nicht, wo die Antwort aufhoert - er
- * wartet auf das Schliessen der Verbindung und meldet am Ende "keine
- * Verbindung", obwohl die Vokabel laengst in der Datenbank steht. Wer das
- * sieht, drueckt noch einmal, und dann steht sie zweimal drin.
- *
- * teacher_redirect_and_continue() setzt aus demselben Grund
- * Content-Length: 0.
- */
-function unit_json(array $daten, int $status = 200): never
-{
-    $koerper = (string) json_encode($daten, JSON_UNESCAPED_UNICODE);
-
-    http_response_code($status);
-    header('Content-Type: application/json; charset=utf-8');
-    header('Cache-Control: no-store');
-    header('Content-Length: ' . strlen($koerper));
-    echo $koerper;
-    exit;
-}
 
 /*
  * Erkannte Vokabeln anhaengen.
@@ -688,7 +648,7 @@ $fehlen = vocab_without_sentences($unitId);
         ?>
         <button class="btn small secondary" name="catch_up" value="1" id="nachtragen"
                 data-fehlen="<?= $fehlen ?>"
-                data-confirm="F&uuml;r <?= $fehlen ?> Vokabeln fehlen noch L&uuml;ckens&auml;tze. Jetzt nachholen? Das kostet."
+                data-confirm="F&uuml;r <?= $fehlen ?> Vokabeln fehlen noch L&uuml;ckens&auml;tze. Jetzt nachholen?"
                 <?= $zeigen ? '' : 'hidden' ?>>
             S&auml;tze nachtragen (<span data-zahl><?= $fehlen ?></span>)
         </button>
@@ -865,10 +825,10 @@ $fehlen = vocab_without_sentences($unitId);
 <?php if ($gesamt > 0): ?>
 <p class="tiny muted">
     Die Lückensätze entstehen schon beim Einlesen, für die ganze Einheit.
-    Die Freigabe entscheidet also nicht, wofür bezahlt wird, sondern nur,
-    was die Klasse zu sehen bekommt &ndash; Vokabeln wie Lückensätze.
-    Zurücknehmen kostet nichts: Die Sätze bleiben, und der Lernstand der
-    Kinder ist beim nächsten Freigeben wieder da.
+    Die Freigabe entscheidet also nur, was die Klasse zu sehen bekommt
+    &ndash; Vokabeln wie Lückensätze. Zurücknehmen lässt sich jederzeit:
+    Die Sätze bleiben, und der Lernstand der Kinder ist beim nächsten
+    Freigeben wieder da.
 </p>
 <?php endif; ?>
 <?php endif; /* $gesamt > 0 || $vonHand */ ?>
@@ -994,8 +954,8 @@ $fehlen = vocab_without_sentences($unitId);
     <p class="notice bad" id="stapelFehler" hidden></p>
 
     <p class="tiny muted">
-        Das Erkennen macht ein Sprachmodell und kostet &ndash; es dauert je
-        Seite einige Sekunden. Was dabei herauskommt, kann Fehler enthalten:
+        Das Erkennen macht ein Sprachmodell &ndash; es dauert je Seite
+        einige Sekunden. Was dabei herauskommt, kann Fehler enthalten:
         Bitte sieh die neuen Vokabeln durch und berichtige sie, bevor du sie
         freigibst.
     </p>

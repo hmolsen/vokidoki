@@ -690,6 +690,44 @@ function schema_migrations(): array
          * Aufgeraeumt wird nach ein paar Tagen: Was so lange nicht
          * angekommen ist, kommt nicht mehr.
          */
+        /*
+         * Die Reihenfolge der Lerneinheiten - von Hand gelegt.
+         *
+         * Bisher sortierte sie sich nach dem Anlegedatum, neueste zuerst.
+         * Das ist die Reihenfolge, in der sie ENTSTANDEN sind, und die hat
+         * mit der Reihenfolge, in der sie DRANKOMMEN, nichts zu tun: Wer
+         * Unit 7 vor Unit 3 fotografiert, weil die Seite gerade aufgeschlagen
+         * war, bekam sie auch in dieser Reihenfolge vorgesetzt - und die
+         * Klasse sah sie genauso.
+         *
+         * Voreinstellung ist die Entstehungsreihenfolge, aber andersherum:
+         * aelteste oben, neueste unten. Eine neue Einheit kommt dorthin, wo
+         * man sie sucht - ans Ende.
+         */
+        'units.position' => [
+            static fn (): bool => table_exists('units')
+                && !column_exists('units', 'position'),
+            'ALTER TABLE units ADD COLUMN position INT UNSIGNED NOT NULL DEFAULT 0',
+        ],
+        'units.position.backfill' => [
+            static fn (): bool => table_exists('units')
+                && column_exists('units', 'position')
+                && !schema_was_applied('units.position.backfill'),
+            /*
+             * Je Kurs von vorn durchnumeriert, nach Alter aufsteigend.
+             * Die Variablen sind MariaDBs Weg zu einer laufenden Nummer
+             * ohne Fensterfunktion - die gaebe es erst ab 10.2, und die
+             * Anwendung soll auch auf aelterem Hosting laufen.
+             */
+            "UPDATE units t
+               JOIN (SELECT id,
+                            @n := IF(@k = COALESCE(course_id, 0), @n + 1,
+                                     IF(@k := COALESCE(course_id, 0), 1, 1)) AS nr
+                       FROM (SELECT id, course_id FROM units
+                              ORDER BY COALESCE(course_id, 0), created_at, id) AS sortiert
+                       JOIN (SELECT @n := 0, @k := -1) AS init) AS lfd ON lfd.id = t.id
+                SET t.position = lfd.nr",
+        ],
         'answer_receipts.table' => [
             static fn (): bool => !table_exists('answer_receipts'),
             "CREATE TABLE answer_receipts (

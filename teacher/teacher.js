@@ -941,7 +941,7 @@ function offeneSaetze(anzahl) {
 
 /** Die Rueckfrage - sie nennt die Zahl, und die Zahl aendert sich. */
 const nachtragenFrage = (anzahl) =>
-    `Für ${anzahl} Vokabeln fehlen noch Lückensätze. Jetzt nachholen? Das kostet.`;
+    `Für ${anzahl} Vokabeln fehlen noch Lückensätze. Jetzt nachholen?`;
 
 /**
  * Saetze nachtragen, ohne dass die Seite dabei haengt.
@@ -1479,6 +1479,130 @@ async function jsonPost(url, rumpf, kopf = {}) {
 }
 
 initEinlesen();
+
+// --------------------------------------------- Lerneinheiten sortieren
+
+/**
+ * Die Reihenfolge der Lerneinheiten mit der Maus legen.
+ *
+ * Sie ist dieselbe, in der die Klasse sie in ihrer App sieht. Bis hierher
+ * war es die Entstehungsreihenfolge, neueste zuerst - wer Unit 7 vor Unit 3
+ * fotografierte, weil die Seite gerade aufgeschlagen war, bekam sie auch so
+ * vorgesetzt.
+ *
+ * Ohne Skript tun es die beiden Pfeile je Zeile; sie schicken dieselbe Liste
+ * als gewoehnliches Formular. Mit Skript verschwinden sie (js-hide), und es
+ * wird gezogen.
+ */
+function initUnitSort() {
+    const tabelle = document.getElementById('einheiten');
+    const form    = document.getElementById('sortierform');
+    if (!tabelle || !form) return;
+
+    const zeilen = () => [...tabelle.querySelectorAll('tr[data-unit]')];
+    if (zeilen().length < 2) return;
+
+    /*
+     * Gezogen wird nur mit einer Maus.
+     *
+     * Das Ziehen des Browsers gibt es auf einem Touchgeraet nicht - dort
+     * bewegt ein Wisch die Seite, und ein dragstart kommt nie. Wer hier
+     * trotzdem die Pfeile entfernte, liesse eine Lehrkraft am Telefon mit
+     * einer Tabelle zurueck, die sich gar nicht mehr sortieren laesst.
+     * Also: feiner Zeiger, dann ziehen; sonst bleiben die Pfeile.
+     */
+    if (!window.matchMedia('(pointer: fine)').matches) return;
+
+    /*
+     * Die Pfeile sind der Weg ohne Skript und verschwinden hier - dasselbe
+     * Muster wie beim Freigabebalken. Sie tragen die Nachbarlisten in ihren
+     * Werten, und nach dem ersten Zug stimmten die nicht mehr; sie
+     * stehenzulassen hiesse, einen Knopf anzubieten, der etwas Falsches
+     * tut.
+     */
+    tabelle.querySelectorAll('.js-hide').forEach((b) => b.remove());
+    tabelle.classList.add('sortierbar');
+
+    let packe = null;
+
+    tabelle.addEventListener('dragstart', (e) => {
+        const tr = e.target.closest('tr[data-unit]');
+        if (!tr) return;
+        packe = tr;
+        tr.classList.add('zieht');
+        e.dataTransfer.effectAllowed = 'move';
+        // Firefox zieht nur, wenn etwas im Paket liegt.
+        e.dataTransfer.setData('text/plain', tr.dataset.unit);
+    });
+
+    tabelle.addEventListener('dragover', (e) => {
+        const tr = e.target.closest('tr[data-unit]');
+        if (packe === null || !tr || tr === packe) return;
+        e.preventDefault();
+
+        /*
+         * Vor oder hinter die Zeile, je nachdem, wo der Zeiger steht.
+         * Ohne diese Unterscheidung springt die gezogene Zeile an der
+         * untersten Position hin und her, weil sie sich selbst
+         * verdraengt.
+         */
+        const kasten = tr.getBoundingClientRect();
+        const untereHaelfte = e.clientY > kasten.top + kasten.height / 2;
+        tr.parentNode.insertBefore(packe, untereHaelfte ? tr.nextSibling : tr);
+    });
+
+    tabelle.addEventListener('dragend', () => {
+        if (packe === null) return;
+        packe.classList.remove('zieht');
+        packe = null;
+        speichern();
+    });
+
+    let uhr = null;
+
+    /*
+     * Gesichert wird kurz nach dem Loslassen, nicht sofort: Wer drei Zeilen
+     * hintereinander schiebt, soll daraus eine Anfrage machen und nicht
+     * drei.
+     */
+    const speichern = () => {
+        if (uhr !== null) clearTimeout(uhr);
+        uhr = setTimeout(async () => {
+            uhr = null;
+            const liste = zeilen().map((tr) => tr.dataset.unit).join(',');
+
+            const daten = new FormData(form);
+            daten.set('reihenfolge', liste);
+
+            tabelle.classList.add('sichert');
+            try {
+                const res = await fetch(form.action, {
+                    method: 'POST',
+                    body: daten,
+                    credentials: 'same-origin',
+                    headers: { 'X-Requested-With': 'fetch' },
+                });
+                const json = await res.json();
+                if (!json.ok) throw new Error(json.error || 'Das hat nicht geklappt.');
+            } catch {
+                /*
+                 * Neu laden statt eine Meldung: Was auf dem Bildschirm
+                 * steht, stimmt dann nicht mit der Datenbank ueberein, und
+                 * eine falsche Reihenfolge stillschweigend stehenzulassen
+                 * waere schlimmer als ein Sprung.
+                 */
+                alert('Die Reihenfolge konnte nicht gespeichert werden.');
+                location.reload();
+                return;
+            } finally {
+                tabelle.classList.remove('sichert');
+            }
+
+        }, 500);
+    };
+}
+
+initUnitSort();
 
 // ------------------------------------------------------- Freigabe-Balken
 

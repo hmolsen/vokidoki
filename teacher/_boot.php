@@ -134,6 +134,53 @@ function teacher_redirect_and_continue(string $file): void
  * gebraucht dort, wo die Antwort JSON ist: Die frische Vokabelzeile steht
  * beim Tippenden schon, waehrend der Lueckensatz dazu noch entsteht.
  */
+/*
+ * Die beiden Helfer fuer "antworte mit Daten, nicht mit einer Seite".
+ *
+ * Sie standen in unit.php, solange nur die Lerneinheit sie brauchte. Seit
+ * die Kursseite ihre Reihenfolge per fetch sichert, brauchen zwei Seiten
+ * sie - und zwei Abschriften waeren bald zwei verschiedene Antworten.
+ */
+/**
+ * Will der Aufrufer eine Zeile statt einer Seite?
+ *
+ * Das Formular funktioniert ohne JavaScript ganz gewoehnlich: abschicken,
+ * weiterleiten, neue Seite. Mit JavaScript wird daraus ein Zug - Wort,
+ * Tab, Wort, Enter, naechste Vokabel -, und dafuer braucht es die frische
+ * Zeile als Antwort statt einer ganzen Seite. Dasselbe Muster wie beim
+ * Eintragen einer Klassenliste.
+ */
+function unit_will_json(): bool
+{
+    return ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'fetch';
+}
+
+/**
+ * Eine JSON-Antwort - mit Laenge.
+ *
+ * Content-Length ist hier nicht Beiwerk, sondern der Unterschied zwischen
+ * "angekommen" und "haengt": Wenn der Vorgang nach dem Abschicken noch
+ * weiterarbeitet (die Lueckensaetze), bleibt die Verbindung offen. Ohne
+ * Laengenangabe weiss der Browser nicht, wo die Antwort aufhoert - er
+ * wartet auf das Schliessen der Verbindung und meldet am Ende "keine
+ * Verbindung", obwohl die Vokabel laengst in der Datenbank steht. Wer das
+ * sieht, drueckt noch einmal, und dann steht sie zweimal drin.
+ *
+ * teacher_redirect_and_continue() setzt aus demselben Grund
+ * Content-Length: 0.
+ */
+function unit_json(array $daten, int $status = 200): never
+{
+    $koerper = (string) json_encode($daten, JSON_UNESCAPED_UNICODE);
+
+    http_response_code($status);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+    header('Content-Length: ' . strlen($koerper));
+    echo $koerper;
+    exit;
+}
+
 function teacher_flush_and_continue(): void
 {
     ignore_user_abort(true);

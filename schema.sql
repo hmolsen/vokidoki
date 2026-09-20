@@ -54,6 +54,11 @@ CREATE TABLE IF NOT EXISTS units (
   title       VARCHAR(128) NOT NULL,
   -- Bis zu welcher vocab.position ist die Einheit aufgegeben? 0 = noch nichts.
   released_position INT UNSIGNED NOT NULL DEFAULT 0,
+  -- Die Reihenfolge im Kurs, von Hand gelegt. Aelteste oben, neueste unten;
+  -- genau so sehen die Kinder sie in der App. Frueher sortierte sie sich nach
+  -- dem Anlegedatum - der Reihenfolge, in der sie ENTSTANDEN sind, und die hat
+  -- mit der Reihenfolge, in der sie DRANKOMMEN, nichts zu tun.
+  position    INT UNSIGNED NOT NULL DEFAULT 0,
   created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   -- Die Lueckensaetze entstehen im Hintergrund, gleich nach dem Einlesen.
   -- NULL = nie angestossen, sonst running / done / failed.

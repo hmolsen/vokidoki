@@ -266,7 +266,7 @@ function known_vocabulary(?int $courseId, int $exceptUnitId): array
            FROM vocab v
            JOIN units t ON t.id = v.unit_id
           WHERE t.course_id = ? AND t.id <> ?
-          ORDER BY t.created_at DESC, v.position
+          ORDER BY t.position DESC, v.position
           LIMIT ' . KNOWN_VOCAB_LIMIT,
         [$courseId, $exceptUnitId],
     );
