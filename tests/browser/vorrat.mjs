@@ -12,6 +12,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -146,6 +147,40 @@ export async function pruefe(f, aus) {
            + ' - ohne sie zaehlte ein zweimal geschickter Stapel doppelt');
         ok('Und der Lernstand steht schon im Gerät', geuebt.stand > 0,
            String(geuebt.stand));
+
+        // ---- Der Vergleich beim Lueckentext, gegen dieselben Faelle wie PHP.
+
+        /*
+         * Seit das Ueben ohne Netz laeuft, vergleicht das Geraet die
+         * getippte Antwort selbst - die Loesung darf dafuer nicht erst beim
+         * Server erfragt werden muessen. Damit gibt es die Regel zweimal, in
+         * zwei Sprachen, und das ist ein Risiko: Wer hier eine Nachsicht
+         * ergaenzt und dort nicht, laesst ein Kind vor zwei verschiedenen
+         * Wahrheiten stehen - dieselbe Antwort zaehlt online anders als
+         * offline.
+         *
+         * Dieselbe Sammlung prueft tests/sentences.php gegen answer_check().
+         * Sie gehoert keiner der beiden Seiten; faellt eine auseinander,
+         * faellt eine Suite um.
+         */
+        const faelle = JSON.parse(readFileSync(
+            new URL('../faelle/antworten.json', import.meta.url), 'utf8'));
+
+        const schief = await b.js(`(async () => {
+            const { antwortPruefen } = await import('${f.basis}/vorrat.js');
+            const faelle = ${JSON.stringify(faelle)};
+            return faelle
+                .map((fall) => {
+                    const r = antwortPruefen(fall.getippt, fall.erwartet);
+                    return (r.correct === fall.correct && r.exact === fall.exact)
+                        ? null : fall.was + ': ' + JSON.stringify(r);
+                })
+                .filter(Boolean);
+        })()`);
+
+        ok('antwortPruefen() stimmt mit jedem Fall der Sammlung ueberein',
+           Array.isArray(schief) && schief.length === 0,
+           (schief ?? []).slice(0, 3).join(' | '));
 
         // ---- Netz wieder an: Die Antworten gehen raus.
 

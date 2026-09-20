@@ -1,0 +1,156 @@
+[
+    {
+        "getippt": "Je m'appelle",
+        "erwartet": "Je m'appelle",
+        "correct": true,
+        "exact": true,
+        "was": "unveraendert"
+    },
+    {
+        "getippt": "je m'appelle",
+        "erwartet": "Je m'appelle",
+        "correct": true,
+        "exact": true,
+        "was": "kleingeschrieben"
+    },
+    {
+        "getippt": "JE M'APPELLE",
+        "erwartet": "Je m'appelle",
+        "correct": true,
+        "exact": true,
+        "was": "grossgeschrieben"
+    },
+    {
+        "getippt": "  Je   m'appelle ",
+        "erwartet": "Je m'appelle",
+        "correct": true,
+        "exact": true,
+        "was": "Leerzeichen drumherum"
+    },
+    {
+        "getippt": "Je m’appelle",
+        "erwartet": "Je m'appelle",
+        "correct": true,
+        "exact": true,
+        "was": "typografischer Apostroph"
+    },
+    {
+        "getippt": "élève",
+        "erwartet": "élève",
+        "correct": true,
+        "exact": true,
+        "was": "mit Akzenten"
+    },
+    {
+        "getippt": "Salut!",
+        "erwartet": "Salut !",
+        "correct": true,
+        "exact": true,
+        "was": "Leerzeichen vor Satzzeichen fehlt"
+    },
+    {
+        "getippt": "Salut !",
+        "erwartet": "Salut!",
+        "correct": true,
+        "exact": true,
+        "was": "Leerzeichen vor Satzzeichen zu viel"
+    },
+    {
+        "getippt": "Salut  !",
+        "erwartet": "Salut !",
+        "correct": true,
+        "exact": true,
+        "was": "zwei Leerzeichen"
+    },
+    {
+        "getippt": "Comment tu t'appelles?",
+        "erwartet": "Comment tu t'appelles ?",
+        "correct": true,
+        "exact": true,
+        "was": "ganze Frage"
+    },
+    {
+        "getippt": "je mappelle",
+        "erwartet": "Je m'appelle",
+        "correct": true,
+        "exact": false,
+        "was": "Apostroph fehlt"
+    },
+    {
+        "getippt": "eleve",
+        "erwartet": "élève",
+        "correct": true,
+        "exact": false,
+        "was": "Akzente fehlen"
+    },
+    {
+        "getippt": "Jeg bor",
+        "erwartet": "Jeg bør",
+        "correct": true,
+        "exact": false,
+        "was": "daenisches o durchgestrichen"
+    },
+    {
+        "getippt": "grosse",
+        "erwartet": "große",
+        "correct": true,
+        "exact": false,
+        "was": "scharfes s ausgeschrieben"
+    },
+    {
+        "getippt": "ca va",
+        "erwartet": "ça va",
+        "correct": true,
+        "exact": false,
+        "was": "Cedille fehlt"
+    },
+    {
+        "getippt": "soeur",
+        "erwartet": "sœur",
+        "correct": true,
+        "exact": false,
+        "was": "Ligatur ausgeschrieben"
+    },
+    {
+        "getippt": "etwas ganz anderes",
+        "erwartet": "élève",
+        "correct": false,
+        "exact": false,
+        "was": "anderes Wort"
+    },
+    {
+        "getippt": "",
+        "erwartet": "élève",
+        "correct": false,
+        "exact": false,
+        "was": "leere Eingabe"
+    },
+    {
+        "getippt": "   ",
+        "erwartet": "élève",
+        "correct": false,
+        "exact": false,
+        "was": "nur Leerzeichen"
+    },
+    {
+        "getippt": "élèves",
+        "erwartet": "élève",
+        "correct": false,
+        "exact": false,
+        "was": "Plural statt Singular"
+    },
+    {
+        "getippt": "elev",
+        "erwartet": "élève",
+        "correct": false,
+        "exact": false,
+        "was": "zu kurz"
+    },
+    {
+        "getippt": "Bonjour !",
+        "erwartet": "Salut !",
+        "correct": false,
+        "exact": false,
+        "was": "Abstand entschuldigt kein anderes Wort"
+    }
+]

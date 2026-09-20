@@ -477,6 +477,39 @@ $einmal = punctuation_fix('Salut!', 'fr');
 ok('Zweimal angewandt kommt dasselbe heraus',
    punctuation_fix($einmal, 'fr') === $einmal, $einmal);
 
+section('Die gemeinsame Fallsammlung');
+
+/*
+ * Dieselben Faelle prueft die Browser-Suite gegen antwortPruefen() in
+ * vorrat.js.
+ *
+ * Seit das Ueben ohne Netz laeuft, findet der Vergleich im Geraet statt -
+ * die Loesung darf dafuer nicht erst beim Server erfragt werden muessen.
+ * Damit gibt es die Regel zweimal, in zwei Sprachen, und das ist ein
+ * Risiko: Wer hier eine Nachsicht ergaenzt und dort nicht, laesst ein Kind
+ * vor zwei verschiedenen Wahrheiten stehen - dieselbe Antwort zaehlt
+ * online anders als offline.
+ *
+ * Die Sammlung in tests/faelle/antworten.json ist der Riegel davor. Sie
+ * gehoert keiner der beiden Seiten; faellt eine auseinander, faellt eine
+ * Suite um.
+ */
+$faelle = json_decode(
+    (string) file_get_contents(__DIR__ . '/faelle/antworten.json'), true,
+);
+ok('Die Fallsammlung ist lesbar', is_array($faelle) && count($faelle) >= 20,
+   is_array($faelle) ? count($faelle) . ' Faelle' : 'nicht lesbar');
+
+$schief = [];
+foreach ($faelle as $fall) {
+    $r = answer_check((string) $fall['getippt'], (string) $fall['erwartet']);
+    if ($r['correct'] !== $fall['correct'] || $r['exact'] !== $fall['exact']) {
+        $schief[] = $fall['was'] . ': ' . json_encode($r);
+    }
+}
+ok('answer_check() stimmt mit jedem Fall darin ueberein', $schief === [],
+   implode(' | ', array_slice($schief, 0, 3)));
+
 section('Abstand vor Satzzeichen gilt nicht als Fehler');
 
 // Was das Kind tippt, soll an dieser Stelle nie darüber entscheiden, ob die

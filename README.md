@@ -882,7 +882,7 @@ Dazu zwei Suiten gegen Simulatoren statt gegen die echten Dienste:
 php -S 127.0.0.1:8124 tests/fake-keyvault.php &
 php -S 127.0.0.1:8125 tests/fake-anthropic.php &
 
-php tests/sentences.php  # 136 Prüfungen, braucht nichts davon
+php tests/sentences.php  # 138 Prüfungen, braucht nichts davon
 php tests/keyvault.php   # 15 Prüfungen
 php tests/ai.php         # 59 Prüfungen
 ```
@@ -914,7 +914,7 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 1310 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 1312 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
 
@@ -932,7 +932,7 @@ Quelltext völlig richtig aussahen:
 - Der Zettel für die ganze Klasse wurde erst beim nächsten Laden anklickbar.
 
 ```bash
-node tests/browser/lauf.mjs --fixture            # 295 Prüfungen
+node tests/browser/lauf.mjs --fixture            # 296 Prüfungen
 node tests/browser/lauf.mjs --fixture bilder/    # dazu Bildschirmfotos
 ```
 
