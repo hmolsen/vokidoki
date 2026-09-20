@@ -2,7 +2,7 @@
    Hash-Routing, damit die App ohne Rewrite-Regeln in jedem Unterverzeichnis
    eines Shared-Hostings läuft. */
 
-import { VT, go, render, notice, api, hardRefresh } from './core.js';
+import { VT, go, render, notice, api, hardRefresh, navQuelle, navAbmelden } from './core.js';
 import { loginView } from './views/login.js';
 import { languagesView } from './views/languages.js';
 import { languageView } from './views/language.js';
@@ -11,7 +11,41 @@ import { unitView } from './views/unit.js';
 import { quizView } from './views/quiz.js';
 import { clozeView } from './views/cloze.js';
 import { profileView } from './views/profile.js';
-import { vorratAuffrischen, vorratLaden, vorratAlter } from './vorrat.js';
+import {
+    vorratAuffrischen, vorratLaden, vorratAlter, vorratVergessen,
+    sprachen, einheit,
+} from './vorrat.js';
+
+/*
+ * Woher die Leiste ihre Kurse nimmt - und was beim Abmelden wegzuraeumen
+ * ist.
+ *
+ * core.js baut die beiden Schubladen, kennt den Vorrat aber nicht: vorrat.js
+ * holt sich von dort VT und api(), ein Import in die andere Richtung waere
+ * ein Ring. Also reicht app.js die beiden Faeden herein - hier, wo ohnehin
+ * alles zusammenlaeuft.
+ */
+navQuelle(() => ({ kurse: sprachen(), aktiv: aktiverKurs() }));
+navAbmelden(async () => { vorratVergessen(); });
+
+/**
+ * Welcher Kurs gerade offen ist - damit er im Menue markiert steht.
+ *
+ * Nicht nur auf der Kursseite: Wer in einer Lerneinheit oder mitten im
+ * Ueben steht, ist genauso in einem Kurs, und ein Menue, das das vergisst,
+ * markiert ausgerechnet dort nichts, wo man am tiefsten drin ist.
+ */
+function aktiverKurs() {
+    const pfad = currentPath();
+
+    const direkt = pfad.match(/^\/lang\/(\d+)/);
+    if (direkt) return Number(direkt[1]);
+
+    const ueber = pfad.match(/^\/(?:unit|quiz|cloze)\/(\d+)/);
+    if (ueber) return einheit(ueber[1])?.l ?? null;
+
+    return null;
+}
 
 const ROUTES = [
     [/^\/login$/,                 loginView,     { anonymous: true }],

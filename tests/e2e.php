@@ -1947,10 +1947,15 @@ ok('core.js bringt hardRefresh mit', str_contains($js, 'export async function ha
 ok('Es meldet den Service Worker ab', str_contains($js, 'r.unregister()'));
 ok('Und leert den Zwischenspeicher', str_contains($js, 'caches.delete'));
 
-$view = file_get_contents(__DIR__ . '/../views/languages.js');
+/*
+ * Beides steht jetzt im Einstellungsmenue, nicht mehr als Symbol in der
+ * Ecke. Es stand dort nur auf der Startseite - wer mitten im Ueben eine
+ * neue Fassung holen wollte, musste erst zurueck.
+ */
+$view = file_get_contents(__DIR__ . '/../core.js');
 ok('In der App steht dort Aktualisieren statt Abmelden',
-   str_contains($view, 'VT.standalone') && str_contains($view, "id=\"refresh\""));
-ok('Im Browser bleibt das Abmelden', str_contains($view, "id=\"logout\""));
+   str_contains($view, 'VT.standalone') && str_contains($view, 'data-nav-refresh'));
+ok('Im Browser bleibt das Abmelden', str_contains($view, 'data-nav-logout'));
 
 // Der Versionsstempel muss sich mit den Dateien aendern, sonst liefern Browser
 // und Service Worker ewig die alte Fassung aus.
@@ -2095,8 +2100,15 @@ ok('Jeder importierte Name wird auch exportiert',
 preg_match('/import\s*\{([^}]*)\}\s*from\s*[\'"]\.\/core\.js[\'"]/s',
            (string) file_get_contents(__DIR__ . '/../app.js'), $m);
 $ausCore = array_filter(array_map('trim', explode(',', $m[1] ?? '')));
+/*
+ * Zwei mehr als frueher: navQuelle und navAbmelden. Sie sind der Grund,
+ * warum core.js die Menues bauen kann, ohne den Vorrat zu kennen - vorrat.js
+ * holt sich von dort VT und api(), ein Import in die andere Richtung waere
+ * ein Ring. app.js reicht die beiden Faeden herein, und nur deshalb bleibt
+ * die Richtung eindeutig.
+ */
 ok('app.js haelt sich bei core.js zurueck',
-   count($ausCore) <= 6, implode(', ', $ausCore));
+   count($ausCore) <= 8, implode(', ', $ausCore));
 
 $sw = file_get_contents(__DIR__ . '/../sw.js');
 
@@ -3089,14 +3101,23 @@ freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
     'release' => 0, 'unit_id' => $freiUnit, 'csrf' => $freiCsrf,
 ]);
 
-$cssK = $cssB;
+/*
+ * Die Schubladen stehen in style.css, nicht in admin.css: Seit die
+ * Kinderansicht dieselben zwei Knoepfe hat, brauchen beide Bereiche sie,
+ * und admin.css laedt die App gar nicht. Eine Fassung fuer beide - zwei
+ * waeren bald zwei verschiedene Menues.
+ */
+$cssK = (string) file_get_contents(__DIR__ . '/../style.css');
 ok('Die Schublade schiebt sich herein',
    preg_match('/\.menue > \.schublade\s*\{[^}]*animation:\s*schubladeLinks/s', $cssK) === 1,
    'als Animation, nicht als Uebergang - <details> blendet seinen Inhalt aus');
 ok('Und legt einen Schleier ueber die Seite',
    preg_match('/\.menue > \.schleier\s*\{[^}]*position:\s*fixed/s', $cssK) === 1);
+ok('Und sie steht dort, wo beide Bereiche sie finden',
+   !str_contains($cssB, '.menue > .schublade'),
+   'in admin.css waere sie fuer die App unerreichbar');
 ok('Und die Knopfreihe bricht um statt zu quetschen',
-   preg_match('/\.buttonrow\s*\{[^}]*flex-wrap:\s*wrap/s', $cssK) === 1);
+   preg_match('/\.buttonrow\s*\{[^}]*flex-wrap:\s*wrap/s', $cssB) === 1);
 
 /*
  * Die Grenze: Eine Lerneinheit einer anderen Schule geht niemanden etwas an -
@@ -4320,7 +4341,8 @@ q('DELETE FROM users WHERE id = ?', [$kontoKind]);
 
 $listeQuelle2 = (string) file_get_contents(__DIR__ . '/../views/languages.js');
 ok('Die App fuehrt zum eigenen Konto',
-   str_contains($listeQuelle2, "go('/konto')"));
+   str_contains((string) file_get_contents(__DIR__ . '/../core.js'), 'href="#/konto"'),
+   'im Einstellungsmenue, von jeder Ansicht aus - nicht nur von der Startseite');
 ok('Und die Verwaltung steht ueber den Sprachen',
    strpos($listeQuelle2, '${teacherLink()}') < strpos($listeQuelle2, '<div class="grid">'),
    'der Link steht noch darunter');
@@ -7581,6 +7603,157 @@ ok('Ein anderes Konto bekommt sein eigenes Buendel',
 @unlink($buFremdJar);
 
 q('DELETE FROM answer_receipts WHERE user_id = ?', [$userId]);
+
+section('Hell, dunkel, automatisch');
+
+require_once __DIR__ . '/../lib/thema.php';
+
+/*
+ * Die Wahl ist eine Einstellung des Geraets, kein Datensatz auf dem Server:
+ * Wer die App auf dem Tablet dunkel mag und am Rechner hell, soll das haben
+ * koennen, ohne dass eines das andere umstellt.
+ */
+$cssT = (string) file_get_contents(__DIR__ . '/../style.css');
+
+ok('Ohne Wahl entscheidet das Geraet',
+   preg_match('/@media \(prefers-color-scheme: dark\)/', $cssT) === 1);
+ok('Eine Wahl schlaegt das Geraet',
+   preg_match('/:root\[data-theme="dark"\]\s*\{/', $cssT) === 1
+   && preg_match('/:root\[data-theme="light"\]/', $cssT) === 1);
+ok('Und "hell" bleibt hell, auch auf einem dunklen Geraet',
+   preg_match('/@media \(prefers-color-scheme: dark\)\s*\{\s*(?:\/\*.*?\*\/\s*)?'
+              . ':root:not\(\[data-theme="light"\]\)/s', $cssT) === 1,
+   'ohne die Wache gewaenne die Medienabfrage');
+ok('Der Browser faerbt seine eigenen Teile mit',
+   substr_count($cssT, 'color-scheme:') >= 3,
+   'sonst steht ein weisser Rollbalken neben einer dunklen Seite');
+
+/*
+ * Und die Wahl greift, BEVOR das erste Bild steht. Als Modul ginge das
+ * nicht - Module laufen nach dem Aufbau, und dann blitzt eine halbe
+ * Sekunde die helle Seite auf, bevor sie dunkel wird.
+ */
+$skript = thema_kopf_skript();
+ok('Das Kopfskript liest die Wahl', str_contains($skript, 'vt-thema')
+   && str_contains($skript, 'data'));
+ok('Und faellt weich, wenn der Speicher gesperrt ist',
+   str_contains($skript, 'catch'),
+   'in einem privaten Fenster wirft schon der Zugriff auf localStorage');
+
+foreach (['/' => 'die App', '/teacher/' => 'der Lehrkraft-Bereich'] as $pfad => $was) {
+    $res = $pfad === '/' ? http($base . '/') : teacherGet('index.php');
+    ok('Es steht im Kopf - ' . $was,
+       str_contains($res['body'], 'vt-thema')
+       && strpos($res['body'], 'vt-thema') < strpos($res['body'], '</head>'),
+       'nach </head> waere es zu spaet');
+}
+
+/*
+ * Dieselben drei Knoepfe in beiden Bereichen - der eine baut sie in PHP,
+ * der andere in JavaScript. Zwei Fassungen desselben Markups sind ein
+ * Risiko; hier steht der Riegel.
+ */
+$phpWahl = thema_wahl_html();
+$jsWahl  = (string) file_get_contents(__DIR__ . '/../menue.js');
+
+foreach (['hell', 'dunkel', 'auto'] as $wahl) {
+    ok('Beide Fassungen kennen "' . $wahl . '"',
+       str_contains($phpWahl, 'data-thema="' . $wahl . '"')
+       && str_contains($jsWahl, 'data-thema="' . $wahl . '"'));
+}
+ok('Und beide nennen sie gleich',
+   str_contains($phpWahl, '> Hell<') && str_contains($jsWahl, '> Hell')
+   && str_contains($phpWahl, '> Dunkel<') && str_contains($jsWahl, '> Dunkel')
+   && str_contains($phpWahl, '> Automatisch<') && str_contains($jsWahl, '> Automatisch'));
+
+/*
+ * Noch einmal anmelden: Ein Abschnitt weiter oben hat die Sitzung dieser
+ * Lehrkraft beendet, und von der Anmeldeseite laesst sich kein Menue
+ * pruefen - dort gibt es keines.
+ */
+/*
+ * Eine eigene Lehrkraft fuer diesen Abschnitt.
+ *
+ * Die aus dem Lehrkraft-Abschnitt gibt es hier nicht mehr - er raeumt sein
+ * Konto am Ende weg. Und die Anmeldebremse weiter oben hat Fehlversuche
+ * erzeugt; sie zaehlt je Konto UND je Adresse, und alle Laeufe dieser Suite
+ * kommen von derselben Adresse.
+ */
+q('DELETE FROM login_attempts');
+$themaLehrer = 'themalehr_' . bin2hex(random_bytes(3));
+q('INSERT INTO users (school_id, username, display_name, password_hash, color, role, can_import)
+   VALUES (?, ?, ?, ?, ?, ?, 1)',
+  [(int) qv('SELECT school_id FROM users WHERE id = ?', [$userId]),
+   $themaLehrer, 'Frau Farbe',
+   password_hash('lehrerin123', PASSWORD_DEFAULT), '#4f7cff', ROLE_TEACHER]);
+$themaLehrerId = (int) db()->lastInsertId();
+
+teacherLogin($themaLehrer, 'lehrerin123');
+$res = teacherGet('index.php');
+ok('Der Lehrkraft-Bereich hat sie im Einstellungsmenue',
+   preg_match('/id="menuRechts".*?class="themawahl".*?name="teacher_logout"/s',
+              $res['body']) === 1,
+   'zwischen dem Konto und dem Abmelden');
+
+section('Die Menues in der Kinderansicht');
+
+/*
+ * Sie standen nur im Lehrkraft-Bereich. In der Kinderansicht hiess Kurs
+ * wechseln: zurueck, zurueck, antippen - und die Einstellungen lagen hinter
+ * einem Zahnrad, das es nur auf der Startseite gab. Wer mitten im Ueben die
+ * Farben umstellen wollte, musste erst herausfinden, wo das geht.
+ */
+$kern = (string) file_get_contents(__DIR__ . '/../core.js');
+
+ok('Die Leiste traegt beide Schubladen',
+   str_contains($kern, 'id="menuLinks"') && str_contains($kern, 'id="menuRechts"'));
+ok('Links die eigenen Kurse',
+   str_contains($kern, 'Meine Kurse') && str_contains($kern, 'href="#/lang/'));
+ok('Und der offene Kurs steht darin markiert',
+   str_contains($kern, "' on' : ''") && str_contains($kern, 'aria-current="page"'));
+ok('Rechts Profil, Passwort, Farben und Abmelden',
+   str_contains($kern, 'href="#/konto"')
+   && str_contains($kern, 'href="#/konto/passwort"')
+   && str_contains($kern, 'themaWahlHtml()')
+   && str_contains($kern, 'data-nav-logout'));
+
+ok('Sie stehen in jeder Ansicht, nicht nur auf der Startseite',
+   preg_match('/export function topbar\([^)]*\)\s*\{\s*return `\s*<div class="topbar">\s*'
+              . '\$\{navLinksHtml\(\)\}/s', $kern) === 1,
+   'topbar() baut sie, und topbar() ruft jede Ansicht');
+ok('Und werden nach jedem Zeichnen verdrahtet',
+   preg_match('/export function render\(html\)\s*\{.*?navAktivieren\(app\);/s',
+              $kern) === 1,
+   'sonst waere es achtzehnmal dieselbe Zeile, und die neunzehnte fehlte');
+
+ok('Ohne Anmeldung steht dort nichts',
+   substr_count($kern, "if (!VT.user) return '';") === 2,
+   'auf der Anmeldeseite gibt es weder Kurse noch ein Konto');
+
+/*
+ * Das Verhalten steht einmal da. Zwei Abschriften waeren bald zwei
+ * verschiedene Menues, und ein Kind und seine Lehrkraft sollen dieselbe
+ * Bewegung sehen.
+ */
+$menue   = (string) file_get_contents(__DIR__ . '/../menue.js');
+$lehrJs  = (string) file_get_contents(__DIR__ . '/../teacher/teacher.js');
+ok('Das Auf- und Zuklappen steht in menue.js',
+   str_contains($menue, 'export function menueAktivieren'));
+ok('Die App holt es sich von dort',
+   str_contains($kern, "from './menue.js'"));
+ok('Und der Lehrkraft-Bereich auch',
+   str_contains($lehrJs, 'leiste.dataset.menue')
+   && str_contains($lehrJs, 'menueAktivieren'),
+   'als Nachladung, weil teacher.js ein gewoehnliches Skript ist');
+ok('Es steht nicht zweimal da',
+   !str_contains($lehrJs, 'schubladeLinks')
+   && substr_count($menue, 'export function menueAktivieren') === 1);
+
+$res = teacherGet('index.php');
+ok('Die Leiste sagt dem Skript, wo das Modul liegt',
+   preg_match('/data-menue="[^"]*\/menue\.js/', $res['body']) === 1);
+
+q('DELETE FROM users WHERE id = ?', [$themaLehrerId]);
 
 section('Verbindungen bleiben stehen');
 

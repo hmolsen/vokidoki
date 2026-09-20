@@ -1,5 +1,7 @@
 /* Gemeinsame Bausteine: API-Zugriff, kleine DOM-Helfer, Router-Navigation. */
 
+import { menueAktivieren, themaWahlAktivieren, themaWahlHtml } from './menue.js';
+
 export const VT = window.VT;
 
 export class ApiError extends Error {
@@ -135,6 +137,15 @@ export function render(html) {
     const app = document.getElementById('app');
     app.innerHTML = html;
 
+    /*
+     * Die beiden Schubladen verdrahten - hier und nicht in jeder Ansicht.
+     *
+     * Die Leiste wird bei jedem Wechsel neu gezeichnet, und mit ihr die
+     * Menüs. Hätte jede Ansicht das selbst zu tun, wäre es achtzehnmal
+     * dieselbe Zeile, und die neunzehnte fehlte.
+     */
+    navAktivieren(app);
+
     // Ansichten, die sich an die sichtbare Höhe binden, bringen ein .screen
     // mit. Dann wird zusätzlich das Dokument selbst festgesetzt: Solange
     // html und body scrollen können, schiebt iOS beim Fokus die ganze Seite
@@ -178,11 +189,161 @@ export function go(path, replace = false) {
 export function topbar(title, { backTo = null, action = '', lead = '' } = {}) {
     return `
         <div class="topbar">
+            ${navLinksHtml()}
             ${backTo === null ? '' : `<button class="iconbtn" data-back="${esc(backTo)}" aria-label="Zurück">&#8249;</button>`}
             ${lead}
             <h1>${esc(title)}</h1>
             ${action}
+            ${navRechtsHtml()}
         </div>`;
+}
+
+/* ------------------------------------------------------- Die beiden Menüs
+ *
+ * Dieselben zwei Schubladen wie im Lehrkraft-Bereich: links die Kurse,
+ * rechts das eigene Konto. Dort standen sie schon, in der Kinderansicht
+ * fehlten sie - Kurs wechseln hiess zurück, zurück, antippen, und die
+ * Einstellungen lagen hinter einem Zahnrad, das nur auf der Startseite
+ * stand.
+ *
+ * Woher die Kurse kommen, weiss diese Datei nicht: Sie liegen im Vorrat,
+ * und vorrat.js holt sich von hier VT und api(). Ein Import in die andere
+ * Richtung wäre ein Ring. Stattdessen reicht app.js beim Start eine
+ * Funktion herein.
+ */
+let navQuelleFn = () => ({ kurse: [], aktiv: null });
+
+/** app.js sagt, woher die Kursliste kommt und welcher Kurs gerade offen ist. */
+export function navQuelle(fn) {
+    navQuelleFn = fn;
+}
+
+function navLinksHtml() {
+    if (!VT.user) return '';
+
+    const { kurse, aktiv } = navQuelleFn();
+
+    const eintraege = kurse.length === 0
+        ? '<p class="mleer tiny muted">Hier ist noch nichts freigegeben.</p>'
+        : `<div class="mgruppe">${kurse.map((k) => `
+            <a class="mitem${k.id === aktiv ? ' on' : ''}" href="#/lang/${k.id}"
+               ${k.id === aktiv ? 'aria-current="page"' : ''}>
+                <span class="micon" aria-hidden="true">${
+                    flagHtml(k.flag_emoji || '\u{1F310}', 'mflagge')
+                }</span>
+                <span>${esc(k.name)}</span>
+            </a>`).join('')}</div>`;
+
+    /*
+     * Für eine Lehrkraft geht es von hier auch wieder hinaus. Sie kommt
+     * her, um zu sehen, was ihre Klasse sieht - und fand dann keinen Weg
+     * zurück ausser dem Hinweis oben auf der Seite, den es nicht auf jeder
+     * gibt. Einem Kind sagt der Eintrag nichts, also steht er dort nicht.
+     */
+    const verwaltung = VT.user.isTeacher ? `
+        <hr class="mtrenner">
+        <a class="mitem" href="${esc(VT.base)}/teacher/">
+            <span class="micon" aria-hidden="true">&#128203;</span>
+            <span>Zur Verwaltung</span>
+        </a>` : '';
+
+    return `
+        <details class="menue" id="menuLinks">
+            <summary class="burger" aria-label="Menü" title="Menü">
+                <span aria-hidden="true">&#9776;</span>
+            </summary>
+            <span class="schleier" data-zu></span>
+            <nav class="schublade" aria-label="Navigation">
+                <a class="mitem haupt" href="#/">
+                    <span class="micon" aria-hidden="true">&#127968;</span>
+                    <span>Meine Kurse</span>
+                </a>
+                ${eintraege}
+                ${verwaltung}
+            </nav>
+        </details>`;
+}
+
+function navRechtsHtml() {
+    if (!VT.user) return '';
+
+    /*
+     * In der installierten App steht unten kein Abmelden, sondern
+     * Aktualisieren. Das Symbol auf dem Home-Bildschirm gehört genau einem
+     * Kind - sich dort abzumelden hilft niemandem und nimmt nur den Zugang.
+     * Was dort dafür fehlt, ist ein Weg zu einer neuen Fassung: keine
+     * Adresszeile, kein Neu-Laden.
+     */
+    const letzte = VT.standalone
+        ? `<button class="mitem" type="button" data-nav-refresh>
+               <span class="micon" aria-hidden="true">&#8635;</span>
+               <span>App aktualisieren</span>
+           </button>`
+        : `<button class="mitem" type="button" data-nav-logout>
+               <span class="micon" aria-hidden="true">&#9099;</span>
+               <span>Abmelden</span>
+           </button>`;
+
+    return `
+        <details class="menue rechts" id="menuRechts">
+            <summary class="burger" aria-label="Einstellungen" title="Einstellungen">
+                <span aria-hidden="true">&#9881;</span>
+            </summary>
+            <span class="schleier" data-zu></span>
+            <nav class="schublade" aria-label="Einstellungen">
+                <p class="mkopf">${esc(VT.user.name)}</p>
+
+                <a class="mitem" href="#/konto">
+                    <span class="micon" aria-hidden="true">&#128100;</span>
+                    <span>Mein Profil</span>
+                </a>
+                <a class="mitem" href="#/konto/passwort">
+                    <span class="micon" aria-hidden="true">&#128273;</span>
+                    <span>Passwort ändern</span>
+                </a>
+
+                <hr class="mtrenner">
+                ${themaWahlHtml()}
+                <hr class="mtrenner">
+
+                ${letzte}
+            </nav>
+        </details>`;
+}
+
+/** Was nach jedem Zeichnen zu tun ist, damit die Menüs leben. */
+function navAktivieren(wurzel) {
+    menueAktivieren(wurzel);
+    themaWahlAktivieren(wurzel);
+
+    wurzel.querySelector('[data-nav-refresh]')?.addEventListener('click', async (e) => {
+        const k = e.currentTarget;
+        k.disabled = true;
+        k.querySelector('.micon').innerHTML = '<span class="spinner inline"></span>';
+        await hardRefresh();
+    });
+
+    wurzel.querySelector('[data-nav-logout]')?.addEventListener('click', async () => {
+        if (!confirm('Abmelden? Dein Homescreen-Symbol bleibt bestehen.')) return;
+        try {
+            await api('auth', 'logout', { body: {} });
+        } catch { /* auch bei Fehler zum Login */ }
+        /*
+         * Und der Vorrat geht mit - er gehört diesem Kind. Auf einem
+         * geteilten Tablet hätte das nächste sonst die Vokabeln des
+         * vorigen im Gerät liegen. Wer das aufräumt, weiss nur vorrat.js;
+         * app.js reicht es beim Start herein.
+         */
+        try { await abmeldeAufraeumer(); } catch { /* egal */ }
+        window.location.href = `${VT.base}/`;
+    });
+}
+
+let abmeldeAufraeumer = async () => {};
+
+/** app.js sagt, was beim Abmelden noch wegzuräumen ist. */
+export function navAbmelden(fn) {
+    abmeldeAufraeumer = fn;
 }
 
 /** Aktiviert die Zurück-Buttons aus topbar(). */

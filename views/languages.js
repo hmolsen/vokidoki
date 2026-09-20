@@ -1,10 +1,8 @@
 import {
-    VT, api, render, esc, $, $$, on, go, topbar, loading, showError, clearError, withBusy,
-    hardRefresh, flagHtml,
+    VT, api, render, esc, $, on, go, topbar, showError, clearError, withBusy,
+    flagHtml,
 } from '../core.js';
-import {
-    sprachen, einheitenDerSprache, vokabelnDerEinheit, vorratVergessen,
-} from '../vorrat.js';
+import { sprachen, einheitenDerSprache, vokabelnDerEinheit } from '../vorrat.js';
 
 /* Die Sprachen, die hier gebraucht werden. Alles andere lässt sich
    im Formular darunter frei eintragen. */
@@ -37,7 +35,7 @@ export async function languagesView() {
     }).join('');
 
     render(`
-        ${topbar(VT.user.appName, { action: cornerButton() })}
+        ${topbar(VT.user.appName)}
         <div id="msg"></div>
         ${teacherLink()}
         ${languages.length === 0 ? `
@@ -63,55 +61,6 @@ export async function languagesView() {
     on('[data-lang]', 'click', (e) => go(`/lang/${e.currentTarget.dataset.lang}`));
     const add = $('#add');
     if (add) add.addEventListener('click', showAddForm);
-    wireCornerButton();
-}
-
-/**
- * In der installierten App steht dort kein Abmelden, sondern Aktualisieren.
- *
- * Das Symbol gehört zu genau einem Kind - sich dort abzumelden hilft niemandem
- * und nimmt nur den Zugang. Was in der App dagegen fehlt, ist ein Weg, eine
- * neue Fassung zu holen: keine Adresszeile, kein Neu-Laden.
- */
-function cornerButton() {
-    // Das eigene Konto steht immer daneben - Name, Farbe und vor allem das
-    // Passwort waren bisher nur ueber den Betreiber zu aendern.
-    const konto = '<button class="iconbtn" id="konto" aria-label="Mein Konto">&#9881;</button>';
-
-    return konto + (VT.standalone
-        ? '<button class="iconbtn" id="refresh" aria-label="App aktualisieren">&#8635;</button>'
-        : '<button class="iconbtn" id="logout" aria-label="Abmelden">&#9099;</button>');
-}
-
-function wireCornerButton() {
-    const konto = $('#konto');
-    if (konto) konto.addEventListener('click', () => go('/konto'));
-
-    const refresh = $('#refresh');
-    if (refresh) {
-        refresh.addEventListener('click', async () => {
-            refresh.disabled = true;
-            refresh.innerHTML = '<span class="spinner inline"></span>';
-            await hardRefresh();
-        });
-        return;
-    }
-
-    const btn = $('#logout');
-    if (!btn) return;
-    btn.addEventListener('click', async () => {
-        if (!confirm('Abmelden? Dein Homescreen-Symbol bleibt bestehen.')) return;
-        try {
-            await api('auth', 'logout', { body: {} });
-            /*
-             * Und der Vorrat geht mit. Er gehoert diesem Kind: Auf einem
-             * geteilten Tablet haette das naechste sonst die Vokabeln des
-             * vorigen im Geraet liegen.
-             */
-            vorratVergessen();
-        } catch { /* auch bei Fehler zum Login */ }
-        window.location.href = `${VT.base}/`;
-    });
 }
 
 /**

@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../lib/html.php';
+require_once __DIR__ . '/../lib/thema.php';
 require_once __DIR__ . '/../lib/db.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/access.php';
@@ -217,6 +218,7 @@ function teacher_login_page(?string $error): never
 <title>Anmeldung - Vokabeltrainer</title>
 <link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
 <link rel="stylesheet" href="<?= h(url('/admin/admin.css')) ?>">
+<?= thema_kopf_skript() ?>
 </head><body class="admin"><main class="adminmain" style="max-width:420px">
 <h1>Vokabeltrainer</h1>
 <p class="muted">Bereich für Lehrkräfte</p>
@@ -243,6 +245,7 @@ function teacher_blocked_page(): never
 <title>Kurz Geduld - Vokabeltrainer</title>
 <link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
 <link rel="stylesheet" href="<?= h(url('/admin/admin.css')) ?>">
+<?= thema_kopf_skript() ?>
 </head><body class="admin"><main class="adminmain" style="max-width:520px">
 <h1>Kurz Geduld</h1>
 <div class="notice">
@@ -277,7 +280,7 @@ function teacher_nav(array $user, ?int $kursId = null): void
 {
     $meine = courses_for_teacher((int) $user['id'], (int) ($user['school_id'] ?? 0));
     ?>
-<div class="adminbar">
+<div class="adminbar" data-menue="<?= h(url('/menue.js') . '?v=' . app_version()) ?>">
     <details class="menue" id="menuLinks">
         <summary class="burger" aria-label="Menü" title="Menü">
             <span aria-hidden="true">&#9776;</span>
@@ -363,6 +366,25 @@ function teacher_nav(array $user, ?int $kursId = null): void
 
             <hr class="mtrenner">
 
+            <?php
+            /*
+             * Hell, dunkel, oder wie das Geraet es haelt.
+             *
+             * Ohne JavaScript stehen die Knoepfe da und tun nichts - es ist
+             * eine Einstellung des Geraets, kein Datensatz auf dem Server,
+             * und ohne Skript gilt eben die Einstellung des Geraets. Das
+             * ist die Voreinstellung und fuer die meisten die richtige
+             * Antwort; die beiden anderen sind fuer die, bei denen sie es
+             * nicht ist.
+             *
+             * Dasselbe Markup baut themaWahlHtml() in menue.js fuer die
+             * Kinderansicht. Eine Pruefung haelt beide zusammen.
+             */
+            ?>
+            <?= thema_wahl_html() ?>
+
+            <hr class="mtrenner">
+
             <form method="post" action="<?= h(teacher_url('index.php')) ?>">
                 <?= teacher_csrf_field() ?>
                 <button class="mitem" name="teacher_logout" value="1">
@@ -417,6 +439,13 @@ function teacher_head(
 <title><?= h($title) ?> - Vokabeltrainer</title>
 <link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
 <link rel="stylesheet" href="<?= h(url('/admin/admin.css')) ?>">
+<?php
+/*
+ * Die Farbwahl vor dem ersten Bild - sonst blitzt die helle Seite auf,
+ * bevor sie dunkel wird.
+ */
+?>
+<?= thema_kopf_skript() ?>
 </head><body class="admin" data-base="<?= h(base_path()) ?>">
 <?php teacher_nav($user, $kursId); ?>
 <main class="adminmain">

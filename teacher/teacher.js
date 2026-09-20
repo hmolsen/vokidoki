@@ -18,96 +18,25 @@ document.addEventListener('click', (e) => {
 // ------------------------------------------------------------------ Menues
 
 /**
- * Die beiden Schubladen links und rechts.
+ * Die beiden Schubladen und die Farbwahl.
  *
- * Das Auf- und Zuklappen macht <details> von selbst - hier kommt nur
- * dazu, was der Browser nicht wissen kann: dass die beiden einander
- * ausschliessen, dass ein Druck auf den Schleier daneben schliesst, und
- * dass Escape schliesst. Ohne Skript bleibt der Knopf selbst der Weg
- * zurueck; das ist einer mehr, aber keiner weniger.
+ * Das Verhalten steht in menue.js - dieselbe Datei bedient die
+ * Kinderansicht. Zwei Abschriften waeren bald zwei verschiedene Menues, und
+ * ein Kind und seine Lehrkraft sollen dieselbe Bewegung sehen.
+ *
+ * Nachgeladen statt importiert: Diese Datei ist ein gewoehnliches Skript,
+ * kein Modul. Die Adresse steht im HTML, weil ein dynamisches import() in
+ * einem klassischen Skript nicht ueberall gleich aufgeloest wird.
  */
-function initMenues() {
-    const menues = [...document.querySelectorAll('details.menue')];
-    if (menues.length === 0) return;
+async function initMenues() {
+    const leiste = document.querySelector('.adminbar');
+    if (!leiste) return;
 
-    const teile = (m) => [m.querySelector('.schublade'), m.querySelector('.schleier')]
-        .filter(Boolean);
+    const { menueAktivieren, themaWahlAktivieren } =
+        await import(leiste.dataset.menue);
 
-    /*
-     * Vor jedem Oeffnen die Animation zuruecksetzen.
-     *
-     * Sie lief sonst genau einmal je Seite. Ein geschlossenes <details>
-     * nimmt seinen Inhalt inzwischen nicht mehr aus dem Baum, sondern
-     * versteckt ihn per content-visibility: Das Element bleibt dasselbe,
-     * seine Animation ist abgelaufen, und wieder sichtbar zu werden ist
-     * kein Grund, von vorn anzufangen. Beim zweiten Oeffnen stand die
-     * Schublade darum einfach da.
-     *
-     * animation: none, ein erzwungener Umbruch, dann zurueck auf die Regel
-     * aus dem Stilblatt - das ist der Weg, eine CSS-Animation neu zu
-     * starten, und er ist so alt wie CSS-Animationen.
-     */
-    const oeffnen = (m) => {
-        menues.forEach((a) => { if (a !== m && a.open) schliessen(a, true); });
-        m.classList.remove('zu');
-        m.open = true;
-        teile(m).forEach((el) => {
-            el.style.animation = 'none';
-            void el.offsetWidth;
-            el.style.animation = '';
-        });
-    };
-
-    /*
-     * Und wieder hinaus - das kann <details> von sich aus nicht.
-     *
-     * open = false nimmt den Inhalt sofort weg; es gibt dann nichts mehr,
-     * was hinausfliegen koennte. Also erst .zu setzen, die Animation
-     * abwarten und dann schliessen. Laeuft keine (reduzierte Bewegung,
-     * oder ein Browser, der getAnimations nicht kennt), passiert es
-     * sofort - eine Schublade, die haengenbleibt, waere schlimmer als
-     * eine, die springt.
-     */
-    const schliessen = (m, sofort = false) => {
-        if (!m.open || m.dataset.schliesst === '1') return;
-
-        const fertig = () => {
-            m.classList.remove('zu');
-            delete m.dataset.schliesst;
-            m.open = false;
-        };
-
-        if (sofort) { fertig(); return; }
-
-        m.dataset.schliesst = '1';
-        m.classList.add('zu');
-
-        const laeuft = teile(m).flatMap((el) => el.getAnimations?.() ?? []);
-        if (laeuft.length === 0) { fertig(); return; }
-        Promise.all(laeuft.map((a) => a.finished)).then(fertig, fertig);
-    };
-
-    menues.forEach((m) => {
-        /*
-         * Den Klick auf den Knopf selbst uebernehmen: Der Browser wuerde
-         * open sofort umlegen, und damit waere das Zuklappen vorbei, bevor
-         * es angefangen hat. Ohne Skript bleibt genau dieses Umlegen der
-         * Weg - hier wird es nur aufgeschoben, nicht ersetzt.
-         */
-        m.querySelector('summary')?.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (m.open) schliessen(m); else oeffnen(m);
-        });
-        m.querySelector('[data-zu]')?.addEventListener('click', () => schliessen(m));
-    });
-
-    document.addEventListener('keydown', (e) => {
-        if (e.key !== 'Escape') return;
-        const offen = menues.find((m) => m.open);
-        if (!offen) return;
-        schliessen(offen);
-        offen.querySelector('summary')?.focus();
-    });
+    menueAktivieren(document);
+    themaWahlAktivieren(document);
 }
 
 initMenues();

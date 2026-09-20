@@ -16,6 +16,7 @@ require_once __DIR__ . '/lib/handoff.php';
 require_once __DIR__ . '/lib/access.php';
 require_once __DIR__ . '/lib/errors.php';
 require_once __DIR__ . '/lib/version.php';
+require_once __DIR__ . '/lib/thema.php';
 
 boot_error_handling();
 
@@ -111,6 +112,14 @@ header('Cache-Control: no-store, must-revalidate');
 <meta name="robots" content="noindex, nofollow">
 
 <link rel="stylesheet" href="<?= $e(url('/style.css?v=' . $appVersion)) ?>">
+<?php
+/*
+ * Die Farbwahl vor dem ersten Bild. Als Modul ginge das nicht - Module
+ * laufen nach dem Aufbau, und dann blitzt eine halbe Sekunde lang die
+ * helle Seite auf, bevor sie dunkel wird.
+ */
+?>
+<?= thema_kopf_skript() ?>
 </head>
 <body style="--accent: <?= $e($color) ?>">
 

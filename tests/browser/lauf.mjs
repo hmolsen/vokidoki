@@ -33,6 +33,7 @@ import { pruefe as suche }    from './suche.mjs';
 import { pruefe as mobil }    from './mobil.mjs';
 import { pruefe as stapel }   from './stapel.mjs';
 import { pruefe as vorrat, pruefeKaltstart } from './vorrat.mjs';
+import { pruefe as menues }  from './menues.mjs';
 import { pruefe as kursanlegen } from './kursanlegen.mjs';
 
 const hier  = dirname(fileURLToPath(import.meta.url));
@@ -70,6 +71,7 @@ try {
     await stapel(f, aus);
     await vorrat(f, aus);
     await pruefeKaltstart(f, aus);
+    await menues(f, aus);
     // Zuletzt: legt einen Kurs an, und die Navigation zaehlt vorher Karten.
     await kursanlegen(f, aus);
 } finally {
