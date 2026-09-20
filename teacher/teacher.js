@@ -373,7 +373,18 @@ function initMemberSearch() {
     const daten = document.getElementById(feld?.getAttribute('list') ?? '');
     if (!feld || !geist || !liste || !daten) return;
 
-    const namen = [...daten.options].map((o) => o.value);
+    /*
+     * Name und Klasse. Der Wert bleibt der blosse Name - danach sucht der
+     * Server -, die Klasse steht daneben in data-zusatz und wird in
+     * Klammern dahinter gezeigt. Gesucht wird in beidem: "Marta W." gibt
+     * es an einer Schule zweimal, "Marta W. (7b)" nicht, und wer die
+     * Klasse kennt, aber den Namen nur halb, kommt ueber sie ans Ziel.
+     */
+    const leute = [...daten.options].map((o) => ({
+        name:   o.value,
+        zusatz: o.dataset.zusatz ?? '',
+    }));
+    const beschriftung = (l) => (l.zusatz === '' ? l.name : `${l.name} (${l.zusatz})`);
 
     // Die eigene Liste ersetzt die des Browsers - beide zugleich wären zwei
     // Vorschlagslisten übereinander.
@@ -433,17 +444,17 @@ function initMemberSearch() {
             return;
         }
 
-        const treffer = namen.filter((n) => passt(n, suche));
+        const treffer = leute.filter((l) => passt(beschriftung(l), suche));
 
         /*
          * Genau einer, und er fängt mit dem Getippten an: Dann ist die
          * Liste überflüssig - der Name steht ja schon da, nur grau.
          */
         const eindeutig = treffer.length === 1
-            && ohnePunkte(treffer[0]).startsWith(ohnePunkte(suche));
+            && ohnePunkte(treffer[0].name).startsWith(ohnePunkte(suche));
 
         if (eindeutig) {
-            geistSetzen(roh, roh + treffer[0].slice(suche.length));
+            geistSetzen(roh, roh + treffer[0].name.slice(suche.length));
             schliessen();
             return;
         }
@@ -463,8 +474,10 @@ function initMemberSearch() {
 
         gezeigt = treffer.slice(0, 8);
         aktiv = -1;
-        liste.innerHTML = gezeigt.map((n, i) => `<li role="option" data-i="${i}"
-            aria-selected="false">${escapeHtml(n)}</li>`).join('');
+        liste.innerHTML = gezeigt.map((l, i) => `<li role="option" data-i="${i}"
+            aria-selected="false">${escapeHtml(l.name)}<span class="zusatz">${
+                l.zusatz === '' ? '' : ` (${escapeHtml(l.zusatz)})`
+            }</span></li>`).join('');
         liste.hidden = false;
         platzieren();
         feld.setAttribute('aria-expanded', 'true');
@@ -512,7 +525,7 @@ function initMemberSearch() {
         // schickt das Formular ganz gewöhnlich ab.
         if (aktiv >= 0) {
             e.preventDefault();
-            nehmen(gezeigt[aktiv]);
+            nehmen(gezeigt[aktiv].name);
             return;
         }
         if (ergaenzung !== '') {
@@ -525,7 +538,7 @@ function initMemberSearch() {
     liste.addEventListener('click', (e) => {
         const li = e.target.closest('li[role=option]');
         if (!li) return;
-        nehmen(gezeigt[Number(li.dataset.i)]);
+        nehmen(gezeigt[Number(li.dataset.i)].name);
     });
 
     // Wer woandershin fasst, will die Liste nicht mehr sehen.
@@ -744,6 +757,116 @@ function initStudentAdd() {
 }
 
 initStudentAdd();
+
+// ------------------------------------------------- Vokabeln von Hand
+
+/**
+ * Eine Vokabel je Enter, ohne die Seite neu zu laden.
+ *
+ * Gedacht für den Fall, dass jemand eine Handvoll Wörter abtippt: Wort,
+ * Tab, Wort, Enter - und die nächste Zeile steht schon da. Vorher lud die
+ * Seite nach jeder Vokabel neu; bei zehn Wörtern sind das zehn Ladevorgänge
+ * und zehnmal die Tabelle von oben.
+ *
+ * Die frische Zeile kommt vom Server, nicht von hier: `vocab_append()`
+ * setzt `punctuation_fix()` darauf an, es steht also nicht zwingend das in
+ * der Datenbank, was getippt wurde. Sie taucht grün auf und verblasst -
+ * eine Bestätigung, die man nicht wegklicken muss.
+ *
+ * Ohne JavaScript schickt dasselbe Formular ganz gewöhnlich ab: Die Seite
+ * lädt neu, die Zeile steht da. Dasselbe Ergebnis, nur langsamer.
+ */
+function initVocabAdd() {
+    const zeile = document.getElementById('handzeile');
+    const form  = document.getElementById('neueVokabel');
+    const karte = document.getElementById('vonHand');
+    if (!zeile || !form) return;
+
+    const fremd = zeile.querySelector('input[name="new_f"]');
+    const deutsch = zeile.querySelector('input[name="new_n"]');
+    const knopf = zeile.querySelector('[name="add_vocab"]');
+
+    /*
+     * Der Knopf unter der Tabelle ist ein Link auf ?vonhand=1 - ohne
+     * Skript lädt die Seite damit neu und die Zeile steht da. Mit Skript
+     * genügt es, sie einzublenden.
+     */
+    const zeigen = () => {
+        zeile.hidden = false;
+        zeile.scrollIntoView({ block: 'center' });
+        fremd.focus();
+    };
+    if (karte) karte.addEventListener('click', (e) => { e.preventDefault(); zeigen(); });
+
+    const anlegen = async () => {
+        if (fremd.value.trim() === '' || deutsch.value.trim() === '') {
+            (fremd.value.trim() === '' ? fremd : deutsch).focus();
+            return;
+        }
+
+        const daten = new FormData(form);
+        daten.set('add_vocab', '1');
+        daten.set('new_f', fremd.value);
+        daten.set('new_n', deutsch.value);
+
+        knopf.disabled = true;
+        try {
+            const res = await fetch(form.action, {
+                method: 'POST',
+                body: daten,
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'fetch' },
+            });
+            const json = await res.json();
+            if (!json.ok) {
+                alert(json.error || 'Das hat nicht geklappt.');
+                return;
+            }
+            einhaengen(json.vokabel);
+            fremd.value = '';
+            deutsch.value = '';
+            fremd.focus();
+        } catch {
+            alert('Keine Verbindung. Die Vokabel ist nicht angekommen.');
+        } finally {
+            knopf.disabled = false;
+        }
+    };
+
+    /*
+     * Die neue Zeile vor die Anlegezeile - eine frisch angelegte Vokabel
+     * steht hinten, und hinten ist hier direkt über dem Feld, in das man
+     * gerade getippt hat.
+     */
+    const einhaengen = (v) => {
+        const tr = document.createElement('tr');
+        tr.className = 'locked frisch';
+        tr.dataset.pos = String(
+            document.querySelectorAll('#freigabe tr[data-pos]').length + 1);
+        tr.innerHTML = `
+            <td><strong>${escapeHtml(v.term_foreign)}</strong></td>
+            <td><span>${escapeHtml(v.term_native)}</span></td>
+            <td class="actions"></td>`;
+        zeile.parentNode.insertBefore(tr, zeile);
+    };
+
+    knopf.addEventListener('click', (e) => { e.preventDefault(); anlegen(); });
+
+    /*
+     * Enter in einem der beiden Felder legt an. Nicht das Formular
+     * abschicken lassen: Das lüde die Seite neu, und genau das soll hier
+     * nicht passieren.
+     */
+    [fremd, deutsch].forEach((feld) => {
+        feld.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            anlegen();
+        });
+    });
+}
+
+initVocabAdd();
 
 // ------------------------------------------ Vokabel aendern
 

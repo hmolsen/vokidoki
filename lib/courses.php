@@ -332,8 +332,22 @@ function course_delete(int $courseId): void
 /** Konten der Schule, die in diesem Kurs noch fehlen. */
 function course_candidates(int $courseId, int $schoolId): array
 {
+    /*
+     * Die Klasse reist mit.
+     *
+     * "Marta W." gibt es an einer Schule zweimal, "Marta W. (7b)" nicht.
+     * Im Suchfeld steht sie hinter dem Namen, und man kann danach suchen -
+     * wer die Klasse kennt, aber den Namen nur halb, kommt so ans Ziel.
+     *
+     * Ein Kind kann in mehreren Klassen stehen; genommen wird die erste
+     * nach Namen. Das ist eine Anzeige, keine Zuordnung.
+     */
     return qa(
-        'SELECT u.id, u.display_name, u.username, u.role
+        'SELECT u.id, u.display_name, u.username, u.role,
+                (SELECT c.name FROM class_members cm
+                   JOIN classes c ON c.id = cm.class_id
+                  WHERE cm.user_id = u.id AND c.school_id = u.school_id
+                  ORDER BY c.name LIMIT 1) AS class_name
            FROM users u
           WHERE u.school_id = ? AND u.active = 1
             AND NOT EXISTS (SELECT 1 FROM course_members m
@@ -537,8 +551,21 @@ function course_in_school(int $courseId, int $schoolId): ?array
 /** Wer gehört zum Kurs? Lehrkräfte zuerst. */
 function course_members_list(int $courseId): array
 {
+    /*
+     * Mit der Klasse - in der Tabelle steht sie statt der Rolle.
+     *
+     * "Kind" in jeder Zeile sagte nichts: Dass im Kurs Kinder sind, weiss
+     * man. Die Klasse dagegen unterscheidet, und bei einem Kurs quer durch
+     * die Jahrgaenge ist sie die einzige Auskunft, die zaehlt.
+     *
+     * Lehrkraefte stehen oben - member_role = 'student' ist fuer sie 0.
+     */
     return qa(
-        "SELECT m.member_role, u.id, u.display_name, u.username, u.active
+        "SELECT m.member_role, u.id, u.display_name, u.username, u.active,
+                (SELECT c.name FROM class_members cm
+                   JOIN classes c ON c.id = cm.class_id
+                  WHERE cm.user_id = u.id AND c.school_id = u.school_id
+                  ORDER BY c.name LIMIT 1) AS class_name
            FROM course_members m
            JOIN users u ON u.id = m.user_id
           WHERE m.course_id = ?

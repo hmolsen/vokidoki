@@ -20,6 +20,30 @@ if ($kurs === null) {
 
 $zurueck = 'course.php?id=' . $courseId;
 
+/*
+ * Eine leere Lerneinheit anlegen.
+ *
+ * Bis hierher entstand eine Lerneinheit nur beim Einlesen - aus Fotos, in
+ * der App. Wer eine Handvoll Vokabeln von Hand eintragen wollte, brauchte
+ * trotzdem erst ein Foto. Jetzt entsteht sie leer, und auf ihrer Seite
+ * stehen alle drei Wege nebeneinander.
+ *
+ * Der Titel ist vorlaeufig: "Unbenannte Lerneinheit" steht dort, bis
+ * jemand oben auf den Stift drueckt. Ein Pflichtfeld an dieser Stelle
+ * waere eine Frage vor der Arbeit - und beim Einlesen kommt der Titel
+ * ohnehin von der Buchseite.
+ */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_unit'])) {
+    teacher_csrf_check();
+
+    q('INSERT INTO units (language_id, course_id, title, released_position)
+       VALUES (?, ?, ?, 0)',
+      [(int) $kurs['language_id'], $courseId, 'Unbenannte Lerneinheit']);
+
+    teacher_flash('Leere Lerneinheit angelegt. Gib ihr einen Namen und füll sie.');
+    teacher_redirect('unit.php?id=' . (int) db()->lastInsertId());
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['sync_class'])) {
     teacher_csrf_check();
     $neu = course_sync_class($courseId);
@@ -178,16 +202,6 @@ $offene     = course_candidates($courseId, $schoolId);
 $verlust    = course_delete_preview($courseId);
 
 /*
- * Der Weg zum Einlesen, an einer Stelle gebildet.
- *
- * Die App faehrt ueber die Raute: /#/lang/<id>/import. Als Adresse fuer
- * einen QR-Code muss sie vollstaendig sein - public_url() statt url(),
- * sonst steht im Code ein Pfad und kein Link.
- */
-$importPfad = '/lang/' . (int) $kurs['language_id'] . '/import';
-$importUrl  = url('/') . '#' . $importPfad;
-
-/*
  * Der Weg in die Schueleransicht.
  *
  * Eine Lehrkraft sieht in der App genau das, was ihre Klasse sieht - das
@@ -220,15 +234,11 @@ teacher_flash_render();
  */
 ?>
 <?= teacher_leer(
-    'Noch keine Lerneinheit. Eingelesen wird <strong>am Handy</strong> &ndash; '
-    . 'dort ist die Kamera. Buchseite fotografieren, das Modell erkennt die '
-    . 'Vokabeln, und die Lerneinheit landet in diesem Kurs.',
-    sprintf(
-        '<a class="btn small" href="%s" target="_blank" rel="noopener">Vokabeln einlesen</a>'
-        . '<button class="btn small secondary" type="button" data-handoff>'
-        . '<span aria-hidden="true">&#128241;</span> Am Smartphone einlesen</button>',
-        h($importUrl),
-    ),
+    'Noch keine Lerneinheit. Leg eine an &ndash; auf ihrer Seite stehen die '
+    . 'drei Wege, sie zu f&uuml;llen: von Hand, aus Dateien, oder mit dem '
+    . 'Telefon fotografiert.',
+    '<button class="btn small" form="neueEinheit" name="add_unit" value="1">'
+    . 'Lerneinheit hinzuf&uuml;gen</button>',
 ) ?>
 <?php else: ?>
 <table class="data courses rowlink" id="einheiten">
@@ -274,15 +284,23 @@ teacher_flash_render();
      * (wenn das hier schon das Telefon ist) oder hinueber aufs Telefon.
      */
     ?>
+    <?php
+    /*
+     * Eine Anlegezeile, ein Knopf.
+     *
+     * Hier standen zwei - "Vokabeln einlesen" und "Am Smartphone einlesen"
+     * -, und beide waren nicht die Frage, die man an dieser Stelle hat.
+     * Die lautet: Ich brauche eine neue Lerneinheit. Wie sie gefuellt wird,
+     * entscheidet man auf ihrer Seite, wo alle drei Wege nebeneinander
+     * stehen - auch der von Hand, den es hier gar nicht gab.
+     */
+    ?>
     <tr class="newrow">
         <td colspan="5" data-label="Neue Lerneinheit">
             <span class="coursetitle addbuttons">
                 <span class="cflag plus">+</span>
-                <a class="btn small" href="<?= h($importUrl) ?>"
-                   target="_blank" rel="noopener">Vokabeln einlesen</a>
-                <button class="btn small secondary" type="button" data-handoff>
-                    <span aria-hidden="true">&#128241;</span> Am Smartphone einlesen
-                </button>
+                <button class="btn small" form="neueEinheit"
+                        name="add_unit" value="1">Lerneinheit hinzuf&uuml;gen</button>
             </span>
         </td>
     </tr>
@@ -297,47 +315,39 @@ teacher_flash_render();
 
 <?php
 /*
- * Das Fenster mit dem Code.
+ * Das Fenster mit dem QR-Code stand einmal hier.
  *
- * Es steht leer im HTML und wird erst gefuellt, wenn jemand darauf drueckt -
- * die Marke darin ist eine Anmeldung, und die soll nicht auf Vorrat
- * entstehen und zehn Minuten lang auf einem unbeaufsichtigten Bildschirm
- * liegen. Ohne JavaScript bleibt der Knopf wirkungslos; der Weg ueber
- * "Vokabeln einlesen" und eine Anmeldung am Telefon steht daneben.
+ * Es gehoert zur Lerneinheit, nicht zum Kurs: Der Code fuehrt ins
+ * Einlesen, und eingelesen wird IN eine Lerneinheit. Auf ihrer Seite steht
+ * er als einer von drei Wegen neben den beiden anderen.
  */
 ?>
-<dialog id="handoff" class="qrdialog"
-        data-url="<?= h(teacher_url('handoff.php')) ?>"
-        data-course="<?= $courseId ?>"
-        data-csrf="<?= h(teacher_csrf_token()) ?>">
-    <h3>Am Smartphone einlesen</h3>
-    <div class="qrslot" id="handoffSlot"></div>
-    <p class="tiny muted" id="handoffHint">
-        Code mit der Kamera des Telefons scannen. Du bist dann angemeldet und
-        stehst direkt im Einlesen dieses Kurses.
-    </p>
-    <p class="tiny muted">
-        <strong>Der Code ist ein Schlüssel.</strong> Er gilt
-        <?= HANDOFF_TTL ?> Minuten und nur ein einziges Mal &ndash; wer ihn
-        einlöst, ist als du angemeldet. Nicht abfotografieren lassen.
-    </p>
-    <form method="dialog"><button class="btn small secondary">Schließen</button></form>
-</dialog>
-
 <h2>Wer im Kurs ist</h2>
 
 <table class="data" id="mitglieder">
     <tr>
         <th>Name</th>
         <th>Benutzername</th>
-        <th>Rolle</th>
+        <th>Klasse</th>
         <th class="actions"></th>
     </tr>
     <?php foreach ($mitglieder as $m): ?>
         <tr<?= $m['active'] ? '' : ' class="dim"' ?>>
             <td data-label="Name"><?= h($m['display_name']) ?></td>
             <td data-label="Benutzername"><code class="token"><?= h($m['username']) ?></code></td>
-            <td data-label="Rolle"><?= $m['member_role'] === 'teacher' ? 'Lehrkraft' : 'Kind' ?><?php
+            <?php
+            /*
+             * Die Klasse statt der Rolle: "Kind" in jeder Zeile sagte
+             * nichts - dass im Kurs Kinder sind, weiss man. Die Klasse
+             * unterscheidet, und bei einem Kurs quer durch die Jahrgaenge
+             * ist sie die einzige Auskunft, die zaehlt.
+             */
+            ?>
+            <td data-label="Klasse"><?= $m['member_role'] === 'teacher'
+                    ? 'Lehrkraft'
+                    : (($m['class_name'] ?? null) === null
+                        ? '<span class="muted">ohne Klasse</span>'
+                        : h((string) $m['class_name'])) ?><?php
                 if (!$m['active']) { echo ' <span class="tiny muted">stillgelegt</span>'; } ?></td>
             <td class="actions">
                 <form method="post" class="compact">
@@ -406,10 +416,23 @@ teacher_flash_render();
                     </span>
                     <ul class="vorschlaege" role="listbox" hidden></ul>
                 </span>
+                <?php
+                /*
+                 * Der Wert bleibt der blosse Name - danach sucht der
+                 * Server, und ohne JavaScript schickt das Feld genau das
+                 * ab. Die Klasse steht daneben in data-zusatz: Das Skript
+                 * schreibt sie in Klammern hinter den Namen und sucht
+                 * darin mit.
+                 */
+                ?>
                 <datalist id="kandidaten">
                     <?php foreach ($offene as $o): ?>
+                        <?php $zusatz = $o['role'] === ROLE_TEACHER
+                            ? 'Lehrkraft'
+                            : (string) ($o['class_name'] ?? 'ohne Klasse'); ?>
                         <option value="<?= h($o['display_name']) ?>"
-                            <?= $o['role'] === ROLE_TEACHER ? 'label="Lehrkraft"' : '' ?>></option>
+                                data-zusatz="<?= h($zusatz) ?>"
+                                label="<?= h($zusatz) ?>"></option>
                     <?php endforeach; ?>
                 </datalist>
             <?php endif; ?>
@@ -424,6 +447,11 @@ teacher_flash_render();
         </td>
     </tr>
 </table>
+
+<form method="post" id="neueEinheit" hidden>
+    <?= teacher_csrf_field() ?>
+    <input type="hidden" name="course_id" value="<?= $courseId ?>">
+</form>
 
 <?php if ($offene !== []): ?>
 <form method="post" id="newmember" hidden>

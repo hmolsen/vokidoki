@@ -26,9 +26,14 @@ body.admin { background: var(--bg); }
  * Dieselbe Leiste benutzt auch der Betreiber-Admin - dort mit festen
  * Reitern, weil es dort wirklich Bereiche gibt (Konten, Schulen, Kosten,
  * Saetze) und keinen Ort, an dem man steht.
+ *
+ * Als DIREKTES Kind, und das ist kein Schoenheitsfehler: Die Schubladen
+ * der Lehrkraft sind ebenfalls <nav> und liegen in derselben Leiste. Ohne
+ * das > wurden sie zu Flex-Reihen mit Reiter-Innenabstand - die Eintraege
+ * standen weit auseinander und nicht mehr oben.
  */
-.adminbar nav { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
-.adminbar nav a {
+.adminbar > nav { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
+.adminbar > nav a {
     padding: 8px 13px;
     border-radius: 9px;
     color: var(--text-soft);
@@ -36,9 +41,9 @@ body.admin { background: var(--bg); }
     font-weight: 600;
     font-size: .95rem;
 }
-.adminbar nav a:hover { background: var(--surface-2); color: var(--text); }
-.adminbar nav a.on    { background: var(--accent); color: #fff; }
-.adminbar .logout { margin: 0; }
+.adminbar > nav a:hover { background: var(--surface-2); color: var(--text); }
+.adminbar > nav a.on    { background: var(--accent); color: #fff; }
+.adminbar > .logout { margin: 0; }
 .barname {
     margin-left: auto;
     color: var(--text-soft);
@@ -117,18 +122,21 @@ body.admin { background: var(--bg); }
     .menue > .schublade, .menue > .schleier { animation: none; }
 }
 
-.mkopf {
-    margin: 4px 10px 12px;
-    font-weight: 700;
-    font-size: 1.05rem;
-}
-
+/*
+ * Jede Zeile gleich hoch, und beide Schubladen fangen oben an.
+ *
+ * Eine Zeile war zweizeilig ("Mein Profil" mit einer Erklaerung darunter),
+ * eine andere einzeilig, und rechts stand obendrein der eigene Name als
+ * Ueberschrift darueber - nebeneinander sahen die beiden Menues aus, als
+ * gehoerten sie nicht zusammen. Der Name steht ohnehin in der Leiste.
+ */
 .mitem {
     display: flex;
     align-items: center;
     gap: 11px;
     width: 100%;
-    padding: 10px 10px;
+    min-height: 48px;
+    padding: 0 10px;
     border: 0;
     border-radius: 10px;
     background: none;
@@ -142,8 +150,7 @@ body.admin { background: var(--bg); }
 .mitem:hover { background: var(--surface-2); }
 .mitem.haupt { font-weight: 700; }
 .mitem.on { background: var(--surface-2); font-weight: 700; }
-.mitem > span:last-child { display: flex; flex-direction: column; min-width: 0; }
-.mitem .tiny { font-weight: 400; }
+.mitem > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 .micon {
     flex: none;
@@ -898,6 +905,24 @@ table.release.draggable tr[data-pos] { cursor: pointer; }
 }
 table.release tr.flip td { animation: releaseflip .18s ease-out; }
 
+/*
+ * Gerade eben eingetippt.
+ *
+ * Wer zehn Woerter abtippt, soll sehen, dass jedes angekommen ist - und
+ * gleich weitertippen koennen. Deshalb keine Meldung, die stehenbleibt,
+ * sondern die Zeile selbst: Sie taucht gruen auf und verblasst in die
+ * Farbe der anderen.
+ */
+@keyframes frischWeg {
+    from { background: var(--good-bg); }
+    to   { background: transparent; }
+}
+table.release tr.frisch td { animation: frischWeg 2.4s ease-out forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+    table.release tr.frisch td { animation: none; background: var(--good-bg); }
+}
+
 @media (prefers-reduced-motion: reduce) {
     table.release tr.flip td { animation: none; }
 }
@@ -1245,6 +1270,8 @@ a.erweiternkarte, button.erweiternkarte {
     cursor: default;
 }
 .suchfeld .vorschlaege li.leertreffer:hover { background: none; }
+/* Die Klasse steht dabei, aber der Name ist die Sache. */
+.suchfeld .vorschlaege .zusatz { color: var(--text-soft); }
 
 /* Anlegen ohne Tabelle darum: ein Feld, ein Knopf, eine Zeile. */
 .anlegezeile {
@@ -1476,10 +1503,12 @@ a.rowmain:hover { text-decoration: underline; }
         /*
          * Breit genug fuer Stift und Muelleimer NEBENEINANDER.
          *
-         * Als farbige Emoji sind sie breiter als ein Zeichen aus der
-         * Textschrift - je 42 px -, dazu 4 px Abstand, das Leerzeichen aus
-         * dem Quelltext und 6 px Innenabstand: zusammen rund 98. Bei 86 px
-         * brach der zweite in die naechste Zeile.
+         * Zweimal gemessen und zweimal daneben gelegen: Wie breit ein
+         * Emoji ist, entscheidet die Schrift des Geraets - unter Windows
+         * anders als auf einem iPhone -, und mit einer Spalte, die auf den
+         * Pixel passt, brach der zweite Knopf dort trotzdem um. Deshalb
+         * jetzt nicht mehr geraten: Die Knoepfe bekommen eine feste
+         * Breite, und die Zelle darf nicht umbrechen.
          */
         width: 100px;
         gap: 0;
@@ -1488,14 +1517,23 @@ a.rowmain:hover { text-decoration: underline; }
         border-top: 0;
         border-bottom: 1px solid var(--border);
         text-align: right;
-        /* Ohne JavaScript steht hier ein dritter Knopf - der Rueckfallweg
-           "bis hier freigeben". Zu dritt passen sie nicht nebeneinander,
-           und umbrechen ist besser als abgeschnitten werden: table.data
-           traegt overflow: hidden - was zu breit ist, ist einfach weg. */
-        white-space: normal;
+        white-space: nowrap;
     }
-    table.data.release .iconaction.nurbild { padding: 7px 9px; min-height: 38px; }
+    /* Feste Breite statt Innenabstand: Damit haengt die Spalte nicht mehr
+       daran, wie breit die Emoji-Schrift des Geraets ihre Zeichen setzt. */
+    table.data.release .iconaction.nurbild {
+        width: 40px;
+        padding: 0;
+        min-height: 38px;
+        justify-content: center;
+    }
     table.data.release td.actions .iconaction + .iconaction { margin-left: 4px; }
+    /*
+     * Ohne JavaScript steht hier ein dritter Knopf - der Rueckfallweg "bis
+     * hier freigeben". Der bekommt seine eigene Zeile ueber den beiden
+     * anderen, statt sie auseinanderzudruecken.
+     */
+    table.data.release td.actions .js-hide { display: block; margin: 0 0 4px auto; }
     table.data.release tr.newrow td.actions .iconaction { width: auto; }
 
     /* Die Leiste ist eine Zeile, und sie bleibt eine: zwei Knoepfe und ein

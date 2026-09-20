@@ -217,6 +217,29 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['delete_unit']
  * und bleibt so: Eine Vertretung muss an den Unterlagen ihrer Kollegin
  * arbeiten koennen, und genau dafuer ist der Lehrkraft-Bereich da.
  */
+/**
+ * Will der Aufrufer eine Zeile statt einer Seite?
+ *
+ * Das Formular funktioniert ohne JavaScript ganz gewoehnlich: abschicken,
+ * weiterleiten, neue Seite. Mit JavaScript wird daraus ein Zug - Wort,
+ * Tab, Wort, Enter, naechste Vokabel -, und dafuer braucht es die frische
+ * Zeile als Antwort statt einer ganzen Seite. Dasselbe Muster wie beim
+ * Eintragen einer Klassenliste.
+ */
+function unit_will_json(): bool
+{
+    return ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'fetch';
+}
+
+function unit_json(array $daten, int $status = 200): never
+{
+    http_response_code($status);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+    echo json_encode($daten, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_vocab'])) {
     teacher_csrf_check();
 
@@ -224,6 +247,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_vocab']))
     $n = trim((string) ($_POST['new_n'] ?? ''));
 
     if ($f === '' || $n === '') {
+        if (unit_will_json()) {
+            unit_json(['ok' => false,
+                       'error' => 'Beide Felder ausfüllen - Fremdsprache und Deutsch.'], 422);
+        }
         teacher_flash('Beide Felder ausfüllen - Fremdsprache und Deutsch.', 'bad');
         teacher_redirect($zurueck);
     }
@@ -231,16 +258,48 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_vocab']))
     $dazu = vocab_append($unitId, [['foreign' => $f, 'native' => $n]],
                          $unit['code'] ?? null);
     if ($dazu === 0) {
+        if (unit_will_json()) {
+            unit_json(['ok' => false, 'error' => 'Die Vokabel liess sich nicht anlegen.'], 500);
+        }
         teacher_flash('Die Vokabel liess sich nicht anlegen.', 'bad');
         teacher_redirect($zurueck);
     }
+
+    /*
+     * Die frisch angelegte Zeile - vocab_append() setzt punctuation_fix()
+     * darauf an, es steht also nicht zwingend das in der Datenbank, was
+     * getippt wurde. Zurueckgegeben wird, was wirklich drinsteht.
+     */
+    $neueVokabel = q1('SELECT id, term_foreign, term_native FROM vocab
+                        WHERE unit_id = ? ORDER BY position DESC, id DESC LIMIT 1',
+                      [$unitId]);
 
     /*
      * Und gleich einen Lueckensatz dazu - sonst bleibt die neue Vokabel im
      * Lueckentext stumm, und niemand sieht, warum. Dasselbe Muster wie
      * "Saetze nachtragen": antworten, dann weiterarbeiten.
      */
-    if (budget_block_reason((int) $user['id']) === null && sentence_claim($unitId)) {
+    $saetze = budget_block_reason((int) $user['id']) === null && sentence_claim($unitId);
+
+    if (unit_will_json()) {
+        if (!$saetze) {
+            unit_json(['ok' => true, 'vokabel' => $neueVokabel]);
+        }
+        /*
+         * Antworten, dann weiterarbeiten: Die Zeile steht beim Tippenden
+         * schon, waehrend der Satz noch entsteht.
+         */
+        http_response_code(200);
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+        echo json_encode(['ok' => true, 'vokabel' => $neueVokabel], JSON_UNESCAPED_UNICODE);
+        teacher_flush_and_continue();
+        set_time_limit(900);
+        generate_sentences_tracked($unitId);
+        exit;
+    }
+
+    if ($saetze) {
         teacher_flash(sprintf('„%s" ist dabei. Der Lückensatz entsteht gerade.', $f));
         teacher_redirect_and_continue($zurueck);
         set_time_limit(900);
@@ -381,24 +440,38 @@ teacher_flash_render();
     </div>
 <?php endif; ?>
 
+<?php
+/*
+ * "Von Hand" steht in der Adresse, nicht nur im Skript.
+ *
+ * Der Knopf unten ist ein Link auf dieselbe Seite mit ?vonhand=1. Ohne
+ * JavaScript laedt sie neu und die Zeile steht da; mit JavaScript faengt
+ * das Skript den Klick ab und blendet sie ein, ohne zu laden. Ein Zustand,
+ * zwei Wege dorthin.
+ */
+$vonHand = isset($_GET['vonhand']);
+?>
+
 <h2>Freigabe</h2>
 
 <?php
 /*
- * Auch ohne Vokabeln wird die Tabelle gezeigt.
+ * Ohne Vokabeln keine Tabelle.
  *
- * Vorher verschluckte dieser Zweig alles - und seit unten eine Anlegezeile
- * steht, war damit ausgerechnet in einer leeren Lerneinheit der einzige
- * Weg verdeckt, eine Vokabel von Hand einzutragen.
+ * Sie stand hier einmal auch dann, weil die Anlegezeile in ihr wohnte -
+ * ein Tabellengeruest mit einem Kopf und nichts darunter. Seit die drei
+ * Wege unter der Tabelle stehen, braucht es das nicht mehr: Ein Satz
+ * sagt, was los ist, und darunter steht, was zu tun ist.
  */
 ?>
 <?php if ($gesamt === 0): ?>
     <?= teacher_leer(
-        'Diese Lerneinheit hat noch keine Vokabeln. Unter &bdquo;Lerneinheit '
-        . 'erweitern&ldquo; stehen die drei Wege: von Hand, aus Dateien, '
-        . 'oder mit dem Telefon fotografiert.',
+        'Diese Lerneinheit hat noch keine Vokabeln &ndash; die Klasse sieht '
+        . 'sie als leer. Darunter stehen die drei Wege, sie zu f&uuml;llen.',
     ) ?>
-<?php else: ?>
+<?php endif; ?>
+
+<?php if ($gesamt > 0): ?>
 
 <p>
     <?php if ($frei === 0): ?>
@@ -411,7 +484,6 @@ teacher_flash_render();
         Die Klasse übt bis „<?= h($vokabeln[$frei - 1]['term_foreign'] ?? '') ?>".
     <?php endif; ?>
 </p>
-<?php endif; ?>
 
 <?php
 /*
@@ -453,6 +525,17 @@ $fehlen = vocab_without_sentences($unitId);
         <?php endif; ?>
     </div>
 </form>
+<?php endif; /* $gesamt > 0 */ ?>
+
+<?php
+/*
+ * Die Tabelle steht auch fuer eine leere Lerneinheit da, sobald jemand
+ * "von Hand" gewaehlt hat: Dann besteht sie aus dem Kopf und der
+ * Anlegezeile, und genau das ist der Ort, an dem die erste Vokabel
+ * entsteht.
+ */
+?>
+<?php if ($gesamt > 0 || $vonHand): ?>
 
 <?php
 /*
@@ -536,8 +619,43 @@ $fehlen = vocab_without_sentences($unitId);
         </tr>
     <?php endforeach; ?>
 
+    <?php
+    /*
+     * Die Anlegezeile - eine Zusatzzeile unter den Vokabeln, keine
+     * Vokabelzeile: kein data-pos, keine released/locked-Klasse, damit der
+     * Balken sie nicht mitzaehlt.
+     *
+     * Sie stand eine Weile am Knopf unter der Tabelle. Dort war sie weit
+     * weg von dem, was entsteht - man tippt eine Vokabel und sieht sie
+     * zwei Bildschirme hoeher erscheinen. Hier steht sie, wo die naechste
+     * Zeile hinkommt.
+     */
+    ?>
+    <tr class="newrow" id="handzeile"<?= $vonHand ? '' : ' hidden' ?>>
+        <td>
+            <input type="text" name="new_f" form="neueVokabel" maxlength="255"
+                   placeholder="apple" autocomplete="off"
+                   aria-label="<?= h((string) $unit['language_name']) ?>">
+        </td>
+        <td>
+            <input type="text" name="new_n" form="neueVokabel" maxlength="255"
+                   placeholder="Apfel" autocomplete="off" aria-label="Deutsch">
+        </td>
+        <td class="actions">
+            <button class="iconaction primary nurbild" form="neueVokabel"
+                    name="add_vocab" value="1" title="Vokabel hinzufügen">
+                <span aria-hidden="true">+</span><span class="nurvorlesen">Hinzufügen</span>
+            </button>
+        </td>
+    </tr>
     </tbody>
 </table>
+
+<form method="post" id="neueVokabel"
+      action="<?= h(teacher_url('unit.php') . '?id=' . $unitId) ?>">
+    <?= teacher_csrf_field() ?>
+    <input type="hidden" name="unit_id" value="<?= $unitId ?>">
+</form>
 
 <form method="post" id="releaseform">
     <?= teacher_csrf_field() ?>
@@ -557,6 +675,7 @@ $fehlen = vocab_without_sentences($unitId);
     </form>
 <?php endforeach; ?>
 
+<?php if ($gesamt > 0): ?>
 <p class="tiny muted">
     Die Lückensätze entstehen schon beim Einlesen, für die ganze Einheit.
     Die Freigabe entscheidet also nicht, wofür bezahlt wird, sondern nur,
@@ -564,47 +683,31 @@ $fehlen = vocab_without_sentences($unitId);
     Zurücknehmen kostet nichts: Die Sätze bleiben, und der Lernstand der
     Kinder ist beim nächsten Freigeben wieder da.
 </p>
+<?php endif; ?>
+<?php endif; /* $gesamt > 0 || $vonHand */ ?>
 
-<h2>Lerneinheit erweitern</h2>
+<h2>Vokabeln zur Lerneinheit hinzufügen</h2>
 
 <?php
 /*
  * Drei Wege, eine Lerneinheit zu fuellen - nebeneinander, weil sie
  * gleichwertig sind.
  *
- * Die Anlegezeile fuer eine einzelne Vokabel stand bis hierher als letzte
- * Zeile IN der Freigabetabelle. Dort war sie am falschen Ort: Die Tabelle
- * zeigt, was freigegeben ist, und der Balken laeuft durch sie hindurch -
- * eine Zeile mit zwei leeren Feldern mittendrin sieht aus wie eine Vokabel
- * ohne Wort.
- *
- * Von Hand als <details>: Das Auf- und Zuklappen kann der Browser von
- * selbst, mit Tastatur und Vorleseprogramm, und ohne JavaScript steht das
- * Formular genauso da.
+ * "Von Hand" oeffnet keine Felder an dieser Stelle, sondern eine
+ * Zusatzzeile unter der Tabelle - dort, wo die neue Vokabel gleich stehen
+ * wird. Als Link auf ?vonhand=1: Ohne JavaScript laedt die Seite neu und
+ * die Zeile steht da, mit JavaScript blendet das Skript sie ein.
  */
 ?>
 <div class="erweitern">
-    <details class="card erweiternkarte">
-        <summary>
-            <span class="cflag">&#9999;&#65039;</span>
-            <span class="wahltext">
-                <strong>Vokabel manuell hinzufügen</strong>
-                <span class="tiny muted">Ein Paar eintippen</span>
-            </span>
-        </summary>
-
-        <form method="post" class="handform" id="neueVokabel">
-            <?= teacher_csrf_field() ?>
-            <input type="hidden" name="unit_id" value="<?= $unitId ?>">
-            <label for="new_f"><?= h((string) $unit['language_name']) ?></label>
-            <input type="text" id="new_f" name="new_f" maxlength="255"
-                   placeholder="apple" autocomplete="off">
-            <label for="new_n">Deutsch</label>
-            <input type="text" id="new_n" name="new_n" maxlength="255"
-                   placeholder="Apfel" autocomplete="off">
-            <button class="btn small" name="add_vocab" value="1">Hinzufügen</button>
-        </form>
-    </details>
+    <a class="card erweiternkarte" id="vonHand"
+       href="<?= h(teacher_url('unit.php') . '?id=' . $unitId . '&vonhand=1#handzeile') ?>">
+        <span class="cflag">&#9999;&#65039;</span>
+        <span class="wahltext">
+            <strong>Vokabel manuell hinzufügen</strong>
+            <span class="tiny muted">Eine Zeile unter der Tabelle</span>
+        </span>
+    </a>
 
     <a class="card erweiternkarte" href="<?= h($importUrl) ?>">
         <span class="cflag">&#128193;</span>

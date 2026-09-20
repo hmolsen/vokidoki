@@ -2448,7 +2448,7 @@ function freiGet(string $pfad): array
     return freiPost($base . '/teacher/' . $pfad, null);
 }
 
-function freiPost(string $url, ?array $post): array
+function freiPost(string $url, ?array $post, array $header = []): array
 {
     global $freiJar;
     $ch = curl_init($url);
@@ -2459,6 +2459,9 @@ function freiPost(string $url, ?array $post): array
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_TIMEOUT        => 60,
     ]);
+    if ($header !== []) {
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
+    }
     if ($post !== null) {
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post));
@@ -2717,20 +2720,40 @@ ok('Und verteilen die Breite fest',
  */
 $res = freiPost($base . '/teacher/unit.php?id=' . $freiUnit, null);
 
-ok('In der Freigabetabelle steht keine Anlegezeile mehr',
-   preg_match('/<table class="data release".*?<\/table>/s', $res['body'], $tm) === 1
-   && !str_contains($tm[0], 'name="new_f"'),
-   'sie gehoert unter die Tabelle, nicht hinein');
+/*
+ * Die Anlegezeile steht wieder IN der Tabelle - aber als Zusatzzeile unter
+ * den Vokabeln, nicht als Teil der Freigabe: kein data-pos, keine
+ * released/locked-Klasse, damit der Balken sie nicht mitzaehlt.
+ *
+ * Dazwischen lag sie eine Weile am Knopf darunter. Dort war sie weit weg
+ * von dem, was entsteht - man tippt eine Vokabel und sieht sie zwei
+ * Bildschirme hoeher erscheinen.
+ */
+preg_match('/<table class="data release".*?<\/table>/s', $res['body'], $tm);
+ok('Die Anlegezeile steht am Fuss der Tabelle',
+   str_contains($tm[0] ?? '', 'id="handzeile"')
+   && str_contains($tm[0] ?? '', 'name="new_f"'),
+   'dort, wo die neue Vokabel gleich stehen wird');
+ok('Und zaehlt fuer den Balken nicht mit',
+   preg_match('/<tr class="newrow" id="handzeile"[^>]*>/', $tm[0] ?? '') === 1
+   && !preg_match('/id="handzeile"[^>]*data-pos/', $tm[0] ?? ''));
+ok('Zugeklappt, bis jemand sie will',
+   preg_match('/id="handzeile"[^>]*hidden/', $tm[0] ?? '') === 1);
 
-ok('Darunter steht "Lerneinheit erweitern"',
-   str_contains($res['body'], '<h2>Lerneinheit erweitern</h2>'));
+/*
+ * Die Ueberschrift heisst nach dem, was darunter steht - und das stimmt
+ * auch fuer eine leere Lerneinheit: "erweitern" kann man nur, was es
+ * schon gibt.
+ */
+ok('Darunter steht "Vokabeln zur Lerneinheit hinzufuegen"',
+   str_contains($res['body'], '<h2>Vokabeln zur Lerneinheit hinzufügen</h2>'));
 ok('Mit drei Wegen', substr_count($res['body'], 'class="card erweiternkarte"') === 3,
    substr_count($res['body'], 'class="card erweiternkarte"') . ' statt 3');
 
-ok('Von Hand: ein Formular, zugeklappt',
-   preg_match('/<details class="card erweiternkarte">.*?name="new_f".*?name="add_vocab"/s',
+ok('Von Hand: ein Link auf dieselbe Seite',
+   preg_match('/<a class="card erweiternkarte" id="vonHand"\s+href="[^"]*vonhand=1/s',
               $res['body']) === 1,
-   '<details> kann das Auf- und Zuklappen von selbst, auch ohne JavaScript');
+   'ohne JavaScript laedt sie neu und die Zeile steht da');
 ok('Aus Dateien: der Weg in die Einleseansicht',
    preg_match('/<a class="card erweiternkarte" href="[^"]*#\/lang\/\d+\/import"/',
               $res['body']) === 1);
@@ -2743,8 +2766,37 @@ ok('Und das Fenster dafuer steht auch hier',
    'der Sprung ans Telefon stand nur im Kurs');
 
 ok('Das Feld heisst nach der Sprache, nicht "Fremdsprache"',
-   str_contains($res['body'], '<label for="new_f">' . h($kopfSprache) . '</label>'),
+   str_contains($res['body'], 'aria-label="' . h($kopfSprache) . '"'),
    $kopfSprache);
+
+/*
+ * Und ohne Seitenneuladen: Wer zehn Woerter abtippt, will nicht zehnmal
+ * die Tabelle von oben sehen. Das Formular antwortet auf ein fetch mit
+ * der frischen Zeile.
+ */
+ok('Das Anlegen antwortet auch mit einer Zeile statt einer Seite',
+   str_contains((string) file_get_contents(__DIR__ . '/../teacher/unit.php'),
+                'function unit_will_json'));
+$jsonAntwort = freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
+    'add_vocab' => '1', 'unit_id' => $freiUnit,
+    'new_f' => 'zulu', 'new_n' => 'de-zulu', 'csrf' => $freiCsrf,
+], ['X-Requested-With: fetch']);
+$jsonDaten = json_decode($jsonAntwort['body'], true);
+ok('Und die Zeile kommt als JSON zurueck',
+   ($jsonDaten['ok'] ?? false) === true
+   && ($jsonDaten['vokabel']['term_foreign'] ?? '') === 'zulu',
+   $jsonAntwort['body']);
+ok('Die Vokabel steht danach wirklich drin',
+   (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ? AND term_foreign = ?',
+            [$freiUnit, 'zulu']) === 1);
+q('DELETE FROM vocab WHERE unit_id = ? AND term_foreign = ?', [$freiUnit, 'zulu']);
+ok('Das Skript haengt sie ein, ohne zu laden',
+   str_contains($skriptB['body'], 'function initVocabAdd')
+   && str_contains($skriptB['body'], "'X-Requested-With': 'fetch'"));
+ok('Und markiert sie als frisch',
+   str_contains($skriptB['body'], "'locked frisch'")
+   && preg_match('/table\.release tr\.frisch td\s*\{[^}]*animation:\s*frischWeg/s', $cssB) === 1,
+   'gruen auftauchen und verblassen - eine Bestaetigung, die man nicht wegklickt');
 
 // ---- Und nach dem Einlesen geht es in die Freigabe, nicht in die App.
 
@@ -5924,17 +5976,19 @@ $umbauSprache = (int) qv('SELECT language_id FROM courses WHERE id = ?', [$umbau
  */
 ok('Der leere Kurs zeigt keinen Code mehr',
    !str_contains($res['body'], 'importqr') && !str_contains($res['body'], '<svg'));
-ok('Aber beide Wege ins Einlesen',
-   str_contains($res['body'], '#/lang/' . $umbauSprache . '/import')
-   && str_contains($res['body'], 'data-handoff'));
+ok('Und auch keine zwei Einleseknoepfe mehr',
+   !str_contains($res['body'], 'data-handoff'),
+   'die Frage an dieser Stelle lautet: Ich brauche eine neue Lerneinheit');
+ok('Sondern einen Knopf, der eine anlegt',
+   str_contains($res['body'], 'name="add_unit"'));
 
 // Eine Lerneinheit anlegen - dann weicht die Karte der Tabelle mit Anlegezeile.
 $umbauUnit = makeUnit($lehrerId, $umbauSprache, 'Umbau-Unit');
 $res = teacherGet('course.php?id=' . $umbauKursId);
 ok('Mit Lerneinheiten ist die Karte weg', !str_contains($res['body'], 'importcard'));
 ok('Dafuer steht eine Anlegezeile in der Tabelle',
-   preg_match('/<tr class="newrow">.*?Vokabeln einlesen.*?data-handoff/s', $res['body']) === 1,
-   'beide Wege: hier weiter oder hinueber aufs Telefon');
+   preg_match('/<tr class="newrow">.*?name="add_unit"/s', $res['body']) === 1,
+   'ein Knopf, eine Frage: Ich brauche eine neue Lerneinheit');
 ok('Die Lerneinheit oeffnet sich per Zeilenklick',
    preg_match('/<tr data-href="[^"]*unit\.php\?id=' . $umbauUnit . '"/', $res['body']) === 1);
 
@@ -6624,8 +6678,20 @@ ok('Die leere Lerneinheit ebenso', str_contains($res['body'], '<div class="leer"
  * damit ausgerechnet in einer leeren Lerneinheit der einzige Weg verdeckt,
  * eine Vokabel von Hand einzutragen.
  */
-ok('Auch ohne Vokabeln laesst sich eine von Hand eintragen',
-   str_contains($res['body'], 'name="new_f"') && str_contains($res['body'], 'name="add_vocab"'),
+/*
+ * Auch eine leere Lerneinheit ist keine Sackgasse: Ohne Vokabeln steht
+ * dort keine Tabelle mehr - aber "von Hand" laedt sie mit der
+ * Anlegezeile, und dann ist sie der Ort, an dem die erste Vokabel
+ * entsteht.
+ */
+ok('Ohne Vokabeln steht dort kein Tabellengeruest',
+   !str_contains($res['body'], 'id="freigabe"'),
+   'ein Kopf und nichts darunter ist keine Tabelle');
+$leerHand = teacherGet('unit.php?id=' . $efUnit . '&vonhand=1');
+ok('Aber "von Hand" bringt sie mit der Anlegezeile',
+   str_contains($leerHand['body'], 'id="handzeile"')
+   && str_contains($leerHand['body'], 'name="add_vocab"')
+   && !preg_match('/id="handzeile"[^>]*hidden/', $leerHand['body']),
    'sonst ist eine leere Lerneinheit eine Sackgasse');
 
 teacherRequest($base . '/teacher/unit.php?id=' . $efUnit, [
@@ -6727,11 +6793,16 @@ if (!is_string($hoKlasse)) {
 }
 ok('Die Lehrkraft hat einen Kurs fuer den Versuch', $hoKurs > 0);
 
-$res = teacherGet('course.php?id=' . $hoKurs);
+/*
+ * Der Sprung steht auf der Lerneinheit, nicht auf dem Kurs: Der Code
+ * fuehrt ins Einlesen, und eingelesen wird IN eine Lerneinheit.
+ */
+$hoUnit = makeUnit($lehrerId, (int) $angelegt['language_id'], 'Sprung-Unit');
+$res = teacherGet('unit.php?id=' . $hoUnit);
 preg_match('/name="csrf" value="([a-f0-9]+)"/', $res['body'], $hm);
 $hoCsrf = $hm[1] ?? '';
 
-ok('Die Kursseite bietet den Sprung an',
+ok('Die Lerneinheit bietet den Sprung an',
    str_contains($res['body'], 'data-handoff')
    && str_contains($res['body'], 'id="handoff"'));
 

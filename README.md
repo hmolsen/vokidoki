@@ -330,6 +330,13 @@ nicht an.
 die beiden Schubladen einander ausschliessen, dass ein Druck auf den
 Schleier schliesst, und dass Escape schliesst.
 
+Jede Zeile darin ist **gleich hoch** (`min-height: 48px`), und beide
+Schubladen fangen oben an. Das war nicht so: Die Regeln der
+Betreiber-Leiste (`.adminbar nav a`) griffen auf die Schubladen durch —
+die sind ebenfalls `<nav>` und liegen in derselben Leiste —, und machten
+aus ihnen Flex-Reihen mit Reiter-Innenabstand. Jetzt steht dort
+`.adminbar > nav`, als direktes Kind.
+
 **Die Klasse steht nicht mehr darin.** Sie stand einmal dazwischen —
 `Schule › Klasse 5B › Englisch - 5B` —, und das bildete die Datenstruktur
 ab, nicht den Weg: Eine Klasse öffnet man zweimal im Jahr, einen Kurs jede
@@ -360,6 +367,15 @@ Die Klassenliste ist damit das, wonach sie aussieht: die Liste der Klassen,
 in denen Kinder angelegt und Zettel gedruckt werden. Kurse stehen dort keine
 mehr — auch nicht die ohne Klasse; **alle** Kurse stehen auf der Startseite.
 
+**Eine Lerneinheit entsteht auch leer.** In der Kurstabelle steht als
+letzte Zeile ein Knopf — „Lerneinheit hinzufügen" — statt der beiden
+Einleseknopfe, die dort standen. Die Frage an dieser Stelle lautet nicht
+„womit fülle ich sie", sondern „ich brauche eine neue"; womit, entscheidet
+man auf ihrer Seite, wo alle drei Wege nebeneinander stehen — auch der von
+Hand, den es dort gar nicht gab. Sie heißt zunächst „Unbenannte
+Lerneinheit"; ein Pflichtfeld wäre eine Frage vor der Arbeit, und beim
+Einlesen kommt der Titel ohnehin von der Buchseite.
+
 **„Wen aufnehmen?" sucht mit, während getippt wird.** Eine Schule hat
 dreihundert Kinder, und der Kurs braucht eines davon; dort stand ein
 `<datalist>`, und der Browser bietet seine Vorschläge nach eigenem
@@ -368,6 +384,13 @@ filtert das Feld bei jedem Zeichen in der Liste derer, die noch **nicht** im
 Kurs sind. Drei Zustände: mehrere Treffer → Liste darunter; genau einer →
 die Liste verschwindet und der Rest des Namens steht grau hinter dem
 Getippten, Enter nimmt ihn; keiner → ein Satz statt einer leeren Liste.
+
+Hinter jedem Namen steht **die Klasse in Klammern** — „Marta W. (7b)",
+„Herr Vertretung (Lehrkraft)" —, und gesucht wird in beidem: „Marta W."
+gibt es an einer Schule zweimal, „Marta W. (7b)" nicht, und wer die Klasse
+kennt, aber den Namen nur halb, kommt über sie ans Ziel. In der Tabelle
+„Wer im Kurs ist" steht sie ebenfalls, an der Stelle der Rolle: „Kind" in
+jeder Zeile sagte nichts.
 
 Das Graue ist kein Text im Feld, sondern ein zweites Element darunter — ein
 Eingabefeld kann nicht zwei Farben zugleich —, und der getippte Teil wird
@@ -470,18 +493,34 @@ und am Telefon gibt es keinen. Beide stehen als Emoji da, also mit der
 Variantenwahl `&#65039;` dahinter: Ohne sie wählt der Browser die Textform,
 und dann steht neben einem farbigen Mülleimer ein blasser Strich, der ein
 Stift sein soll. Dass sie **nebeneinander** stehen und nicht untereinander,
-hängt an vierzehn Pixeln: Als Emoji sind sie je 42 px breit, dazu Abstand,
-das Leerzeichen aus dem Quelltext und der Innenabstand der Zelle — zusammen
-rund 98, und die Spalte war 86 breit. Jetzt 100.
+war zweimal eine Rechnung und zweimal falsch: Wie breit ein Emoji ist,
+entscheidet die Schrift des Geräts — unter Windows anders als auf einem
+iPhone —, und mit einer Spalte, die auf den Pixel passt, brach der zweite
+Knopf dort trotzdem um. Jetzt wird nicht mehr gerechnet: Die Knöpfe haben
+eine feste Breite (40 px), die Zelle `white-space: nowrap`, und der dritte
+Knopf ohne JavaScript bekommt mit `display: block` seine eigene Zeile
+darüber, statt die beiden auseinanderzudrücken.
 
-**Die Anlegezeile steht nicht mehr in der Tabelle.** Sie war die letzte
-Zeile der Freigabetabelle — am falschen Ort: Die Tabelle zeigt, was
-freigegeben ist, der Balken läuft durch sie hindurch, und eine Zeile mit
-zwei leeren Feldern mittendrin sieht aus wie eine Vokabel ohne Wort.
-Darunter steht jetzt **„Lerneinheit erweitern"** mit drei gleichwertigen
-Wegen nebeneinander: von Hand (ein `<details>`, das der Browser ohne eine
-Zeile JavaScript auf- und zuklappt), aus Dateien (die Einleseansicht), mit
-dem Telefon (der QR-Code, der bisher nur im Kurs stand).
+**Unter der Tabelle stehen drei gleichwertige Wege**, sie zu füllen —
+„Vokabeln zur Lerneinheit hinzufügen": von Hand, aus Dateien (die
+Einleseansicht), mit dem Telefon (der QR-Code, der bisher nur im Kurs
+stand). Die Überschrift heißt nicht „erweitern", weil das nur stimmt, wenn
+schon etwas da ist; eine frisch angelegte Lerneinheit ist leer.
+
+**„Von Hand" öffnet kein Feld am Knopf, sondern eine Zeile am Fuß der
+Tabelle** — dort, wo die neue Vokabel gleich stehen wird. Als Link auf
+`?vonhand=1`: Ohne JavaScript lädt die Seite neu und die Zeile steht da,
+mit JavaScript blendet das Skript sie ein.
+
+Und das Eintragen lädt die Seite **nicht** neu. Wort, Tab, Wort, Enter —
+und die nächste Zeile steht da; bei zehn Wörtern waren es vorher zehn
+Ladevorgänge und zehnmal die Tabelle von oben. Die frische Zeile kommt vom
+Server und nicht aus dem Skript: `vocab_append()` setzt `punctuation_fix()`
+darauf an, es steht also nicht zwingend das in der Datenbank, was getippt
+wurde. Sie taucht grün auf und verblasst — eine Bestätigung, die man nicht
+wegklicken muss. Dasselbe Muster wie beim Eintragen einer Klassenliste:
+`X-Requested-With: fetch`, und die Antwort ist eine Zeile statt einer
+Seite.
 
 **Im Kopf steht die Sprache, nicht das Wort „Fremdsprache".** `🇬🇧 Englisch`
 und `🇩🇪 Deutsch`, beide mit ihrer Fahne als SVG: Die Spalte sagt damit, was
@@ -793,7 +832,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-1012 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+1021 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
 Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
 Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
 hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
@@ -855,7 +894,7 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 1222 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 1231 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
 
@@ -873,7 +912,7 @@ Quelltext völlig richtig aussahen:
 - Der Zettel für die ganze Klasse wurde erst beim nächsten Laden anklickbar.
 
 ```bash
-node tests/browser/lauf.mjs --fixture            # 214 Prüfungen
+node tests/browser/lauf.mjs --fixture            # 227 Prüfungen
 node tests/browser/lauf.mjs --fixture bilder/    # dazu Bildschirmfotos
 ```
 

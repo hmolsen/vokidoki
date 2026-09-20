@@ -29,10 +29,10 @@ export async function pruefe(f, aus) {
                 .filter((e) => getComputedStyle(e).display !== 'none').length;
             return {
                 zeilen:   document.querySelectorAll('#freigabe tr[data-pos]').length,
-                anlegen:  !!document.querySelector('#freigabe tr.newrow input[name="new_f"]'),
+                anlegen:  !!document.querySelector('#handzeile input[name="new_f"]'),
+                versteckt: document.getElementById('handzeile')?.hidden,
                 erweitern: document.querySelectorAll('.erweiternkarte').length,
-                vonHand:  !!document.querySelector('.handform input[name="new_f"]'),
-                zu:       document.querySelector('details.erweiternkarte')?.open === false,
+                vonHand:  !!document.getElementById('vonHand'),
                 aendern:  sichtbar('#freigabe [data-edit]'),
                 sichern:  sichtbar('#freigabe [data-save]'),
                 felder:   sichtbar('#freigabe input[name="edit_f"]'),
@@ -41,19 +41,16 @@ export async function pruefe(f, aus) {
         })()`);
 
         /*
-         * Die Anlegezeile stand bis hierher als letzte Zeile IN der
-         * Freigabetabelle - am falschen Ort: Die Tabelle zeigt, was
-         * freigegeben ist, der Balken laeuft durch sie hindurch, und eine
-         * Zeile mit zwei leeren Feldern mittendrin sieht aus wie eine
-         * Vokabel ohne Wort.
+         * Die Anlegezeile steht am Fuss der Tabelle - dort, wo die neue
+         * Vokabel gleich stehen wird -, aber erst, wenn jemand sie will.
+         * Zwei leere Felder sind kein Inhalt.
          */
-        ok('In der Tabelle steht keine Anlegezeile mehr', !ruhe.anlegen,
-           'sie gehört unter die Tabelle, nicht hinein');
+        ok('Die Anlegezeile steht am Fuss der Tabelle', ruhe.anlegen);
+        ok('Zugeklappt, bis jemand sie will', ruhe.versteckt === true,
+           String(ruhe.versteckt));
         ok('Dafür gibt es drei Wege, die Lerneinheit zu erweitern',
            ruhe.erweitern === 3, String(ruhe.erweitern));
         ok('Von Hand ist einer davon', ruhe.vonHand);
-        ok('Und liegt zugeklappt da', ruhe.zu,
-           'zwei leere Felder sind kein Inhalt');
         ok('Je Zeile steht "Ändern" da', ruhe.aendern === ruhe.zeilen,
            ruhe.aendern + ' von ' + ruhe.zeilen);
         ok('"Sichern" steht noch nirgends', ruhe.sichern === 0,
@@ -163,25 +160,53 @@ export async function pruefe(f, aus) {
         const vorher = await b.js(
             `document.querySelectorAll('#freigabe tr[data-pos]').length`);
 
+        /*
+         * Wort, Tab, Wort, Enter - und die naechste Zeile steht da.
+         *
+         * Vorher lud die Seite nach jeder Vokabel neu; bei zehn Woertern
+         * sind das zehn Ladevorgaenge und zehnmal die Tabelle von oben.
+         * Ob es diesmal ohne geht, sieht man nur hier: Die Kennung des
+         * Dokuments bleibt dieselbe, wenn nichts neu geladen wurde.
+         */
         await b.js(`(() => {
-            document.querySelector('details.erweiternkarte').open = true;
-            document.querySelector('input[name="new_f"]').value = 'zebra';
-            document.querySelector('input[name="new_n"]').value = 'Zebra';
-            document.querySelector('[name="add_vocab"]').click();
+            document.getElementById('vonHand').click();
+            window.__marke = 'steht';
+        })()`);
+        await schlafe(400);
+        ok('„Von Hand" blendet die Zeile ein, ohne zu laden',
+           (await b.js(`document.getElementById('handzeile').hidden === false
+                        && window.__marke === 'steht'`)));
+
+        await b.js(`(() => {
+            const f = document.querySelector('#handzeile input[name="new_f"]');
+            const n = document.querySelector('#handzeile input[name="new_n"]');
+            f.value = 'zebra';
+            n.value = 'Zebra';
+            n.focus();
+            n.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
         })()`);
         await schlafe(2500);
 
         const nachher = await b.js(`({
-            zeilen: document.querySelectorAll('#freigabe tr[data-pos]').length,
-            letzte: [...document.querySelectorAll('#freigabe tr[data-pos] td:first-child')]
-                      .pop()?.textContent?.trim() ?? '',
-            meldung: document.querySelector('.notice')?.textContent?.trim() ?? '',
+            zeilen:  document.querySelectorAll('#freigabe tr[data-pos]').length,
+            letzte:  [...document.querySelectorAll('#freigabe tr[data-pos] td:first-child')]
+                       .pop()?.textContent?.trim() ?? '',
+            frisch:  document.querySelectorAll('#freigabe tr.frisch').length,
+            geladen: window.__marke !== 'steht',
+            leer:    document.querySelector('#handzeile input[name="new_f"]').value === '',
+            fokus:   document.activeElement?.name ?? '',
         })`);
 
         ok('Eine Vokabel von Hand kommt dazu', nachher.zeilen === vorher + 1,
            nachher.zeilen + ' statt ' + (vorher + 1));
         ok('Und steht hinten dran', nachher.letzte.includes('zebra'), nachher.letzte);
-        ok('Die Seite sagt es', nachher.meldung.includes('zebra'), nachher.meldung);
+        ok('Ohne dass die Seite neu geladen hat', !nachher.geladen,
+           'zehn Wörter wären sonst zehn Ladevorgänge');
+        ok('Die neue Zeile ist als frisch markiert', nachher.frisch === 1,
+           String(nachher.frisch));
+        ok('Die Felder sind wieder leer', nachher.leer);
+        ok('Und der Finger steht schon im ersten', nachher.fokus === 'new_f',
+           nachher.fokus);
     } finally {
         b.schliessen();
     }

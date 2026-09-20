@@ -67,6 +67,19 @@ q('INSERT INTO users (school_id, username, display_name, password_hash, color, r
    password_hash(BT_PASSWORT, PASSWORD_DEFAULT), '#4f7cff', ROLE_TEACHER]);
 $lehrerId = (int) db()->lastInsertId();
 
+/*
+ * Eine zweite Lehrkraft, die in keinem Kurs ist.
+ *
+ * Fuer das Suchfeld "Wen aufnehmen?": Es zeigt auch Lehrkraefte, und
+ * hinter ihrem Namen steht "(Lehrkraft)" statt einer Klasse. Ohne eine
+ * zweite gaebe es dort keine zu finden - die erste ist in ihren eigenen
+ * Kursen schon drin.
+ */
+q('INSERT INTO users (school_id, username, display_name, password_hash, color, role, can_import)
+   VALUES (?, ?, ?, ?, ?, ?, 1)',
+  [$schuleId, 'browsertest_lehr2', 'Herr Vertretung',
+   password_hash(BT_PASSWORT, PASSWORD_DEFAULT), '#4f7cff', ROLE_TEACHER]);
+
 $klasse   = class_create($schuleId, '8c');
 $klasseId = (int) $klasse['id'];
 

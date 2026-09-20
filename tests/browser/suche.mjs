@@ -72,6 +72,9 @@ export async function pruefe(f, aus) {
            viele.eintraege.length === 2
            && viele.eintraege.every((e) => e.startsWith('Mar')),
            viele.eintraege.join(', '));
+        ok('Mit der Klasse in Klammern dahinter',
+           viele.eintraege.every((e) => e.includes('(7b)')),
+           viele.eintraege.join(', '));
         ok('Ergänzt wird dabei nichts', viele.geist === '',
            'bei zwei Möglichkeiten wäre jede Ergänzung geraten');
 
@@ -137,6 +140,32 @@ export async function pruefe(f, aus) {
 
         await b.bild('suche');
 
+        // ---- Und die Klasse ist selbst ein Suchwort.
+
+        /*
+         * Wer den Namen nur halb kennt, aber die Klasse, kommt ueber sie
+         * ans Ziel - "Marta W." gibt es an einer Schule zweimal, "Marta W.
+         * (7b)" nicht.
+         */
+        await tippen(b, '7b');
+        await schlafe(250);
+        const nachKlasse = await stand(b);
+        ok('Nach der Klasse lässt sich suchen',
+           nachKlasse.offen && nachKlasse.eintraege.length === 3,
+           nachKlasse.eintraege.join(', '));
+        ok('Und alle drei stehen in ihr',
+           nachKlasse.eintraege.every((e) => e.includes('(7b)')),
+           nachKlasse.eintraege.join(', '));
+
+        await tippen(b, 'Lehrkraft');
+        await schlafe(250);
+        const lehrkraft = await stand(b);
+        ok('„Lehrkraft" findet die Lehrkräfte', lehrkraft.eintraege.length >= 1,
+           lehrkraft.eintraege.join(', '));
+        ok('Und sie sind als solche gekennzeichnet',
+           lehrkraft.eintraege.every((e) => e.includes('(Lehrkraft)')),
+           lehrkraft.eintraege.join(', '));
+
         // ---- Niemand: ein Satz statt einer leeren Liste.
 
         await tippen(b, 'Zwiebelfisch');
@@ -162,6 +191,30 @@ export async function pruefe(f, aus) {
         ok('Enter nimmt den Vorschlag auf',
            drin.namen.includes('Marta W.'), drin.namen.join(', '));
         ok('Und die Seite sagt es', drin.meldung.includes('Marta W.'), drin.meldung);
+
+        /*
+         * In der Tabelle steht die Klasse, nicht die Rolle: "Kind" in
+         * jeder Zeile sagte nichts. Lehrkraefte stehen oben.
+         */
+        const tabelle = await b.js(`(() => {
+            const zeilen = [...document.querySelectorAll('#mitglieder tr')]
+                .filter((tr) => tr.querySelector('td'));
+            return {
+                kopf:   [...document.querySelectorAll('#mitglieder th')]
+                          .map((e) => e.textContent.trim()),
+                erste:  zeilen[0]?.children[2]?.textContent.trim() ?? '',
+                klassen: zeilen.map((tr) => tr.children[2]?.textContent.trim() ?? ''),
+            };
+        })()`);
+        ok('Die Tabelle nennt die Klasse statt der Rolle',
+           tabelle.kopf.includes('Klasse') && !tabelle.kopf.includes('Rolle'),
+           tabelle.kopf.join(' | '));
+        ok('Die Lehrkraft steht oben', tabelle.erste === 'Lehrkraft', tabelle.erste);
+        ok('Und bei den Kindern steht ihre Klasse',
+           tabelle.klassen.filter((k) => k === '8c').length >= 3,
+           tabelle.klassen.join(', '));
+        ok('Auch bei der frisch Aufgenommenen',
+           tabelle.klassen.includes('7b'), tabelle.klassen.join(', '));
     } finally {
         b.schliessen();
     }

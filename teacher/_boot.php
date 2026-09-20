@@ -127,6 +127,33 @@ function teacher_redirect_and_continue(string $file): void
 }
 
 /**
+ * Die Antwort abschicken und danach weiterarbeiten.
+ *
+ * Der Kern von teacher_redirect_and_continue(), aber ohne Weiterleitung -
+ * gebraucht dort, wo die Antwort JSON ist: Die frische Vokabelzeile steht
+ * beim Tippenden schon, waehrend der Lueckensatz dazu noch entsteht.
+ */
+function teacher_flush_and_continue(): void
+{
+    ignore_user_abort(true);
+    header('Connection: close');
+
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+        return;
+    }
+
+    while (ob_get_level() > 0) {
+        ob_end_flush();
+    }
+    flush();
+}
+
+/**
  * Sorgt für eine angemeldete Lehrkraft - oder zeigt die Anmeldung.
  *
  * Die Sitzung ist dieselbe wie in der App. Das ist Absicht: Zum Einlesen der
@@ -322,11 +349,9 @@ function teacher_nav(array $user, ?int $kursId = null): void
         </summary>
         <span class="schleier" data-zu></span>
         <nav class="schublade" aria-label="Einstellungen">
-            <p class="mkopf"><?= h($user['display_name']) ?></p>
-
             <a class="mitem" href="<?= h(url('/') . '#/konto') ?>">
                 <span class="micon" aria-hidden="true">&#128100;</span>
-                <span>Mein Profil<span class="tiny muted">Name und Farbe</span></span>
+                <span>Mein Profil</span>
             </a>
             <a class="mitem" href="<?= h(url('/') . '#/konto/passwort') ?>">
                 <span class="micon" aria-hidden="true">&#128273;</span>
