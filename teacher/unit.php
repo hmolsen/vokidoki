@@ -7,6 +7,8 @@ require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/handoff.php';
 require_once __DIR__ . '/../lib/sentences.php';
 require_once __DIR__ . '/../lib/vocab.php';
+// Fuer word_type_clean() beim Anhaengen erkannter Vokabeln.
+require_once __DIR__ . '/../lib/wordtypes.php';
 
 /*
  * Eine Lerneinheit aus Sicht der Lehrkraft - und die Stelle, an der
@@ -257,6 +259,87 @@ function unit_json(array $daten, int $status = 200): never
     exit;
 }
 
+/*
+ * Erkannte Vokabeln anhaengen.
+ *
+ * Das Einlesen selbst passiert in api/import.php - dort sitzt das Modell,
+ * die Budgetpruefung und die Bildvalidierung. Gespeichert wird aber hier,
+ * und zwar aus einem Grund: Diese Seite prueft auf die SCHULE, die API auf
+ * die Kursmitgliedschaft. Eine Vertretung soll die Seiten ihrer Kollegin
+ * einlesen koennen, und sie tut es an derselben Stelle, an der sie auch
+ * von Hand ergaenzt und freigibt.
+ *
+ * Die Freigabemarke bleibt unberuehrt: Frisch Eingelesenes ist fuer die
+ * Klasse zunaechst unsichtbar. Das ist der ganze Sinn dieser Seite.
+ */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_scanned'])) {
+    teacher_csrf_check();
+
+    $roh = json_decode((string) ($_POST['entries'] ?? ''), true);
+    if (!is_array($roh) || $roh === []) {
+        unit_json(['ok' => false, 'error' => 'Es gibt nichts zu speichern.'], 422);
+    }
+    if (count($roh) > 500) {
+        unit_json(['ok' => false,
+                   'error' => 'Eine Lerneinheit kann höchstens 500 Vokabeln haben.'], 422);
+    }
+
+    $paare = [];
+    foreach ($roh as $zeile) {
+        if (!is_array($zeile)) {
+            continue;
+        }
+        $f = trim((string) ($zeile['foreign'] ?? ''));
+        $n = trim((string) ($zeile['native'] ?? ''));
+        if ($f === '' || $n === '') {
+            continue;
+        }
+        $notiz = trim((string) ($zeile['note'] ?? ''));
+        $paare[] = [
+            'foreign'   => $f,
+            'native'    => $n,
+            'note'      => $notiz === '' ? null : $notiz,
+            // Die Wortart bestimmt das Modell; sie wird hier nur durchgereicht.
+            'word_type' => word_type_clean($zeile['word_type'] ?? null),
+        ];
+    }
+
+    if ($paare === []) {
+        unit_json(['ok' => false, 'error' => 'Keine vollständigen Vokabelpaare dabei.'], 422);
+    }
+
+    /*
+     * vocab_append() ueberspringt, was schon drinsteht - zweimal dieselbe
+     * Buchseite fotografiert ist ein Versehen, keine Absicht. Deshalb
+     * werden zwei Zahlen zurueckgemeldet und nicht eine.
+     */
+    $dazu     = vocab_append($unitId, $paare, $unit['code'] ?? null);
+    $doppelt  = count($paare) - $dazu;
+    $saetze   = $dazu > 0
+                && budget_block_reason((int) $user['id']) === null
+                && sentence_claim($unitId);
+
+    $antwort = ['ok' => true, 'dazu' => $dazu, 'doppelt' => $doppelt];
+
+    if (!$saetze) {
+        unit_json($antwort);
+    }
+
+    // Antworten, dann weiterarbeiten: Die Lueckensaetze zu vierzig Vokabeln
+    // dauern Minuten, und solange soll niemand auf einen Spinner sehen.
+    $koerper = (string) json_encode($antwort, JSON_UNESCAPED_UNICODE);
+    http_response_code(200);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+    header('Content-Length: ' . strlen($koerper));
+    echo $koerper;
+
+    teacher_flush_and_continue();
+    set_time_limit(900);
+    generate_sentences_tracked($unitId);
+    exit;
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_vocab'])) {
     teacher_csrf_check();
 
@@ -479,7 +562,30 @@ teacher_flash_render();
  * zwei Wege dorthin.
  */
 $vonHand = isset($_GET['vonhand']);
+
+/*
+ * Wie viele Vokabeln gerade eingelesen wurden.
+ *
+ * Nach dem Erkennen laedt die Seite neu - anders als beim Tippen, wo jede
+ * Vokabel einzeln nachwaechst. Hier aendern sich zu viele Dinge auf
+ * einmal: die Zahl im Satz darueber, der Knopf "Alles freigeben", die
+ * Zeilen, an denen der Freigabebalken misst. Eine Seite, die all das
+ * richtig hat, ist ehrlicher als eine, die es an sechs Stellen nachtraegt.
+ *
+ * Damit trotzdem sichtbar ist, was neu ist, stehen die letzten $neu
+ * Zeilen gruen da und verblassen - dasselbe Zeichen wie beim Tippen.
+ */
+$neu = max(0, min($gesamt, (int) ($_GET['neu'] ?? 0)));
 ?>
+
+<?php if ($neu > 0): ?>
+    <div class="notice info">
+        <strong><?= $neu ?> Vokabeln sind dazugekommen</strong> &ndash; sie
+        stehen unten am Ende der Liste. Das Einlesen macht ein Sprachmodell,
+        und das verliest sich: Bitte einmal durchsehen und, wo nötig,
+        über das Stift-Zeichen berichtigen, <em>bevor</em> du freigibst.
+    </div>
+<?php endif; ?>
 
 <h2>Freigabe</h2>
 
@@ -612,8 +718,15 @@ $fehlen = vocab_without_sentences($unitId);
     </thead>
     <tbody>
     <?php foreach ($vokabeln as $i => $v): ?>
-        <?php $istFrei = $i < $frei; ?>
-        <tr class="<?= $istFrei ? 'released' : 'locked' ?>" data-pos="<?= $i + 1 ?>">
+        <?php
+        $istFrei   = $i < $frei;
+        $istFrisch = $neu > 0 && $i >= $gesamt - $neu;
+        $klassen   = ($istFrei ? 'released' : 'locked') . ($istFrisch ? ' frisch' : '');
+        // Ein Anker auf der ersten frischen Zeile: Das Skript springt nach
+        // dem Einlesen dorthin, statt oben auf der Seite zu landen.
+        $anker     = $istFrisch && $i === $gesamt - $neu ? ' id="frisch"' : '';
+        ?>
+        <tr class="<?= $klassen ?>" data-pos="<?= $i + 1 ?>"<?= $anker ?>>
             <td>
                 <strong data-wort><?= h($v['term_foreign']) ?></strong>
                 <input type="text" name="edit_f" value="<?= h($v['term_foreign']) ?>"
@@ -749,22 +862,124 @@ $fehlen = vocab_without_sentences($unitId);
         </span>
     </a>
 
-    <a class="card erweiternkarte" href="<?= h($importUrl) ?>">
+    <?php
+    /*
+     * Aus Dateien: ein Link auf die Einleseansicht der App - und mit
+     * JavaScript faengt das Skript den Klick ab und oeffnet stattdessen
+     * gleich den Dateidialog. Ein Zwischenschritt weniger: Wer hier
+     * drueckt, will Dateien auswaehlen, nicht erst eine Seite sehen, auf
+     * der ein Knopf steht, mit dem man Dateien auswaehlt.
+     */
+    ?>
+    <a class="card erweiternkarte" id="ausDateien" href="<?= h($importUrl) ?>">
         <span class="cflag">&#128193;</span>
         <span class="wahltext">
             <strong>Vokabeln aus Dateisystem hochladen</strong>
-            <span class="tiny muted">Fotos einer Buchseite auswählen</span>
+            <span class="tiny muted">Fotos von Buchseiten auswählen</span>
         </span>
     </a>
 
-    <button class="card erweiternkarte" type="button" data-handoff>
+    <?php
+    /*
+     * Und der dritte Weg, der zwei ist.
+     *
+     * Am Rechner ist die Kamera woanders - also ein QR-Code, der genau auf
+     * diese Seite fuehrt; wer ihn scannt, steht am Telefon hier und
+     * fotografiert dort weiter. Am Telefon waere derselbe Code Unsinn:
+     * Dort ist die Kamera in der Hand, und der Knopf oeffnet sie.
+     *
+     * Beide Karten stehen im HTML, das Skript blendet die falsche aus.
+     * Welche das ist, weiss nur der Browser - ein Geraet am Kennzeichen
+     * der Anfrage zu erraten geht seit Jahren schief.
+     */
+    ?>
+    <button class="card erweiternkarte" type="button" data-handoff id="perQr">
         <span class="cflag">&#128241;</span>
         <span class="wahltext">
-            <strong>Vokabeln mit Smartphone fotografieren</strong>
-            <span class="tiny muted">QR-Code scannen, direkt weiterarbeiten</span>
+            <strong>Mit dem Smartphone fotografieren</strong>
+            <span class="tiny muted">QR-Code scannen &ndash; das Telefon
+                landet genau hier</span>
+        </span>
+    </button>
+
+    <button class="card erweiternkarte" type="button" id="perKamera" hidden>
+        <span class="cflag">&#128247;</span>
+        <span class="wahltext">
+            <strong>Buchseite fotografieren</strong>
+            <span class="tiny muted">Öffnet die Kamera</span>
         </span>
     </button>
 </div>
+
+<?php
+/*
+ * Die beiden Dateifelder liegen versteckt daneben, nicht in den Karten:
+ * Ein <input type="file"> laesst sich nicht so gestalten, dass es wie eine
+ * Karte aussieht, und ein Klick darauf ist ohnehin das, was die Karte
+ * ausloest. Ohne JavaScript ruehrt sie niemand an.
+ */
+?>
+<input type="file" id="bildwahl" accept="image/*" multiple hidden
+       aria-hidden="true" tabindex="-1">
+<input type="file" id="kamerawahl" accept="image/*" capture="environment" multiple hidden
+       aria-hidden="true" tabindex="-1">
+
+<?php
+/*
+ * Die Ablage: was ausgewaehlt ist, bevor es zum Modell geht.
+ *
+ * Buchseiten sehen einander aehnlich - zwei Spalten, dieselbe Schrift, oft
+ * dieselbe Ueberschrift. Deshalb laesst sich hier jede Seite gross
+ * ansehen, in der Reihenfolge verschieben und wieder entfernen, bevor
+ * etwas eingelesen wird. Sie steht leer im HTML und fuellt sich erst,
+ * wenn jemand Dateien gewaehlt hat.
+ */
+?>
+<section class="stapel" id="stapel" hidden
+         data-unit="<?= $unitId ?>"
+         data-language="<?= (int) $unit['language_id'] ?>"
+         data-api="<?= h(url('/api/import.php')) ?>"
+         data-bilder="<?= h(url('/views/bilder.js') . '?v=' . app_version()) ?>"
+         data-ziel="<?= h(teacher_url('unit.php') . '?id=' . $unitId) ?>"
+         data-csrf="<?= h(teacher_csrf_token()) ?>">
+    <h3>Ausgew&auml;hlte Seiten</h3>
+
+    <p class="notice warn" id="stapelZuviel" hidden></p>
+
+    <ol class="seiten" id="seiten"></ol>
+
+    <div class="buttonrow">
+        <button class="btn small" type="button" id="erkennen">
+            <span data-knopftext>Vokabeln erkennen</span>
+        </button>
+        <button class="btn small secondary" type="button" id="stapelWeg">
+            Auswahl verwerfen
+        </button>
+    </div>
+
+    <p class="notice bad" id="stapelFehler" hidden></p>
+
+    <p class="tiny muted">
+        Das Erkennen macht ein Sprachmodell und kostet &ndash; es dauert je
+        Seite einige Sekunden. Was dabei herauskommt, kann Fehler enthalten:
+        Bitte sieh die neuen Vokabeln durch und berichtige sie, bevor du sie
+        freigibst.
+    </p>
+</section>
+
+<?php
+/*
+ * Die Lupe. Ein <dialog> und kein eigenes Fenster: Das Bild liegt im
+ * Browser, nicht auf dem Server - es gibt keine Adresse, die sich oeffnen
+ * liesse.
+ */
+?>
+<dialog id="lupe" class="lupe">
+    <img id="lupeBild" alt="">
+    <form method="dialog">
+        <button class="btn small secondary" autofocus>Schließen</button>
+    </form>
+</dialog>
 
 <?php
 /*
@@ -778,13 +993,14 @@ $fehlen = vocab_without_sentences($unitId);
 ?>
 <dialog id="handoff" class="qrdialog"
         data-url="<?= h(teacher_url('handoff.php')) ?>"
-        data-course="<?= (int) $unit['course_id'] ?>"
+        data-unit="<?= $unitId ?>"
         data-csrf="<?= h(teacher_csrf_token()) ?>">
-    <h3>Am Smartphone einlesen</h3>
+    <h3>Am Smartphone fotografieren</h3>
     <div class="qrslot" id="handoffSlot"></div>
     <p class="tiny muted" id="handoffHint">
         Code mit der Kamera des Telefons scannen. Du bist dann angemeldet und
-        stehst direkt im Einlesen dieses Kurses.
+        stehst am Telefon auf genau dieser Seite &ndash; dort fotografierst du
+        die Buchseiten.
     </p>
     <p class="tiny muted">
         <strong>Der Code ist ein Schlüssel.</strong> Er gilt

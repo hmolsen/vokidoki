@@ -107,6 +107,14 @@ export async function pruefe(f, aus) {
                 zelle2:  getComputedStyle(zweite).display,
                 label:   getComputedStyle(zweite, '::before').content,
                 bar:     !!document.querySelector('.releasebar'),
+                /*
+                 * Am Telefon wird jede Tabellenzeile zum Block - und das
+                 * schlaegt das eingebaute [hidden] { display: none }. Die
+                 * Anlegezeile stand dadurch am Telefon dauerhaft offen,
+                 * mit zwei leeren Feldern mitten in der Vokabelliste.
+                 */
+                anlegezeile: getComputedStyle(
+                    document.getElementById('handzeile')).display,
             };
         })()`);
 
@@ -135,6 +143,9 @@ export async function pruefe(f, aus) {
         ok('Und keine traegt die Spaltenueberschrift noch einmal',
            tab.label === 'none', tab.label);
         ok('Und der Balken ist auch am Telefon da', tab.bar);
+        ok('Die Anlegezeile bleibt zugeklappt, auch am Telefon',
+           tab.anlegezeile === 'none', tab.anlegezeile
+           + ' - display: block aus der Kartenregel schlaegt sonst [hidden]');
 
         // ---- Der Kopf bleibt beim Rollen stehen, unter der Leiste.
 

@@ -42,7 +42,10 @@ export async function pruefe(f, aus) {
             return {
                 beschriftung: knoepfe.map((k) => k.textContent.trim()),
                 freigeben: knoepfe.find((k) => k.textContent.includes('Freigeben'))?.getAttribute('href') ?? '',
-                einlesen:  knoepfe.find((k) => k.textContent.includes('Lerneinheit'))?.getAttribute('href') ?? '',
+                einlesen:  knoepfe.find((k) => k.textContent.includes('Lerneinheit'))?.tagName ?? '',
+                einleseZiel: knoepfe.find((k) => k.textContent.includes('Lerneinheit'))
+                                ?.getAttribute('action') ?? '',
+                neuerTab:  !!karte.querySelector('[target="_blank"]'),
                 kopf:      karte.querySelector('.kurskopf')?.getAttribute('href') ?? '',
             };
         })()`);
@@ -53,8 +56,17 @@ export async function pruefe(f, aus) {
            wege.beschriftung.join(' | '));
         ok('Freigeben führt direkt in eine Lerneinheit',
            wege.freigeben.includes('unit.php?id=' + f.unit), wege.freigeben);
-        ok('Einlesen führt in die Einleseansicht dieses Kurses',
-           wege.einlesen.includes('/lang/' + f.sprache + '/import'), wege.einlesen);
+        /*
+         * "+ Lerneinheit" ist kein Link mehr, sondern ein Formular: Es legt
+         * eine leere Lerneinheit an und führt auf ihre Seite. Dort stehen
+         * alle drei Wege, sie zu füllen - vorher führte der Knopf in die
+         * Einleseansicht der App, und zwar in einem neuen Tab, weil man von
+         * dort nicht zurückfand.
+         */
+        ok('"+ Lerneinheit" legt eine an, statt in die App zu führen',
+           wege.einlesen === 'FORM' && wege.einleseZiel.includes('course.php'),
+           wege.einlesen + ' → ' + wege.einleseZiel);
+        ok('Und öffnet dafür keinen zweiten Tab', wege.neuerTab === false);
         ok('Der Kartenkopf führt in den Kurs',
            wege.kopf.includes('course.php?id=' + f.kurs), wege.kopf);
 

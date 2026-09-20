@@ -59,14 +59,26 @@ function kurskarte(array $c, bool $eigener): string
 
     $knoepfe = '';
     if ($eigener) {
-        $einlesen = url('/') . '#/lang/' . (int) $c['language_id'] . '/import';
-        $neueste  = (int) ($c['latest_unit'] ?? 0);
+        $neueste = (int) ($c['latest_unit'] ?? 0);
 
+        /*
+         * "+ Lerneinheit" legt eine leere an und fuehrt auf ihre Seite.
+         *
+         * Hier stand ein Link in die Einleseansicht der App - in einem
+         * neuen Tab, weil man von dort nicht zurueckfand. Seit auf der
+         * Lerneinheitsseite alle drei Wege stehen (von Hand, aus Dateien,
+         * mit dem Telefon), fuehrt der kurze Weg genau dorthin. Derselbe
+         * Knopf wie in der Lerneinheitentabelle des Kurses.
+         */
         $knoepfe = '<div class="buttonrow">'
             . sprintf(
-                '<a class="btn small" href="%s" target="_blank" rel="noopener">'
-                . '+ Lerneinheit</a>',
-                h($einlesen),
+                '<form method="post" action="%s">%s'
+                . '<input type="hidden" name="course_id" value="%d">'
+                . '<button class="btn small" name="add_unit" value="1">'
+                . '+ Lerneinheit</button></form>',
+                h(teacher_url('course.php')),
+                teacher_csrf_field(),
+                (int) $c['id'],
             )
             . ($neueste > 0
                 ? sprintf(

@@ -733,6 +733,16 @@ img.cflag {
 .pill.good { background: var(--good-bg); color: var(--good); }
 
 /*
+ * Freigabe auf einen Blick: rot heisst zu, gelb heisst mittendrin, gruen
+ * heisst auf. Die Zahl daneben steht immer als "n von m" da - auch
+ * "70 von 70", denn nur so lassen sich zwei Zeilen untereinander
+ * vergleichen, ohne jedesmal neu zu lesen, welche Form gerade gewaehlt ist.
+ */
+.pill.bad  { background: var(--bad-bg);  color: var(--bad); }
+.pill.halb { background: var(--warn-bg); color: var(--warn); }
+.pill.leer { font-weight: 400; }
+
+/*
  * Aktionen als Knoepfe statt als Textlinks.
  *
  * "ansehen" mitten in einer Tabelle sieht aus wie ein Tippfehler und trifft
@@ -1079,6 +1089,10 @@ table.release tr.frisch td { animation: frischWeg 2.4s ease-out forwards; }
    auch wenn ein Kursname umbricht. */
 .kurskarte .buttonrow  { margin: auto 0 0; }
 .kurskarte .buttonrow .btn { flex: 1 1 auto; }
+/* "+ Lerneinheit" ist ein Formular geworden - es legt eine an, statt
+   woandershin zu fuehren. Das Formular muss sich dehnen wie der Knopf
+   darin, sonst stehen die beiden Knoepfe unterschiedlich breit da. */
+.kurskarte .buttonrow form { display: flex; flex: 1 1 auto; margin: 0; }
 
 details.kursealle { margin-bottom: 20px; }
 details.kursealle > summary {
@@ -1205,6 +1219,133 @@ a.erweiternkarte, button.erweiternkarte {
 .handform label { display: block; margin-bottom: 4px; }
 .handform input[type=text] { margin: 0 0 12px; width: 100%; }
 .handform .btn { margin: 0; }
+
+/* ------------------------------------------------- Die Ablage vor dem Einlesen
+ *
+ * Was ausgewählt ist, bevor es zum Modell geht. Buchseiten sehen einander
+ * ähnlich - zwei Spalten, dieselbe Schrift, oft dieselbe Überschrift -, und
+ * deshalb ist hier jede Seite gross genug, um sie zu erkennen, nummeriert,
+ * verschiebbar und wieder wegnehmbar.
+ */
+.stapel {
+    margin: 0 0 24px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+}
+.stapel h3 { margin: 0 0 12px; font-size: 1rem; }
+.stapel .buttonrow { margin: 14px 0 10px; }
+.stapel p:last-child { margin-bottom: 0; }
+
+.seiten {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.seite {
+    position: relative;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    overflow: hidden;
+}
+.seite.zieht { opacity: .4; }
+.seite.ueber { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+
+/*
+ * Die überzähligen Seiten sind da, aber nicht dabei.
+ *
+ * Abgeblendet statt weggeworfen: Wer acht Seiten gewählt hat, hat sie
+ * gewählt - er soll selbst entscheiden, welche zwei warten, und sie
+ * notfalls nach vorn schieben.
+ */
+.seite.zuviel .seitenbild { opacity: .32; filter: grayscale(1); }
+.seite.zuviel .seitennr { background: var(--text-soft); }
+
+.seitenbild {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: zoom-in;
+}
+.seitenbild img {
+    display: block;
+    width: 100%;
+    height: 132px;
+    object-fit: cover;
+}
+
+.seitennr {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    min-width: 22px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: .78rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+/* Die Werkzeugleiste liegt auf dem Bild, nicht daneben: Sonst wäre jede
+   Kachel doppelt so hoch wie ihr Bild. */
+.seitenwerkzeug {
+    display: flex;
+    justify-content: space-between;
+    gap: 2px;
+    padding: 4px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+}
+
+/*
+ * Der Knopf, der arbeitet.
+ *
+ * Das Erkennen dauert je Seite Sekunden, manchmal eine halbe Minute. Ein
+ * Knopf, der in dieser Zeit aussieht wie vorher, wird ein zweites Mal
+ * gedrückt - und das kostet dann zweimal.
+ */
+.btn.laeuft::before {
+    content: "";
+    display: inline-block;
+    width: 13px;
+    height: 13px;
+    margin-right: 8px;
+    vertical-align: -2px;
+    border: 2px solid rgba(255, 255, 255, .45);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+}
+
+/* Die Lupe: das Bild so gross, wie der Bildschirm es hergibt. */
+.lupe {
+    max-width: 94vw;
+    max-height: 94vh;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+}
+.lupe::backdrop { background: rgba(0, 0, 0, .7); }
+.lupe img {
+    display: block;
+    max-width: 88vw;
+    max-height: 80vh;
+    margin: 0 auto 12px;
+    border-radius: var(--radius-sm);
+}
+.lupe form { margin: 0; text-align: center; }
 
 /* ------------------------------------------------- Wen aufnehmen?
  *
@@ -1550,15 +1691,21 @@ a.rowmain:hover { text-decoration: underline; }
 }
 
 /*
- * hidden muss hidden heissen.
+ * hidden muss hidden heissen. Fuer alles, ohne Liste.
  *
- * .iconaction setzt display: inline-flex, und das schlaegt das eingebaute
- * [hidden] { display: none } - der Sichern-Knopf stand dadurch in jeder
- * Zeile, obwohl er erst beim Bearbeiten auftauchen soll. Dasselbe gilt
- * fuer alles andere, dem eine display-Regel gegeben wurde.
+ * Jede display-Regel schlaegt das eingebaute [hidden] { display: none },
+ * und in dieser Datei stehen viele: .iconaction ist inline-flex, eine
+ * Erweiternkarte flex, und am Telefon wird jede Tabellenzeile zum Block.
+ * Die Falle ist dreimal zugeschnappt - der Sichern-Knopf stand in jeder
+ * Zeile, beide Fassungen des dritten Weges nebeneinander, und die
+ * Anlegezeile am Telefon dauerhaft offen. Jedesmal kam ein Wahlschalter
+ * mehr in die Liste hier, und jedesmal fehlte der naechste.
+ *
+ * Also einmal fuer alles. hidden ist keine Gestaltungsfrage: Es heisst,
+ * dass etwas gerade nicht zur Seite gehoert, und daran hat keine
+ * Layoutregel etwas zu deuteln.
  */
-.iconaction[hidden], .btn[hidden], .coursetitle[hidden],
-.iconbtn[hidden], .einheitfeld[hidden], .einheitname[hidden] { display: none !important; }
+[hidden] { display: none !important; }
 
 /* Eine Vokabelzeile im Bearbeitungszustand. Die Felder ersetzen den Text
    an Ort und Stelle - keine zweite Zeile, kein Fenster. */

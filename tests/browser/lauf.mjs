@@ -31,6 +31,7 @@ import { pruefe as fahnen }   from './fahnen.mjs';
 import { pruefe as klasse }   from './klasse.mjs';
 import { pruefe as suche }    from './suche.mjs';
 import { pruefe as mobil }    from './mobil.mjs';
+import { pruefe as stapel }   from './stapel.mjs';
 import { pruefe as kursanlegen } from './kursanlegen.mjs';
 
 const hier  = dirname(fileURLToPath(import.meta.url));
@@ -65,6 +66,7 @@ try {
     await klasse(f, aus);
     await suche(f, aus);
     await mobil(f, aus);
+    await stapel(f, aus);
     // Zuletzt: legt einen Kurs an, und die Navigation zaehlt vorher Karten.
     await kursanlegen(f, aus);
 } finally {

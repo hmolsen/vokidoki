@@ -2756,23 +2756,168 @@ ok('Zugeklappt, bis jemand sie will',
  */
 ok('Darunter steht "Vokabeln zur Lerneinheit hinzufuegen"',
    str_contains($res['body'], '<h2>Vokabeln zur Lerneinheit hinzufügen</h2>'));
-ok('Mit drei Wegen', substr_count($res['body'], 'class="card erweiternkarte"') === 3,
-   substr_count($res['body'], 'class="card erweiternkarte"') . ' statt 3');
+$teacherJs = (string) file_get_contents(__DIR__ . '/../teacher/teacher.js');
+
+ok('Mit vier Karten - drei Wege, der letzte in zwei Fassungen',
+   substr_count($res['body'], 'class="card erweiternkarte"') === 4,
+   substr_count($res['body'], 'class="card erweiternkarte"') . ' statt 4');
 
 ok('Von Hand: ein Link auf dieselbe Seite',
    preg_match('/<a class="card erweiternkarte" id="vonHand"\s+href="[^"]*vonhand=1/s',
               $res['body']) === 1,
    'ohne JavaScript laedt sie neu und die Zeile steht da');
-ok('Aus Dateien: der Weg in die Einleseansicht',
-   preg_match('/<a class="card erweiternkarte" href="[^"]*#\/lang\/\d+\/import"/',
+ok('Aus Dateien: ohne Skript weiterhin der Weg in die Einleseansicht',
+   preg_match('/<a class="card erweiternkarte" id="ausDateien" href="[^"]*#\/lang\/\d+\/import"/',
+              $res['body']) === 1,
+   'mit Skript faengt teacher.js den Klick ab und oeffnet den Dateidialog');
+
+/*
+ * Der dritte Weg steht zweimal da, weil er zwei ist.
+ *
+ * Am Rechner ist die Kamera woanders - dort fuehrt ein QR-Code das Telefon
+ * hierher. Am Telefon waere derselbe Code Unsinn; dort oeffnet der Knopf
+ * die Kamera. Welches Geraet davorsitzt, weiss nur der Browser: Beide
+ * Karten stehen im HTML, das Skript blendet die falsche aus. Ohne Skript
+ * bleibt der QR-Code stehen - das ist der Weg, der auch ohne Kamera
+ * weiterhilft.
+ */
+ok('Am Rechner: der QR-Code',
+   preg_match('/<button class="card erweiternkarte" type="button" data-handoff id="perQr">/',
               $res['body']) === 1);
-ok('Mit dem Telefon: der QR-Code',
-   preg_match('/<button class="card erweiternkarte" type="button" data-handoff>/',
-              $res['body']) === 1);
-ok('Und das Fenster dafuer steht auch hier',
+ok('Am Telefon: die Kamera - vorerst ausgeblendet',
+   preg_match('/<button class="card erweiternkarte" type="button" id="perKamera" hidden>/',
+              $res['body']) === 1,
+   'sichtbar macht sie das Skript, wenn der Zeiger grob und die Finger mehrere sind');
+ok('Und das Skript entscheidet danach, nicht nach dem Kennzeichen der Anfrage',
+   str_contains($teacherJs, "matchMedia('(pointer: coarse)')")
+   && str_contains($teacherJs, 'navigator.maxTouchPoints > 1')
+   && !str_contains($teacherJs, 'userAgent'),
+   'ein iPad meldet sich seit Jahren als Mac');
+
+ok('Und das Fenster mit dem Code steht auch hier',
    str_contains($res['body'], 'id="handoff"')
-   && str_contains($res['body'], 'data-course="'),
-   'der Sprung ans Telefon stand nur im Kurs');
+   && str_contains($res['body'], 'data-unit="' . $freiUnit . '"'),
+   'und es zeigt auf die Lerneinheit, nicht mehr auf den Kurs');
+ok('Der Kurs steht nicht mehr darin',
+   !str_contains($res['body'], 'data-course="'),
+   'das Ziel ist genau diese Seite');
+
+// ---- Einlesen ohne Umweg: Dateidialog, Ablage, Erkennen.
+
+/*
+ * Das Einlesen war eine eigene Ansicht in der App: Knopf druecken, Seite
+ * wechselt, Dateien waehlen, Titel eintippen, zurueckfinden. Wer an einer
+ * Lerneinheit arbeitet, hat die Lerneinheit schon - der Umweg fuehrte an
+ * einen Ort, der von ihr nichts weiss.
+ */
+ok('Zwei Dateifelder liegen versteckt daneben',
+   str_contains($res['body'], '<input type="file" id="bildwahl" accept="image/*" multiple hidden')
+   && str_contains($res['body'], 'id="kamerawahl" accept="image/*" capture="environment"'),
+   'eines fuer den Dateidialog, eines fuer die Kamera');
+
+ok('Die Ablage steht leer im HTML',
+   preg_match('/<section class="stapel" id="stapel" hidden/', $res['body']) === 1);
+ok('Und weiss, wohin sie gehoert',
+   str_contains($res['body'], 'data-unit="' . $freiUnit . '"')
+   && preg_match('/data-language="\d+"/', $res['body']) === 1
+   && str_contains($res['body'], 'data-api="')
+   && str_contains($res['body'], 'data-bilder="'),
+   'Sprache fuer das Erkennen, Einheit fuer das Speichern');
+ok('Die Lupe ist ein Fenster, kein neuer Tab',
+   str_contains($res['body'], '<dialog id="lupe" class="lupe">'),
+   'das Bild liegt im Browser - es gibt keine Adresse, die sich oeffnen liesse');
+ok('Und die Ablage sagt, dass die Maschine sich verlesen kann',
+   preg_match('/Was dabei herauskommt, kann Fehler enthalten/', $res['body']) === 1);
+
+ok('Die Bildverkleinerung steht nur noch einmal im Quelltext',
+   file_exists(__DIR__ . '/../views/bilder.js')
+   && str_contains((string) file_get_contents(__DIR__ . '/../views/import.js'),
+                   "from './bilder.js'")
+   && str_contains($teacherJs, 'stapel.dataset.bilder'),
+   'zwei Abschriften waeren bald zwei verschiedene Bildgroessen');
+
+// ---- Erkannte Vokabeln anhaengen.
+
+$vorherStand = (int) qv('SELECT released_position FROM units WHERE id = ?', [$freiUnit]);
+$vorherZahl  = (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$freiUnit]);
+
+$scan = freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
+    'add_scanned' => '1', 'unit_id' => $freiUnit, 'csrf' => $freiCsrf,
+    'entries' => json_encode([
+        ['foreign' => 'gescannt-eins', 'native' => 'Eins', 'word_type' => 'noun'],
+        ['foreign' => 'gescannt-zwei', 'native' => 'Zwei'],
+        ['foreign' => '', 'native' => 'ohne Wort'],
+    ]),
+], ['X-Requested-With: fetch']);
+$scanDaten = json_decode($scan['body'], true);
+
+ok('Erkannte Vokabeln haengen sich an die Lerneinheit an',
+   ($scanDaten['ok'] ?? false) === true && ($scanDaten['dazu'] ?? 0) === 2,
+   $scan['body']);
+ok('Halbe Paare fallen dabei weg',
+   (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$freiUnit])
+   === $vorherZahl + 2);
+ok('Sie stehen hinten, nicht vorne',
+   (string) qv('SELECT term_foreign FROM vocab WHERE unit_id = ? ORDER BY position DESC LIMIT 1',
+               [$freiUnit]) === 'gescannt-zwei');
+ok('Und die Freigabe ruehrt das nicht an',
+   (int) qv('SELECT released_position FROM units WHERE id = ?', [$freiUnit]) === $vorherStand,
+   'frisch Eingelesenes ist fuer die Klasse zunaechst unsichtbar - das ist der Sinn dieser Seite');
+
+$nochmal = freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
+    'add_scanned' => '1', 'unit_id' => $freiUnit, 'csrf' => $freiCsrf,
+    'entries' => json_encode([
+        ['foreign' => 'gescannt-eins', 'native' => 'Eins'],
+        ['foreign' => 'gescannt-drei', 'native' => 'Drei'],
+    ]),
+], ['X-Requested-With: fetch']);
+$nochmalDaten = json_decode($nochmal['body'], true);
+ok('Dieselbe Buchseite zweimal fotografiert gibt keine Duplikate',
+   ($nochmalDaten['dazu'] ?? 0) === 1 && ($nochmalDaten['doppelt'] ?? 0) === 1,
+   $nochmal['body']);
+ok('Und "gescannt-eins" steht weiterhin genau einmal drin',
+   (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ? AND term_foreign = ?',
+            [$freiUnit, 'gescannt-eins']) === 1);
+
+$ohneMarke = freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
+    'add_scanned' => '1', 'unit_id' => $freiUnit, 'csrf' => 'falsch',
+    'entries' => json_encode([['foreign' => 'heimlich', 'native' => 'Heimlich']]),
+], ['X-Requested-With: fetch']);
+ok('Ohne gueltiges CSRF-Feld kommt nichts an',
+   (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ? AND term_foreign = ?',
+            [$freiUnit, 'heimlich']) === 0,
+   'Status ' . $ohneMarke['status']);
+
+/*
+ * Und die frisch angehaengten Zeilen stehen gruen da. Nach dem Erkennen
+ * laedt die Seite neu - anders als beim Tippen: Es aendern sich zu viele
+ * Dinge auf einmal, und eine Seite, die sie alle richtig hat, ist
+ * ehrlicher als eine, die sie an sechs Stellen nachtraegt.
+ */
+$frischRes = freiPost($base . '/teacher/unit.php?id=' . $freiUnit . '&neu=3', null);
+ok('Nach dem Einlesen stehen die neuen Zeilen gruen da',
+   substr_count($frischRes['body'], 'class="locked frisch"')
+   + substr_count($frischRes['body'], 'class="released frisch"') === 3,
+   'dasselbe Zeichen wie beim Tippen');
+ok('Und ein Anker fuehrt direkt zu ihnen', str_contains($frischRes['body'], 'id="frisch"'));
+ok('Daneben ein Hinweis, dass die Maschine sich verlesen kann',
+   str_contains($frischRes['body'], '3 Vokabeln sind dazugekommen')
+   && str_contains($frischRes['body'], 'bevor</em> du freigibst'));
+/*
+ * Die Zahl steht in der Adresse, also darf sie erfunden sein. Ohne
+ * Deckelung meldete "&neu=9999" neuntausend dazugekommene Vokabeln und
+ * faerbte jede Zeile der Einheit gruen.
+ */
+$luege = freiPost($base . '/teacher/unit.php?id=' . $freiUnit . '&neu=9999', null)['body'];
+$wirklich = (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$freiUnit]);
+ok('Eine erfundene Zahl wird auf die Einheit gedeckelt',
+   !str_contains($luege, '9999 Vokabeln sind dazugekommen')
+   && str_contains($luege, $wirklich . ' Vokabeln sind dazugekommen'));
+ok('Und eine negative macht gar keine frischen Zeilen',
+   !str_contains(freiPost($base . '/teacher/unit.php?id=' . $freiUnit . '&neu=-4', null)['body'],
+                 'frisch'));
+
+q('DELETE FROM vocab WHERE unit_id = ? AND term_foreign LIKE ?', [$freiUnit, 'gescannt-%']);
 
 ok('Das Feld heisst nach der Sprache, nicht "Fremdsprache"',
    str_contains($res['body'], 'aria-label="' . h($kopfSprache) . '"'),
@@ -3740,15 +3885,12 @@ function teacherRequest(string $url, ?array $post): array
     }
     $roh    = (string) curl_exec($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $laenge = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
     curl_close($ch);
 
-    if (!$mitKopf) {
-        return ['status' => $status, 'body' => $roh, 'header' => ''];
-    }
-    return ['status' => $status,
-            'header' => substr($roh, 0, $laenge),
-            'body'   => substr($roh, $laenge)];
+    // Ohne CURLOPT_HEADER: Diese Fassung liefert nur den Rumpf. Hier stand
+    // eine Abfrage auf ein $mitKopf, das es in dieser Funktion nie gab -
+    // sie war immer wahr und erzeugte bei jedem Aufruf eine Warnung.
+    return ['status' => $status, 'body' => $roh, 'header' => ''];
 }
 
 function teacherLogin(string $user, string $pass): array
@@ -5765,8 +5907,37 @@ ok('Der eigene Kurs steht darauf', str_contains($res['body'], h($startKurs['name
 ok('Die Karte fuehrt mit einem Klick in die Freigabe',
    str_contains($res['body'], 'unit.php?id=' . $startUnit),
    'vorher waren es drei Klicks und vier Seiten');
-ok('Und mit einem in die Einleseansicht',
-   str_contains($res['body'], '#/lang/' . (int) $startKurs['language_id'] . '/import'));
+/*
+ * "+ Lerneinheit" fuehrt nicht mehr in die App.
+ *
+ * Hier stand ein Link in die Einleseansicht - in einem neuen Tab, weil man
+ * von dort nicht zurueckfand. Seit auf der Lerneinheitsseite alle drei
+ * Wege stehen, legt der Knopf eine leere Einheit an und fuehrt auf ihre
+ * Seite: derselbe Weg wie in der Lerneinheitentabelle des Kurses.
+ */
+ok('Und "+ Lerneinheit" legt eine an, statt in die App zu fuehren',
+   preg_match('/<form method="post" action="[^"]*course\.php">.*?'
+              . 'name="course_id" value="' . (int) $startKurs['id'] . '".*?'
+              . 'name="add_unit"/s', $res['body']) === 1,
+   'vorher ein Link auf #/lang/N/import');
+ok('Und oeffnet dafuer keinen zweiten Tab',
+   !str_contains($res['body'], 'target="_blank"'),
+   'ein Knopf, der die Seite verlaesst, ist kein Knopf');
+
+$vorherEinheiten = (int) qv('SELECT COUNT(*) FROM units WHERE course_id = ?',
+                            [(int) $startKurs['id']]);
+$angelegt = teacherRequest($base . '/teacher/course.php', [
+    'add_unit' => '1', 'course_id' => (int) $startKurs['id'], 'csrf' => $lehrerCsrf,
+]);
+ok('Der Knopf legt wirklich eine an',
+   (int) qv('SELECT COUNT(*) FROM units WHERE course_id = ?',
+            [(int) $startKurs['id']]) === $vorherEinheiten + 1);
+ok('Und man steht danach auf ihrer Seite',
+   str_contains($angelegt['body'], 'Unbenannte Lerneinheit')
+   && str_contains($angelegt['body'], 'Vokabeln zur Lerneinheit hinzufügen'),
+   'dort stehen die drei Wege, sie zu fuellen');
+q('DELETE FROM units WHERE course_id = ? AND title = ?',
+  [(int) $startKurs['id'], 'Unbenannte Lerneinheit']);
 
 ok('Die Kurse der Kolleginnen stehen zugeklappt darunter',
    str_contains($res['body'], 'class="kursealle"')
@@ -6754,6 +6925,75 @@ $res = teacherGet('course.php?id=' . $efKursId);
 ok('Auch die Einheitentabelle traegt "courses"',
    str_contains($res['body'], 'class="data courses rowlink" id="einheiten"'),
    'ohne das ist ihre Anlegezeile als einzige nicht getoent');
+
+// ---- Die Lerneinheiten-Tabelle sagt eine Sache, und zwar immer dieselbe.
+
+/*
+ * Vorher standen dort vier Spalten: Titel, Vokabeln, Freigegeben, Angelegt.
+ * "Vokabeln" und "Freigegeben" nannten beide die Gesamtzahl - zweimal
+ * dieselbe Zahl nebeneinander -, und das Anlegedatum beantwortete keine
+ * Frage, die sich beim Unterrichten stellt.
+ *
+ * Und "Freigegeben" hatte drei Formen: "alle", "noch keine", "3 von 8".
+ * Drei Formen fuer eine Auskunft heisst, dass sich zwei Zeilen
+ * untereinander nicht vergleichen lassen, ohne jede einzeln zu lesen.
+ */
+$efZu   = makeUnit($lehrerId, (int) $efKurs['language_id'], 'Noch zu');
+$efHalb = makeUnit($lehrerId, (int) $efKurs['language_id'], 'Halb offen');
+$efGanz = makeUnit($lehrerId, (int) $efKurs['language_id'], 'Ganz offen');
+foreach ([$efZu, $efHalb, $efGanz] as $u) {
+    for ($i = 0; $i < 4; $i++) {
+        q('INSERT INTO vocab (unit_id, term_foreign, term_native, position)
+           VALUES (?, ?, ?, ?)', [$u, 'w' . $i . '-' . $u, 'W' . $i, $i]);
+    }
+}
+q('UPDATE units SET released_position = 0 WHERE id = ?', [$efZu]);
+q('UPDATE units SET released_position = 2 WHERE id = ?', [$efHalb]);
+q('UPDATE units SET released_position = 4 WHERE id = ?', [$efGanz]);
+
+$res = teacherGet('course.php?id=' . $efKursId);
+preg_match('/<table class="data courses rowlink" id="einheiten">.*?<\/table>/s',
+           $res['body'], $etm);
+$etab = $etm[0] ?? '';
+
+ok('Drei Spalten, nicht fuenf',
+   preg_match_all('/<th[\s>]/', $etab) === 3,
+   preg_match_all('/<th[\s>]/', $etab) . ' statt 3');
+ok('Die Vokabelzahl steht nicht mehr als eigene Spalte da',
+   !str_contains($etab, '>Vokabeln</th>'),
+   'sie steht in "n von m" schon drin');
+ok('Und das Anlegedatum auch nicht', !str_contains($etab, '>Angelegt</th>'));
+
+ok('Halb offen heisst "2 von 4", und zwar gelb',
+   str_contains($etab, '<span class="pill halb">2 von 4</span>'), $etab);
+ok('Ganz offen heisst "4 von 4", und zwar gruen',
+   str_contains($etab, '<span class="pill good">4 von 4</span>'));
+ok('Nichts offen heisst "0 von 4", und zwar rot',
+   str_contains($etab, '<span class="pill bad">0 von 4</span>'), $etab);
+ok('Und "alle" steht nirgends mehr',
+   !str_contains($etab, '>alle<') && !str_contains($etab, 'noch keine</span>'),
+   'eine Form fuer eine Auskunft');
+ok('Eine Lerneinheit ohne Vokabeln sagt das statt einer Zahl',
+   str_contains($etab, '<span class="pill leer">noch keine Vokabeln</span>'),
+   '"0 von 0" waere keine Antwort');
+
+/*
+ * Und der Titel: Die Sprache stand als eigene Zeile unter dem Kursnamen -
+ * "Englisch - 6B" und darunter noch einmal "Englisch". Jetzt steht sie als
+ * Fahne davor, wo sie einen halben Zentimeter braucht statt einer Zeile.
+ */
+ok('Die Fahne steht vor dem Kursnamen',
+   preg_match('/<h1><img class="kopfflagge"[^>]*>' . preg_quote(h((string) $efKurs['name']), '/')
+              . '<\/h1>/', $res['body']) === 1,
+   'und der Kursname gleich dahinter');
+ok('Die Zeile mit der Sprache darunter ist weg',
+   !str_contains($res['body'], '<p class="muted">' . h((string) qv(
+       'SELECT l.name FROM languages l JOIN courses co ON co.language_id = l.id
+         WHERE co.id = ?', [$efKursId])) . '</p>'),
+   'dieselbe Auskunft zweimal');
+
+q('DELETE FROM units WHERE id IN (?, ?, ?)', [$efZu, $efHalb, $efGanz]);
+$res = teacherGet('course.php?id=' . $efKursId);
 $res = teacherGet('unit.php?id=' . $efUnit);
 ok('Die leere Lerneinheit ebenso', str_contains($res['body'], '<div class="leer">'));
 
@@ -6897,13 +7137,13 @@ ok('Ohne POST gibt es keine Marke', $res['status'] === 405, 'Status ' . $res['st
 
 $vorher = (int) qv('SELECT COUNT(*) FROM login_handoffs');
 $res = teacherRequest($base . '/teacher/handoff.php', [
-    'course_id' => $hoKurs, 'csrf' => 'falsch',
+    'unit_id' => $hoUnit, 'csrf' => 'falsch',
 ]);
 ok('Ohne gueltiges CSRF-Feld auch nicht',
    (int) qv('SELECT COUNT(*) FROM login_handoffs') === $vorher);
 
 $res  = teacherRequest($base . '/teacher/handoff.php', [
-    'course_id' => $hoKurs, 'csrf' => $hoCsrf,
+    'unit_id' => $hoUnit, 'csrf' => $hoCsrf,
 ]);
 $json = json_decode($res['body'], true);
 ok('Mit POST und CSRF entsteht eine', ($json['ok'] ?? false) === true,
@@ -6924,8 +7164,9 @@ ok('Im Code steht eine Adresse mit Marke',
 
 /*
  * Jetzt das Telefon: ein eigenes Cookie-Glas, also keine Sitzung. Wer die
- * Adresse aufruft, muss danach angemeldet sein und im Einlesen dieses
- * Kurses stehen.
+ * Adresse aufruft, muss danach angemeldet sein und auf genau der
+ * Lerneinheit stehen, von der der Code kam - nicht in der App, wo er die
+ * Einheit in einer Liste wiedersuchen muesste.
  */
 $handyJar = tempnam(sys_get_temp_dir(), 'vthandy');
 $holen = static function (string $url) use ($handyJar): array {
@@ -6954,8 +7195,8 @@ if (preg_match('/\?h=(.+)$/', $lokal, $hmm) === 1) {
 
 $r1 = $holen($lokal);
 ok('Die Marke leitet weiter', $r1['status'] === 302, 'Status ' . $r1['status']);
-ok('Und zwar in die Einleseansicht dieses Kurses',
-   str_contains($r1['ort'], '#/lang/') && str_contains($r1['ort'], '/import'),
+ok('Und zwar auf genau diese Lerneinheit',
+   str_contains($r1['ort'], '/teacher/unit.php?id=' . $hoUnit),
    $r1['ort']);
 
 // Angemeldet? Die API antwortet nur einer Sitzung.
@@ -6999,8 +7240,8 @@ curl_setopt_array($ch, [
 curl_exec($ch);
 $ortZwei = (string) curl_getinfo($ch, CURLINFO_REDIRECT_URL);
 curl_close($ch);
-ok('Ein zweites Einloesen fuehrt nicht ins Einlesen',
-   !str_contains($ortZwei, '/import'), $ortZwei);
+ok('Ein zweites Einloesen fuehrt nicht zur Lerneinheit',
+   !str_contains($ortZwei, '/teacher/unit.php'), $ortZwei);
 
 $ch = curl_init($base . '/api/languages.php?action=list');
 curl_setopt_array($ch, [
@@ -7026,16 +7267,17 @@ ok('Eine abgelaufene Marke zieht nicht', handoff_redeem($alt) === null);
 
 // ---- Fremde Kurse gehen niemanden etwas an.
 
-$fremderKurs = (int) qv(
-    'SELECT co.id FROM courses co WHERE co.school_id <> ? LIMIT 1',
+$fremdeEinheit = (int) qv(
+    'SELECT t.id FROM units t JOIN courses co ON co.id = t.course_id
+      WHERE co.school_id <> ? LIMIT 1',
     [(int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId])],
 );
-if ($fremderKurs > 0) {
+if ($fremdeEinheit > 0) {
     $res  = teacherRequest($base . '/teacher/handoff.php', [
-        'course_id' => $fremderKurs, 'csrf' => $hoCsrf,
+        'unit_id' => $fremdeEinheit, 'csrf' => $hoCsrf,
     ]);
     $json = json_decode($res['body'], true);
-    ok('Fuer einen Kurs einer anderen Schule gibt es keine Marke',
+    ok('Fuer eine Lerneinheit einer anderen Schule gibt es keine Marke',
        ($json['ok'] ?? false) !== true, mb_substr($res['body'], 0, 80));
 }
 
@@ -7047,6 +7289,23 @@ ok('Ein Ziel mit doppeltem Schraegstrich ebenso',
    !handoff_target_ok('//boese.example/'));
 ok('Ein gewoehnlicher Weg der App ist erlaubt',
    handoff_target_ok('/lang/12/import'));
+
+/*
+ * Und die Uebersetzung vom Ziel zur Adresse.
+ *
+ * In der Marke steht eine abstrakte Form - "/teacher/unit/42" -, damit
+ * handoff_target_ok() eng bleiben kann: Stuende dort die fertige Adresse
+ * mit Fragezeichen und Punkt darin, muesste die Pruefung beides
+ * durchlassen, und damit waere sie keine mehr.
+ */
+ok('Ein Ziel in der App wird zum Hash',
+   str_ends_with((string) handoff_target_url('/lang/12/import'), '#/lang/12/import'));
+ok('Ein Ziel im Lehrkraft-Bereich zu einer eigenen Adresse',
+   str_ends_with((string) handoff_target_url('/teacher/unit/42'),
+                 '/teacher/unit.php?id=42'),
+   (string) handoff_target_url('/teacher/unit/42'));
+ok('Und ein verbogenes Ziel zu gar nichts',
+   handoff_target_url('https://boese.example/') === null);
 
 /*
  * Und die Pruefung greift auch wirklich auf dem Weg.

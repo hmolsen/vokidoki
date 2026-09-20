@@ -16,8 +16,14 @@ require_once __DIR__ . '/../lib/handoff.php';
  * Geprüft wird dreierlei, und keines davon ist verhandelbar:
  *   - Die Sitzung gehört einer Lehrkraft (teacher_require).
  *   - Das Formular kommt von uns (teacher_csrf_check).
- *   - Der Kurs gehört zur Schule dieser Lehrkraft.
+ *   - Die Lerneinheit gehört zur Schule dieser Lehrkraft.
  * Die Marke lautet danach auf das eigene Konto, nie auf ein anderes.
+ *
+ * Das Ziel war einmal die Einleseansicht der App. Jetzt ist es die
+ * Lerneinheit selbst: Wer am Rechner auf „am Telefon fotografieren"
+ * drückt, steht am Telefon auf genau derselben Seite und fotografiert
+ * dort weiter. Vorher landete er in der App, las ein, und musste sich im
+ * Lehrkraft-Bereich wieder zurechtfinden.
  */
 
 $user = teacher_require();
@@ -34,15 +40,27 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
 $schoolId = (int) ($user['school_id'] ?? 0);
-$courseId = (int) ($_POST['course_id'] ?? 0);
-$kurs     = course_in_school($courseId, $schoolId);
+$unitId   = (int) ($_POST['unit_id'] ?? 0);
 
-if ($kurs === null) {
+/*
+ * Ueber den Kurs geprueft, nicht ueber units.user_id - dieselbe Regel wie
+ * auf der Seite selbst: Eine Vertretung kommt an die Unterlagen ihrer
+ * Kollegin, ein fremdes Kollegium nicht.
+ */
+$einheit = $schoolId === 0 ? null : q1(
+    'SELECT t.id, t.title
+       FROM units t
+       JOIN courses co ON co.id = t.course_id
+      WHERE t.id = ? AND co.school_id = ?',
+    [$unitId, $schoolId],
+);
+
+if ($einheit === null) {
     http_response_code(404);
-    exit(json_encode(['ok' => false, 'error' => 'Diesen Kurs gibt es nicht.']));
+    exit(json_encode(['ok' => false, 'error' => 'Diese Lerneinheit gibt es nicht.']));
 }
 
-$ziel  = '/lang/' . (int) $kurs['language_id'] . '/import';
+$ziel  = '/teacher/unit/' . (int) $einheit['id'];
 $marke = handoff_create((int) $user['id'], $ziel);
 
 /*
@@ -51,7 +69,7 @@ $marke = handoff_create((int) $user['id'], $ziel);
  * sonst den Host der laufenden Anfrage.
  */
 $adresse = public_url('/') . '?h=' . rawurlencode($marke);
-$svg     = qr_svg($adresse, 4, 'Anmelden und einlesen');
+$svg     = qr_svg($adresse, 4, 'Anmelden und fotografieren');
 
 if ($svg === null) {
     http_response_code(500);
@@ -62,5 +80,5 @@ echo json_encode([
     'ok'      => true,
     'svg'     => $svg,
     'minuten' => HANDOFF_TTL,
-    'kurs'    => (string) $kurs['name'],
+    'einheit' => (string) $einheit['title'],
 ], JSON_UNESCAPED_UNICODE);

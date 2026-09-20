@@ -55,8 +55,9 @@ if ($sprung !== '') {
     $eingeloest = handoff_redeem($sprung);
     if ($eingeloest !== null) {
         login_user((int) $eingeloest['user']['id']);
-        if (handoff_target_ok($eingeloest['target'])) {
-            $ziel = url('/') . '#' . $eingeloest['target'];
+        $aus = handoff_target_url($eingeloest['target']);
+        if ($aus !== null) {
+            $ziel = $aus;
         }
     }
     header('Location: ' . $ziel, true, 302);

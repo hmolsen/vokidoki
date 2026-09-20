@@ -210,16 +210,22 @@ $verlust    = course_delete_preview($courseId);
  */
 $schuelerUrl = url('/') . '#/lang/' . (int) $kurs['language_id'];
 
+/*
+ * Die Fahne vor den Kursnamen, und die Zeile mit der Sprache darunter
+ * faellt weg: "Englisch - 6B" und darunter noch einmal "Englisch" ist
+ * dieselbe Auskunft zweimal.
+ */
+$kursTitel = flag_html((string) $kurs['flag_emoji'] ?: FLAG_FALLBACK, 'kopfflagge')
+           . h((string) $kurs['name']);
+
 teacher_head($kurs['name'], $user, sprintf(
     '<a class="btn small secondary" href="%s" '
     . 'title="Die Ansicht, die deine Klasse sieht">'
     . '<span aria-hidden="true">&#128065;</span> So sieht es die Klasse</a>',
     h($schuelerUrl),
-), '', $courseId);
+), $kursTitel, $courseId);
 teacher_flash_render();
 ?>
-
-<p class="muted"><?= h($kurs['language_name']) ?></p>
 
 <h2>Lerneinheiten</h2>
 
@@ -242,11 +248,18 @@ teacher_flash_render();
 ) ?>
 <?php else: ?>
 <table class="data courses rowlink" id="einheiten">
+    <?php
+    /*
+     * Zwei Spalten weniger.
+     *
+     * "Vokabeln" stand neben "Freigegeben", und dort steht die Gesamtzahl
+     * ohnehin - zweimal dieselbe Zahl. Und das Anlegedatum beantwortete
+     * keine Frage, die sich beim Unterrichten stellt.
+     */
+    ?>
     <tr>
         <th>Titel</th>
-        <th class="num">Vokabeln</th>
         <th>Freigegeben</th>
-        <th>Angelegt</th>
         <th class="actions"></th>
     </tr>
     <?php foreach ($einheiten as $e): ?>
@@ -255,23 +268,25 @@ teacher_flash_render();
             <td data-label="Titel">
                 <a class="rowmain" href="<?= h($ziel) ?>"><?= h($e['title']) ?></a>
             </td>
-            <td class="num" data-label="Vokabeln"><?= (int) $e['vocab_count'] ?></td>
+            <?php
+            /*
+             * Immer "n von m", und die Farbe sagt, wo man steht: rot heisst
+             * nichts aufgemacht, gelb mittendrin, gruen fertig. Vorher
+             * stand da mal "alle", mal "noch keine", mal eine Zahl - drei
+             * Formen fuer dieselbe Auskunft, und keine davon liess sich mit
+             * der Zeile darueber vergleichen.
+             */
+            $frei   = (int) $e['released_count'];
+            $gesamt = (int) $e['vocab_count'];
+            $ton    = $frei === 0 ? 'bad' : ($frei >= $gesamt ? 'good' : 'halb');
+            ?>
             <td data-label="Freigegeben">
-                <?php
-                $frei   = (int) $e['released_count'];
-                $gesamt = (int) $e['vocab_count'];
-                if ($gesamt === 0) {
-                    echo '<span class="muted">&ndash;</span>';
-                } elseif ($frei >= $gesamt) {
-                    echo '<span class="pill good">alle</span>';
-                } elseif ($frei === 0) {
-                    echo '<span class="muted">noch keine</span>';
-                } else {
-                    printf('<span class="pill">%d von %d</span>', $frei, $gesamt);
-                }
-                ?>
+                <?php if ($gesamt === 0): ?>
+                    <span class="pill leer">noch keine Vokabeln</span>
+                <?php else: ?>
+                    <span class="pill <?= $ton ?>"><?= $frei ?> von <?= $gesamt ?></span>
+                <?php endif; ?>
             </td>
-            <td class="tiny muted" data-label="Angelegt"><?= h(substr((string) $e['created_at'], 0, 10)) ?></td>
             <td class="actions chev" aria-hidden="true">&#8250;</td>
         </tr>
     <?php endforeach; ?>
@@ -296,7 +311,7 @@ teacher_flash_render();
      */
     ?>
     <tr class="newrow">
-        <td colspan="5" data-label="Neue Lerneinheit">
+        <td colspan="3" data-label="Neue Lerneinheit">
             <span class="coursetitle addbuttons">
                 <span class="cflag plus">+</span>
                 <button class="btn small" form="neueEinheit"
@@ -308,8 +323,9 @@ teacher_flash_render();
 
 <p class="tiny muted">
     Eine Zeile anklicken öffnet die Freigabe. Freigegeben wird portionsweise:
-    Die Klasse sieht nur, was aufgemacht ist. Eingelesen wird am Handy &ndash;
-    dafür braucht es die Kamera.
+    Die Klasse sieht nur, was aufgemacht ist. Gefüllt wird eine Lerneinheit
+    auf ihrer eigenen Seite &ndash; von Hand, aus Dateien oder mit dem Telefon
+    fotografiert.
 </p>
 <?php endif; ?>
 

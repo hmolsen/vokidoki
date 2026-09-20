@@ -32,6 +32,10 @@ export async function pruefe(f, aus) {
                 anlegen:  !!document.querySelector('#handzeile input[name="new_f"]'),
                 versteckt: document.getElementById('handzeile')?.hidden,
                 erweitern: document.querySelectorAll('.erweiternkarte').length,
+                sichtbareWege: sichtbar('.erweiternkarte'),
+                qr:       !document.getElementById('perQr').hidden,
+                kamera:   !document.getElementById('perKamera').hidden,
+                ablage:   document.getElementById('stapel')?.hidden,
                 vonHand:  !!document.getElementById('vonHand'),
                 aendern:  sichtbar('#freigabe [data-edit]'),
                 sichern:  sichtbar('#freigabe [data-save]'),
@@ -48,8 +52,22 @@ export async function pruefe(f, aus) {
         ok('Die Anlegezeile steht am Fuss der Tabelle', ruhe.anlegen);
         ok('Zugeklappt, bis jemand sie will', ruhe.versteckt === true,
            String(ruhe.versteckt));
+        /*
+         * Vier Karten im HTML, drei sichtbar: Der dritte Weg - mit dem
+         * Telefon - steht zweimal da, weil er zwei ist. Am Rechner ein
+         * QR-Code, der das Telefon hierherführt; am Telefon die Kamera.
+         * Welches Gerät davorsitzt, weiss nur der Browser, und deshalb
+         * lässt sich genau das auch nur hier prüfen.
+         */
         ok('Dafür gibt es drei Wege, die Lerneinheit zu erweitern',
-           ruhe.erweitern === 3, String(ruhe.erweitern));
+           ruhe.sichtbareWege === 3, String(ruhe.sichtbareWege));
+        ok('Und einer davon steht in zwei Fassungen im HTML',
+           ruhe.erweitern === 4, String(ruhe.erweitern));
+        ok('Am Rechner zeigt er den QR-Code', ruhe.qr === true);
+        ok('Und nicht die Kamera', ruhe.kamera === false,
+           'hier ist keine, die sich öffnen liesse');
+        ok('Die Ablage für Fotos steht leer daneben', ruhe.ablage === true,
+           'sie füllt sich erst, wenn jemand Dateien wählt');
         ok('Von Hand ist einer davon', ruhe.vonHand);
         ok('Je Zeile steht "Ändern" da', ruhe.aendern === ruhe.zeilen,
            ruhe.aendern + ' von ' + ruhe.zeilen);

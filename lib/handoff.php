@@ -133,3 +133,30 @@ function handoff_target_ok(string $target): bool
         && preg_match('#^/[A-Za-z0-9/_-]{1,120}$#', $target) === 1
         && !str_contains($target, '//');
 }
+
+/**
+ * Macht aus dem Ziel einer Marke eine Adresse - oder null.
+ *
+ * Zwei Sorten Ziel gibt es. Eine Stelle in der App ist ein Hash hinter der
+ * Wurzel ("/lang/3/import"); eine Seite im Lehrkraft-Bereich ist eine
+ * eigene Adresse mit Fragezeichen darin. Beides muss durch dasselbe
+ * enge Nadeloehr passen, also steht in der Marke die abstrakte Form
+ * "/teacher/unit/42" und hier die einzige Stelle, die sie uebersetzt.
+ *
+ * Warum nicht einfach die fertige Adresse speichern: Dann muesste
+ * handoff_target_ok() Fragezeichen, Punkte und Gleichheitszeichen
+ * durchlassen, und die Pruefung, die einen untergeschobenen Link
+ * abfaengt, waere keine mehr.
+ */
+function handoff_target_url(string $target): ?string
+{
+    if (!handoff_target_ok($target)) {
+        return null;
+    }
+
+    if (preg_match('#^/teacher/unit/([1-9][0-9]{0,9})$#', $target, $t) === 1) {
+        return url('/teacher/unit.php') . '?id=' . (int) $t[1];
+    }
+
+    return url('/') . '#' . $target;
+}

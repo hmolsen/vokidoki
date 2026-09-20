@@ -1061,7 +1061,7 @@ function initHandoff() {
 
             try {
                 const daten = new FormData();
-                daten.set('course_id', dialog.dataset.course);
+                daten.set('unit_id', dialog.dataset.unit);
                 daten.set('csrf', dialog.dataset.csrf);
 
                 const res  = await fetch(dialog.dataset.url, {
@@ -1090,6 +1090,314 @@ function initHandoff() {
 }
 
 initHandoff();
+
+// ------------------------------------------------------- Seiten einlesen
+
+/**
+ * Buchseiten fotografieren, ordnen, erkennen - auf dieser Seite.
+ *
+ * Das Einlesen war bis hierher eine eigene Ansicht in der App: Knopf
+ * drücken, Seite wechselt, Dateien wählen, Titel eintippen, zurückkommen.
+ * Für eine Lehrkraft, die gerade an einer Lerneinheit arbeitet, war das
+ * ein Umweg über einen Ort, der von ihrer Arbeit nichts weiss - die
+ * Lerneinheit steht dort gar nicht, sie muss sie in einer Liste wieder
+ * suchen.
+ *
+ * Jetzt bleibt sie hier. Der Knopf öffnet den Dateidialog, die Fotos
+ * legen sich darunter ab, und "Vokabeln erkennen" hängt sie an genau die
+ * Lerneinheit an, auf deren Seite man steht.
+ *
+ * Drei Dinge, die die Ablage können muss, und alle drei aus demselben
+ * Grund - Buchseiten sehen einander ähnlich:
+ *   - gross ansehen (welche Seite ist das?),
+ *   - verschieben (die Reihenfolge ist die der Vokabelliste),
+ *   - entfernen (die verwackelte wieder raus).
+ *
+ * Ohne JavaScript passiert hier nichts; die Karte daneben bleibt ein
+ * gewöhnlicher Link in die Einleseansicht der App.
+ */
+function initEinlesen() {
+    const stapel = document.getElementById('stapel');
+    if (!stapel) return;
+
+    const liste   = document.getElementById('seiten');
+    const zuviel  = document.getElementById('stapelZuviel');
+    const fehler  = document.getElementById('stapelFehler');
+    const knopf   = document.getElementById('erkennen');
+    const text    = knopf.querySelector('[data-knopftext]');
+    const weg     = document.getElementById('stapelWeg');
+    const lupe    = document.getElementById('lupe');
+    const lupeBild = document.getElementById('lupeBild');
+
+    const dateiwahl  = document.getElementById('bildwahl');
+    const kamerawahl = document.getElementById('kamerawahl');
+    const ausDateien = document.getElementById('ausDateien');
+    const perQr      = document.getElementById('perQr');
+    const perKamera  = document.getElementById('perKamera');
+
+    /* Muss zu MAX_IMAGES in api/import.php passen - dort wird es
+       durchgesetzt, hier nur angezeigt. */
+    const HOECHSTENS = 6;
+
+    /** Die gewählten Seiten: { datei, url }. url ist eine Blob-Adresse für
+     *  Vorschau und Lupe; verkleinert wird erst beim Erkennen. */
+    let seiten = [];
+
+    // ---------------------------------------------------------- Kamera oder Code
+
+    /*
+     * Am Telefon die Kamera, am Rechner der QR-Code.
+     *
+     * Gefragt wird nach dem Zeigegerät und der Kamera, nicht nach dem
+     * Kennzeichen der Anfrage: Ein iPad meldet sich seit Jahren als
+     * Mac, und ein Rechner mit Touchscreen ist kein Telefon. "Grober
+     * Zeiger und mehr als ein Finger" trifft Telefone und Tablets und
+     * lässt Mäuse draussen.
+     */
+    const amGeraet = window.matchMedia('(pointer: coarse)').matches
+                  && navigator.maxTouchPoints > 1;
+    if (amGeraet && perKamera && perQr) {
+        perQr.hidden = true;
+        perKamera.hidden = false;
+    }
+
+    // ---------------------------------------------------------- Auswählen
+
+    if (ausDateien) {
+        ausDateien.addEventListener('click', (e) => {
+            e.preventDefault();
+            dateiwahl.click();
+        });
+    }
+    if (perKamera) {
+        perKamera.addEventListener('click', () => kamerawahl.click());
+    }
+
+    const aufnehmen = (feld) => {
+        for (const datei of feld.files) {
+            if (!datei.type.startsWith('image/')) continue;
+            seiten.push({ datei, url: URL.createObjectURL(datei) });
+        }
+        // Damit dieselbe Datei ein zweites Mal gewählt werden kann: Ohne
+        // das Leeren feuert change beim gleichen Namen nicht noch einmal.
+        feld.value = '';
+        zeichnen();
+        if (seiten.length > 0) stapel.scrollIntoView({ block: 'nearest' });
+    };
+    dateiwahl.addEventListener('change', () => aufnehmen(dateiwahl));
+    kamerawahl.addEventListener('change', () => aufnehmen(kamerawahl));
+
+    // ---------------------------------------------------------- Anzeigen
+
+    const zeichnen = () => {
+        stapel.hidden = seiten.length === 0;
+        fehler.hidden = true;
+
+        liste.innerHTML = seiten.map((s, i) => `
+            <li class="seite${i >= HOECHSTENS ? ' zuviel' : ''}"
+                draggable="true" data-i="${i}">
+                <button class="seitenbild" type="button" data-gross="${i}"
+                        title="Gross ansehen">
+                    <img src="${escapeHtml(s.url)}" alt="Seite ${i + 1}">
+                </button>
+                <span class="seitennr">${i + 1}</span>
+                <span class="seitenwerkzeug">
+                    <button class="iconaction quiet" type="button" data-vor="${i}"
+                            title="Nach vorne" ${i === 0 ? 'disabled' : ''}>
+                        <span aria-hidden="true">&#9664;</span>
+                        <span class="nurvorlesen">Nach vorne</span>
+                    </button>
+                    <button class="iconaction danger" type="button" data-weg="${i}"
+                            title="Entfernen">
+                        <span aria-hidden="true">&#10005;</span>
+                        <span class="nurvorlesen">Entfernen</span>
+                    </button>
+                    <button class="iconaction quiet" type="button" data-zurueck="${i}"
+                            title="Nach hinten" ${i === seiten.length - 1 ? 'disabled' : ''}>
+                        <span aria-hidden="true">&#9654;</span>
+                        <span class="nurvorlesen">Nach hinten</span>
+                    </button>
+                </span>
+            </li>`).join('');
+
+        const ueber = seiten.length - HOECHSTENS;
+        zuviel.hidden = ueber <= 0;
+        if (ueber > 0) {
+            zuviel.textContent = `Höchstens ${HOECHSTENS} Seiten auf einmal. `
+                + `Die ${ueber === 1 ? 'letzte Seite wird' : `letzten ${ueber} Seiten werden`}`
+                + ` diesmal übergangen - entferne sie oder lies sie danach`
+                + ` in einem zweiten Durchgang ein.`;
+        }
+
+        const nimmt = Math.min(seiten.length, HOECHSTENS);
+        text.textContent = nimmt === 1
+            ? 'Vokabeln von dieser Seite erkennen'
+            : `Vokabeln von ${nimmt} Seiten erkennen`;
+    };
+
+    // ---------------------------------------------------------- Ordnen
+
+    const tauschen = (a, b) => {
+        if (b < 0 || b >= seiten.length) return;
+        [seiten[a], seiten[b]] = [seiten[b], seiten[a]];
+        zeichnen();
+    };
+
+    liste.addEventListener('click', (e) => {
+        const gross = e.target.closest('[data-gross]');
+        if (gross) {
+            lupeBild.src = seiten[+gross.dataset.gross].url;
+            lupeBild.alt = `Seite ${+gross.dataset.gross + 1}`;
+            if (typeof lupe.showModal === 'function') lupe.showModal();
+            return;
+        }
+        const vor = e.target.closest('[data-vor]');
+        if (vor) { tauschen(+vor.dataset.vor, +vor.dataset.vor - 1); return; }
+
+        const zur = e.target.closest('[data-zurueck]');
+        if (zur) { tauschen(+zur.dataset.zurueck, +zur.dataset.zurueck + 1); return; }
+
+        const raus = e.target.closest('[data-weg]');
+        if (raus) {
+            const i = +raus.dataset.weg;
+            URL.revokeObjectURL(seiten[i].url);
+            seiten.splice(i, 1);
+            zeichnen();
+        }
+    });
+
+    /*
+     * Ziehen und Ablegen - mit der Maus.
+     *
+     * Auf einem Touchgerät gibt es keine HTML5-Zieherei; dafür sind die
+     * beiden Pfeile da, und die tun dasselbe. Dass beide Wege nebeneinander
+     * stehen, ist kein Versehen: Der eine ist schneller, der andere
+     * funktioniert überall, auch mit der Tastatur.
+     */
+    let packe = -1;
+    liste.addEventListener('dragstart', (e) => {
+        const li = e.target.closest('.seite');
+        if (!li) return;
+        packe = +li.dataset.i;
+        li.classList.add('zieht');
+        e.dataTransfer.effectAllowed = 'move';
+        // Firefox zieht nur, wenn etwas im Paket liegt.
+        e.dataTransfer.setData('text/plain', String(packe));
+    });
+    liste.addEventListener('dragend', () => {
+        packe = -1;
+        liste.querySelectorAll('.zieht, .ueber')
+             .forEach((el) => el.classList.remove('zieht', 'ueber'));
+    });
+    liste.addEventListener('dragover', (e) => {
+        const li = e.target.closest('.seite');
+        if (packe < 0 || !li) return;
+        e.preventDefault();
+        liste.querySelectorAll('.ueber').forEach((el) => el.classList.remove('ueber'));
+        li.classList.add('ueber');
+    });
+    liste.addEventListener('drop', (e) => {
+        const li = e.target.closest('.seite');
+        if (packe < 0 || !li) return;
+        e.preventDefault();
+        const ziel = +li.dataset.i;
+        const [s] = seiten.splice(packe, 1);
+        seiten.splice(ziel, 0, s);
+        packe = -1;
+        zeichnen();
+    });
+
+    weg.addEventListener('click', () => {
+        seiten.forEach((s) => URL.revokeObjectURL(s.url));
+        seiten = [];
+        zeichnen();
+    });
+
+    // ---------------------------------------------------------- Erkennen
+
+    knopf.addEventListener('click', async () => {
+        if (seiten.length === 0) return;
+
+        knopf.disabled = true;
+        weg.disabled = true;
+        knopf.classList.add('laeuft');
+        fehler.hidden = true;
+        const vorher = text.textContent;
+        text.textContent = 'Die Seiten werden gelesen …';
+
+        try {
+            /*
+             * Verkleinert wird erst jetzt, und nur, was wirklich geschickt
+             * wird: Wer acht Seiten wählt und zwei wieder wegnimmt, soll
+             * nicht acht Bilder umgerechnet haben.
+             *
+             * Die Rechnerei steht in views/bilder.js - dieselbe wie in der
+             * App. Nachgeladen wird sie erst hier, damit die Seite ohne
+             * Einlesen nichts davon anfasst.
+             */
+            const { shrinkToBase64 } = await import(stapel.dataset.bilder);
+            const bilder = [];
+            for (const s of seiten.slice(0, HOECHSTENS)) {
+                bilder.push(await shrinkToBase64(s.datei));
+            }
+
+            const erkannt = await jsonPost(
+                `${stapel.dataset.api}?action=analyze`,
+                { language_id: +stapel.dataset.language, images: bilder },
+                { 'X-Vokabeltrainer': '1' },
+            );
+            if (!erkannt.ok) throw new Error(erkannt.error || 'Das Erkennen ging schief.');
+
+            text.textContent = 'Wird gespeichert …';
+
+            const daten = new FormData();
+            daten.set('add_scanned', '1');
+            daten.set('unit_id', stapel.dataset.unit);
+            daten.set('csrf', stapel.dataset.csrf);
+            daten.set('entries', JSON.stringify(erkannt.entries));
+
+            const res = await fetch(stapel.dataset.ziel, {
+                method: 'POST', body: daten, credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'fetch' },
+            });
+            const gesichert = await res.json();
+            if (!gesichert.ok) throw new Error(gesichert.error || 'Das Speichern ging schief.');
+
+            /*
+             * Und dann die Seite neu laden. Nach dem Erkennen ändert sich
+             * zu vieles auf einmal - die Zahlen im Satz über der Tabelle,
+             * der Knopf "Alles freigeben", die Zeilen, an denen der
+             * Freigabebalken misst. Ein ?neu= in der Adresse sorgt dafür,
+             * dass die neuen Zeilen drüben grün dastehen.
+             */
+            seiten.forEach((s) => URL.revokeObjectURL(s.url));
+            window.location.href =
+                `${stapel.dataset.ziel}&neu=${gesichert.dazu}#frisch`;
+        } catch (e) {
+            fehler.textContent = e.message || 'Keine Verbindung zum Server.';
+            fehler.hidden = false;
+            text.textContent = vorher;
+            knopf.classList.remove('laeuft');
+            knopf.disabled = false;
+            weg.disabled = false;
+        }
+    });
+
+    zeichnen();
+}
+
+/** Ein JSON-Aufruf gegen die API - sie nimmt kein FormData, sondern einen Rumpf. */
+async function jsonPost(url, rumpf, kopf = {}) {
+    const res = await fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', ...kopf },
+        body: JSON.stringify(rumpf),
+    });
+    return res.json();
+}
+
+initEinlesen();
 
 // ------------------------------------------------------- Freigabe-Balken
 
