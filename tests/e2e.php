@@ -7430,6 +7430,152 @@ ok('Abmelden führt zurück zur Anmeldung',
 q('DELETE FROM users WHERE id = ?', [$lehrerId]);
 @unlink($lehrerJar);
 
+section('Das Buendel: alles auf einmal, Antworten zurueck');
+
+/*
+ * Bis hierher holte die App jede Frage einzeln - Vokabel ziehen, Ablenker
+ * wuerfeln, Antwort einschicken, naechste Frage. Drei bis vier Runden uebers
+ * Netz je Wort, auf die ein Kind wartet, und ein Aussetzer mitten darin
+ * wurde zu "Bist du online?".
+ *
+ * Jetzt: einmal alles holen, ohne Netz ueben, Antworten als Strom von
+ * Ereignissen zurueck.
+ */
+
+$buLang = makeLanguage($userId, 'Buendelisch' . bin2hex(random_bytes(2)));
+$buUnit = makeUnit($userId, $buLang, 'Buendel-Unit');
+$buWoerter = ['aa', 'bb', 'cc', 'dd', 'ee', 'ff'];
+foreach ($buWoerter as $i => $w) {
+    q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, ?)',
+      [$buUnit, $w, 'de-' . $w, $i]);
+}
+// Nur die ersten vier sind auf - die letzten beiden duerfen nirgends auftauchen.
+q('UPDATE units SET released_position = 4 WHERE id = ?', [$buUnit]);
+
+$buIds = [];
+foreach (qa('SELECT id, term_foreign FROM vocab WHERE unit_id = ? ORDER BY position',
+            [$buUnit]) as $v) {
+    $buIds[$v['term_foreign']] = (int) $v['id'];
+}
+// Zu "aa" ein Lueckensatz, damit das Buendel auch Saetze traegt.
+q('INSERT INTO sentences (vocab_id, native_text, foreign_text, answer) VALUES (?, ?, ?, ?)',
+  [$buIds['aa'], 'Ein deutscher Satz.', 'An ___ sentence.', 'aa']);
+
+[$bu, $status] = apiCall('bundle', 'get');
+ok('Das Buendel kommt in einem Stueck', $status === 200 && ($bu['ok'] ?? false) === true,
+   'Status ' . $status);
+
+$buVok = array_column($bu['vokabeln'] ?? [], 'f');
+ok('Es traegt die freigegebenen Vokabeln',
+   in_array('aa', $buVok, true) && in_array('dd', $buVok, true));
+ok('Und die gesperrten nicht',
+   !in_array('ee', $buVok, true) && !in_array('ff', $buVok, true),
+   'sonst stuenden die naechsten Woerter im Geraet, bevor die Klasse sie sehen darf');
+ok('Die Lueckensaetze sind dabei',
+   in_array('An ___ sentence.', array_column($bu['saetze'] ?? [], 'f'), true));
+ok('Und die Sprache, in deren Kurs dieses Konto ist',
+   in_array($buLang, array_column($bu['sprachen'] ?? [], 'id'), true));
+ok('Dazu die Schwelle, ab der etwas als gekonnt gilt',
+   (int) ($bu['schwelle'] ?? 0) === KNOWN_THRESHOLD,
+   'das Geraet rechnet mit, und zwar mit derselben Zahl');
+
+/*
+ * Und die Rueckrichtung. Der ganze Trick ist, dass es ein EREIGNISSTROM
+ * ist: record_answer() ist eine reine Funktion aus (bisheriger Stand,
+ * richtig/falsch). Wer dieselben Antworten in derselben Reihenfolge
+ * nachspielt, bekommt denselben Stand - es gibt nichts zusammenzufuehren.
+ */
+$buE = static fn (string $wort, bool $richtig, string $kennung): array => [
+    'e' => $kennung, 'v' => $buIds[$wort], 'm' => 'mc', 'r' => $richtig ? 1 : 0,
+];
+
+$marke = bin2hex(random_bytes(6));
+[$antwort, $status] = apiCall('bundle', 'push', ['ereignisse' => [
+    $buE('aa', true,  $marke . '-1'),
+    $buE('aa', true,  $marke . '-2'),
+    $buE('aa', true,  $marke . '-3'),
+    $buE('bb', false, $marke . '-4'),
+]]);
+ok('Ein Stapel Antworten wird angenommen',
+   $status === 200 && ($antwort['genommen'] ?? 0) === 4, (string) json_encode($antwort));
+
+$standAa = q1('SELECT streak, correct_count, known_at FROM progress
+                WHERE user_id = ? AND vocab_id = ? AND mode = ?',
+              [$userId, $buIds['aa'], 'mc']);
+ok('Dreimal richtig ergibt dieselbe Serie wie einzeln geschickt',
+   (int) ($standAa['streak'] ?? 0) === 3 && (int) ($standAa['correct_count'] ?? 0) === 3);
+ok('Und die Vokabel gilt danach als gekonnt', ($standAa['known_at'] ?? null) !== null,
+   'KNOWN_THRESHOLD ist drei - nachgespielt gilt dieselbe Regel');
+
+$standBb = q1('SELECT streak, wrong_count FROM progress
+                WHERE user_id = ? AND vocab_id = ? AND mode = ?',
+              [$userId, $buIds['bb'], 'mc']);
+ok('Eine falsche Antwort zaehlt als falsch',
+   (int) ($standBb['wrong_count'] ?? 0) === 1 && (int) ($standBb['streak'] ?? 9) === 0);
+
+/*
+ * Derselbe Stapel noch einmal - das passiert wirklich: Die Anfrage kam an,
+ * die Antwort ging unterwegs verloren, das Geraet schickt noch einmal.
+ * Ohne Gedaechtnis stuende "aa" danach bei sechs statt bei drei.
+ */
+[$zweimal, $status] = apiCall('bundle', 'push', ['ereignisse' => [
+    $buE('aa', true, $marke . '-1'),
+    $buE('aa', true, $marke . '-2'),
+    $buE('aa', true, $marke . '-3'),
+    $buE('bb', false, $marke . '-4'),
+]]);
+ok('Derselbe Stapel zweimal zaehlt nicht doppelt',
+   ($zweimal['genommen'] ?? 9) === 0 && ($zweimal['doppelt'] ?? 0) === 4,
+   json_encode($zweimal));
+ok('Der Stand bleibt, wie er war',
+   (int) qv('SELECT correct_count FROM progress
+              WHERE user_id = ? AND vocab_id = ? AND mode = ?',
+            [$userId, $buIds['aa'], 'mc']) === 3,
+   'sonst gaelte eine Vokabel eine Runde zu frueh als gekonnt');
+
+/*
+ * Und die Grenze. Eine untergeschobene Kennung darf keinen Lernstand an
+ * einer Vokabel anlegen, die dieses Konto gar nicht sehen darf - weder an
+ * einer fremden noch an einer noch nicht freigegebenen.
+ */
+$buFremdLang = makeLanguage($otherId, 'Fremdbuendel' . bin2hex(random_bytes(2)));
+$buFremdUnit = makeUnit($otherId, $buFremdLang, 'Fremde Buendel-Unit');
+q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, 0)',
+  [$buFremdUnit, 'geheim', 'geheim']);
+q('UPDATE units SET released_position = 1 WHERE id = ?', [$buFremdUnit]);
+$buFremdVokabel = (int) qv('SELECT id FROM vocab WHERE unit_id = ?', [$buFremdUnit]);
+
+[$abgewiesen] = apiCall('bundle', 'push', ['ereignisse' => [
+    ['e' => $marke . '-fremd', 'v' => $buFremdVokabel, 'm' => 'mc', 'r' => 1],
+    ['e' => $marke . '-zu',    'v' => $buIds['ff'],    'm' => 'mc', 'r' => 1],
+]]);
+ok('Eine fremde Vokabel wird nicht angenommen',
+   ($abgewiesen['fremd'] ?? 0) === 2 && ($abgewiesen['genommen'] ?? 9) === 0,
+   json_encode($abgewiesen));
+ok('Und es entsteht auch kein Lernstand dafuer',
+   (int) qv('SELECT COUNT(*) FROM progress WHERE user_id = ? AND vocab_id IN (?, ?)',
+            [$userId, $buFremdVokabel, $buIds['ff']]) === 0,
+   'eine gesperrte Vokabel ist fuer dieses Konto so fremd wie eine aus einer anderen Schule');
+
+[$mist] = apiCall('bundle', 'push', ['ereignisse' => [
+    ['e' => $marke . '-mist', 'v' => $buIds['cc'], 'm' => 'erfunden', 'r' => 1],
+]]);
+ok('Eine erfundene Uebungsart wird uebergangen', ($mist['genommen'] ?? 9) === 0);
+
+// Und ein anderes Konto bekommt sein eigenes Buendel, nicht dieses.
+$buFremdJar = tempnam(sys_get_temp_dir(), 'vtbu');
+$buAndere = apiAls($buFremdJar, static function (): array {
+    apiCall('auth', 'login', ['username' => 'e2e_other', 'password' => 'geheim123']);
+    [$d] = apiCall('bundle', 'get');
+    return $d ?? [];
+});
+ok('Ein anderes Konto bekommt sein eigenes Buendel',
+   !in_array('aa', array_column($buAndere['vokabeln'] ?? [], 'f'), true),
+   'die Vokabeln haengen am Kurs, nicht am Konto, das fragt');
+@unlink($buFremdJar);
+
+q('DELETE FROM answer_receipts WHERE user_id = ?', [$userId]);
+
 section('Verbindungen bleiben stehen');
 
 /*
@@ -7584,7 +7730,8 @@ ok('Widerrufener Token meldet niemanden mehr an',
  * Kurse, Einheiten, Vokabeln und Saetze fallen per ON DELETE CASCADE mit
  * (fk_course_language, fk_unit_language).
  */
-foreach ([$languageId ?? 0, $otherLang ?? 0, $fremdLang ?? 0, $freiLang ?? 0] as $lid) {
+foreach ([$languageId ?? 0, $otherLang ?? 0, $fremdLang ?? 0, $freiLang ?? 0,
+          $buLang ?? 0, $buFremdLang ?? 0] as $lid) {
     if ((int) $lid > 0) {
         q('DELETE FROM languages WHERE id = ?', [(int) $lid]);
     }

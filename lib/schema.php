@@ -673,6 +673,37 @@ function schema_migrations(): array
                  REFERENCES users(id) ON DELETE CASCADE
              ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         ],
+        /*
+         * Quittungen fuer nachgereichte Antworten.
+         *
+         * Wer offline uebt, sammelt seine Antworten im Geraet und schickt
+         * sie spaeter am Stueck. Geht dabei die Antwort des Servers
+         * verloren - und nicht die Anfrage -, schickt das Geraet dieselben
+         * Antworten noch einmal, und ohne Gedaechtnis zaehlte der Server
+         * sie doppelt. Eine Vokabel gaelte dann eine Runde zu frueh als
+         * gekonnt.
+         *
+         * Jede Antwort traegt deshalb eine im Geraet erzeugte Kennung. Der
+         * eindeutige Schluessel darauf macht das zweite Einreichen zu
+         * einem Nichts statt zu einer Verdopplung.
+         *
+         * Aufgeraeumt wird nach ein paar Tagen: Was so lange nicht
+         * angekommen ist, kommt nicht mehr.
+         */
+        'answer_receipts.table' => [
+            static fn (): bool => !table_exists('answer_receipts'),
+            "CREATE TABLE answer_receipts (
+                 id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                 user_id    INT UNSIGNED NOT NULL,
+                 event_id   CHAR(36)     NOT NULL,
+                 created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                 PRIMARY KEY (id),
+                 UNIQUE KEY uq_receipt (user_id, event_id),
+                 KEY idx_receipt_alter (created_at),
+                 CONSTRAINT fk_receipt_user FOREIGN KEY (user_id)
+                   REFERENCES users(id) ON DELETE CASCADE
+             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        ],
         'login_attempts.table' => [
             static fn (): bool => !table_exists('login_attempts'),
             "CREATE TABLE login_attempts (

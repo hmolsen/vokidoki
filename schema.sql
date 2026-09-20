@@ -272,6 +272,22 @@ CREATE TABLE IF NOT EXISTS login_handoffs (
   CONSTRAINT fk_lh_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Quittungen fuer nachgereichte Antworten. Wer offline uebt, sammelt seine
+-- Antworten im Geraet und schickt sie spaeter am Stueck; geht dabei die
+-- Antwort des Servers verloren und nicht die Anfrage, kommt derselbe Stapel
+-- noch einmal. Die Kennung je Antwort macht daraus ein Nichts statt einer
+-- Verdopplung.
+CREATE TABLE IF NOT EXISTS answer_receipts (
+  id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id    INT UNSIGNED NOT NULL,
+  event_id   CHAR(36)     NOT NULL,
+  created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_receipt (user_id, event_id),
+  KEY idx_receipt_alter (created_at),
+  CONSTRAINT fk_receipt_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS settings (
   k VARCHAR(64) PRIMARY KEY,
   v TEXT NOT NULL
