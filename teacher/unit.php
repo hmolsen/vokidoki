@@ -72,16 +72,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['release'])) {
     q('UPDATE units SET released_position = ? WHERE id = ?', [$bis, $unitId]);
 
     /*
-     * Die Freigabe setzt nur noch die Marke.
+     * Freigeben heisst: Die Klasse sieht es - und kann es ueben.
      *
-     * Die Saetze entstehen beim Einlesen fuer die ganze Einheit - einmal,
-     * zu einem Zeitpunkt, an dem niemand davorsitzt. Frueher haengte die
-     * Erzeugung an dieser Stelle, und dann wartete die Lehrkraft nach jeder
-     * Portion eine halbe Minute, waehrend die Lerneinheit fuer die Klasse halb
-     * da war.
+     * Zum Ueben gehoert der Lueckensatz, also entsteht er hier. Was hinter
+     * der Marke wartet, braucht keinen: Eine Vokabel, die gerade von Hand
+     * dazugekommen ist, kommt erst dran, wenn jemand sie aufmacht.
      *
-     * Fehlt trotzdem etwas - ein abgebrochener Lauf, ein aufgebrauchtes
-     * Budget -, sagt es die Seite und der Knopf "Saetze nachtragen" holt es.
+     * Zurueckgenommen wird nichts erzeugt - was zu ist, wird nicht geuebt.
      */
     if ($bis <= $vorher) {
         teacher_flash($bis === 0
@@ -92,11 +89,29 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['release'])) {
     }
 
     $fehlen = vocab_without_sentences($unitId);
-    teacher_flash($fehlen === 0
-        ? sprintf('%d Vokabeln freigegeben.', $bis)
-        : sprintf('%d Vokabeln freigegeben. Für %d fehlen noch Lückensätze - '
-                  . 'mit „Sätze nachtragen".', $bis, $fehlen));
-    teacher_redirect($zurueck);
+
+    if ($fehlen === 0
+        || budget_block_reason((int) $user['id']) !== null
+        || !sentence_claim($unitId)) {
+        teacher_flash(sprintf('%d Vokabeln freigegeben.', $bis));
+        teacher_redirect($zurueck);
+    }
+
+    /*
+     * Antworten, dann weiterarbeiten.
+     *
+     * Die Saetze zu zwanzig Vokabeln dauern eine halbe Minute, und solange
+     * soll niemand auf eine leere Seite sehen. Die Seite, auf der die
+     * Lehrkraft landet, sagt "entsteht gerade" und laedt sich von selbst
+     * nach.
+     */
+    teacher_flash(sprintf(
+        '%d Vokabeln freigegeben. Die Lückensätze dazu entstehen gerade.', $bis));
+    teacher_redirect_and_continue($zurueck);
+
+    set_time_limit(900);
+    generate_sentences_tracked($unitId);
+    exit;
 }
 
 /*
@@ -529,9 +544,27 @@ teacher_flash_render();
     <meta http-equiv="refresh" content="10">
 <?php elseif ($zustand['status'] === SENTENCE_FAILED): ?>
     <div class="notice bad">
-        Bei den Lückensätzen ist etwas schiefgegangen:
-        <?= h((string) ($zustand['error'] ?? 'unbekannter Fehler')) ?>
-        Ein erneutes Freigeben versucht es noch einmal.
+        <p>
+            Bei den Lückensätzen ist etwas schiefgegangen:
+            <?= h((string) ($zustand['error'] ?? 'unbekannter Fehler')) ?>
+        </p>
+        <?php
+        /*
+         * Der einzige Ort, an dem noch von Hand nachgeholt wird.
+         *
+         * Im Regelfall entstehen die Sätze beim Freigeben. Bricht ein Lauf
+         * ab, würde ohne diesen Knopf erst die nächste Freigabe es wieder
+         * versuchen - und wer schon alles aufgemacht hat, hätte gar keine
+         * mehr.
+         */
+        ?>
+        <form method="post">
+            <?= teacher_csrf_field() ?>
+            <input type="hidden" name="unit_id" value="<?= $unitId ?>">
+            <button class="btn small secondary" name="catch_up" value="1">
+                Noch einmal versuchen
+            </button>
+        </form>
     </div>
 <?php endif; ?>
 
@@ -637,21 +670,15 @@ $fehlen = vocab_without_sentences($unitId);
 
         <?php
         /*
-         * Der Knopf steht immer da und ist ausgeblendet, wenn nichts
-         * fehlt - nicht weggelassen. Beim Tippen waechst die Zahl
-         * dahinter mit: Jede Vokabel, die dazukommt, hat noch keinen
-         * Lueckensatz, und das Skript traegt das nach, ohne die Seite neu
-         * zu laden. Einen Knopf, den es im HTML gar nicht gibt, kann es
-         * nicht einblenden.
+         * Hier stand ein Knopf "Sätze nachtragen (N)".
+         *
+         * Er ist weg, weil er eine Frage stellte, die sich nicht stellt:
+         * Sätze entstehen jetzt beim Freigeben, und was nicht freigegeben
+         * ist, braucht keinen. Uebrig bleibt der eine Fall, in dem wirklich
+         * etwas nachzuholen ist - ein Lauf, der abgebrochen ist -, und den
+         * bietet die Meldung oben an.
          */
-        $zeigen = $fehlen > 0 && $zustand['status'] !== SENTENCE_RUNNING;
         ?>
-        <button class="btn small secondary" name="catch_up" value="1" id="nachtragen"
-                data-fehlen="<?= $fehlen ?>"
-                data-confirm="F&uuml;r <?= $fehlen ?> Vokabeln fehlen noch L&uuml;ckens&auml;tze. Jetzt nachholen?"
-                <?= $zeigen ? '' : 'hidden' ?>>
-            S&auml;tze nachtragen (<span data-zahl><?= $fehlen ?></span>)
-        </button>
     </div>
 </form>
 <?php endif; /* $gesamt > 0 */ ?>
@@ -684,8 +711,8 @@ $fehlen = vocab_without_sentences($unitId);
  * Die laufende Nummer stand einmal davor und die Zahl der Lueckensaetze
  * dahinter - am Telefon kostete beides die Breite, die die Woerter
  * brauchen, und keines davon sagte etwas, das nicht anderswo steht: wie
- * viel freigegeben ist, sagt die Blase am Balken, und wie viele Saetze
- * fehlen, der Knopf "Saetze nachtragen" darueber.
+ * viel freigegeben ist, sagt die Blase am Balken, und die Saetze entstehen
+ * beim Freigeben von selbst.
  */
 ?>
 <table class="data release" id="freigabe" data-released="<?= $frei ?>">

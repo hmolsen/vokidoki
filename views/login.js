@@ -1,4 +1,6 @@
-import { api, render, $, withBusy, showError, clearError } from '../core.js';
+import {
+    api, render, $, withBusy, showError, clearError, rechtsZeile,
+} from '../core.js';
 
 export async function loginView() {
     render(`
@@ -23,6 +25,10 @@ export async function loginView() {
 
             <button class="btn" type="submit" id="submit">Anmelden</button>
         </form>
+
+        <!-- Auch ohne Konto erreichbar: Wer sich anmelden soll, darf vorher
+             wissen, wer dahintersteht und was mit seinen Daten geschieht. -->
+        ${rechtsZeile()}
     `);
 
     const form = $('#form');

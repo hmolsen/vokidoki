@@ -852,7 +852,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-1159 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+1200 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
 Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
 Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
 hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
@@ -914,7 +914,7 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 1371 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 1412 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
 
@@ -932,7 +932,7 @@ Quelltext völlig richtig aussahen:
 - Der Zettel für die ganze Klasse wurde erst beim nächsten Laden anklickbar.
 
 ```bash
-node tests/browser/lauf.mjs --fixture            # 329 Prüfungen
+node tests/browser/lauf.mjs --fixture            # 330 Prüfungen
 node tests/browser/lauf.mjs --fixture bilder/    # dazu Bildschirmfotos
 ```
 

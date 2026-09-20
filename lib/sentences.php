@@ -220,23 +220,25 @@ function sentence_schema(): array
 function sentence_candidates(int $unitId): array
 {
     /*
-     * Alle Vokabeln der Einheit, nicht nur die freigegebenen.
+     * Nur die freigegebenen Vokabeln.
      *
-     * Das war eine Weile anders: Saetze entstanden erst beim Freigeben, um
-     * fuer noch Gesperrtes nichts zu bezahlen. In der Anwendung fuehlte sich
-     * das falsch an - eine Lehrkraft gibt eine Portion frei und wartet erst
-     * einmal eine halbe Minute, und bis dahin ist die Lektion fuer die
-     * Klasse halb da. Einmal beim Einlesen alles erzeugen kostet dasselbe,
-     * sobald die Unit ohnehin ganz drankommt, und es kostet es zu einem
-     * Zeitpunkt, an dem niemand wartet.
+     * Ein Lueckensatz wird gebraucht, wenn ein Kind ihn ueben soll - und
+     * ueben kann es nur, was aufgemacht ist. Eine Vokabel, die gerade von
+     * Hand dazugekommen ist, steht hinter der Marke und wartet; ihr Satz
+     * wartet mit.
      *
-     * Die Freigabe steuert weiterhin, was die Klasse SIEHT - nur nicht mehr,
-     * was erzeugt wird.
+     * Das war eine Weile anders - es entstand alles gleich beim Einlesen,
+     * damit niemand nach dem Freigeben warten muss. Der Grund ist
+     * weggefallen: Die Freigabe antwortet inzwischen zuerst und arbeitet
+     * danach weiter, die Seite sagt "entsteht gerade" und laedt sich von
+     * selbst nach. Gewartet wird also so oder so nicht - und so entsteht
+     * nichts fuer Woerter, die vielleicht nie drankommen.
      */
     return qa(
         'SELECT v.id, v.term_foreign, v.term_native, v.word_type
            FROM vocab v
-          WHERE v.unit_id = ?
+           JOIN units u ON u.id = v.unit_id
+          WHERE v.unit_id = ? AND v.position < u.released_position
           ORDER BY v.position, v.id',
         [$unitId],
     );

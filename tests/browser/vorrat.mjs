@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { browser, alsKind, ok, abschnitt, schlafe } from './browser.mjs';
+import { browser, alsKind, alsLehrkraft, ok, abschnitt, schlafe } from './browser.mjs';
 
 export async function pruefe(f, aus) {
     abschnitt('Üben ohne Netz');
@@ -287,5 +287,66 @@ export async function pruefeKaltstart(f, aus) {
     } finally {
         b.schliessen();
         serverWeg();
+    }
+}
+
+/*
+ * Die Freigabe kommt sofort in der Kinderansicht an.
+ *
+ * Der Fehler, den das hier festnagelt: Eine Lehrkraft gibt Vokabeln frei und
+ * drückt „So sieht es die Klasse" - und sah dort ihren eigenen Vorrat von
+ * vor vier Minuten, also die Freigabe von vorhin. Das sieht aus, als hätte
+ * das Freigeben nicht gewirkt.
+ *
+ * Der Grund war eine Sparsamkeit: Der Vorrat wurde nur aufgefrischt, wenn er
+ * älter als fünf Minuten war. Beim Kaltstart wird jetzt immer nachgesehen -
+ * gewartet wird darauf nicht, aber wenn sich etwas geändert hat, zeichnet
+ * die Ansicht gleich noch einmal.
+ */
+export async function pruefeFreigabeKommtAn(f, aus) {
+    abschnitt('Freigabe kommt sofort an');
+
+    const b = await browser({ port: 9418, breite: 1100, hoehe: 900, aus });
+    try {
+        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort);
+
+        const zaehle = async () => {
+            await b.geh(f.basis + '/#/unit/' + f.unit, 2500);
+            return b.js(`document.querySelectorAll('.row.vocab').length`);
+        };
+
+        /*
+         * Erst alles zumachen, dann in der Kinderansicht nachsehen - damit
+         * der Vorrat im Gerät einen Stand hat, der gleich veraltet.
+         */
+        const setzen = async (bis) => {
+            await b.geh(f.basis + '/teacher/unit.php?id=' + f.unit, 1500);
+            await b.js(`(() => {
+                const form = document.getElementById('releaseform');
+                const feld = document.createElement('input');
+                feld.type = 'hidden'; feld.name = 'release'; feld.value = '${bis}';
+                form.appendChild(feld);
+                form.submit();
+            })()`);
+            await schlafe(2200);
+        };
+
+        await setzen(0);
+        ok('Zugemacht sieht die Klasse nichts', (await zaehle()) === 0,
+           String(await b.js(`document.querySelectorAll('.row.vocab').length`)));
+
+        await setzen(3);
+        ok('Und nach dem Freigeben sofort drei',
+           (await zaehle()) === 3,
+           await b.js(`document.querySelectorAll('.row.vocab').length`)
+           + ' - der Vorrat war vier Minuten alt und galt als frisch genug');
+
+        await setzen(5);
+        ok('Eine zweite Freigabe kommt genauso an', (await zaehle()) === 5,
+           String(await b.js(`document.querySelectorAll('.row.vocab').length`)));
+
+        if (aus) await b.bild('freigabe-kommt-an');
+    } finally {
+        b.schliessen();
     }
 }

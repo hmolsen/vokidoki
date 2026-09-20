@@ -824,9 +824,11 @@ function initVocabAdd() {
                 return;
             }
             einhaengen(json.vokabel);
-            // Jede neue Vokabel ist eine ohne Lueckensatz. Der Knopf
-            // daneben nennt die Zahl und taucht auf, sobald es eine gibt.
-            offeneSaetze(json.offen);
+            /*
+             * Kein Nachzaehlen mehr: Eine frisch getippte Vokabel steht
+             * hinter der Freigabemarke und wird noch nicht geuebt - ihr
+             * Lueckensatz entsteht, wenn jemand sie aufmacht.
+             */
             fremd.value = '';
             deutsch.value = '';
             fremd.focus();
@@ -921,94 +923,6 @@ function initVocabAdd() {
     });
 }
 
-/**
- * Wie viele Vokabeln noch ohne Lueckensatz sind.
- *
- * Der Knopf "Saetze nachtragen" steht immer im HTML und ist ausgeblendet,
- * solange nichts fehlt. Beim Tippen waechst die Zahl mit - ohne das
- * stuende nach zehn abgetippten Woertern immer noch "(0)" da, oder gar
- * nichts.
- */
-function offeneSaetze(anzahl) {
-    const knopf = document.getElementById('nachtragen');
-    if (!knopf || typeof anzahl !== 'number') return;
-
-    knopf.dataset.fehlen = String(anzahl);
-    knopf.hidden = anzahl === 0;
-    const zahl = knopf.querySelector('[data-zahl]');
-    if (zahl) zahl.textContent = String(anzahl);
-}
-
-/** Die Rueckfrage - sie nennt die Zahl, und die Zahl aendert sich. */
-const nachtragenFrage = (anzahl) =>
-    `Für ${anzahl} Vokabeln fehlen noch Lückensätze. Jetzt nachholen?`;
-
-/**
- * Saetze nachtragen, ohne dass die Seite dabei haengt.
- *
- * Ohne Skript ist das ein gewoehnliches Formular: abschicken, weiterleiten,
- * und der Server erzeugt die Saetze danach weiter. Mit Skript wird daraus
- * eine Anfrage, auf deren Antwort wirklich gewartet wird - mit einem
- * Spinner am Knopf, damit sichtbar ist, dass etwas laeuft.
- *
- * Der Umweg ueber "antworten und dann weiterarbeiten" ist hier
- * ausdruecklich nicht gewollt. Er setzt voraus, dass die Antwort den
- * Browser verlaesst, bevor der Vorgang endet, und das haelt nicht ueberall:
- * Legt der Webserver eine Komprimierung darueber, ersetzt er die
- * Laengenangabe durch eine stueckweise Uebertragung, und der Browser wartet
- * trotzdem bis zum Schluss - nur ohne zu wissen, worauf.
- */
-function initCatchUp() {
-    const knopf = document.getElementById('nachtragen');
-    const form  = knopf?.closest('form');
-    if (!knopf || !form) return;
-
-    /*
-     * Das data-confirm weg, sobald dieses Skript laeuft: Sonst fragt der
-     * allgemeine Hoerer oben UND dieser hier, also zweimal dasselbe. Im
-     * HTML bleibt es stehen, weil es dort die Rueckfrage fuer den Fall
-     * ohne Skript beschreibt.
-     */
-    knopf.removeAttribute('data-confirm');
-
-    knopf.addEventListener('click', async (e) => {
-        e.preventDefault();
-        if (!confirm(nachtragenFrage(Number(knopf.dataset.fehlen) || 0))) return;
-
-        const text = knopf.innerHTML;
-        knopf.disabled = true;
-        knopf.classList.add('laeuft');
-        knopf.textContent = 'Die Sätze entstehen …';
-
-        const daten = new FormData(form);
-        daten.set('catch_up', '1');
-
-        try {
-            const res = await fetch(location.pathname + location.search, {
-                method: 'POST',
-                body: daten,
-                credentials: 'same-origin',
-                headers: { 'X-Requested-With': 'fetch' },
-            });
-            const json = await res.json();
-            if (!json.ok) alert(json.error || 'Das hat nicht geklappt.');
-        } catch {
-            /*
-             * Hier steht bewusst keine Behauptung darueber, was passiert
-             * ist: Die Anfrage kann durchgegangen und nur die Antwort
-             * verlorengegangen sein, und dann laufen die Saetze gerade.
-             */
-            alert('Die Antwort kam nicht an. Ein Neuladen zeigt, wie weit es ist.');
-        }
-        knopf.innerHTML = text;
-        knopf.classList.remove('laeuft');
-        knopf.disabled = false;
-        location.reload();
-    });
-}
-
-initVocabAdd();
-initCatchUp();
 
 // ------------------------------------------ Vokabel aendern
 
@@ -1024,6 +938,9 @@ initCatchUp();
  * einmal entstehen - und ein Wort mit einer spitzen Klammer darin kann die
  * Tabelle so nicht zerlegen.
  */
+
+initVocabAdd();
+
 /**
  * Der Titel der Lerneinheit, an Ort und Stelle.
  *

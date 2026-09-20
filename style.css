@@ -1301,3 +1301,101 @@ input.cloze-input[readonly] { opacity: 1; }
 @media (max-width: 520px) {
     .notice.pupilview .btn { flex: 1 1 100%; }
 }
+
+/* ------------------------------------------------ Impressum und Datenschutz
+ *
+ * Eine gewöhnliche Seite vom Server, kein Teil der App: Sie muss erreichbar
+ * sein, bevor jemand angemeldet ist. Deshalb steht ihre Gestaltung hier und
+ * nicht in admin.css - die lädt weder die App noch diese Seite.
+ */
+body.rechtsseite { background: var(--bg); }
+
+.rechtsblatt {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: 18px 18px 48px;
+}
+
+.rechtswahl {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 22px;
+}
+.rechtswahl .chip {
+    display: inline-block;
+    padding: 6px 13px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text-soft);
+    font-size: .9rem;
+    text-decoration: none;
+}
+.rechtswahl .chip:hover { background: var(--surface-2); color: var(--text); }
+.rechtswahl .chip.on {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-text);
+    font-weight: 600;
+}
+
+/*
+ * Der Fliesstext. Etwas schmaler als die Seite und mit reichlich Luft
+ * zwischen den Absätzen: Eine Datenschutzerklärung liest niemand zum
+ * Vergnügen, und eine Bleiwüste liest erst recht niemand.
+ */
+.rechtstext {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    line-height: 1.6;
+}
+.rechtstext h2 { margin: 26px 0 10px; font-size: 1.25rem; }
+.rechtstext h3 { margin: 22px 0 8px;  font-size: 1.08rem; }
+.rechtstext h4 { margin: 18px 0 6px;  font-size: .98rem; color: var(--text-soft); }
+.rechtstext > :first-child { margin-top: 0; }
+.rechtstext p  { margin: 0 0 12px; }
+.rechtstext ul { margin: 0 0 12px; padding-left: 22px; }
+.rechtstext li { margin: 0 0 7px; }
+.rechtstext li > ul { margin: 7px 0 0; }
+.rechtstext hr {
+    margin: 26px 0;
+    border: 0;
+    border-top: 1px solid var(--border);
+}
+.rechtstext a { color: var(--accent); overflow-wrap: anywhere; }
+.rechtstext code {
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: 5px;
+    font-size: .92em;
+    overflow-wrap: anywhere;
+}
+
+.rechtsfuss { margin: 18px 0 0; text-align: center; }
+
+/* Der Zurück-Pfeil ist ein Link, kein Knopf - ohne das trägt er den
+   Unterstrich und die Linkfarbe, und dann sieht er neben dem Titel aus wie
+   ein Versehen. */
+.rechtsblatt .topbar .iconbtn { text-decoration: none; }
+
+/*
+ * Die Zeile ganz unten, in App und Lehrkraft-Bereich.
+ *
+ * Sie muss von jeder Seite aus erreichbar sein - auch von der Anmeldung,
+ * und gerade dort: Wer noch kein Konto hat, kann kein Menü öffnen.
+ */
+.rechtszeile {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 14px;
+    margin: 28px 0 10px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: .82rem;
+}
+.rechtszeile a { color: var(--text-soft); text-decoration: none; }
+.rechtszeile a:hover { color: var(--text); text-decoration: underline; }

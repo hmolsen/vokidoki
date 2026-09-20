@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../lib/html.php';
 require_once __DIR__ . '/../lib/thema.php';
+require_once __DIR__ . '/../lib/markdown.php';
 require_once __DIR__ . '/../lib/db.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/access.php';
@@ -278,6 +279,7 @@ function teacher_login_page(?string $error): never
     <input type="password" id="p" name="password" autocomplete="current-password">
     <button class="btn" name="teacher_login" value="1">Anmelden</button>
 </form>
+<?= legal_links_html('teacher') ?>
 </main></body></html>
     <?php
     exit;
@@ -300,6 +302,7 @@ function teacher_blocked_page(): never
     Das erledigt der Betreiber mit einem Aufruf des Admin-Bereichs. Bitte in
     ein paar Minuten noch einmal versuchen.
 </div>
+<?= legal_links_html('teacher') ?>
 </main></body></html>
     <?php
     exit;
@@ -432,6 +435,25 @@ function teacher_nav(array $user, ?int $kursId = null): void
 
             <hr class="mtrenner">
 
+            <?php
+            /*
+             * Impressum, Datenschutz, Lizenzen.
+             *
+             * Sie muessen von jeder Seite aus erreichbar sein, nicht nur
+             * von einer Fusszeile, die auf einer langen Klassenliste erst
+             * nach zwei Bildschirmen kommt.
+             */
+            ?>
+            <?php foreach (legal_documents() as $k => $d): ?>
+                <a class="mitem" href="<?= h(url('/rechtliches.php')
+                                             . '?d=' . $k . '&z=teacher') ?>">
+                    <span class="micon" aria-hidden="true">&#167;</span>
+                    <span><?= h($d['kurz']) ?></span>
+                </a>
+            <?php endforeach; ?>
+
+            <hr class="mtrenner">
+
             <form method="post" action="<?= h(teacher_url('index.php')) ?>">
                 <?= teacher_csrf_field() ?>
                 <button class="mitem" name="teacher_logout" value="1">
@@ -516,6 +538,9 @@ function teacher_foot(): void
 {
     // Der Versionsstempel in der Adresse: Sonst liefert der Browser nach
     // einer Aenderung noch tagelang die alte Fassung aus.
+    // Impressum, Datenschutz, Lizenzen - ganz unten, auf jeder Seite.
+    echo legal_links_html('teacher');
+
     printf("<script src=\"%s\"></script>\n",
         h(url('/teacher/teacher.js?v=' . app_version())));
     echo "</main></body></html>\n";

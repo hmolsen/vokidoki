@@ -218,20 +218,12 @@ export async function pruefe(f, aus) {
             leer:    document.querySelector('#handzeile input[name="new_f"]').value === '',
             fokus:   document.activeElement?.name ?? '',
             /*
-             * Der Knopf "Saetze nachtragen" steht immer im HTML und ist
-             * ausgeblendet, solange nichts fehlt. Jede getippte Vokabel
-             * ist eine ohne Lueckensatz - die Zahl dahinter muss also
-             * mitwachsen, ohne dass die Seite neu laedt.
+             * Hier stand ein Knopf "Saetze nachtragen (N)", dessen Zahl beim
+             * Tippen mitwuchs. Er ist weg: Lueckensaetze entstehen beim
+             * Freigeben, und eine frisch getippte Vokabel steht hinter der
+             * Marke - sie wird noch nicht geuebt und braucht keinen.
              */
-            nachtragen: (() => {
-                const k = document.getElementById('nachtragen');
-                return {
-                    da:     !!k,
-                    offen:  k ? !k.hidden : false,
-                    zahl:   k?.querySelector('[data-zahl]')?.textContent ?? '',
-                    frage:  k?.hasAttribute('data-confirm') ?? true,
-                };
-            })(),
+            nachtragen: !!document.querySelector('[name="catch_up"]'),
         })`);
 
         ok('Eine Vokabel von Hand kommt dazu', nachher.zeilen === vorher + 1,
@@ -255,18 +247,16 @@ export async function pruefe(f, aus) {
          * Sie tat es lange: erst antworten, dann den Lueckensatz zur neuen
          * Vokabel erzeugen. Das haelt nur, wenn die Antwort den Browser
          * wirklich verlaesst, bevor der Vorgang endet - und legt der
-         * Webserver eine Komprimierung darueber, ersetzt er die
-         * Laengenangabe durch eine stueckweise Uebertragung, und der
-         * Browser wartet doch bis zum Schluss. Es las sich dann als "die
-         * Antwort kam nicht an", obwohl die Vokabel drinstand. Jetzt
-         * erzeugt sie der Knopf daneben, und der sagt, wie viele fehlen.
+         * Webserver eine Komprimierung darueber, wartet er doch bis zum
+         * Schluss. Es las sich dann als "die Antwort kam nicht an", obwohl
+         * die Vokabel drinstand.
+         *
+         * Danach stand hier ein Knopf "Saetze nachtragen (N)". Auch der ist
+         * weg: Der Satz entsteht beim Freigeben, und eine frisch getippte
+         * Vokabel steht hinter der Marke - sie wird noch nicht geuebt.
          */
-        ok('Der Knopf "Saetze nachtragen" taucht auf', nachher.nachtragen.offen,
-           'er steht immer im HTML und ist bloss ausgeblendet');
-        ok('Und nennt die gewachsene Zahl', Number(nachher.nachtragen.zahl) > 0,
-           nachher.nachtragen.zahl);
-        ok('Die Rueckfrage stellt er nur einmal', nachher.nachtragen.frage === false,
-           'der allgemeine data-confirm-Hoerer wuerde sonst dasselbe noch einmal fragen');
+        ok('Es gibt nichts nachzutragen', nachher.nachtragen === false,
+           'ein Wort hinter der Freigabemarke braucht keinen Lueckensatz');
 
         /*
          * Und dasselbe Wort ein zweites Mal: Es kommt nicht dazu, und die

@@ -2432,21 +2432,29 @@ q('DELETE FROM units WHERE id = ?', [$leereUnit]);
 require_once __DIR__ . '/../lib/sentences.php';
 
 /*
- * Saetze entstehen fuer die ganze Einheit, unabhaengig von der Freigabe.
+ * Saetze entstehen fuer das, was freigegeben ist - und nur dafuer.
  *
- * Das war eine Weile anders. In der Anwendung fuehlte es sich falsch an:
- * Die Lehrkraft gibt eine Portion frei und wartet erst einmal eine halbe
- * Minute, waehrend die Lektion fuer die Klasse halb da ist. Einmal beim
- * Einlesen alles zu erzeugen kostet dasselbe, sobald die Unit ohnehin ganz
- * drankommt - nur zu einem Zeitpunkt, an dem niemand davorsitzt.
+ * Ein Lueckensatz wird gebraucht, wenn ein Kind ihn ueben soll, und ueben
+ * kann es nur, was aufgemacht ist. Eine Vokabel, die gerade von Hand
+ * dazugekommen ist, steht hinter der Marke und wartet; ihr Satz wartet mit.
+ *
+ * Das war eine Weile andersherum - es entstand alles gleich beim Einlesen,
+ * damit niemand nach dem Freigeben warten muss. Der Grund ist weggefallen:
+ * Die Freigabe antwortet inzwischen zuerst und arbeitet danach weiter, die
+ * Seite sagt "entsteht gerade" und laedt sich von selbst nach.
  */
 q('UPDATE units SET released_position = 4 WHERE id = ?', [$freiUnit]);
-ok('Saetze entstehen fuer die ganze Einheit, nicht nur fuer Freigegebenes',
-   count(sentence_candidates($freiUnit)) === 10,
-   count(sentence_candidates($freiUnit)) . ' von 10');
+ok('Saetze entstehen nur fuer Freigegebenes',
+   count(sentence_candidates($freiUnit)) === 4,
+   count(sentence_candidates($freiUnit)) . ' von 4');
 
 q('UPDATE units SET released_position = 0 WHERE id = ?', [$freiUnit]);
-ok('Auch wenn noch gar nichts freigegeben ist',
+ok('Ohne Freigabe gibt es nichts zu erzeugen',
+   count(sentence_candidates($freiUnit)) === 0,
+   count(sentence_candidates($freiUnit)) . ' - was zu ist, wird nicht geuebt');
+
+q('UPDATE units SET released_position = 10 WHERE id = ?', [$freiUnit]);
+ok('Und ist alles auf, sind es alle',
    count(sentence_candidates($freiUnit)) === 10,
    count(sentence_candidates($freiUnit)) . ' von 10');
 
@@ -5282,10 +5290,21 @@ foreach (['alpha', 'beta'] as $i => $w) {
 }
 
 /*
- * Saetze entstehen auch ohne Freigabe - beim Einlesen, fuer die ganze
- * Einheit. Die Freigabe steuert danach nur noch, was die Klasse sieht.
+ * Ohne Freigabe gibt es nichts zu erzeugen: Ein Lueckensatz wird
+ * gebraucht, wenn ein Kind ihn ueben soll, und ueben kann es nur, was
+ * aufgemacht ist.
  */
-ok('Auch ohne Freigabe gibt es etwas zu erzeugen',
+ok('Ohne Freigabe gibt es nichts zu erzeugen',
+   vocab_without_sentences($leerUnit) === 0,
+   vocab_without_sentences($leerUnit) . ' - was zu ist, wird nicht geuebt');
+
+/*
+ * Und mit Freigabe schon. Dass ein Lauf ohne Freigabe frueher "Es entstand
+ * kein brauchbarer Satz" hinterliess, ist damit erledigt: Er startet gar
+ * nicht erst.
+ */
+q('UPDATE units SET released_position = 2 WHERE id = ?', [$leerUnit]);
+ok('Nach der Freigabe schon',
    vocab_without_sentences($leerUnit) === 2,
    vocab_without_sentences($leerUnit) . ' von 2');
 
@@ -5301,6 +5320,10 @@ ok('Die Einheit gilt als fertig',
    $stand['sentences_status'] === SENTENCE_DONE, (string) $stand['sentences_status']);
 ok('Ohne Fehlermeldung', $stand['sentences_error'] === null,
    var_export($stand['sentences_error'], true));
+
+// Wieder zumachen: Die Pruefungen darunter beschreiben eine Einheit ohne
+// Freigabe, und die Saetze von eben bleiben dabei liegen.
+q('UPDATE units SET released_position = 0 WHERE id = ?', [$leerUnit]);
 
 /*
  * Und der Fall, an dem es gehakt hatte: ein Lauf, fuer den es nichts mehr
@@ -5621,20 +5644,32 @@ ok('Die Klasse sieht die angehaengten Woerter also noch nicht',
    === ['red', 'blue']);
 ok('Die Positionen sind lueckenlos', vocab_positions_dense($anUnit));
 
-// ---- Fuer die angehaengten Vokabeln entstehen Lueckensaetze.
+// ---- Und die Lueckensaetze warten, bis die Woerter aufgemacht werden.
+
+/*
+ * Ein Lueckensatz wird gebraucht, wenn ein Kind ihn ueben soll - und ueben
+ * kann es nur, was freigegeben ist. Die angehaengten Woerter stehen hinter
+ * der Marke; ihr Satz wartet mit. Das spart nicht nur einen Aufruf: Es
+ * entsteht auch nichts fuer Woerter, die vielleicht nie drankommen.
+ */
+$satzZu = static fn (string $wort): int => (int) qv(
+    'SELECT COUNT(*) FROM sentences s JOIN vocab v ON v.id = s.vocab_id
+      WHERE v.unit_id = ? AND v.term_foreign = ?', [$anUnit, $wort]);
 
 if ($isFake) {
-    /*
-     * Die Saetze entstehen im Hintergrund - die Antwort auf 'save' ist
-     * schon da, waehrend noch gearbeitet wird. Ohne waitForSentences()
-     * prueft man die Uhr und nicht die Anwendung.
-     */
     $anStand = waitForSentences($anUnit);
     ok('Der Satzlauf fuer die angehaengten Vokabeln wird fertig',
        $anStand === 'done', $anStand);
-    ok('Fuer die angehaengten Vokabeln gibt es Saetze',
-       (int) qv('SELECT COUNT(*) FROM sentences s JOIN vocab v ON v.id = s.vocab_id
-                  WHERE v.unit_id = ? AND v.term_foreign = ?', [$anUnit, 'yellow']) > 0,
+    ok('Solange sie zu sind, entsteht kein Satz', $satzZu('yellow') === 0,
+       $satzZu('yellow') . ' - was nicht geuebt wird, braucht keinen');
+
+    // Und jetzt aufmachen.
+    q('UPDATE units SET released_position = 5 WHERE id = ?', [$anUnit]);
+    sentence_claim($anUnit);
+    generate_sentences_tracked($anUnit);
+
+    ok('Nach dem Freigeben gibt es ihn',
+       $satzZu('yellow') > 0,
        'sonst bleibt die Vokabel im Lueckentext stumm');
     ok('Und die vorher schon vorhandenen behalten ihre',
        (int) qv('SELECT COUNT(*) FROM sentences s JOIN vocab v ON v.id = s.vocab_id
@@ -7657,6 +7692,219 @@ ok('Ein anderes Konto bekommt sein eigenes Buendel',
 
 q('DELETE FROM answer_receipts WHERE user_id = ?', [$userId]);
 
+section('Saetze entstehen beim Freigeben');
+
+/*
+ * Bis hierher entstanden sie beim Einlesen, fuer die ganze Einheit - und
+ * wenn hinterher etwas dazukam, stand ein Knopf "Saetze nachtragen (N)" da.
+ * Der stellte eine Frage, die sich nicht stellt: Ein Lueckensatz wird
+ * gebraucht, wenn ein Kind ihn ueben soll, und ueben kann es nur, was
+ * aufgemacht ist.
+ */
+$sfLehrer = 'sflehr_' . bin2hex(random_bytes(3));
+q('INSERT INTO users (school_id, username, display_name, password_hash, color, role, can_import)
+   VALUES (?, ?, ?, ?, ?, ?, 1)',
+  [(int) qv('SELECT school_id FROM users WHERE id = ?', [$userId]),
+   $sfLehrer, 'Frau Satz', password_hash('lehrerin123', PASSWORD_DEFAULT),
+   '#4f7cff', ROLE_TEACHER]);
+$sfLehrerId = (int) db()->lastInsertId();
+
+$sfKlasse = class_create((int) qv('SELECT school_id FROM users WHERE id = ?', [$userId]),
+                         'Satz' . bin2hex(random_bytes(2)));
+$sfKurs   = course_create(q1('SELECT * FROM users WHERE id = ?', [$sfLehrerId]),
+                          'Satzisch' . bin2hex(random_bytes(2)), "\u{1F310}",
+                          (int) $sfKlasse['id'], '');
+$sfKursId = (int) $sfKurs['id'];
+$sfLang   = (int) $sfKurs['language_id'];
+
+q('INSERT INTO units (language_id, course_id, title, released_position, position)
+   VALUES (?, ?, ?, 0, 1)', [$sfLang, $sfKursId, 'Satz-Unit']);
+$sfUnit = (int) db()->lastInsertId();
+foreach (['aa', 'bb', 'cc'] as $i => $w) {
+    q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, ?)',
+      [$sfUnit, $w, 'de-' . $w, $i]);
+}
+
+ok('Ohne Freigabe steht nichts an', vocab_without_sentences($sfUnit) === 0,
+   vocab_without_sentences($sfUnit) . ' - was zu ist, wird nicht geuebt');
+
+q('UPDATE units SET released_position = 2 WHERE id = ?', [$sfUnit]);
+ok('Nach der Freigabe zweier Vokabeln stehen zwei an',
+   vocab_without_sentences($sfUnit) === 2,
+   (string) vocab_without_sentences($sfUnit));
+
+/*
+ * Und der Weg ueber die Oberflaeche: Freigeben stoesst den Lauf an. Die
+ * Antwort geht dabei zuerst raus - die Saetze zu zwanzig Vokabeln dauern
+ * eine halbe Minute, und solange soll niemand auf eine leere Seite sehen.
+ */
+q('UPDATE units SET released_position = 0, sentences_status = NULL WHERE id = ?', [$sfUnit]);
+
+q('DELETE FROM login_attempts');
+teacherLogin($sfLehrer, 'lehrerin123');
+$res = teacherGet('unit.php?id=' . $sfUnit);
+preg_match('/name="csrf" value="([a-f0-9]+)"/', $res['body'], $sfm);
+$sfCsrf = $sfm[1] ?? '';
+
+ok('Der Knopf "Saetze nachtragen" ist weg',
+   !str_contains($res['body'], 'name="catch_up"'),
+   'er fragte nach etwas, das von selbst geschieht');
+
+$res = teacherRequest($base . '/teacher/unit.php?id=' . $sfUnit, [
+    'release' => 3, 'unit_id' => $sfUnit, 'csrf' => $sfCsrf,
+]);
+
+/*
+ * Geprueft wird der ANSTOSS, nicht das Ergebnis: Ob wirklich Saetze
+ * entstehen, haengt am Modell und steht in tests/ai.php. Hier zaehlt, dass
+ * die Freigabe den Lauf beansprucht hat - ohne das bliebe alles liegen.
+ */
+$sfStand = (string) qv('SELECT sentences_status FROM units WHERE id = ?', [$sfUnit]);
+ok('Freigeben stoesst den Satzlauf an', $sfStand !== '', $sfStand ?: '(nichts)');
+ok('Und die Meldung sagt es',
+   str_contains($res['body'], 'entstehen gerade'),
+   'sonst wartet die Lehrkraft auf etwas, von dem sie nichts weiss');
+
+/*
+ * Zuruecknehmen erzeugt nichts. Was zu ist, wird nicht geuebt - und ein
+ * Lauf, der nichts zu tun hat, faende nichts vor.
+ */
+q('UPDATE units SET released_position = 3, sentences_status = NULL WHERE id = ?', [$sfUnit]);
+$res = teacherRequest($base . '/teacher/unit.php?id=' . $sfUnit, [
+    'release' => 0, 'unit_id' => $sfUnit, 'csrf' => $sfCsrf,
+]);
+ok('Zuruecknehmen stoesst keinen Lauf an',
+   qv('SELECT sentences_status FROM units WHERE id = ?', [$sfUnit]) === null,
+   (string) qv('SELECT sentences_status FROM units WHERE id = ?', [$sfUnit]));
+
+/*
+ * Und der eine Fall, in dem noch von Hand nachgeholt wird: ein Lauf, der
+ * abgebrochen ist. Ohne diesen Knopf wuerde erst die naechste Freigabe es
+ * wieder versuchen - und wer schon alles aufgemacht hat, haette gar keine
+ * mehr.
+ */
+q('UPDATE units SET released_position = 3, sentences_status = ?, sentences_error = ?
+    WHERE id = ?', [SENTENCE_FAILED, 'Probe', $sfUnit]);
+$res = teacherGet('unit.php?id=' . $sfUnit);
+ok('Nach einem Fehlschlag steht ein Knopf zum Wiederholen da',
+   str_contains($res['body'], 'name="catch_up"')
+   && str_contains($res['body'], 'Noch einmal versuchen'));
+
+q('DELETE FROM users WHERE id = ?', [$sfLehrerId]);
+
+section('Impressum, Datenschutz, Lizenzen');
+
+require_once __DIR__ . '/../lib/markdown.php';
+
+/*
+ * Gewoehnliche Seiten vom Server, kein Teil der App: Sie muessen erreichbar
+ * sein, BEVOR jemand angemeldet ist - wer sich anmelden soll, darf vorher
+ * wissen, wer dahintersteht und was mit seinen Daten geschieht.
+ */
+foreach (legal_documents() as $k => $d) {
+    ok('Es gibt ' . $d['titel'], is_file(__DIR__ . '/../' . $d['datei']),
+       $d['datei'] . ' fehlt');
+
+    $res = http($base . '/rechtliches.php?d=' . $k);
+    ok($d['kurz'] . ' laesst sich ohne Anmeldung aufrufen', $res['status'] === 200,
+       'Status ' . $res['status']);
+    ok('Und traegt seinen Titel', str_contains($res['body'], h($d['titel'])));
+    ok('Und die drei stehen nebeneinander',
+       substr_count($res['body'], 'class="chip') === 3);
+}
+
+/*
+ * Die Adresse waehlt aus einer festen Liste, sie benennt keine Datei.
+ * Sonst stuende dort ein Weg, sich mit ?d=../config jede Datei des Servers
+ * ausgeben zu lassen.
+ */
+foreach (['../config', '../../etc/passwd', 'config.php', 'README'] as $boese) {
+    $res = http($base . '/rechtliches.php?d=' . rawurlencode($boese));
+
+    /*
+     * Zweierlei muss stimmen, und das zweite ist das wichtigere: Die Seite
+     * sagt 404 UND zeigt das Impressum - sie versucht also gar nicht erst,
+     * eine Datei mit diesem Namen zu lesen. Nur zu pruefen, dass nichts
+     * Fremdes auslaeuft, pruefte die Wache nicht: Eine Fassung, die den
+     * Namen aus der Adresse nimmt und ".md" anhaengt, kaeme damit durch.
+     */
+    ok('Ein erfundenes Dokument wird abgewiesen: ' . $boese,
+       $res['status'] === 404, 'Status ' . $res['status']);
+    ok('Und zeigt stattdessen das Impressum',
+       str_contains($res['body'], 'Angaben gemäß')
+       && !str_contains($res['body'], 'db_pass')
+       && !str_contains($res['body'], '<?php'),
+       mb_substr(strip_tags($res['body']), 0, 60));
+}
+
+/*
+ * Und der Wandler macht aus Markdown Text, nicht Markup. Erst maskieren,
+ * dann auszeichnen - anders herum liesse sich HTML einschleusen, und eine
+ * dieser Dateien wird irgendwann jemand aus dem Netz zusammenkopieren.
+ */
+$gift = markdown_to_html('<script>alert(1)</script> [x](javascript:alert(2)) '
+                       . '<img src=x onerror=alert(3)>');
+ok('Der Markdown-Wandler laesst kein HTML durch',
+   !str_contains($gift, '<script') && !str_contains($gift, '<img')
+   && !str_contains($gift, 'javascript:'),
+   $gift);
+
+ok('Er kann Ueberschriften, Listen und Links',
+   str_contains(markdown_to_html("## Titel\n\n* eins\n* zwei"), '<h3>Titel</h3>')
+   && str_contains(markdown_to_html("* eins"), '<ul><li>')
+   && str_contains(markdown_to_html('[VT](https://example.org)'),
+                   'href="https://example.org"'));
+ok('Und macht aus einer ersten Ueberschrift keine zweite <h1>',
+   !str_contains(markdown_to_html('# Impressum'), '<h1>'),
+   'die <h1> der Seite ist der Titel des Dokuments');
+
+/*
+ * Erreichbar von ueberall: im Einstellungsmenue, als Zeile ganz unten, und
+ * auf beiden Anmeldeseiten. Wer noch kein Konto hat, kann kein Menue
+ * oeffnen - deshalb gerade dort.
+ */
+$anmeldung = http($base . '/teacher/')['body'];
+ok('Die Anmeldung der Lehrkraft zeigt sie',
+   substr_count($anmeldung, 'rechtliches.php') === 3, $anmeldung ? '' : 'leer');
+
+$kern = (string) file_get_contents(__DIR__ . '/../core.js');
+ok('Die App hat sie im Einstellungsmenue',
+   str_contains($kern, 'rechtsItems()') && str_contains($kern, 'rechtliches.php'));
+ok('Und als Zeile ganz unten',
+   str_contains($kern, 'export function rechtsZeile'));
+ok('Die Anmeldung der App zeigt sie ebenfalls',
+   str_contains((string) file_get_contents(__DIR__ . '/../views/login.js'),
+                'rechtsZeile()'),
+   'wer sich anmelden soll, darf vorher wissen, wer dahintersteht');
+ok('Und die Startseite der App auch',
+   str_contains((string) file_get_contents(__DIR__ . '/../views/languages.js'),
+                'rechtsZeile()'));
+
+q('DELETE FROM login_attempts');
+teacherLogin($lehrerName2 ?? '', 'x');   // egal, nur um die Seite zu bekommen
+$res = http($base . '/teacher/');
+ok('Und jede Seite des Lehrkraft-Bereichs traegt die Zeile',
+   str_contains($res['body'], 'class="rechtszeile"'));
+
+/*
+ * Die Lizenzen nennen, was wirklich mitgeliefert wird. Eine Liste, die ein
+ * Paket vergisst, ist schlimmer als keine: Sie sieht nach Sorgfalt aus.
+ */
+$lizenzen = (string) file_get_contents(__DIR__ . '/../LIZENZEN.md');
+$sperre   = json_decode((string) file_get_contents(__DIR__ . '/../composer.lock'), true);
+$fehlend  = [];
+foreach ($sperre['packages'] ?? [] as $paket) {
+    if (!str_contains($lizenzen, (string) $paket['name'])) {
+        $fehlend[] = (string) $paket['name'];
+    }
+}
+ok('Jedes mitgelieferte Paket steht in den Lizenzen', $fehlend === [],
+   implode(', ', $fehlend));
+ok('Und die Schrift und die Fahnen auch',
+   str_contains($lizenzen, 'Roboto') && str_contains($lizenzen, 'Twemoji')
+   && str_contains($lizenzen, 'CC-BY 4.0') && str_contains($lizenzen, 'Apache'),
+   'beide verlangen die Nennung der Herkunft');
+
 section('Die Reihenfolge der Lerneinheiten');
 
 /*
@@ -8194,14 +8442,15 @@ ok('Widerrufener Token meldet niemanden mehr an',
  * (fk_course_language, fk_unit_language).
  */
 foreach ([$languageId ?? 0, $otherLang ?? 0, $fremdLang ?? 0, $freiLang ?? 0,
-          $buLang ?? 0, $buFremdLang ?? 0, $roLang ?? 0] as $lid) {
+          $buLang ?? 0, $buFremdLang ?? 0, $roLang ?? 0, $sfLang ?? 0] as $lid) {
     if ((int) $lid > 0) {
         q('DELETE FROM languages WHERE id = ?', [(int) $lid]);
     }
 }
 q("DELETE FROM languages WHERE name IN ('Testisch', 'Fremdisch', 'Spanisch', 'Klingonisch')");
 q("DELETE FROM languages WHERE name LIKE 'Reihisch%' OR name LIKE 'Fremdreihe%'");
-q("DELETE FROM classes WHERE name LIKE 'Reihe%'");
+q("DELETE FROM languages WHERE name LIKE 'Satzisch%'");
+q("DELETE FROM classes WHERE name LIKE 'Reihe%' OR name LIKE 'Satz%'");
 
 q('DELETE FROM users WHERE id = ?', [$userId]);
 q("DELETE FROM users WHERE username IN ('e2e_other')");

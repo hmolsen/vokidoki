@@ -165,10 +165,18 @@ if (!VT.user && currentPath() !== '/login') {
  * auch ohne Netz. Ist noch keiner da (erste Anmeldung, neues Geraet), muss
  * einmal gewartet werden; danach nie wieder.
  *
- * VORRAT_FRISCH: So lange gilt ein Vorrat als frisch genug, um nicht
- * gleich wieder zu fragen. Gibt die Lehrkraft mittendrin etwas frei, kommt
- * es beim naechsten Start an - oder wenn die App aus dem Hintergrund
- * zurueckkehrt, siehe unten.
+ * VORRAT_FRISCH gilt nur fuer die Rueckkehr aus dem Hintergrund: Die
+ * installierte App liegt wochenlang da und kommt zwanzigmal am Tag nach
+ * vorn; jedesmal nachzufragen waere Laerm ohne Gewinn.
+ *
+ * BEIM KALTSTART WIRD IMMER NACHGESEHEN, und zwar aus einem Grund, der
+ * eine Fehlermeldung wert war: Eine Lehrkraft gibt Vokabeln frei und
+ * drueckt "So sieht es die Klasse" - und sah dort ihren eigenen Vorrat von
+ * vor vier Minuten, also die Freigabe von vorhin. Das sieht aus, als haette
+ * das Freigeben nicht gewirkt.
+ *
+ * Gewartet wird darauf nicht: Was im Geraet liegt, wird sofort gezeichnet,
+ * und wenn sich etwas geaendert hat, zeichnet route() gleich noch einmal.
  */
 const VORRAT_FRISCH = 5 * 60;
 
@@ -179,15 +187,13 @@ async function vorratBereit() {
         await vorratAuffrischen();
         return;
     }
-    if (vorratAlter() > VORRAT_FRISCH) {
-        // Nicht abwarten: Was da ist, reicht zum Zeichnen.
-        vorratAuffrischen().then((frisch) => {
-            // Kam etwas Neues, die aktuelle Ansicht noch einmal aufbauen -
-            // sonst stuende die frisch freigegebene Lerneinheit erst beim
-            // naechsten Antippen da.
-            if (frisch) route();
-        });
-    }
+
+    vorratAuffrischen().then((frisch) => {
+        // Kam etwas Neues, die aktuelle Ansicht noch einmal aufbauen -
+        // sonst stuende die frisch freigegebene Lerneinheit erst beim
+        // naechsten Antippen da.
+        if (frisch) route();
+    });
 }
 
 await vorratBereit();

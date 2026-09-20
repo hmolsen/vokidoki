@@ -1,6 +1,7 @@
 import {
     VT, api, render, esc, $, on, go, topbar, showError, clearError, withBusy,
     flagHtml,
+    rechtsZeile,
 } from '../core.js';
 import { sprachen, einheitenDerSprache, vokabelnDerEinheit } from '../vorrat.js';
 
@@ -56,6 +57,7 @@ export async function languagesView() {
                 </button>` : ''}
         </div>
         ${installHint()}
+        ${rechtsZeile()}
     `);
 
     on('[data-lang]', 'click', (e) => go(`/lang/${e.currentTarget.dataset.lang}`));

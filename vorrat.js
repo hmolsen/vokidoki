@@ -150,9 +150,27 @@ export async function vorratAuffrischen() {
 
     try {
         const frisch = await api('bundle', 'get');
+
+        /*
+         * Zurueckgemeldet wird, ob sich etwas GEAENDERT hat - nicht, ob der
+         * Abruf durchging.
+         *
+         * Der Aufrufer zeichnet die Ansicht neu, wenn hier true steht.
+         * Truege jeder erfolgreiche Abruf das, wuerde beim Ueben alle paar
+         * Minuten die Frage neu gebaut, waehrend jemand davorsitzt - und
+         * zwar ohne dass sich irgendetwas geaendert haette.
+         *
+         * Der Zeitstempel bleibt beim Vergleich aussen vor: Er ist bei
+         * jedem Abruf ein anderer und saehe immer nach Aenderung aus.
+         */
+        const vorherText = vorrat === null
+            ? null : JSON.stringify({ ...vorrat.daten, geholt: 0 });
+        const frischText = JSON.stringify({ ...frisch, geholt: 0 });
+
         vorrat = register(frisch);
         schreiben(vorratSchluessel(), frisch);
-        return true;
+
+        return vorherText !== frischText;
     } catch {
         return false;
     }

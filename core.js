@@ -306,9 +306,48 @@ function navRechtsHtml() {
                 ${themaWahlHtml()}
                 <hr class="mtrenner">
 
+                ${rechtsItems()}
+
+                <hr class="mtrenner">
+
                 ${letzte}
             </nav>
         </details>`;
+}
+
+/*
+ * Impressum, Datenschutz, Lizenzen.
+ *
+ * Als gewöhnliche Seiten vom Server, nicht als Ansichten der App: Sie
+ * müssen erreichbar sein, bevor jemand angemeldet ist, und wer ihre
+ * Adresse weitergibt, soll sie sehen. Eine Ansicht hinter dem Hash wäre
+ * beides nicht.
+ */
+const RECHTSTEXTE = [
+    ['impressum',   'Impressum'],
+    ['datenschutz', 'Datenschutz'],
+    ['lizenzen',    'Lizenzen'],
+];
+
+function rechtsItems() {
+    return RECHTSTEXTE.map(([k, name]) => `
+        <a class="mitem" href="${esc(VT.base)}/rechtliches.php?d=${k}">
+            <span class="micon" aria-hidden="true">&#167;</span>
+            <span>${esc(name)}</span>
+        </a>`).join('');
+}
+
+/**
+ * Dieselben drei als Zeile ganz unten.
+ *
+ * Gebraucht dort, wo es kein Menü gibt - auf der Anmeldeseite - und auf
+ * der Startseite, weil man rechtliche Hinweise unten sucht.
+ */
+export function rechtsZeile() {
+    return `<nav class="rechtszeile" aria-label="Rechtliches">${
+        RECHTSTEXTE.map(([k, name]) =>
+            `<a href="${esc(VT.base)}/rechtliches.php?d=${k}">${esc(name)}</a>`).join('')
+    }</nav>`;
 }
 
 /** Was nach jedem Zeichnen zu tun ist, damit die Menüs leben. */

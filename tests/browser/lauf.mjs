@@ -32,7 +32,7 @@ import { pruefe as klasse }   from './klasse.mjs';
 import { pruefe as suche }    from './suche.mjs';
 import { pruefe as mobil }    from './mobil.mjs';
 import { pruefe as stapel }   from './stapel.mjs';
-import { pruefe as vorrat, pruefeKaltstart } from './vorrat.mjs';
+import { pruefe as vorrat, pruefeKaltstart, pruefeFreigabeKommtAn } from './vorrat.mjs';
 import { pruefe as menues }  from './menues.mjs';
 import { pruefe as sortieren } from './sortieren.mjs';
 import { pruefe as kursanlegen } from './kursanlegen.mjs';
@@ -72,6 +72,7 @@ try {
     await stapel(f, aus);
     await vorrat(f, aus);
     await pruefeKaltstart(f, aus);
+    await pruefeFreigabeKommtAn(f, aus);
     await menues(f, aus);
     await sortieren(f, aus);
     // Zuletzt: legt einen Kurs an, und die Navigation zaehlt vorher Karten.
