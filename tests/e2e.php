@@ -2448,7 +2448,8 @@ function freiGet(string $pfad): array
     return freiPost($base . '/teacher/' . $pfad, null);
 }
 
-function freiPost(string $url, ?array $post, array $header = []): array
+function freiPost(string $url, ?array $post, array $header = [],
+                 bool $mitKopf = false): array
 {
     global $freiJar;
     $ch = curl_init($url);
@@ -2458,6 +2459,7 @@ function freiPost(string $url, ?array $post, array $header = []): array
         CURLOPT_COOKIEFILE     => $freiJar,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_TIMEOUT        => 60,
+        CURLOPT_HEADER         => $mitKopf,
     ]);
     if ($header !== []) {
         curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
@@ -2466,10 +2468,17 @@ function freiPost(string $url, ?array $post, array $header = []): array
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post));
     }
-    $body   = (string) curl_exec($ch);
+    $roh    = (string) curl_exec($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $laenge = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
     curl_close($ch);
-    return ['status' => $status, 'body' => $body];
+
+    if (!$mitKopf) {
+        return ['status' => $status, 'body' => $roh, 'header' => ''];
+    }
+    return ['status' => $status,
+            'header' => substr($roh, 0, $laenge),
+            'body'   => substr($roh, $laenge)];
 }
 
 $seite = freiPost($base . '/teacher/', null);
@@ -2789,7 +2798,76 @@ ok('Und die Zeile kommt als JSON zurueck',
 ok('Die Vokabel steht danach wirklich drin',
    (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ? AND term_foreign = ?',
             [$freiUnit, 'zulu']) === 1);
-q('DELETE FROM vocab WHERE unit_id = ? AND term_foreign = ?', [$freiUnit, 'zulu']);
+
+/*
+ * Die Antwort traegt ihre Laenge.
+ *
+ * Ohne Content-Length weiss der Browser nicht, wo sie aufhoert - und weil
+ * der Vorgang danach noch weiterarbeitet (die Lueckensaetze), bleibt die
+ * Verbindung offen. Er wartet, meldet am Ende "keine Verbindung", und wer
+ * das sieht, drueckt noch einmal: Die Vokabel steht dann zweimal drin.
+ */
+$kopfAntwort = freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
+    'add_vocab' => '1', 'unit_id' => $freiUnit,
+    'new_f' => 'yankee', 'new_n' => 'de-yankee', 'csrf' => $freiCsrf,
+], ['X-Requested-With: fetch'], true);
+ok('Die JSON-Antwort nennt ihre Laenge',
+   preg_match('/^Content-Length:\s*(\d+)/mi', $kopfAntwort['header'], $lm) === 1
+   && (int) $lm[1] === strlen($kopfAntwort['body']),
+   'sonst wartet der Browser auf das Ende und meldet "keine Verbindung"');
+
+// ---- Und dasselbe Paar kommt kein zweites Mal hinein.
+
+/*
+ * Ein Doppelklick, eine verlorene Antwort, dieselbe Buchseite zweimal
+ * fotografiert - die Wege zu einem Duplikat sind viele, und keiner davon
+ * ist eine Absicht.
+ */
+$nochmal = freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
+    'add_vocab' => '1', 'unit_id' => $freiUnit,
+    'new_f' => 'zulu', 'new_n' => 'de-zulu', 'csrf' => $freiCsrf,
+], ['X-Requested-With: fetch']);
+$nochmalDaten = json_decode($nochmal['body'], true);
+ok('Dieselbe Vokabel kommt kein zweites Mal hinein',
+   (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ? AND term_foreign = ?',
+            [$freiUnit, 'zulu']) === 1);
+ok('Und die Antwort sagt, warum',
+   ($nochmalDaten['ok'] ?? true) === false
+   && ($nochmalDaten['doppelt'] ?? false) === true
+   && str_contains((string) ($nochmalDaten['error'] ?? ''), 'steht schon'),
+   $nochmal['body']);
+
+/*
+ * Das PAAR entscheidet, nicht das fremde Wort allein: "bank" heisst Bank
+ * und Ufer, und beide gehoeren in dieselbe Einheit.
+ */
+freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
+    'add_vocab' => '1', 'unit_id' => $freiUnit,
+    'new_f' => 'zulu', 'new_n' => 'de-zulu-zwei', 'csrf' => $freiCsrf,
+], ['X-Requested-With: fetch']);
+ok('Dasselbe Wort mit anderer Bedeutung darf zweimal vorkommen',
+   (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ? AND term_foreign = ?',
+            [$freiUnit, 'zulu']) === 2,
+   '"bank" heisst Bank und Ufer');
+
+// Und auf demselben Weg beim Einlesen: vocab_append ueberspringt es.
+$dopUnit = makeUnit($freiLehrerId ?? $lehrerId, (int) qv(
+    'SELECT language_id FROM units WHERE id = ?', [$freiUnit]), 'Doppelt-Unit');
+vocab_append($dopUnit, [['foreign' => 'alpha', 'native' => 'de-alpha']]);
+$zweiterLauf = vocab_append($dopUnit, [
+    ['foreign' => 'Alpha ', 'native' => 'de-alpha'],
+    ['foreign' => 'beta',   'native' => 'de-beta'],
+]);
+ok('Auch beim Einlesen kommt nichts doppelt hinein', $zweiterLauf === 1,
+   (string) $zweiterLauf);
+ok('Gross- und Kleinschreibung zaehlt dabei nicht',
+   (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$dopUnit]) === 2,
+   'wer "Apple" statt "apple" tippt, meint dasselbe Wort');
+ok('Und die Positionen bleiben lueckenlos', vocab_positions_dense($dopUnit));
+q('DELETE FROM units WHERE id = ?', [$dopUnit]);
+
+q('DELETE FROM vocab WHERE unit_id = ? AND term_foreign IN (?, ?)',
+  [$freiUnit, 'zulu', 'yankee']);
 ok('Das Skript haengt sie ein, ohne zu laden',
    str_contains($skriptB['body'], 'function initVocabAdd')
    && str_contains($skriptB['body'], "'X-Requested-With': 'fetch'"));
@@ -3660,10 +3738,17 @@ function teacherRequest(string $url, ?array $post): array
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post));
     }
-    $body   = (string) curl_exec($ch);
+    $roh    = (string) curl_exec($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $laenge = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
     curl_close($ch);
-    return ['status' => $status, 'body' => $body];
+
+    if (!$mitKopf) {
+        return ['status' => $status, 'body' => $roh, 'header' => ''];
+    }
+    return ['status' => $status,
+            'header' => substr($roh, 0, $laenge),
+            'body'   => substr($roh, $laenge)];
 }
 
 function teacherLogin(string $user, string $pass): array

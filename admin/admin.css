@@ -84,7 +84,7 @@ body.admin { background: var(--bg); }
     inset: 0;
     z-index: 40;
     background: rgba(12, 16, 28, .38);
-    animation: schleierAuf .18s ease-out;
+    animation: schleierAuf .26s ease-out;
 }
 
 .menue > .schublade {
@@ -99,14 +99,14 @@ body.admin { background: var(--bg); }
     background: var(--surface);
     border-right: 1px solid var(--border);
     box-shadow: 0 0 40px rgba(0, 0, 0, .16);
-    animation: schubladeLinks .18s ease-out;
+    animation: schubladeLinks .26s cubic-bezier(.2, .8, .25, 1);
 }
 .menue.rechts > .schublade {
     left: auto;
     right: 0;
     border-right: 0;
     border-left: 1px solid var(--border);
-    animation: schubladeRechts .18s ease-out;
+    animation: schubladeRechts .26s cubic-bezier(.2, .8, .25, 1);
 }
 
 /*
@@ -1272,6 +1272,13 @@ a.erweiternkarte, button.erweiternkarte {
 .suchfeld .vorschlaege li.leertreffer:hover { background: none; }
 /* Die Klasse steht dabei, aber der Name ist die Sache. */
 .suchfeld .vorschlaege .zusatz { color: var(--text-soft); }
+
+/* Die Zeile, die sagt, warum nichts dazugekommen ist. */
+table.release tr.handfehler td {
+    color: var(--bad);
+    background: var(--bad-bg);
+    font-size: .9rem;
+}
 
 /* Anlegen ohne Tabelle darum: ein Feld, ein Knopf, eine Zeile. */
 .anlegezeile {

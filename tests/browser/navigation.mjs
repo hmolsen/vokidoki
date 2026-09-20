@@ -172,12 +172,37 @@ export async function pruefe(f, aus) {
 
         // Aufklappen und wechseln - ohne Skript, nur <details>.
         await b.geh(f.basis + '/teacher/course.php?id=' + f.kurs, 1300);
-        await b.js(`document.querySelector('#menuLinks > summary').click()`);
+        /*
+         * Aufklappen UND messen im selben Augenblick.
+         *
+         * Die Animation dauert gut eine Viertelsekunde; wer danach
+         * nachsieht, findet nichts mehr und haelt das fuer "keine
+         * Animation". Genau das ist mir passiert.
+         */
+        const fliegt = await b.js(`(() => {
+            const d = document.getElementById('menuLinks');
+            d.querySelector('summary').click();
+            const el = d.querySelector('.schublade');
+            const an = el.getAnimations();
+            return {
+                name:   an[0]?.animationName ?? '',
+                laeuft: an[0]?.playState ?? '',
+                weg:    getComputedStyle(el).transform,
+            };
+        })()`);
+        ok('Die Leiste fliegt herein, statt dazustehen',
+           fliegt.name === 'schubladeLinks', fliegt.name || '(keine Animation)');
+        ok('Und die Animation läuft auch wirklich', fliegt.laeuft === 'running',
+           fliegt.laeuft);
+        ok('Im ersten Augenblick steht sie noch draussen',
+           fliegt.weg !== 'none' && fliegt.weg.includes('-'), fliegt.weg);
+
         await schlafe(400);
 
         const auf = await b.js(`(() => {
             const d = document.getElementById('menuLinks');
-            const s = d.querySelector('.schublade').getBoundingClientRect();
+            const el = d.querySelector('.schublade');
+            const s = el.getBoundingClientRect();
             return {
                 offen:    d.open,
                 links:    Math.round(s.left),
@@ -187,7 +212,7 @@ export async function pruefe(f, aus) {
             };
         })()`);
         ok('Ein Druck klappt es auf', auf.offen);
-        ok('Die Leiste schiebt sich von links herein', auf.links === 0 && auf.breite > 200,
+        ok('Und danach liegt sie am linken Rand', auf.links === 0 && auf.breite > 200,
            auf.links + ' / ' + auf.breite);
         ok('Und legt einen Schleier über die Seite', auf.schleier);
         ok('Der aktuelle Kurs ist darin markiert',
@@ -206,7 +231,14 @@ export async function pruefe(f, aus) {
 
         // ---- Rechts das eigene Konto.
 
-        await b.js(`document.querySelector('#menuRechts > summary').click()`);
+        const fliegtRechts = await b.js(`(() => {
+            const d = document.getElementById('menuRechts');
+            d.querySelector('summary').click();
+            return d.querySelector('.schublade').getAnimations()[0]?.animationName ?? '';
+        })()`);
+        ok('Rechts fliegt sie von rechts herein', fliegtRechts === 'schubladeRechts',
+           fliegtRechts || '(keine Animation)');
+
         await schlafe(400);
         const rechts = await b.js(`(() => {
             const d = document.getElementById('menuRechts');
@@ -221,7 +253,7 @@ export async function pruefe(f, aus) {
         ok('Rechts öffnet das eigene Konto', rechts.offen);
         ok('Und das linke Menü schliesst sich dabei', rechts.links,
            'zwei offene Schubladen wären zwei Navigationen');
-        ok('Die Leiste kommt von rechts', rechts.rand === 0, String(rechts.rand));
+        ok('Die Leiste liegt am rechten Rand', rechts.rand === 0, String(rechts.rand));
         ok('Darin stehen Profil, Passwort und Abmelden',
            rechts.ziele.some((z) => z.includes('Profil'))
            && rechts.ziele.some((z) => z.includes('Passwort'))

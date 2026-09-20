@@ -785,6 +785,13 @@ function initVocabAdd() {
     const fremd = zeile.querySelector('input[name="new_f"]');
     const deutsch = zeile.querySelector('input[name="new_n"]');
     const knopf = zeile.querySelector('[name="add_vocab"]');
+    const fehler = document.getElementById('handfehler');
+
+    const sagen = (text) => {
+        if (!fehler) return;
+        fehler.querySelector('td').textContent = text;
+        fehler.hidden = text === '';
+    };
 
     /*
      * Der Knopf unter der Tabelle ist ein Link auf ?vonhand=1 - ohne
@@ -810,6 +817,7 @@ function initVocabAdd() {
         daten.set('new_n', deutsch.value);
 
         knopf.disabled = true;
+        sagen('');
         try {
             const res = await fetch(form.action, {
                 method: 'POST',
@@ -819,7 +827,9 @@ function initVocabAdd() {
             });
             const json = await res.json();
             if (!json.ok) {
-                alert(json.error || 'Das hat nicht geklappt.');
+                sagen(json.error || 'Das hat nicht geklappt.');
+                fremd.select();
+                fremd.focus();
                 return;
             }
             einhaengen(json.vokabel);
@@ -827,7 +837,16 @@ function initVocabAdd() {
             deutsch.value = '';
             fremd.focus();
         } catch {
-            alert('Keine Verbindung. Die Vokabel ist nicht angekommen.');
+            /*
+             * Was hier ankommt, sagt nichts darueber, ob die Vokabel
+             * gespeichert wurde - die Anfrage kann durchgegangen und nur
+             * die Antwort verlorengegangen sein. Die Meldung behauptet
+             * deshalb nicht mehr, als man weiss; frueher stand hier "Die
+             * Vokabel ist nicht angekommen", und wer daraufhin noch einmal
+             * drueckte, hatte sie zweimal.
+             */
+            sagen('Die Antwort kam nicht an. Ob die Vokabel gespeichert wurde, '
+                  + 'zeigt ein Neuladen der Seite.');
         } finally {
             knopf.disabled = false;
         }
@@ -837,17 +856,59 @@ function initVocabAdd() {
      * Die neue Zeile vor die Anlegezeile - eine frisch angelegte Vokabel
      * steht hinten, und hinten ist hier direkt über dem Feld, in das man
      * gerade getippt hat.
+     *
+     * Sie sieht aus wie jede andere, mit Stift und Mülleimer: Eine Zeile
+     * ohne Knöpfe sieht aus wie eine halb angelegte. Die Hörer dafür
+     * hängen an der Tabelle und am Dokument, nicht an den Zeilen - sie
+     * greifen also auch hier, ohne dass etwas nachgemeldet werden muss.
      */
     const einhaengen = (v) => {
+        const id = Number(v.id);
+
         const tr = document.createElement('tr');
         tr.className = 'locked frisch';
         tr.dataset.pos = String(
             document.querySelectorAll('#freigabe tr[data-pos]').length + 1);
         tr.innerHTML = `
-            <td><strong>${escapeHtml(v.term_foreign)}</strong></td>
-            <td><span>${escapeHtml(v.term_native)}</span></td>
-            <td class="actions"></td>`;
+            <td>
+                <strong data-wort>${escapeHtml(v.term_foreign)}</strong>
+                <input type="text" name="edit_f" value="${escapeHtml(v.term_foreign)}"
+                       form="vokabel${id}" maxlength="255" hidden>
+            </td>
+            <td>
+                <span data-wort>${escapeHtml(v.term_native)}</span>
+                <input type="text" name="edit_n" value="${escapeHtml(v.term_native)}"
+                       form="vokabel${id}" maxlength="255" hidden>
+            </td>
+            <td class="actions">
+                <button class="iconaction quiet nurbild" data-edit="${id}"
+                        type="button" title="Diese Vokabel ändern">
+                    <span aria-hidden="true">&#9999;&#65039;</span><span
+                        class="nurvorlesen">Ändern</span>
+                </button>
+                <button class="iconaction primary nurbild" form="vokabel${id}"
+                        name="save_vocab" value="${id}" data-save="${id}"
+                        title="Änderung speichern" hidden>
+                    <span aria-hidden="true">&#10003;</span><span
+                        class="nurvorlesen">Sichern</span>
+                </button>
+                <button class="iconaction danger nurbild" form="vokabel${id}"
+                        name="delete_vocab" value="${id}"
+                        title="Diese Vokabel löschen"
+                        data-confirm="„${escapeHtml(v.term_foreign)}“ löschen? Die Lückensätze dazu und der Lernstand aller Kinder daran verschwinden mit.">
+                    <span aria-hidden="true">&#128465;&#65039;</span><span
+                        class="nurvorlesen">Löschen</span>
+                </button>
+            </td>`;
         zeile.parentNode.insertBefore(tr, zeile);
+
+        // Je Vokabel ein eigenes Formular - genau wie es die Seite selbst
+        // baut; die Felder oben gehören über form= dazu.
+        const eigen = document.createElement('form');
+        eigen.method = 'post';
+        eigen.id = `vokabel${id}`;
+        eigen.innerHTML = form.innerHTML;
+        form.parentNode.insertBefore(eigen, form);
     };
 
     knopf.addEventListener('click', (e) => { e.preventDefault(); anlegen(); });

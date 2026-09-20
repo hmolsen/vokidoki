@@ -231,12 +231,29 @@ function unit_will_json(): bool
     return ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'fetch';
 }
 
+/**
+ * Eine JSON-Antwort - mit Laenge.
+ *
+ * Content-Length ist hier nicht Beiwerk, sondern der Unterschied zwischen
+ * "angekommen" und "haengt": Wenn der Vorgang nach dem Abschicken noch
+ * weiterarbeitet (die Lueckensaetze), bleibt die Verbindung offen. Ohne
+ * Laengenangabe weiss der Browser nicht, wo die Antwort aufhoert - er
+ * wartet auf das Schliessen der Verbindung und meldet am Ende "keine
+ * Verbindung", obwohl die Vokabel laengst in der Datenbank steht. Wer das
+ * sieht, drueckt noch einmal, und dann steht sie zweimal drin.
+ *
+ * teacher_redirect_and_continue() setzt aus demselben Grund
+ * Content-Length: 0.
+ */
 function unit_json(array $daten, int $status = 200): never
 {
+    $koerper = (string) json_encode($daten, JSON_UNESCAPED_UNICODE);
+
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
-    echo json_encode($daten, JSON_UNESCAPED_UNICODE);
+    header('Content-Length: ' . strlen($koerper));
+    echo $koerper;
     exit;
 }
 
@@ -255,13 +272,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_vocab']))
         teacher_redirect($zurueck);
     }
 
+    /*
+     * vocab_append() ueberspringt, was schon drinsteht. Null heisst hier
+     * also nicht "ging schief", sondern "gibt es schon" - und genau das
+     * soll dastehen: Wer zweimal drueckt, soll die Vokabel einmal haben
+     * und wissen, warum nichts dazugekommen ist.
+     */
     $dazu = vocab_append($unitId, [['foreign' => $f, 'native' => $n]],
                          $unit['code'] ?? null);
     if ($dazu === 0) {
+        $meldung = sprintf('„%s – %s" steht schon in dieser Lerneinheit.', $f, $n);
         if (unit_will_json()) {
-            unit_json(['ok' => false, 'error' => 'Die Vokabel liess sich nicht anlegen.'], 500);
+            unit_json(['ok' => false, 'error' => $meldung, 'doppelt' => true], 409);
         }
-        teacher_flash('Die Vokabel liess sich nicht anlegen.', 'bad');
+        teacher_flash($meldung, 'bad');
         teacher_redirect($zurueck);
     }
 
@@ -285,14 +309,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_vocab']))
         if (!$saetze) {
             unit_json(['ok' => true, 'vokabel' => $neueVokabel]);
         }
+
         /*
          * Antworten, dann weiterarbeiten: Die Zeile steht beim Tippenden
-         * schon, waehrend der Satz noch entsteht.
+         * schon, waehrend der Satz dazu noch entsteht.
          */
+        $koerper = (string) json_encode(['ok' => true, 'vokabel' => $neueVokabel],
+                                        JSON_UNESCAPED_UNICODE);
         http_response_code(200);
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
-        echo json_encode(['ok' => true, 'vokabel' => $neueVokabel], JSON_UNESCAPED_UNICODE);
+        header('Content-Length: ' . strlen($koerper));
+        echo $koerper;
+
         teacher_flush_and_continue();
         set_time_limit(900);
         generate_sentences_tracked($unitId);
@@ -647,6 +676,17 @@ $fehlen = vocab_without_sentences($unitId);
                 <span aria-hidden="true">+</span><span class="nurvorlesen">Hinzufügen</span>
             </button>
         </td>
+    </tr>
+    <?php
+    /*
+     * Und eine Zeile fuer den Fall, dass etwas nicht klappt - eine Vokabel,
+     * die schon drinsteht, oder eine Antwort, die nicht ankam. Ein alert()
+     * waere hier falsch: Es hielte den Zug an, um etwas zu sagen, das
+     * danebenpasst.
+     */
+    ?>
+    <tr class="newrow handfehler" id="handfehler" hidden>
+        <td colspan="3"></td>
     </tr>
     </tbody>
 </table>

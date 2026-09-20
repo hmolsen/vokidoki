@@ -192,6 +192,10 @@ export async function pruefe(f, aus) {
             letzte:  [...document.querySelectorAll('#freigabe tr[data-pos] td:first-child')]
                        .pop()?.textContent?.trim() ?? '',
             frisch:  document.querySelectorAll('#freigabe tr.frisch').length,
+            knoepfe: document.querySelectorAll('#freigabe tr.frisch .iconaction').length,
+            eigenes: !!document.querySelector('#freigabe tr.frisch [data-edit]')
+                && !!document.getElementById('vokabel' + (document.querySelector(
+                       '#freigabe tr.frisch [data-edit]')?.dataset.edit ?? 'x')),
             geladen: window.__marke !== 'steht',
             leer:    document.querySelector('#handzeile input[name="new_f"]').value === '',
             fokus:   document.activeElement?.name ?? '',
@@ -204,9 +208,37 @@ export async function pruefe(f, aus) {
            'zehn Wörter wären sonst zehn Ladevorgänge');
         ok('Die neue Zeile ist als frisch markiert', nachher.frisch === 1,
            String(nachher.frisch));
+        ok('Und sieht aus wie jede andere: Stift, Haken, Mülleimer',
+           nachher.knoepfe === 3, String(nachher.knoepfe));
+        ok('Mit eigenem Formular dahinter', nachher.eigenes,
+           'sonst holt „Ändern" nur eine Absage');
         ok('Die Felder sind wieder leer', nachher.leer);
         ok('Und der Finger steht schon im ersten', nachher.fokus === 'new_f',
            nachher.fokus);
+
+        /*
+         * Und dasselbe Wort ein zweites Mal: Es kommt nicht dazu, und die
+         * Seite sagt warum - in einer Zeile unter der Tabelle, nicht in
+         * einem alert(), das den Zug anhielte.
+         */
+        await b.js(`(() => {
+            const f = document.querySelector('#handzeile input[name="new_f"]');
+            const n = document.querySelector('#handzeile input[name="new_n"]');
+            f.value = 'zebra';
+            n.value = 'Zebra';
+            n.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        })()`);
+        await schlafe(1600);
+
+        const doppelt = await b.js(`({
+            zeilen:  document.querySelectorAll('#freigabe tr[data-pos]').length,
+            meldung: document.getElementById('handfehler')?.hidden === false
+                       ? document.getElementById('handfehler').textContent.trim() : '',
+        })`);
+        ok('Dieselbe Vokabel kommt kein zweites Mal dazu',
+           doppelt.zeilen === vorher + 1, doppelt.zeilen + ' statt ' + (vorher + 1));
+        ok('Und die Zeile darunter sagt, warum',
+           doppelt.meldung.includes('steht schon'), doppelt.meldung || '(nichts)');
     } finally {
         b.schliessen();
     }

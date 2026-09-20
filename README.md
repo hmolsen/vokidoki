@@ -324,7 +324,9 @@ funktioniert es genauso — nur ohne das Hereinschieben und ohne den Schleier,
 der sich wegklicken lässt. Das Hereinschieben ist eine **Animation** und
 kein Übergang: `<details>` blendet seinen Inhalt beim Schliessen aus, und
 ein `transition` läuft auf einem Element, das gerade erst entsteht, gar
-nicht an.
+nicht an. Geprüft wird sie im **selben Augenblick** wie der Klick — sie
+dauert gut eine Viertelsekunde, und wer danach nachsieht, findet nichts
+mehr und hält das für „keine Animation".
 
 `teacher.js` legt drei Dinge dazu, die der Browser nicht wissen kann: dass
 die beiden Schubladen einander ausschliessen, dass ein Druck auf den
@@ -518,9 +520,27 @@ Ladevorgänge und zehnmal die Tabelle von oben. Die frische Zeile kommt vom
 Server und nicht aus dem Skript: `vocab_append()` setzt `punctuation_fix()`
 darauf an, es steht also nicht zwingend das in der Datenbank, was getippt
 wurde. Sie taucht grün auf und verblasst — eine Bestätigung, die man nicht
-wegklicken muss. Dasselbe Muster wie beim Eintragen einer Klassenliste:
-`X-Requested-With: fetch`, und die Antwort ist eine Zeile statt einer
-Seite.
+wegklicken muss — und trägt Stift, Haken und Mülleimer wie jede andere.
+Dasselbe Muster wie beim Eintragen einer Klassenliste: `X-Requested-With:
+fetch`, und die Antwort ist eine Zeile statt einer Seite.
+
+**Die Antwort trägt ihre Länge**, und das ist hier kein Beiwerk. Nach dem
+Abschicken arbeitet der Vorgang weiter (die Lückensätze), die Verbindung
+bleibt also offen. Ohne `Content-Length` weiß der Browser nicht, wo die
+Antwort aufhört: Er wartet auf das Schließen der Verbindung und meldet am
+Ende „keine Verbindung", obwohl die Vokabel längst in der Datenbank steht.
+Wer das sieht, drückt noch einmal — und hat sie zweimal.
+`teacher_redirect_and_continue()` setzt aus demselben Grund
+`Content-Length: 0`.
+
+**Und dasselbe Paar kommt kein zweites Mal hinein.** `vocab_append()`
+überspringt, was schon in der Einheit steht — ein Doppelklick, eine
+verlorene Antwort, dieselbe Buchseite zweimal fotografiert; die Wege zu
+einem Duplikat sind viele, und keiner davon ist eine Absicht. Verglichen
+wird das **Paar**, nicht das fremde Wort allein: „bank" heißt Bank und
+Ufer, und beide gehören in dieselbe Einheit. Und verglichen wird, was
+wirklich gespeichert würde — also nach `punctuation_fix()`, sonst
+schlüpft „apple." an „apple" vorbei.
 
 **Im Kopf steht die Sprache, nicht das Wort „Fremdsprache".** `🇬🇧 Englisch`
 und `🇩🇪 Deutsch`, beide mit ihrer Fahne als SVG: Die Spalte sagt damit, was
@@ -832,7 +852,7 @@ Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
 ```
 
-1021 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
+1028 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
 Account-Anlage, Vokabelkorrektur, Kind-Login, Geräte-Token, Manifest und Icon,
 Zugriffstrennung zwischen den Accounts, die komplette Quiz-Logik samt „dreimal
 hintereinander", Zurücksetzen und Token-Widerruf — dazu der Lehrkraft-Bereich
@@ -894,7 +914,7 @@ die HTTP-Schnittstelle mit. Zeigt `anthropic_base_url` nicht auf localhost, wird
 dieser Abschnitt übersprungen — kein Test kann versehentlich die echte,
 kostenpflichtige API treffen.
 
-Zusammen 1231 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
+Zusammen 1238 Prüfungen, und **keine** ruft die echte Anthropic-API auf.
 Trotzdem gilt: Die Erkennungsqualität selbst zeigt sich erst an einem echten
 Foto einer echten Buchseite — das einmal von Hand ausprobieren.
 
@@ -912,7 +932,7 @@ Quelltext völlig richtig aussahen:
 - Der Zettel für die ganze Klasse wurde erst beim nächsten Laden anklickbar.
 
 ```bash
-node tests/browser/lauf.mjs --fixture            # 227 Prüfungen
+node tests/browser/lauf.mjs --fixture            # 235 Prüfungen
 node tests/browser/lauf.mjs --fixture bilder/    # dazu Bildschirmfotos
 ```
 
