@@ -51,7 +51,8 @@ switch (action()) {
          * einer Klasse hat die Lehrkraft angelegt und die Kinder lernen.
          */
         $sprachen = qa(
-            'SELECT l.id, l.name, l.flag_emoji, l.code, co.name AS course_name
+            'SELECT l.id, l.name, l.flag_emoji, l.code,
+                    co.id AS course_id, co.name AS course_name
                FROM languages l
                JOIN courses co       ON co.language_id = l.id
                JOIN course_members m ON m.course_id = co.id
@@ -78,6 +79,13 @@ switch (action()) {
             }
             unset($r['course_name']);
             $r['id'] = (int) $r['id'];
+            /*
+             * Die Kennung des Kurses - nur fuer eine Lehrkraft. Sie braucht
+             * sie fuer den Weg zurueck: Der Hinweis "So sieht deine Klasse
+             * das" traegt einen Knopf in die Verwaltung, und der soll auf
+             * genau diesen Kurs zeigen. Einem Kind sagt die Zahl nichts.
+             */
+            $r['course_id'] = user_is_teacher($user) ? (int) $r['course_id'] : null;
             $sprachIds[] = $r['id'];
         }
         unset($r);
@@ -94,7 +102,8 @@ switch (action()) {
          * zu sehen ist Sache des Lehrkraft-Bereichs.
          */
         $einheiten = qa(
-            "SELECT u.id, u.language_id, u.title, u.released_position
+            "SELECT u.id, u.language_id, u.title, u.released_position,
+                    u.sentences_status
                FROM units u
                JOIN courses co ON co.id = u.course_id
                JOIN course_members m ON m.course_id = co.id AND m.user_id = ?
@@ -185,6 +194,10 @@ switch (action()) {
                 'i' => (int) $u['id'],
                 'l' => (int) $u['language_id'],
                 't' => (string) $u['title'],
+                // Ob die Lueckensaetze gerade entstehen. Ohne das saehe ein
+                // Kind kurz nach dem Einlesen "keine Saetze" statt "wird
+                // gerade gemacht" - und suchte den Fehler bei sich.
+                'z' => (string) ($u['sentences_status'] ?? ''),
             ], $einheiten),
             'vokabeln'  => $vokabeln,
             'saetze'    => $saetze,
@@ -226,6 +239,25 @@ switch (action()) {
             $erlaubt[(int) $v['id']] = true;
         }
 
+        /*
+         * Und die Einheiten, die dieses Konto zuruecksetzen darf - dieselbe
+         * Frage wie bei den Vokabeln, nur eine Ebene hoeher. "Noch einmal
+         * ueben" gehoert in denselben Strom wie die Antworten: Wer es ohne
+         * Netz drueckt und danach weiteruebt, haette sonst einen Stapel
+         * Antworten auf einen Stand, den der Server noch gar nicht geloescht
+         * hat - und die Reihenfolge waere dahin.
+         */
+        $erlaubteEinheiten = [];
+        foreach (qa(
+            'SELECT u.id
+               FROM units u
+               JOIN courses co ON co.id = u.course_id
+               JOIN course_members m ON m.course_id = co.id AND m.user_id = ?',
+            [$uid],
+        ) as $u) {
+            $erlaubteEinheiten[(int) $u['id']] = true;
+        }
+
         $genommen = 0;
         $doppelt  = 0;
         $fremd    = 0;
@@ -235,12 +267,34 @@ switch (action()) {
                 continue;
             }
             $kennung = trim((string) ($e['e'] ?? ''));
+            $art     = (string) ($e['k'] ?? 'antwort');
             $vocabId = (int) ($e['v'] ?? 0);
             $modus   = (string) ($e['m'] ?? '');
             $richtig = !empty($e['r']);
 
-            if ($kennung === '' || mb_strlen($kennung) > 36
-                || !in_array($modus, [MODE_CHOICE, MODE_CLOZE], true)) {
+            if ($kennung === '' || mb_strlen($kennung) > 36) {
+                continue;
+            }
+
+            if ($art === 'reset') {
+                $unitId = (int) ($e['u'] ?? 0);
+                if ($modus !== '' && !in_array($modus, [MODE_CHOICE, MODE_CLOZE], true)) {
+                    continue;
+                }
+                if (!isset($erlaubteEinheiten[$unitId])) {
+                    $fremd++;
+                    continue;
+                }
+                if (!bundle_quittung($uid, $kennung)) {
+                    $doppelt++;
+                    continue;
+                }
+                reset_unit_progress($unitId, $uid, $modus === '' ? null : $modus);
+                $genommen++;
+                continue;
+            }
+
+            if (!in_array($modus, [MODE_CHOICE, MODE_CLOZE], true)) {
                 continue;
             }
             if (!isset($erlaubt[$vocabId])) {
@@ -254,11 +308,7 @@ switch (action()) {
              * verloren, nicht die Anfrage, und noch einmal zu zählen wäre
              * schlimmer, als gar nicht zu zählen.
              */
-            $quittung = q(
-                'INSERT IGNORE INTO answer_receipts (user_id, event_id) VALUES (?, ?)',
-                [$uid, $kennung],
-            );
-            if ($quittung->rowCount() === 0) {
+            if (!bundle_quittung($uid, $kennung)) {
                 $doppelt++;
                 continue;
             }
@@ -306,6 +356,19 @@ switch (action()) {
 
     default:
         json_fail('Unbekannte Aktion.', 404);
+}
+
+/**
+ * Die Quittung für ein Ereignis - true, wenn es neu ist.
+ *
+ * INSERT IGNORE statt einer Abfrage davor: Zwei Stapel, die gleichzeitig
+ * ankommen, kämen sonst beide durch. Der eindeutige Schlüssel entscheidet,
+ * und rowCount() sagt, wer gewonnen hat.
+ */
+function bundle_quittung(int $uid, string $kennung): bool
+{
+    return q('INSERT IGNORE INTO answer_receipts (user_id, event_id) VALUES (?, ?)',
+             [$uid, $kennung])->rowCount() === 1;
 }
 
 /** Ein Konto ohne Kurs bekommt ein leeres Bündel, keinen Fehler. */

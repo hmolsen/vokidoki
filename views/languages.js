@@ -2,6 +2,9 @@ import {
     VT, api, render, esc, $, $$, on, go, topbar, loading, showError, clearError, withBusy,
     hardRefresh, flagHtml,
 } from '../core.js';
+import {
+    sprachen, einheitenDerSprache, vokabelnDerEinheit, vorratVergessen,
+} from '../vorrat.js';
 
 /* Die Sprachen, die hier gebraucht werden. Alles andere lässt sich
    im Formular darunter frei eintragen. */
@@ -13,17 +16,25 @@ const PRESETS = [
 ];
 
 export async function languagesView() {
-    render(topbar(VT.user.appName, { action: cornerButton() }) + loading('Sprachen werden geladen...'));
+    /*
+     * Die Kacheln kommen aus dem Vorrat, nicht vom Server.
+     *
+     * Kein Ladepunkt mehr: Wer die App oeffnet, sieht seine Kurse sofort -
+     * auch im Zug. Der Vorrat wird beim Start im Hintergrund aufgefrischt;
+     * kommt dabei etwas Neues, zeichnet app.js diese Ansicht noch einmal.
+     */
+    const languages = sprachen();
 
-    const { languages } = await api('languages', 'list');
-
-    const tiles = languages.map((lang) => `
+    const tiles = languages.map((lang) => {
+        const woerter = einheitenDerSprache(lang.id)
+            .reduce((summe, u) => summe + vokabelnDerEinheit(u.i).length, 0);
+        return `
         <button class="tile" data-lang="${lang.id}">
             ${flagHtml(lang.flag_emoji || '\u{1F310}')}
             <span class="name">${esc(lang.name)}</span>
-            <span class="meta">${lang.vocab_count} Vokabeln</span>
-        </button>
-    `).join('');
+            <span class="meta">${woerter} Vokabeln</span>
+        </button>`;
+    }).join('');
 
     render(`
         ${topbar(VT.user.appName, { action: cornerButton() })}
@@ -92,6 +103,12 @@ function wireCornerButton() {
         if (!confirm('Abmelden? Dein Homescreen-Symbol bleibt bestehen.')) return;
         try {
             await api('auth', 'logout', { body: {} });
+            /*
+             * Und der Vorrat geht mit. Er gehoert diesem Kind: Auf einem
+             * geteilten Tablet haette das naechste sonst die Vokabeln des
+             * vorigen im Geraet liegen.
+             */
+            vorratVergessen();
         } catch { /* auch bei Fehler zum Login */ }
         window.location.href = `${VT.base}/`;
     });

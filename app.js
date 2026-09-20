@@ -11,6 +11,7 @@ import { unitView } from './views/unit.js';
 import { quizView } from './views/quiz.js';
 import { clozeView } from './views/cloze.js';
 import { profileView } from './views/profile.js';
+import { vorratAuffrischen, vorratLaden, vorratAlter } from './vorrat.js';
 
 const ROUTES = [
     [/^\/login$/,                 loginView,     { anonymous: true }],
@@ -121,7 +122,54 @@ window.addEventListener('hashchange', route);
 if (!VT.user && currentPath() !== '/login') {
     go('/login', true);
 }
+
+/**
+ * Der Vorrat, und zwar bevor die erste Ansicht ihn braucht.
+ *
+ * Ist schon einer da, wird sofort gezeichnet und im Hintergrund auf den
+ * neuesten Stand gebracht - so sieht ein Kind seine Kacheln ohne Warten,
+ * auch ohne Netz. Ist noch keiner da (erste Anmeldung, neues Geraet), muss
+ * einmal gewartet werden; danach nie wieder.
+ *
+ * VORRAT_FRISCH: So lange gilt ein Vorrat als frisch genug, um nicht
+ * gleich wieder zu fragen. Gibt die Lehrkraft mittendrin etwas frei, kommt
+ * es beim naechsten Start an - oder wenn die App aus dem Hintergrund
+ * zurueckkehrt, siehe unten.
+ */
+const VORRAT_FRISCH = 5 * 60;
+
+async function vorratBereit() {
+    if (!VT.user) return;
+
+    if (vorratLaden() === null) {
+        await vorratAuffrischen();
+        return;
+    }
+    if (vorratAlter() > VORRAT_FRISCH) {
+        // Nicht abwarten: Was da ist, reicht zum Zeichnen.
+        vorratAuffrischen().then((frisch) => {
+            // Kam etwas Neues, die aktuelle Ansicht noch einmal aufbauen -
+            // sonst stuende die frisch freigegebene Lerneinheit erst beim
+            // naechsten Antippen da.
+            if (frisch) route();
+        });
+    }
+}
+
+await vorratBereit();
 route();
+
+/*
+ * Und wenn die App aus dem Hintergrund zurueckkommt: Die installierte App
+ * wird selten wirklich beendet, sie liegt wochenlang da. Ohne das saehe ein
+ * Kind eine Freigabe von heute morgen erst naechste Woche.
+ */
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !VT.user) return;
+    if (vorratAlter() > VORRAT_FRISCH) {
+        vorratAuffrischen().then((frisch) => { if (frisch) route(); });
+    }
+});
 
 // Service Worker nur unter HTTPS bzw. localhost registrieren.
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {

@@ -1,5 +1,6 @@
-import { VT, api, render, esc, on, go, topbar, loading, wireBack, progressBar, flagHtml,
-         pupilHint } from '../core.js';
+import { VT, render, esc, on, go, topbar, wireBack, progressBar, flagHtml,
+         showError, pupilHint } from '../core.js';
+import { sprache, einheitenDerSprache, einheitStatistik } from '../vorrat.js';
 
 /**
  * Startseite einer Sprache: einlesen und üben auf einer Ebene.
@@ -29,9 +30,27 @@ function selbstEinlesen() {
 }
 
 export async function languageView(languageId) {
-    render(loading());
+    /*
+     * Aus dem Vorrat statt vom Server. Kein Ladepunkt, kein Warten - und
+     * das Ganze funktioniert auch im Zug.
+     */
+    const roh = sprache(languageId);
+    if (roh === null) {
+        render(`${topbar('Kurs', { backTo: '/' })}<div id="msg"></div>`);
+        wireBack();
+        showError('Diesen Kurs gibt es nicht - oder er ist noch nicht geladen.');
+        return;
+    }
 
-    const { language, units } = await api('units', 'list', { query: { language_id: languageId } });
+    /*
+     * Der Kursname steht nur da, wenn er etwas unterscheidet - dieselbe
+     * Regel wie auf der Kachel, und api/bundle.php hat sie schon angewandt.
+     */
+    const language = {
+        id: roh.id, name: roh.name, label: roh.name,
+        flag: roh.flag_emoji, courseId: roh.course_id ?? null,
+    };
+    const units = einheitenDerSprache(languageId).map((u) => einheitStatistik(u.i));
 
     /*
      * Gesamtfortschritt über beide Übungsarten.

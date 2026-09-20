@@ -2,6 +2,9 @@ import {
     VT, api, render, esc, $, go, topbar, loading, wireBack, progressBar,
     showError, clearError, pupilHint,
 } from '../core.js';
+import {
+    einheit, vokabelListe, modusStand, zuruecksetzen, vorratAuffrischen,
+} from '../vorrat.js';
 
 /** Die Übungsarten - Reihenfolge und Symbole gelten für die ganze Ansicht. */
 const EXERCISES = [
@@ -30,9 +33,19 @@ function selbstVerwalten() {
 
 /** Detailansicht einer Lerneinheit: Fortschritt, Wortliste, Aktionen. */
 export async function unitView(unitId) {
-    render(loading());
+    // Aus dem Vorrat: kein Ladepunkt, kein Warten, und es geht ohne Netz.
+    const roh = einheit(unitId);
+    if (roh === null) {
+        render(`${topbar('Lerneinheit', { backTo: '/' })}<div id="msg"></div>`);
+        wireBack();
+        showError('Diese Lerneinheit ist noch nicht geladen. '
+                  + 'Einmal mit Netz öffnen, dann geht es auch ohne.');
+        return;
+    }
 
-    const { unit, vocab, modes } = await api('units', 'get', { query: { id: unitId } });
+    const unit  = { id: roh.i, title: roh.t, language_id: roh.l };
+    const vocab = vokabelListe(unitId);
+    const modes = modusStand(unitId);
 
     // Beide Übungsarten zusammen - eine Vokabel ist erst durch, wenn sie in
     // jeder Form sitzt, in der sie überhaupt geübt werden kann.
@@ -116,20 +129,20 @@ export async function unitView(unitId) {
         clearError();
         try {
             await api('units', 'rename', { body: { id: unit.id, title: title.trim() } });
+            // Umbenennen aendert, was im Vorrat steht - also einmal nachholen,
+            // sonst stuende der alte Titel bis zum naechsten Start da.
+            await vorratAuffrischen();
             go(`/unit/${unit.id}`);
         } catch (err) {
             showError(err.message);
         }
     });
 
-    $('#reset').addEventListener('click', async () => {
+    $('#reset').addEventListener('click', () => {
         if (!confirm('Allen Lernfortschritt dieser Einheit zurücksetzen?')) return;
-        try {
-            await api('units', 'reset', { body: { id: unit.id } });
-            go(`/unit/${unit.id}`);
-        } catch (err) {
-            showError(err.message);
-        }
+        // Beide Uebungsarten, und auch ohne Netz.
+        zuruecksetzen(unit.id);
+        go(`/unit/${unit.id}`);
     });
 
     const del = $('#delete');
@@ -137,6 +150,7 @@ export async function unitView(unitId) {
         if (!confirm(`"${unit.title}" mit allen Vokabeln endgültig löschen?`)) return;
         try {
             await api('units', 'delete', { body: { id: unit.id } });
+            await vorratAuffrischen();
             go(`/lang/${unit.language_id}/units`);
         } catch (err) {
             showError(err.message);
@@ -163,12 +177,10 @@ function wireExercises(unitId, modes) {
         // sofort wieder alle Vokabeln als gekonnt markiert. Zurückgesetzt wird
         // nur diese Übungsart - die andere behält ihren Fortschritt.
         if (info.total > 0 && info.known >= info.total) {
-            try {
-                await api('units', 'reset', { body: { id: Number(unitId), mode } });
-            } catch (err) {
-                showError(err.message);
-                return;
-            }
+            // Auch ohne Netz: Der Vorrat vergisst sofort, der Server erfaehrt
+            // es im selben Strom wie die Antworten - und in derselben
+            // Reihenfolge, also vor dem, was danach geuebt wird.
+            zuruecksetzen(unitId, mode);
         }
         go(`${mode === 'cloze' ? '/cloze' : '/quiz'}/${unitId}`);
     });
@@ -186,13 +198,13 @@ function watchSentences(unitId, modes) {
         // Ansicht gewechselt: Der Router hat den Inhalt ersetzt, also aufhören.
         if (!row) return;
 
-        let data;
-        try {
-            data = await api('units', 'sentence_status', { query: { id: unitId } });
-        } catch {
+        // Der Vorrat weiss es, sobald er aufgefrischt ist - und er bringt
+        // die frischen Saetze gleich mit.
+        if (!await vorratAuffrischen()) {
             setTimeout(tick, 6000);   // Aussetzer überbrücken, nicht aufgeben
             return;
         }
+        const data = { cloze: modusStand(unitId).cloze };
 
         if (data.cloze.status === 'running') {
             setTimeout(tick, 2500);

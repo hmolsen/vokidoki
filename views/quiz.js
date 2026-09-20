@@ -1,26 +1,48 @@
 import {
-    api, render, esc, $, $$, go, topbar, loading, wireBack, progressBar, showError,
+    render, esc, $, $$, go, topbar, wireBack, progressBar, showError,
 } from '../core.js';
+import {
+    frageWahl, antwortMerken, zuruecksetzen, MODUS_WAHL, sprache, einheit,
+} from '../vorrat.js';
 
 const NEXT_DELAY_CORRECT = 700;    // richtig: zügig weiter
 const NEXT_DELAY_WRONG   = 1900;   // falsch: Zeit, die richtige Lösung zu lesen
 
 export async function quizView(unitId) {
-    render(loading('Frage wird vorbereitet...'));
-    await nextQuestion(unitId);
+    nextQuestion(unitId);
 }
 
-async function nextQuestion(unitId) {
-    let data;
-    try {
-        data = await api('quiz', 'next', { query: { unit_id: unitId } });
-    } catch (err) {
+/*
+ * Die Frage entsteht im Gerät, nicht auf dem Server.
+ *
+ * Vorher waren es drei bis vier Runden übers Netz je Wort - Frage holen,
+ * Antwort schicken, nächste Frage -, und auf jede davon wartete ein Kind.
+ * Ein Aussetzer mittendrin wurde zu „Bist du online?". Jetzt liegt alles
+ * im Vorrat, und das Üben braucht gar kein Netz mehr; die Antworten gehen
+ * später am Stück zurück.
+ */
+function nextQuestion(unitId) {
+    const data = frageWahl(unitId);
+
+    if (data === null) {
         render(`
             ${topbar('Üben', { backTo: `/unit/${unitId}` })}
             <div id="msg"></div>
         `);
         wireBack();
-        showError(err.message);
+        showError('Die Vokabeln sind noch nicht da. Einmal mit Netz öffnen, '
+                  + 'dann geht es auch ohne.');
+        return;
+    }
+
+    if (data.leer) {
+        render(`
+            ${topbar('Üben', { backTo: `/unit/${unitId}` })}
+            <div id="msg"></div>
+        `);
+        wireBack();
+        showError('Diese Lektion ist noch nicht freigegeben. '
+                  + 'Deine Lehrkraft macht sie auf, wenn sie dran ist.');
         return;
     }
 
@@ -29,9 +51,10 @@ async function nextQuestion(unitId) {
         return;
     }
 
-    const dirLabel = data.direction === 'foreign_to_native'
-        ? `${esc(data.language)} → Deutsch`
-        : `Deutsch → ${esc(data.language)}`;
+    const sprachName = sprache(einheit(unitId)?.l)?.name ?? '';
+    const dirLabel = data.nachVorn
+        ? `${esc(sprachName)} → Deutsch`
+        : `Deutsch → ${esc(sprachName)}`;
 
     render(`
         ${topbar('Üben', { backTo: `/unit/${unitId}` })}
@@ -47,12 +70,12 @@ async function nextQuestion(unitId) {
         <div class="prompt">
             <div>
                 <div class="dir">${dirLabel}</div>
-                <div class="word">${esc(data.question)}</div>
+                <div class="word">${esc(data.frage)}</div>
             </div>
         </div>
 
         <div class="options" id="options">
-            ${data.options.map((opt, i) => `
+            ${data.optionen.map((opt, i) => `
                 <button class="option" data-index="${i}">${esc(opt)}</button>
             `).join('')}
         </div>
@@ -66,23 +89,15 @@ async function nextQuestion(unitId) {
     let answered = false;
 
     $$('.option').forEach((button) => {
-        button.addEventListener('click', async () => {
+        button.addEventListener('click', () => {
             if (answered) return;
             answered = true;
             box.classList.add('locked');
 
-            const index = Number(button.dataset.index);
-            let result;
-            try {
-                result = await api('quiz', 'answer', {
-                    body: { nonce: data.nonce, index },
-                });
-            } catch (err) {
-                answered = false;
-                box.classList.remove('locked');
-                showError(err.message);
-                return;
-            }
+            const index   = Number(button.dataset.index);
+            const richtig = index === data.richtig;
+            const result  = { ...antwortMerken(data.vocabId, MODUS_WAHL, richtig),
+                              correct: richtig, correct_index: data.richtig };
 
             const verdict = $('#verdict');
             if (result.correct) {
@@ -120,12 +135,11 @@ function showFinished(unitId, data) {
 
     wireBack();
 
-    $('#again').addEventListener('click', async () => {
-        try {
-            await api('units', 'reset', { body: { id: Number(unitId) } });
-            go(`/quiz/${unitId}`);
-        } catch (err) {
-            showError(err.message);
-        }
+    $('#again').addEventListener('click', () => {
+        // Auch das geht ohne Netz: Der Vorrat vergisst den Stand sofort, und
+        // der Server erfaehrt es im selben Strom wie die Antworten - in der
+        // richtigen Reihenfolge, also vor dem, was danach geuebt wird.
+        zuruecksetzen(unitId, MODUS_WAHL);
+        go(`/quiz/${unitId}`);
     });
 }

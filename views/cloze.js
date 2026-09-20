@@ -1,6 +1,10 @@
 import {
     VT, api, render, esc, $, go, topbar, wireBack, progressBar, showError,
 } from '../core.js';
+import {
+    frageLuecke, antwortPruefen, antwortMerken, zuruecksetzen, MODUS_LUECKE,
+    sprache, einheit, vorratAuffrischen,
+} from '../vorrat.js';
 
 const NEXT_DELAY_CORRECT = 900;
 const NEXT_DELAY_HINT    = 2400;   // Schreibweise lesen können
@@ -59,20 +63,31 @@ export async function clozeView(unitId) {
     await nextQuestion(unitId);
 }
 
+/*
+ * Die Aufgabe entsteht im Geraet, nicht auf dem Server.
+ *
+ * Der Vergleich der Antwort auch - antwortPruefen() in vorrat.js ist der
+ * Spiegel von answer_check() in lib/sentences.php, und eine gemeinsame
+ * Fallsammlung haelt beide zusammen. Anders ginge es nicht: Solange die
+ * Loesung auf dem Server bleibt, bleibt das Ueben ans Netz gebunden.
+ */
 async function nextQuestion(unitId) {
-    let data;
-    try {
-        data = await api('cloze', 'next', { query: { unit_id: unitId } });
-    } catch (err) {
-        showFailure(unitId, err.message);
+    const data = frageLuecke(unitId);
+
+    if (data === null) {
+        showFailure(unitId, 'Die Vokabeln sind noch nicht da. '
+                    + 'Einmal mit Netz oeffnen, dann geht es auch ohne.');
         return;
     }
 
+    const zustandDerSaetze = einheit(unitId)?.z ?? '';
+
     // Der Hintergrundauftrag vom Einlesen ist noch unterwegs - abwarten statt
     // ein zweites Mal erzeugen zu lassen.
-    if (data.preparing) {
+    if (data.leer && zustandDerSaetze === 'running') {
         showPreparing(unitId);
-        setTimeout(() => nextQuestion(unitId), 2500);
+        // Der Vorrat bringt die frischen Saetze mit, sobald sie da sind.
+        setTimeout(async () => { await vorratAuffrischen(); nextQuestion(unitId); }, 2500);
         return;
     }
 
@@ -81,7 +96,7 @@ async function nextQuestion(unitId) {
      * alle anderen waere das ein bezahlter Aufruf auf Knopfdruck, und die
      * API lehnt ihn ohnehin ab. Dann lieber sagen, woran es liegt.
      */
-    if (data.needs_preparation) {
+    if (data.leer) {
         if (VT.user.canImport) {
             await prepare(unitId);
         } else {
@@ -295,16 +310,14 @@ async function onSubmit(unitId) {
     input.readOnly = true;
     check.disabled = true;
 
-    let result;
-    try {
-        result = await api('cloze', 'answer', { body: { nonce: z.data.nonce, text } });
-    } catch (err) {
-        z.answered = false;
-        input.readOnly = false;
-        check.disabled = false;
-        showError(err.message);
-        return;
-    }
+    const geprueft = antwortPruefen(text, z.data.loesung);
+    const result = {
+        ...antwortMerken(z.data.vocabId, MODUS_LUECKE, geprueft.correct),
+        correct: geprueft.correct,
+        exact:   geprueft.exact,
+        answer:  z.data.loesung,
+        sentence_id: z.data.satzId,
+    };
 
     const verdict = $('#verdict');
     check.disabled = false;
@@ -453,12 +466,18 @@ function showPreparing(unitId) {
 async function prepare(unitId) {
     showPreparing(unitId);
 
+    /*
+     * Saetze erzeugen ist der eine Schritt, der Netz braucht - dahinter
+     * steht ein Sprachmodell, und das liegt nicht im Geraet. Danach den
+     * Vorrat holen, damit die frischen Saetze gleich zum Ueben da sind.
+     */
     try {
         await api('cloze', 'prepare', { body: { unit_id: Number(unitId) } });
     } catch (err) {
         showFailure(unitId, err.message);
         return;
     }
+    await vorratAuffrischen();
 
     await nextQuestion(unitId);
 }
@@ -490,13 +509,10 @@ function showFinished(unitId, data) {
 
     wireBack();
 
-    $('#again').addEventListener('click', async () => {
-        try {
-            // Nur diese Übungsart zurücksetzen - Multiple Choice bleibt stehen.
-            await api('units', 'reset', { body: { id: Number(unitId), mode: 'cloze' } });
-            go(`/cloze/${unitId}`);
-        } catch (err) {
-            showError(err.message);
-        }
+    $('#again').addEventListener('click', () => {
+        // Nur diese Übungsart zurücksetzen - Multiple Choice bleibt stehen.
+        // Auch ohne Netz: Der Server erfaehrt es im selben Strom.
+        zuruecksetzen(unitId, MODUS_LUECKE);
+        go(`/cloze/${unitId}`);
     });
 }

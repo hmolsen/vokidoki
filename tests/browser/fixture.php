@@ -95,6 +95,18 @@ $leereId  = (int) $leere['id'];
  */
 students_bulk_create($schuleId, $klasseId, "Nora Wendt\nPaul Timm\nSina Krug");
 
+/*
+ * Einem der Kinder ein bekanntes Passwort geben.
+ *
+ * Angelegt werden sie mit einem erzeugten - das steht zwar im Klartext in
+ * der Datenbank, aber die Pruefungen sollen sich darauf nicht verlassen
+ * muessen. Gebraucht wird es fuer die Ansicht, die ein Kind hat: Ueben ohne
+ * Netz laesst sich nur als Kind pruefen.
+ */
+$kindId = (int) qv('SELECT id FROM users WHERE username = ?', ['nora.w']);
+q('UPDATE users SET password_hash = ?, initial_password = NULL WHERE id = ?',
+  [password_hash(BT_PASSWORT, PASSWORD_DEFAULT), $kindId]);
+
 $lehrer = q1('SELECT * FROM users WHERE id = ?', [$lehrerId]);
 $kurs   = course_create($lehrer, 'Englisch', language_flag('Englisch'), $klasseId, '');
 if (is_string($kurs)) {
@@ -148,6 +160,7 @@ echo json_encode([
     'kurs'       => $kursId,
     'kurs2'      => $kurs2Id,
     'sprache'    => (int) $kurs['language_id'],
+    'kind'       => 'nora.w',
     'unit'       => $unitId,
     'vokabeln'   => count($woerter),
     'frei'       => 5,

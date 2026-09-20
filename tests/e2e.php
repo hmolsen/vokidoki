@@ -5280,8 +5280,14 @@ ok('Waehrend der Erzeugung dreht sich ein Spinner',
    && str_contains($unitQuelle, 'spinner inline'));
 ok('Und die Zeile ist solange nicht anklickbar',
    preg_match('/\$\{wartet \? .disabled./', $unitQuelle) === 1);
+/*
+ * Nachgefragt wird jetzt ueber den Vorrat, nicht ueber einen eigenen
+ * Endpunkt: Ein Aufruf holt beides auf einmal - ob die Saetze fertig sind
+ * UND die Saetze selbst. Vorher sagte sentence_status nur Bescheid, und das
+ * Kind wartete danach noch einmal auf die naechste Runde.
+ */
 ok('Danach fragt die App nach, bis es fertig ist',
-   str_contains($unitQuelle, 'sentence_status') && str_contains($unitQuelle, 'setTimeout(tick'));
+   str_contains($unitQuelle, 'vorratAuffrischen()') && str_contains($unitQuelle, 'setTimeout(tick'));
 
 q('DELETE FROM languages WHERE id = ?', [$leerLang]);
 q('DELETE FROM ai_requests WHERE user_id IS NULL');
