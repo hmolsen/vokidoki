@@ -74,6 +74,54 @@
    neben einer dunklen Seite. */
 :root[data-theme="light"] { color-scheme: light; }
 
+/* ------------------------------------------------------------- Schriften
+ *
+ * Zwei Schnitte, und beide liegen hier im Verzeichnis.
+ *
+ * NICHT von Google nachgeladen, und das ist keine Kleinigkeit: Ein
+ * eingebundenes Stilblatt von fonts.googleapis.com schickt die Adresse jedes
+ * Kindes dorthin, bei jedem kalten Start. Das ist in einer Schule nicht zu
+ * rechtfertigen - und es ginge ohne Netz auch gar nicht, wo diese App
+ * ausdruecklich weiterlaufen soll. Die Dateien kommen vom eigenen Server;
+ * damit bleibt es dabei, dass nichts von einem Kind den Rechner verlaesst,
+ * nur weil eine Schrift gebraucht wird.
+ *
+ * Beides sind veraenderliche Schriften (variable fonts): eine Datei je
+ * Familie fuer alle Gewichte, statt vier. Zusammen rund 90 KB, einmalig.
+ *
+ * font-display: swap - lieber sofort in der Geraeteschrift lesen und dann
+ * umspringen sehen, als ein paar hundert Millisekunden auf eine leere Seite
+ * schauen.
+ */
+@font-face {
+    font-family: 'Fredoka';
+    src: url('assets/fonts/fredoka.woff2') format('woff2');
+    font-weight: 300 700;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Nunito';
+    src: url('assets/fonts/nunito.woff2') format('woff2');
+    font-weight: 200 1000;
+    font-style: normal;
+    font-display: swap;
+}
+
+/*
+ * Fredoka fuer Ueberschriften und Knoepfe, Nunito fuer alles zum Lesen.
+ *
+ * Die Ersatzkette dahinter ist die alte Geraeteschrift: Kommt die Datei
+ * nicht an - altes Geraet, abgebrochener Abruf -, sieht die App aus wie
+ * vorher und nicht kaputt.
+ */
+:root {
+    --schrift-kopf: 'Fredoka', -apple-system, BlinkMacSystemFont, "Segoe UI",
+                    Roboto, sans-serif;
+    --schrift-text: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI",
+                    Roboto, sans-serif;
+}
+
 * { box-sizing: border-box; }
 
 html { -webkit-text-size-adjust: 100%; }
@@ -82,7 +130,7 @@ body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font: 17px/1.45 var(--schrift-text);
     -webkit-tap-highlight-color: transparent;
     -webkit-font-smoothing: antialiased;
     overscroll-behavior-y: contain;
@@ -101,8 +149,14 @@ body {
 
 /* ---------------------------------------------------------------- Typografie */
 
-h1 { font-size: 1.6rem; line-height: 1.2; margin: 0 0 4px; letter-spacing: -.02em; }
-h2 { font-size: 1.2rem; line-height: 1.25; margin: 26px 0 10px; letter-spacing: -.01em; }
+/*
+ * Ueberschriften in Fredoka - und mit weniger negativem Zurichten als
+ * vorher: Die Schrift ist von sich aus rund und eng, das alte -.02em
+ * drueckte die Buchstaben ineinander.
+ */
+h1, h2, h3 { font-family: var(--schrift-kopf); font-weight: 600; }
+h1 { font-size: 1.6rem; line-height: 1.2; margin: 0 0 4px; letter-spacing: -.01em; }
+h2 { font-size: 1.2rem; line-height: 1.25; margin: 26px 0 10px; letter-spacing: 0; }
 
 /* Überschrift über einer Liste - leiser als eine Seitenüberschrift. */
 h2.section {
@@ -127,7 +181,28 @@ p  { margin: 0 0 12px; }
     margin-bottom: 18px;
     min-height: 44px;
 }
-.topbar h1 { flex: 1; font-size: 1.3rem; margin: 0; }
+/*
+ * Der Titel gibt nach, alles andere nicht.
+ *
+ * min-width: 0 ist hier das Entscheidende. Ein Flex-Element schrumpft von
+ * sich aus nur bis zu seinem laengsten Wort - "Lerneinheit" ist damit eine
+ * harte Untergrenze, und der Rest der Leiste wird aus dem Bild geschoben.
+ * Auf einem 360 Punkte breiten Telefon stand das Zahnrad deswegen ausserhalb
+ * des Fensters, seit links vom Zahnrad noch das Abzeichen der Serie dazukam.
+ *
+ * Und lieber ein abgeschnittener Titel als ein dreizeiliger: Die Leiste ist
+ * eine Zeile, die Lerneinheit steht ohnehin gross auf der Seite darunter,
+ * und der volle Titel haengt als title am Element.
+ */
+.topbar h1 {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1.3rem;
+    margin: 0;
+}
 
 /* Fortschritt neben dem Titel statt in einer eigenen Zeile darunter. */
 .topbar-progress {
@@ -137,6 +212,18 @@ p  { margin: 0 0 12px; }
     flex: none;
 }
 .topbar-progress .bar { width: 64px; margin-top: 0; }
+
+/*
+ * Auf schmalen Geraeten wird es trotzdem eng: Menue, Zurueck, Titel,
+ * Fortschritt, Serie, Zahnrad - sechs Dinge in einer Zeile. Der Fortschritt
+ * gibt dort als erstes nach, denn er steht als Balken gleich noch einmal
+ * unter der Frage. Die Zahl daneben ist das, was am ehesten entbehrlich ist.
+ */
+@media (max-width: 430px) {
+    .topbar { gap: 6px; }
+    .topbar-progress .bar { width: 40px; }
+    .topbar-progress .tiny { display: none; }
+}
 
 .iconbtn {
     flex: none;
@@ -363,6 +450,54 @@ img.mflagge { width: 22px; height: 16px; object-fit: contain; border-radius: 2px
     box-shadow: inset 0 0 0 1px var(--accent);
 }
 
+/*
+ * Verwaltung oder Schueleransicht - derselbe Schalter wie die Farbwahl
+ * darunter, nur mit zwei Stellungen statt drei.
+ *
+ * Bewusst dieselbe Bauart: Beides sind Einstellungen, wie man die Anwendung
+ * sieht, und beide stehen untereinander im selben Menue. Zwei verschieden
+ * aussehende Schalter nebeneinander laesen einen davon wichtiger wirken.
+ *
+ * Die eine Stellung ist ein <a> und fuehrt hinueber, die andere ein <span>
+ * ohne Ziel - die, in der man schon steht. Ein Knopf, der dorthin fuehrt,
+ * wo man ohnehin ist, ist keiner; er soll aussehen wie einer und sich nicht
+ * druecken lassen.
+ */
+.ansichtwahl {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 4px;
+    margin: 0 6px 6px;
+}
+.ansichtknopf {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 8px 2px;
+    min-height: 56px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text-soft);
+    font: inherit;
+    font-size: .74rem;
+    line-height: 1.15;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+}
+.ansichtknopf span { font-size: 1.05rem; }
+a.ansichtknopf:hover { background: var(--surface-2); color: var(--text); }
+.ansichtknopf.on {
+    border-color: var(--accent);
+    color: var(--text);
+    font-weight: 700;
+    box-shadow: inset 0 0 0 1px var(--accent);
+    cursor: default;
+}
+
 /* ---------------------------------------------------------------- Flächen */
 
 .card {
@@ -389,6 +524,16 @@ img.mflagge { width: 22px; height: 16px; object-fit: contain; border-radius: 2px
     background: var(--accent);
     color: var(--accent-text);
     font: inherit;
+    /*
+     * Knoepfe in Fredoka - aber ausdruecklich nur diese hier.
+     *
+     * .option bleibt bei Nunito, obwohl es ein <button> ist: Dort steht eine
+     * Vokabel, und eine Vokabel ist zum Lesen da, nicht zum Anpreisen. Eine
+     * runde Anzeigeschrift ueber franzoesischen Wortformen macht das
+     * Vergleichen schwerer, nicht leichter - und genau darum geht es beim
+     * Ueben. Dasselbe gilt fuer .prompt .word.
+     */
+    font-family: var(--schrift-kopf);
     font-weight: 600;
     text-align: center;
     cursor: pointer;
@@ -924,6 +1069,51 @@ input.cloze-input[readonly] { opacity: 1; }
 }
 .flagbtn:active { background: var(--surface-2); }
 
+/*
+ * Beim Auswählen steht der Knopf in der Ecke der Fragekarte.
+ *
+ * Unter den Antworten wäre er dem Daumen im Weg, der gerade eine davon
+ * trifft - und neben dem Wort, um das es geht, ist klar, was er meldet.
+ */
+.prompt { position: relative; }
+.flagbtn.ecke {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 40px;
+    min-height: 40px;
+    height: 40px;
+    font-size: 1.1rem;
+    border-radius: 50%;
+}
+
+/*
+ * Die Rückfrage vor dem Melden - eine Karte der App, kein Kästchen des
+ * Browsers. Mittig, mit abgedunkeltem Rand; die beiden Knöpfe gleich breit
+ * nebeneinander, "Melden" rechts, wo der Daumen zuletzt hinwill.
+ */
+dialog.rueckfrage {
+    width: min(100% - 32px, 360px);
+    padding: 22px 20px 20px;
+    border: 0;
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow);
+    text-align: center;
+}
+dialog.rueckfrage::backdrop { background: rgba(10, 14, 22, .45); }
+.rueckfrage-zeichen { margin: 0 0 6px; font-size: 2rem; line-height: 1; color: var(--bad); }
+.rueckfrage-text {
+    margin: 0 0 20px;
+    font-family: var(--schrift-kopf);
+    font-weight: 600;
+    font-size: 1.15rem;
+    line-height: 1.3;
+}
+.rueckfrage-knoepfe { display: flex; gap: 10px; }
+.rueckfrage-knoepfe .btn { flex: 1; min-width: 0; margin: 0; }
+
 /* Gemeldet: Der Knopf bleibt stehen und zeigt, dass es angekommen ist. */
 .flagbtn.done {
     background: var(--good-bg);
@@ -932,13 +1122,6 @@ input.cloze-input[readonly] { opacity: 1; }
     opacity: 1;
 }
 .flagbtn.done[disabled] { opacity: 1; }
-
-.flag-done {
-    margin: 8px 0 0;
-    text-align: center;
-    font-size: .85rem;
-    color: var(--good);
-}
 
 /*
  * Der Knopf trägt die Rückmeldung mit: grün bei richtig, rot bei falsch.
@@ -1274,32 +1457,37 @@ input.cloze-input[readonly] { opacity: 1; }
 .kurszeile > span { flex: 1 1 auto; }
 .kurszeile .btn { margin: 0; flex: 0 0 auto; white-space: nowrap; }
 
-/* Der Hinweis in der Schueleransicht - fuer Lehrkraefte, die von ihrem
-   Bereich herkommen. Zurueckhaltend: Er erklaert die Seite, er ist nicht
-   ihr Inhalt. */
 /*
- * Der Hinweis fuer die Lehrkraft - Satz links, Weg zurueck rechts.
+ * Der Streifen ganz oben: "Lernansicht".
  *
- * Auf dem Telefon bricht der Knopf unter den Satz und nimmt die ganze
- * Breite: Er ist dort das Wichtigere von beiden, und ein halbzeiliger
- * Knopf am rechten Rand trifft sich mit dem Daumen schlecht.
+ * Hier stand ein Hinweiskasten mit vier Zeilen Erklaerung, oberhalb der
+ * Kurse und der Lerneinheiten. Er war richtig, solange er die einzige
+ * Auskunft war; inzwischen steht im Zahnrad ein Schalter, der dasselbe sagt
+ * und den Weg zurueck kennt. Uebrig bleibt die Antwort auf "wo bin ich
+ * hier", in einem Wort - und die braucht keinen Kasten.
+ *
+ * Er zieht sich mit negativen Raendern bis an die Kanten: Ein Streifen, der
+ * die Einrueckung des Inhalts mitmacht, sieht aus wie ein Kasten, der nicht
+ * ganz passt. Oben kommt der Sicherheitsabstand des Geraets als Polster
+ * zurueck, damit das Wort auf einem iPhone nicht unter der Uhr liegt.
  */
-.notice.pupilview {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    flex-wrap: wrap;
+.lernansicht {
+    margin:
+        calc((env(safe-area-inset-top) + 14px) * -1)
+        calc((env(safe-area-inset-right) + 16px) * -1)
+        14px
+        calc((env(safe-area-inset-left) + 16px) * -1);
+    padding: calc(env(safe-area-inset-top) + 4px) 12px 4px;
     background: var(--surface-2);
-    border-color: var(--border);
+    border-bottom: 1px solid var(--border);
     color: var(--text-soft);
-    font-size: .88rem;
-}
-.notice.pupilview strong { color: var(--text); }
-.notice.pupilview > span { flex: 1 1 220px; }
-.notice.pupilview .btn { margin: 0; flex: 0 0 auto; white-space: nowrap; }
-
-@media (max-width: 520px) {
-    .notice.pupilview .btn { flex: 1 1 100%; }
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    text-align: center;
+    line-height: 1.5;
+    user-select: none;
 }
 
 /* ------------------------------------------------ Impressum und Datenschutz
@@ -1399,3 +1587,544 @@ body.rechtsseite { background: var(--bg); }
 }
 .rechtszeile a { color: var(--text-soft); text-decoration: none; }
 .rechtszeile a:hover { color: var(--text); text-decoration: underline; }
+
+/*
+ * Das Wortzeichen auf der Anmeldeseite.
+ *
+ * Breite in Prozent mit Deckel: Auf einem schmalen Telefon soll es mitgehen,
+ * auf einem Rechner aber nicht ins Riesenhafte wachsen. Die Hoehe steht im
+ * Bild selbst (Seitenverhaeltnis), deshalb hier nur die Breite.
+ */
+.logo {
+    display: block;
+    width: min(78%, 300px);
+    height: auto;
+    margin: 0 auto 10px;
+}
+
+/* ------------------------------------------------------------- Die Serie
+ *
+ * Das Abzeichen links vom Zahnrad: Voki und die Zahl der Tage.
+ *
+ * Vier Lagen, und man soll sie im Vorbeigehen auseinanderhalten, ohne die
+ * Zahl zu lesen:
+ *
+ *   heute   Voki froh und farbig, Zahl grün.  Heute schon gelernt.
+ *   offen   Voki froh und farbig, Zahl grau.  Heute noch nicht.
+ *   gefahr  Voki traurig und grau, Zahl grau. Ein Tag ausgelassen.
+ *   aus     Voki traurig und grau, Null grau. Die Serie ist weg.
+ *
+ * Das Grün ist das des Maskottchens selbst und kommt darum nicht aus der
+ * Palette: --accent gehört dem Kind und wechselt mit seiner Farbwahl, Voki
+ * ist immer derselbe. Stünde die Zahl in --accent, wäre sie bei einem Kind
+ * mit grüner Lieblingsfarbe von der "nicht fortgeführt"-Grau nicht mehr zu
+ * unterscheiden.
+ */
+:root { --voki: #AFD535; }
+
+/* Auf hellem Grund ist das Grün des Maskottchens zu blass für Text. Dieselbe
+   Farbe, nur dunkler - Voki daneben bleibt unverändert. */
+:root:not([data-theme="dark"]) { --voki-text: #6f8c15; }
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --voki-text: #AFD535; }
+}
+:root[data-theme="dark"] { --voki-text: #AFD535; }
+
+.menue.serie { flex: none; }
+
+.topbar .menue.serie > .seriebtn {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    min-width: 44px;
+    height: 44px;
+    padding: 0 8px 0 4px;
+    border: 1px solid transparent;
+    border-radius: 22px;
+    background: none;
+    cursor: pointer;
+    list-style: none;
+}
+.seriebtn::-webkit-details-marker { display: none; }
+.seriebtn:hover { background: var(--surface-2); }
+.seriebtn:active { transform: scale(.94); }
+
+.serievoki {
+    width: 30px;
+    height: 30px;
+    flex: none;
+    /* Der Rahmen um das Bild wäre sonst quadratisch und säße schief. */
+    display: block;
+}
+
+/* Auf schmalen Geraeten ein Stueck kleiner - das Abzeichen ist wichtig,
+   aber nicht so wichtig wie der Titel daneben. */
+@media (max-width: 430px) {
+    .topbar .menue.serie > .seriebtn { min-width: 38px; padding: 0 6px 0 2px; }
+    .serievoki { width: 26px; height: 26px; }
+    .seriezahl { font-size: .98rem; }
+}
+
+.seriezahl {
+    font-size: 1.05rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-soft);
+    line-height: 1;
+}
+
+/* Heute gelernt: das Grün des Maskottchens. Sonst bleibt die Zahl grau -
+   genau das ist die Aufforderung, sie heute noch grün zu machen. */
+.seriebtn.lage-heute .seriezahl { color: var(--voki-text); }
+
+/*
+ * Farbe bekommt nur der Tag, an dem wirklich gelernt wurde.
+ *
+ * Voki ist also an drei von vier Lagen grau - froh und grau, solange der Tag
+ * nur noch offen ist, traurig und grau, wenn schon einer fehlt. Das ist der
+ * Sinn: Die Farbe ist die Belohnung, nicht die Grundeinstellung. Wer sie
+ * heute noch nicht hat, sieht auf einen Blick, dass etwas fehlt - und muss
+ * dafuer nicht erst die Zahl daneben lesen.
+ *
+ * Nur das Graustufenfilter und keine zweite Bilddatei: Es ist derselbe Voki,
+ * dem gerade etwas fehlt.
+ */
+.seriebtn.lage-offen .serievoki,
+.seriebtn.lage-gefahr .serievoki,
+.seriebtn.lage-aus .serievoki { filter: grayscale(1); opacity: .75; }
+
+/* Und in Gefahr wackelt er kurz, wenn die Seite aufgeht - einmal, nicht
+   dauernd: Eine Warnung, die nie aufhört, ist Tapete. */
+.seriebtn.lage-gefahr .serievoki { animation: serieWackeln 1.1s ease-in-out .4s 2; }
+
+@keyframes serieWackeln {
+    0%, 100%    { transform: rotate(0); }
+    25%         { transform: rotate(-9deg); }
+    75%         { transform: rotate(9deg); }
+}
+
+/*
+ * Der Tag ist geschafft - einmal kurz feiern.
+ *
+ * Läuft nur in dem Augenblick, in dem die Zahl weiterspringt, und wird von
+ * views/quiz.js und views/cloze.js ausgelöst. Kein Konfetti über den halben
+ * Bildschirm: Das Kind ist mitten in einer Übung, und was es gleich wieder
+ * wegklicken muss, ist keine Belohnung.
+ */
+.seriebtn.feiert { animation: serieFeier .7s cubic-bezier(.2, .9, .3, 1.4); }
+.seriebtn.feiert .seriezahl { animation: serieZahl .7s ease-out; }
+
+@keyframes serieFeier {
+    0%   { transform: scale(1); }
+    35%  { transform: scale(1.32) rotate(-6deg); }
+    60%  { transform: scale(1.1) rotate(4deg); }
+    100% { transform: scale(1); }
+}
+@keyframes serieZahl {
+    0%   { color: var(--voki-text); text-shadow: 0 0 0 var(--voki); }
+    40%  { color: var(--voki-text); text-shadow: 0 0 14px var(--voki); }
+    100% { text-shadow: 0 0 0 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .seriebtn.feiert, .seriebtn.feiert .seriezahl,
+    .seriebtn.lage-gefahr .serievoki { animation: none; }
+}
+
+/*
+ * Die Karte dahinter - eine Karte in der Mitte, keine Schublade am Rand.
+ *
+ * Sie hängt trotzdem am selben <details class="menue"> wie die beiden
+ * Schubladen und bekommt damit deren Mechanik geschenkt: Escape schliesst,
+ * ein Druck auf den Schleier auch, und ohne Skript klappt sie schlicht auf.
+ * Nur das Aussehen ist ein anderes, weil der Inhalt ein anderer ist - ein
+ * Text zum Lesen, keine Liste zum Antippen.
+ */
+.seriekarte {
+    position: fixed;
+    z-index: 41;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(360px, calc(100vw - 32px));
+    max-height: min(560px, calc(100vh - 48px));
+    overflow-y: auto;
+    padding: 18px 18px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    animation: serieKarteAuf .22s cubic-bezier(.2, .8, .25, 1);
+}
+.menue.zu > .seriekarte { animation: serieKarteZu .18s ease-in forwards; }
+
+@keyframes serieKarteAuf {
+    from { opacity: 0; transform: translate(-50%, -46%) scale(.94); }
+}
+@keyframes serieKarteZu {
+    to { opacity: 0; transform: translate(-50%, -46%) scale(.94); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .seriekarte, .menue.zu > .seriekarte { animation: none; }
+}
+
+.seriekopf {
+    margin: 0 0 4px;
+    font-size: 1.15rem;
+    font-weight: 800;
+}
+.serietext { margin: 0 0 14px; font-size: .92rem; color: var(--text-soft); }
+
+.serieregel {
+    margin: 0 0 14px;
+    padding-left: 20px;
+    font-size: .92rem;
+    color: var(--text-soft);
+}
+.serieregel li { margin-bottom: 6px; }
+
+.seriebest {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    font-size: .92rem;
+}
+
+/* Der Schalter für den Ton, im rechten Menü. Die Beschriftung rechts sagt,
+   was gerade gilt - ein Häkchen sagte nur, dass man etwas anklicken kann. */
+.mschalter {
+    margin-left: auto;
+    /* Schrumpft nicht mit: Bricht die Beschriftung links daneben auf zwei
+       Zeilen um, wurde sonst aus dem "an" ein "a...". */
+    flex: none;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    font-size: .78rem;
+    font-weight: 700;
+    color: var(--text-soft);
+}
+[data-ton][aria-pressed="true"] .mschalter {
+    background: var(--voki);
+    color: #171a21;
+}
+
+/* ------------------------------------------------- Die Tage im Konto
+ *
+ * Dreissig Kästchen, eines je Tag, das jüngste unten rechts. Kein Diagramm
+ * und keine Zahlen: Die Frage, die ein Kind hier hat, ist "wie viel habe ich
+ * geschafft", und darauf antwortet ein Muster schneller als eine Tabelle.
+ */
+/*
+ * Der Monatskalender im Konto.
+ *
+ * Sieben Spalten, Montag links. Hier standen einmal dreissig Kaestchen in
+ * einer Reihe - eine Zeitleiste ohne Bezug: Sie sagte, wie viele Tage am
+ * Stueck, aber nicht, wann. Der vierte Kasten von links war irgendein
+ * Dienstag. Im Kalender weiss jeder, wo er steht, und die Wochentage
+ * brauchen deshalb keine Beschriftung.
+ */
+.monatskopf {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 2px 0 10px;
+}
+.monatskopf strong {
+    font-family: var(--schrift-kopf);
+    font-size: 1rem;
+    flex: 1;
+    text-align: center;
+}
+.monatskopf .iconbtn { width: 38px; height: 38px; font-size: 1rem; }
+.monatskopf .iconbtn[disabled] { opacity: .35; cursor: default; }
+
+.monatsgitter {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 5px;
+    margin: 0 0 12px;
+}
+
+/*
+ * In jedem Kasten steht die Zahl der richtigen Antworten - bis zu
+ * dreistellig. Die Schrift schrumpft mit der Spaltenbreite mit, damit auch
+ * eine 999 bei 320 px Fensterbreite noch hineinpasst, statt umzubrechen.
+ */
+.monatstag {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(.58rem, 2.6vw, .78rem);
+    font-weight: 700;
+    color: var(--text-soft);
+    overflow: hidden;
+}
+.monatstag.leer { border-color: transparent; background: none; }
+.monatstag.spaeter { opacity: .35; }
+
+/* Gelernt: das Gruen des Maskottchens. Geuebt, aber unter der Schwelle:
+   dieselbe Farbe, nur blass - der Tag zaehlt, aber knapp nicht. */
+.monatstag.voll { background: var(--voki); border-color: var(--voki); color: #171a21; }
+.monatstag.halb { background: color-mix(in srgb, var(--voki) 38%, transparent); color: var(--text); }
+.monatstag.heute { outline: 2px solid var(--text); outline-offset: 1px; }
+
+/* Die Kaestchen der Legende unter dem Kalender. Das Gitter aus dreissig
+   Tagen, zu dem sie einmal gehoerten, ist ein Monatskalender geworden. */
+.serietag {
+    aspect-ratio: 1;
+    border-radius: 6px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+}
+/* Gelernt: das Grün des Maskottchens. Wiederholt, aber unter der Schwelle:
+   dieselbe Farbe, nur blass - der Tag hat gezählt, aber knapp. */
+.serietag.voll  { background: var(--voki); border-color: var(--voki); }
+.serietag.halb  { background: color-mix(in srgb, var(--voki) 38%, transparent); }
+.serietag.heute { outline: 2px solid var(--text); outline-offset: 1px; }
+
+.serielegende {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    font-size: .8rem;
+    color: var(--text-soft);
+}
+.serielegende span { display: flex; align-items: center; gap: 6px; }
+.serielegende i {
+    width: 12px;
+    height: 12px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+}
+
+/* ------------------------------------------------------------ Belohnung
+ *
+ * Drei Stufen: ein Punkt je richtige Antwort, Konfetti wenn eine Vokabel
+ * sitzt, Feuerwerk wenn die ganze Lerneinheit steht.
+ *
+ * Nichts davon haelt den Ablauf auf. Die Buehne liegt als fixierte Schicht
+ * ueber allem und laesst jeden Druck durch (pointer-events: none) - die
+ * naechste Frage wird darunter gezeichnet, waehrend es noch fliegt.
+ */
+.feier {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+/* Das Lob davor. Gross, kurz sichtbar, in der Anzeigeschrift - es ist eine
+   Ueberschrift fuer einen Augenblick. */
+.feierwort {
+    position: absolute;
+    left: 50%;
+    top: 38%;
+    transform: translate(-50%, -50%);
+    font-family: var(--schrift-kopf);
+    font-weight: 600;
+    font-size: clamp(2rem, 11vw, 3.4rem);
+    color: var(--good);
+    text-shadow: 0 2px 0 var(--surface), 0 0 24px var(--surface);
+    white-space: nowrap;
+    animation: lobAuf 1.5s cubic-bezier(.2, .9, .3, 1.3) forwards;
+}
+@keyframes lobAuf {
+    0%   { opacity: 0; transform: translate(-50%, -50%) scale(.4); }
+    18%  { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
+    32%  { transform: translate(-50%, -50%) scale(1); }
+    75%  { opacity: 1; transform: translate(-50%, -58%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -78%) scale(.96); }
+}
+
+/*
+ * Die Schnipsel. Jeder bekommt seine Werte als CSS-Variablen mit - Start,
+ * Seitwaertsdrift, Drehung, Dauer, Farbe, Groesse. Gleiche Werte fuer alle
+ * saehen aus wie ein Vorhang, nicht wie Konfetti.
+ */
+.feier.konfetti > i {
+    position: absolute;
+    top: -24px;
+    left: var(--x);
+    width: var(--b);
+    height: var(--h);
+    background: var(--c);
+    border-radius: 2px;
+    animation: schnipsel var(--dauer) var(--ab) linear forwards;
+}
+@keyframes schnipsel {
+    from { opacity: 1; transform: translate(0, 0) rotate(0); }
+    to   { opacity: 0; transform: translate(var(--dx), 104vh) rotate(var(--dreh)); }
+}
+
+/*
+ * Das Feuerwerk liegt HINTER der Seite, nicht darueber.
+ *
+ * z-index: -1, nicht 0: Ein fixiertes Element mit z-index 0 wird ueber den
+ * nicht positionierten Bloecken der Seite gezeichnet - also ueber der
+ * Ueberschrift und den Knoepfen. Erst bei -1 liegt es darunter, und der
+ * Hintergrund von <body> traegt es weiterhin, weil der als Grund der ganzen
+ * Seite noch tiefer liegt.
+ *
+ * Das Konfetti bleibt oben: Es ist ein Augenblick, keine Kulisse.
+ */
+.feier.feuerwerk { z-index: -1; }
+
+/* Jede Rakete ist eine Gruppe, die sich nach ihrem Ausklang selbst
+   abraeumt - sonst waechst die Seite mit jeder um achtzehn Elemente. */
+.rakete { position: absolute; inset: 0; }
+
+/* Die Funken des Feuerwerks fliegen aus einem Punkt nach aussen und
+   verloeschen dabei. */
+/*
+ * Etwas groesser und mit mehr Schein als frueher: Die Funken liegen jetzt
+ * hinter der Seite und muessen sich gegen einen hellen Grund behaupten -
+ * davor, ueber allem, genuegten sieben Punkte.
+ */
+.feier.feuerwerk i {
+    position: absolute;
+    left: var(--x);
+    top: var(--y);
+    width: 9px;
+    height: 9px;
+    margin: -4px 0 0 -4px;
+    border-radius: 50%;
+    background: var(--c);
+    box-shadow: 0 0 14px var(--c), 0 0 4px var(--c);
+    animation: funke var(--dauer, 1.15s) var(--ab) cubic-bezier(.12, .7, .3, 1) forwards;
+}
+@keyframes funke {
+    0%   { opacity: 0; transform: translate(0, 0) scale(.3); }
+    10%  { opacity: 1; transform: translate(0, 0) scale(1); }
+    /* Die Helligkeit haelt bis weit in den Flug. Verblasste der Funke von
+       Anfang an, waere er die meiste Zeit kaum zu sehen - und hinter der
+       Seite faellt das doppelt auf. */
+    62%  { opacity: 1; }
+    /* Am Ende faellt der Funke ein Stueck - sonst sieht der Ring aus wie ein
+       Rad, nicht wie etwas, das in der Luft steht. */
+    100% { opacity: 0; transform: translate(var(--dx), calc(var(--dy) + 34px)) scale(.2); }
+}
+
+/*
+ * Der frisch hinzugekommene Punkt: aufwachsen, gruen werden, zurueck in die
+ * Reihe. Er laeuft so lange wie der Ton und gehoert zu ihm.
+ *
+ * Das Wachsen geht ueber transform und nicht ueber width/height: Sonst
+ * ruecken die Nachbarpunkte beiseite und die Reihe zappelt.
+ */
+.dots i.frisch { animation: punktAuf .5s cubic-bezier(.2, .9, .3, 1.5); }
+@keyframes punktAuf {
+    0%   { transform: scale(1);   box-shadow: 0 0 0 0 rgba(28, 157, 92, .5); }
+    40%  { transform: scale(1.9); box-shadow: 0 0 0 5px rgba(28, 157, 92, 0); }
+    100% { transform: scale(1);   box-shadow: 0 0 0 0 rgba(28, 157, 92, 0); }
+}
+/* Der Farbwechsel selbst weich, damit er zum Wachsen passt. */
+.dots i { transition: background .25s ease, border-color .25s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+    .dots i.frisch { animation: none; }
+    .feierwort { animation: lobRuhig 1.5s ease forwards; }
+    @keyframes lobRuhig { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+}
+
+/* -------------------------------------------------------- Freies Üben
+ *
+ * Über jeder Aufgabe die Serie der Runde: links die laufende, rechts die
+ * beste, dazwischen der Weg dorthin. Grün, solange die laufende die beste
+ * ist - sonst in der Akzentfarbe, bis sie wieder eingeholt ist.
+ */
+.freikopf {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 14px;
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+}
+.freizahl {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: none;
+    min-width: 3.2em;
+    line-height: 1.1;
+}
+.freizahl b {
+    font-variant-numeric: tabular-nums;
+    font-weight: 800;
+    font-size: 1.25rem;
+    color: var(--text);
+    /* Die Zahl waechst beim Weiterspringen - ueber transform, damit die
+       Nachbarn nicht beiseiteruecken und die Leiste zappelt. */
+    display: inline-block;
+}
+.freiname { font-size: .72rem; color: var(--text-soft); white-space: nowrap; }
+/* Der Balken nimmt, was zwischen den Zahlen frei ist. */
+.freikopf .freibalken { flex: 1; min-width: 0; margin-top: 0; height: 10px; border-radius: 5px; }
+
+/* Im Lückentext steht die Leiste im Kopf des Bildschirms, unter dem Titel -
+   dort bleibt sie auch bei offener Tastatur, aber schmaler. */
+.screen-top .freikopf { margin-bottom: 10px; }
+body.keyboard-open .screen-top .freikopf { padding: 4px 12px; margin-bottom: 6px; }
+
+/* Dieselbe Bewegung wie beim Punkt in den anderen Übungen. */
+.freizahl b.frisch { animation: zahlAuf .5s cubic-bezier(.2, .9, .3, 1.5); }
+@keyframes zahlAuf {
+    0%   { transform: scale(1);    color: var(--text); }
+    35%  { transform: scale(1.45); color: var(--good); }
+    100% { transform: scale(1);    color: var(--text); }
+}
+
+/* Die Hantel - als SVG, weil es dafuer kein Emoji gibt. Sie nimmt die
+   Schriftfarbe an und passt damit in jede Zeile. */
+.hantel { width: 24px; height: 24px; vertical-align: -5px; }
+.hantel.lead { width: 26px; height: 26px; color: var(--accent); }
+.hantel.gross { width: 54px; height: 54px; color: var(--text-soft); }
+.btn .hantel { width: 22px; height: 22px; vertical-align: -4px; }
+
+/* Die Auswahl der Lerneinheiten: eine Zeile je Einheit mit Haken davor. */
+.wahlzeile { cursor: pointer; }
+.wahlzeile .wahlbox {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    margin: 0 12px 0 0;
+    accent-color: var(--accent);
+}
+
+/* Die zweite Zeile unter dem Lob - sie sagt, wofuer gelobt wird. */
+.feiergrund {
+    position: absolute;
+    left: 50%;
+    top: 38%;
+    transform: translate(-50%, 34px);
+    font-family: var(--schrift-kopf);
+    font-weight: 600;
+    font-size: clamp(1rem, 4.5vw, 1.4rem);
+    color: var(--text);
+    text-shadow: 0 2px 0 var(--surface), 0 0 18px var(--surface);
+    white-space: nowrap;
+    animation: grundAuf 1.5s ease forwards;
+}
+@keyframes grundAuf {
+    0%   { opacity: 0; transform: translate(-50%, 46px); }
+    22%  { opacity: 1; transform: translate(-50%, 34px); }
+    75%  { opacity: 1; transform: translate(-50%, 26px); }
+    100% { opacity: 0; transform: translate(-50%, 10px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .freizahl b.frisch { animation: none; }
+    .feiergrund { animation: grundRuhig 1.5s ease forwards; }
+    @keyframes grundRuhig { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+}

@@ -66,11 +66,9 @@ function user_can(array $user, string $cap): bool
 /*
  * Ab hier entscheidet die Kurszugehörigkeit, nicht mehr das Feld user_id.
  *
- * Vorher lautete die Regel "die Lerneinheit gehört genau einem Kind". Jetzt
- * lautet sie "wer im Kurs ist, darf". Für eine Familie ist das dieselbe
- * Aussage - jedes Kind ist alleiniges Mitglied seiner eigenen Kurse -, und
- * genau deshalb dürfen die Prüfungen sich nicht rühren. Täten sie es, wäre
- * die Überführung des Bestandes unvollständig gewesen.
+ * Die Regel lautet "wer im Kurs ist, darf" - nicht "die Lerneinheit gehört
+ * genau einem Kind". Der Unterschied trägt alles Weitere: Eine Klasse übt
+ * denselben Vokabelsatz, und sichtbar ist er für jeden, der im Kurs ist.
  */
 
 /** Sprache zum Ansehen laden, oder null. */
@@ -96,8 +94,9 @@ function load_language_for_view(array $user, int $languageId): ?array
  * Mitgliedschaft allein genügt dafür nicht, und das war ein Loch: Ein Kind im
  * Kurs konnte die Sprache seiner Klasse löschen und damit die Unterlagen von
  * siebenundzwanzig anderen. Wer Inhalte anlegen darf, darf sie auch ändern -
- * das ist dieselbe Befugnis, und sie heisst CAP_IMPORT. In einer Schule hat
- * sie die Lehrkraft, in einer Familie das Kind, das für sich selbst einliest.
+ * das ist dieselbe Befugnis, und sie heisst CAP_IMPORT. Normalerweise hat sie
+ * die Lehrkraft; ein Kind bekommt sie nur, wenn es für sich selbst einlesen
+ * soll.
  */
 function load_language_for_edit(array $user, int $languageId): ?array
 {
@@ -251,28 +250,5 @@ function visible_position_for(int $unitId, int $userId): int
     return visible_position(
         ['role' => $row['role']],
         ['released_position' => $row['released_position']],
-    );
-}
-
-// ---------------------------------------------------------------- Lückensätze
-
-/**
- * Lückensatz zum Ansehen laden, oder null.
- *
- * Ein Satz hat keinen eigenen Besitzer - er hängt an einer Vokabel und damit
- * an einer Lerneinheit. Die Frage "darf dieses Kind den Satz melden" ist
- * deshalb dieselbe wie "darf es die Lerneinheit sehen", nur über zwei Ecken.
- */
-function load_sentence_for_view(array $user, int $sentenceId): ?array
-{
-    return q1(
-        'SELECT s.*
-           FROM sentences s
-           JOIN vocab v          ON v.id = s.vocab_id
-           JOIN units t          ON t.id = v.unit_id
-           JOIN course_members m ON m.course_id = t.course_id
-          WHERE s.id = ? AND m.user_id = ?
-          LIMIT 1',
-        [$sentenceId, (int) $user['id']],
     );
 }

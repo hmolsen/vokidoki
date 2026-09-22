@@ -1,9 +1,12 @@
-# Vokabeltrainer
+# Vokidoki
+
+*(Das Verzeichnis heisst weiterhin `vokabeltrainer` — der Name der App hat
+sich geändert, der Ablageort nicht.)*
 
 Eine PWA, mit der Kinder Vokabelseiten aus dem Schulbuch abfotografieren, von
 Claude auslesen lassen und anschließend mit einem Flashcard-Trainer üben.
 Jedes Kind hat einen eigenen Account und ein eigenes Symbol auf dem iOS-Home-Bildschirm
-("Lillis Vokabeln"), das dauerhaft beim richtigen Kind angemeldet bleibt.
+("Lillis Vokidoki"), das dauerhaft beim richtigen Kind angemeldet bleibt.
 
 ---
 
@@ -71,9 +74,15 @@ mysql -u BENUTZER -p DATENBANK < schema.sql
 (es wird beim ersten Login als Hash gespeichert, danach ist der Wert in
 `config.php` wirkungslos). Dann:
 
-1. **Selbsttest** öffnen — dort muss alles grün sein.
-2. Unter **Accounts** für jede Tochter einen Account anlegen.
-3. Unter **Einstellungen** ggf. Modell und Monatsbudget anpassen.
+1. **Selbsttest** öffnen — dort muss alles grün sein. Die Liste der
+   Schemaänderungen ist leer: `schema.sql` legt das fertige Schema an, eine
+   frische Installation hat nichts nachzutragen.
+2. Unter **Schulen** die erste Schule anlegen. Ohne sie kann ein Konto weder
+   eine Sprache anlegen noch eine Lerneinheit sehen — beides hängt am Kurs
+   und ein Kurs an der Schule. Es entsteht keine Schule von selbst.
+3. Unter **Accounts** das erste Lehrkraft-Konto anlegen; Klassen, Kinder und
+   Kurse legt die Lehrkraft dann in ihrem eigenen Bereich an.
+4. Unter **Einstellungen** ggf. Modell und Monatsbudget anpassen.
 
 ---
 
@@ -149,10 +158,11 @@ Manifests:
    dabei einen persönlichen `<link rel="manifest">` mit Namen, Farbe und Symbol
    des Kindes aus.
 2. **Teilen → Zum Home-Bildschirm.** iOS liest das Manifest und schlägt
-   „Lillis Vokabeln" vor.
+   „Lillis Vokidoki" vor.
 3. Beim Start aus dem Symbol öffnet iOS die `start_url` mit dem Token, tauscht ihn
    gegen eine Session in *diesem* Container und entfernt ihn aus der URL.
-4. Für die zweite Tochter: in Safari abmelden, als zweites Kind anmelden, erneut
+4. Für ein zweites Kind auf demselben Gerät: in Safari abmelden, als dieses
+   Kind anmelden, erneut
    zum Home-Bildschirm hinzufügen. Unterschiedliche `start_url` ⇒ iOS legt eine
    zweite, unabhängige App an.
 
@@ -230,6 +240,387 @@ Im Quelltext bleiben die englischen Namen (`units`, `vocab`, `courses`) —
 sie stehen in der Datenbank und ändern sich nicht, weil eine Beschriftung
 sich ändert.
 
+## Das Schema, und wie es sich ändert
+
+**`schema.sql` legt das fertige Schema an.** Eine frische Installation hat
+nichts nachzutragen: Die Liste der Schemaänderungen in `lib/schema.php` ist
+leer, und der Selbsttest meldet nichts Offenes.
+
+Dort standen fünfundvierzig Änderungen, und jede einzelne war der Weg von
+einem älteren Stand auf den heutigen: der Umbau vom Besitzer-Modell („diese
+Lerneinheit gehört diesem Kind") auf Kurse, das Nachziehen der Schul- und
+Klassenspalten, das zweistufige Fallenlassen von `units.user_id`, das
+Nachtragen von Sprachkürzeln und Positionen — und zehn `family.*`-Schritte,
+die den Bestand der alten Familien-App in eine Schule namens „Familie"
+überführten. Nichts davon wird je wieder laufen; es gibt keine ältere
+Datenbank mehr, die überführt werden müsste.
+
+Mit ihnen sind die Helfer gegangen, die nur sie brauchten:
+`schema_has_legacy_data()`, `column_is_nullable()`,
+`vocab_positions_have_gaps()`, `language_code_backfill_*()` und die drei
+`password_seed_*()`. Die Wörter für die Anfangspasswörter stehen jetzt als
+`INSERT` in `schema.sql` — ohne sie blieben die Listen leer, und
+`password_generate()` liefert dann bewusst gar kein Passwort.
+
+**Der Weg selbst bleibt.** Die nächste Schemaänderung kommt in dieselbe
+Liste, `ensure_schema()` führt sie auf Knopfdruck im Selbsttest aus, und
+`schema_was_applied()` steht bereit, falls sie Daten nachträgt statt
+Struktur. Eine Änderung gehört **immer an zwei Stellen**: in die Liste für
+die laufende Installation und in `schema.sql` für die nächste frische.
+
+Dass beides nicht auseinanderläuft, ist keine Frage der Sorgfalt, sondern
+eine Prüfung: Die Suite fährt gegen eine aus `schema.sql` gebaute Datenbank
+und besteht darauf, dass `schema_pending()` leer ist.
+
+## Vokidoki — Name, Zeichen, Schrift
+
+Die App heisst **Vokidoki**. Das V des Namens ist Voki selbst; dahinter steht
+„okidoki" in fettem Fredoka, im Grün des Maskottchens. Das Wortzeichen liegt
+als `assets/vokidoki.svg` und steht auf der Anmeldeseite.
+
+„okidoki" steht darin als **Pfad, nicht als `<text>`**. Ein `<text>` in einem
+über `<img>` eingebundenen SVG findet die Schriften der Seite nicht und fällt
+auf irgendeine Systemschrift zurück — ausgerechnet beim Namen der App, und
+ausgerechnet in dem Augenblick vor dem ersten Bild, in dem die Schrift noch
+gar nicht geladen ist. Als Pfad sieht es überall gleich aus.
+
+Wer das Zeichen neu bauen will: Es entsteht aus `assets/voki-mini.svg` und
+Fredoka 700, auf Versalhöhe gesetzt und um ein Dreissigstel grösser als die
+Buchstaben — ein rundes Maskottchen wirkt neben fetten Buchstaben sonst
+kleiner, als es ist.
+
+### Zwei Schriften
+
+| | |
+|---|---|
+| **Fredoka** | Überschriften und Knöpfe |
+| **Nunito** | alles zum Lesen: Fließtext, Sätze, **Vokabeln** |
+
+Die Antwortknöpfe im Quiz sind ausdrücklich ausgenommen: Sie sind zwar
+`<button>`, aber darin steht eine Vokabel. Eine runde Anzeigeschrift über
+französischen Wortformen macht das Vergleichen schwerer, nicht leichter — und
+genau darum geht es beim Üben. Dasselbe gilt für das abgefragte Wort selbst.
+
+**Beide Dateien liegen auf dem eigenen Server**, nicht bei Google. Das ist
+kein Geschmacksurteil: Ein eingebundenes Stilblatt von `fonts.googleapis.com`
+schickte die Adresse jedes Kindes bei jedem kalten Start dorthin — in einer
+Schule nicht zu rechtfertigen. Und ohne Netz gäbe es dann gar keine Schrift,
+obwohl diese App ausdrücklich weiterlaufen soll.
+
+Je Familie eine einzige Datei mit allen Strichstärken (*variable font*),
+beschnitten auf Latin und Latin-Ext — das deckt Deutsch, Französisch, Dänisch,
+Englisch und Latein ab. Zusammen rund 90 KB, mit `font-display: swap` und
+einem Jahr Cache-Control.
+
+## Freies Üben
+
+Die dritte Übungsart, und die einzige ohne Ziel. Die beiden anderen sind
+fertig, wenn jede Vokabel dreimal hintereinander sass; diese läuft, bis
+jemand aufhört, und zieht aus allem, was ausgewählt wurde — auch aus dem, was
+längst sitzt. Wiederholen, nicht abarbeiten.
+
+Zwei Wege hinein:
+
+* **Von einer Lerneinheit** (`#/frei/12`) — alles, was dort freigegeben ist.
+* **Vom Kurs** (`#/frei/waehlen/5`) — erst die Frage „Welche Lerneinheiten
+  sollen geübt werden?" mit einem Haken je Einheit, dann die Runde über alle
+  angekreuzten (`#/frei/12-13-15`).
+
+Die Auswahl steht in der Adresse und nicht in einer Variablen: So übersteht
+eine Runde das Neuladen, und der Zurück-Pfeil des Browsers führt dorthin, wo
+man war.
+
+Gewürfelt wird zweierlei — welche Vokabel und welche Aufgabenart. Drei von
+fünf Aufgaben werden Lückentext, wenn es zu der Vokabel einen Satz gibt: Er
+ist die schwerere Übung, und wer frei übt, hat das Auswählen meist hinter
+sich. Eine Vokabel ohne Satz bekommt ihre Frage trotzdem.
+
+### Der Lernstand bleibt unberührt
+
+**Das ist die wichtigste Eigenschaft dieser Übung.** Freies Üben schreibt
+nicht in `progress`: Eine richtige Antwort macht hier nichts „gekonnt", und
+ein Fehler beim lockeren Wiederholen reisst keine Serie ein, die über Wochen
+entstanden ist. „Gekonnt" bleibt die Aussage der strukturierten Übung, und
+der Fortschrittsbalken einer Lerneinheit bewegt sich hier nicht.
+
+Gezählt wird trotzdem. Jede richtige Antwort geht als eigenes Ereignis in den
+Strom (`k: 'frei'`), und der Server verbucht damit **nur den Tag**:
+
+```php
+if ($art === 'frei') {
+    …
+    streak_verbuchen($uid, $tag, $richtig, false);   // kein record_answer()
+}
+```
+
+Das Ereignis trägt die Vokabel trotzdem mit — an ihr prüft dieselbe Schranke
+wie bei jeder anderen Antwort, ob dieses Konto überhaupt antworten darf, und
+eine Quittung bekommt es auch: Ein zweimal geschickter Stapel zählt sonst
+doppelt. Damit landen die Antworten in Serie, Kalender und Abzeichen. Geübt
+ist geübt.
+
+### Die Serie der Runde
+
+Über jeder Aufgabe steht eine Leiste: links, wie viele gerade hintereinander
+richtig sind, rechts das Beste dieser Runde, dazwischen ein Balken.
+
+* Am Anfang stehen beide auf **0**, der Balken voll und **grün**.
+* Solange die laufende Serie das Beste *ist*, zählen beide Zahlen gemeinsam
+  hoch, und der Balken bleibt voll und grün.
+* Nach einem Fehler fällt die linke Zahl auf 0, die rechte bleibt stehen.
+  Der Balken zeigt jetzt den Weg zurück: bei 2 von 5 ist er zu zwei Fünfteln
+  gefüllt, in der Akzentfarbe. Holt die Serie den Rekord ein, wird er wieder
+  grün, und beide zählen gemeinsam weiter.
+
+Die Zahlen springen sofort nach der Antwort weiter, mit derselben kurzen
+Bewegung wie der Punkt in den anderen Übungen, und zur selben Zeit wie der
+Ton. Eine Tür „Runde beenden" gibt es nicht mehr — sie tat dasselbe wie der
+Zurück-Pfeil daneben.
+
+**Der Lückentext ist derselbe Bildschirm wie in der Lückentext-Übung**
+(`lueckeZeigen()` in `views/cloze.js`): Feld in der Lücke, Zeichenreihe,
+der Knopf, der Richtig und Falsch trägt, nach einem Fehler „Weiter" statt
+eines Zeitablaufs, und die Tastatur bleibt zwischen zwei Lückenaufgaben
+offen. Das freie Üben bringt nur mit, was bei ihm anders ist — die Leiste
+oben und wohin die Antwort geht.
+
+Gelobt wird an zwei Marken: alle **25** richtigen Antworten und alle **5**
+hintereinander. Unter dem Lob steht, wofür — „25 Richtige!" oder „5 in
+Folge"; ohne diese Zeile wäre es ein Ausruf ohne Anlass. Fallen beide
+zusammen, gewinnt die seltenere: Wer bei der 25. auch noch fünf in Folge hat,
+soll die 25 lesen.
+
+### Kleinigkeiten mit Grund
+
+**Das Symbol ist eine gezeichnete Hantel**, kein Emoji — es gibt keines. Das
+nächstliegende (🏋️) ist ein Mensch, der etwas stemmt, und das ist etwas
+anderes als das Gerät. Zwei Scheiben, eine Stange, `currentColor`.
+
+**Nach dem Verlassen schaltet nichts mehr weiter.** Der Zeitgeber, der die
+nächste Aufgabe bringt, prüft vorher die Adresse:
+
+```js
+if (runde === null || !location.hash.startsWith('#/frei/')) return;
+```
+
+Der Zurück-Pfeil und das Menü wechseln die Adresse, ohne dass diese Ansicht
+davon erfährt. Ohne die Prüfung liefe der
+Zeitgeber trotzdem ab und zeichnete die nächste Aufgabe über die Seite, auf
+der man gerade gelandet ist.
+
+## Die Serie
+
+Links vom Zahnrad steht auf jeder Seite Voki und eine Zahl: an wie vielen
+Tagen hintereinander dieses Kind gelernt hat.
+
+| Lage | Bild | Zahl | heisst |
+|---|---|---|---|
+| heute schon gelernt | Voki froh, **farbig** | **grün** | alles gut |
+| heute noch nicht | Voki froh, aber grau | grau | der Tag ist noch offen |
+| ein Tag ausgelassen | Voki traurig, grau | grau | heute nichts mehr, und sie ist weg |
+| zwei Tage ausgelassen | Voki traurig, grau | **0** | von vorn |
+
+**Ein Tag Pause wird verziehen, zwei nicht.** Wer Montag lernt, darf Dienstag
+aussetzen und Mittwoch weitermachen — die Serie läuft weiter. Wer Dienstag
+*und* Mittwoch aussetzt, fängt Donnerstag bei null an. Der traurige Voki ist
+die Warnung dazwischen: Er erscheint einen Tag, bevor die Serie fällt, nicht
+erst danach. Eine Warnung, die erst kommt, wenn nichts mehr zu retten ist,
+ist keine.
+
+### Wie man einen Tag bekommt
+
+Zwei Wege, und der zweite ist der wichtigere:
+
+1. **Eine Vokabel neu können** — dreimal hintereinander richtig, dieselbe
+   Regel wie überall (`KNOWN_THRESHOLD`).
+2. **Oder zehn richtige Antworten** an diesem Tag (`STREAK_UEBUNG_MIN`).
+
+Ohne den zweiten Weg könnte eine Serie aus einem Grund sterben, an dem das
+Kind nichts ändern kann: Das Quiz legt nur Vokabeln vor, die noch nicht
+gekonnt sind. Wer alles Freigegebene kann, bekommt gar keine neue mehr — und
+gäbe die Lehrkraft eine Woche nichts frei, verlöre eine ganze Klasse am
+selben Tag ihre Serien, obwohl alle täglich geübt haben. Wiederholen ist dann
+das Beste, was ein Kind tun kann, und dafür soll es den Tag bekommen.
+
+Ein Tipp auf das Abzeichen erklärt beides in einer Karte. Das ist keine
+Zugabe: Gerade der zweite Weg erklärt sich nicht von selbst, und ein Kind,
+das sich fragt, warum die Zahl heute grau ist, soll eine Antwort bekommen,
+ohne jemanden fragen zu müssen.
+
+### Welcher Tag zählt — der des Geräts
+
+**Jede Antwort bringt ihren eigenen Tag mit** (`d` im Ereignisstrom), und der
+kommt vom Gerät, nicht vom Server. Die App übt ohne Netz und schickt ihre
+Antworten später am Stück; wer Montag im Zug lernt und Mittwoch wieder online
+ist, hätte sonst zwei verpasste Tage und eine tote Serie — für Lernen, das
+stattgefunden hat.
+
+Der Server stutzt den Tag auf ein glaubhaftes Maß (nicht in der Zukunft,
+höchstens vierzehn Tage alt), lehnt ihn aber nie ab: Die Antwort selbst war
+ja richtig. Dass sich der Tag stellen lässt, indem jemand die Uhr des Tablets
+verstellt, ist bekannt und in Kauf genommen. Es ist eine Lernhilfe, keine
+Klassenarbeit.
+
+Ein Tag beginnt in `Europe/Berlin` (`STREAK_ZONE`) — ausdrücklich dort und
+nicht per `date_default_timezone_set()`: Die Zeitstempel in der Datenbank
+schreibt MySQL mit `NOW()` in *seiner* Zone, und der Admin-Bereich zeigt sie
+mit `date()` an. Stellte man PHP um und MySQL nicht, stünden dort Uhrzeiten,
+die es nie gab.
+
+### Gerechnet wird zweimal
+
+`lib/streak.php` auf dem Server, `vorrat.js` im Gerät — dieselbe Regel in
+zwei Sprachen, wie schon beim Vergleich der Lückenantwort. Es geht nicht
+anders: Das Abzeichen steht auf jeder Seite und muss auch ohne Netz stimmen,
+und eine installierte App liegt wochenlang im Hintergrund — zwischen dem
+letzten Abruf und dem Blick auf den Bildschirm kann Mitternacht liegen.
+
+Die Arbeit ist dabei geteilt. Der Server rechnet die **Kette** aus allen
+Tagen (`streak_rechnen`), das Gerät rechnet nur die **Anzeige** daraus
+(`serieAnzeige`) — es kennt nur den Ausschnitt, den der Kalender braucht,
+muss aber wissen, ob die Serie heute noch steht. Dafür reichen zwei Werte: wie lang die
+Kette an ihrem letzten Lerntag war, und wann dieser Tag war.
+
+Zusammengehalten werden beide Fassungen von `tests/faelle/serien.json` —
+einer Fallsammlung, die keiner der beiden Seiten gehört. `tests/sentences.php`
+prüft sie gegen PHP, die Browser-Suite gegen JavaScript. Fällt eine
+auseinander, fällt eine Suite um.
+
+### Gespeichert wird in Tagen, nicht als Zähler
+
+`learn_days` hält eine Zeile je Kind und Tag (`learned`, `correct`). Ein
+Zähler an `users` wäre kleiner, liesse sich aber nie nachrechnen — und genau
+das wird gebraucht: Antworten kommen aus der Warteschlange nachträglich für
+vorgestern herein, und ein Zähler wüsste dann nicht mehr, ob dieser Tag schon
+zählte. Aus den Tagen fällt die Serie jedesmal neu heraus, und der Kalender
+im Konto kommt ohne eine zweite Buchführung aus. Nur die Bestmarke steht als
+`users.streak_best` daneben; sie überlebt eine gerissene Serie.
+
+**Fehlt das Schema noch, hält die Serie still.** Der Code geht per FTP sofort
+live, die Schemaänderung läuft erst auf Knopfdruck im Selbsttest — dazwischen
+gibt es `learn_days` nicht. Ohne diesen Riegel fiele in genau diesem Fenster
+jede angemeldete Seite um, wegen eines Abzeichens. Eine Serie darf nie der
+Grund sein, warum ein Kind nicht üben kann.
+
+### Belohnung: Punkt, Konfetti, Feuerwerk
+
+Drei Stufen, und jede hat ihren Anlass:
+
+| | wann | was |
+|---|---|---|
+| **Punkt** | jede richtige Antwort | er wächst auf, wird grün, fällt zurück in die Reihe |
+| **Konfetti** | die Vokabel sitzt (drittes Mal hintereinander) | Schnipsel über den Schirm, davor ein Lob |
+| **Feuerwerk** | die ganze Lerneinheit steht | Raketen hinter der Geschafft-Seite, bis jemand weiterklickt |
+
+**Die Punkte standen vorher auf dem Stand *vor* der Antwort.** Sie rückten
+erst mit der nächsten Frage nach — wer zweimal richtig lag, sah zwei Punkte,
+und beim dritten Mal, dem Augenblick, auf den es ankommt, immer noch zwei.
+Jetzt springt der Punkt sofort an, mit derselben Länge wie der Ton (500 ms).
+Er wächst über `transform: scale`, nicht über `width` — sonst rücken die
+Nachbarpunkte beiseite und die Reihe zappelt.
+
+**Nichts davon hält den Ablauf auf.** Nach einer richtigen Antwort bleibt es
+bei denselben 700 ms (Quiz) bzw. 900 ms (Lückentext) bis zur nächsten Frage.
+Konfetti und Feuerwerk hängen deshalb an `<body>` und nicht in der Ansicht:
+`render()` ersetzt den ganzen Inhalt von `#app`, und in der Ansicht wären sie
+schon 700 ms später mitten im Flug verschwunden. Die nächste Frage wird
+darunter gezeichnet, während es noch fliegt; `pointer-events: none` lässt
+jeden Druck durch. Die Browser-Suite misst genau das nach.
+
+Das Lob wird aus vierzehn kurzen Wendungen gezogen („Super!", „Spitze!",
+„Klasse!", „Prima!" …), nie zweimal dieselbe hintereinander — das fällt
+sofort auf. „Sitzt!" ist bewusst nicht dabei: Das steht schon als Rückmeldung
+unter der Frage, und zweimal dasselbe Wort auf einem Bildschirm ist eine
+Verdopplung, keine Steigerung.
+
+**Das Feuerwerk hört nicht von selbst auf.** Die Geschafft-Seite ist kein
+Durchgang, sondern der Augenblick, auf den zwanzig Vokabeln hingearbeitet
+haben — drei Raketen und Schluss waren zu Ende, bevor ein Kind aufgesehen
+hatte. Jetzt steigt alle 850 ms eine neue, bis jemand weiterklickt.
+
+Es liegt dabei **hinter** der Seite (`z-index: -1`), nicht darüber: Die
+Überschrift und die beiden Knöpfe bleiben lesbar, und die Raketen steigen
+drumherum. `z-index: 0` genügt dafür nicht — ein fixiertes Element wird auch
+damit über den nicht positionierten Blöcken der Seite gezeichnet; erst bei
+−1 liegt es darunter, und der Hintergrund von `<body>` trägt es weiterhin,
+weil der als Grund der ganzen Seite noch tiefer liegt.
+
+Beendet wird es **in `render()`**, nicht an den Knöpfen: Jeder Wechsel der
+Ansicht kommt durch diese eine Zeile, ob über „Noch einmal üben", „Zur
+Übersicht", das Menü oder den Zurück-Pfeil. Ein eigener Hörer je Ausgang
+wäre einer zu wenig. Das Konfetti ist davon ausdrücklich nicht betroffen —
+es soll über der nächsten Frage weiterfliegen, und die wird in genau diesem
+`render()` gezeichnet. Deshalb haben die beiden **getrennte Bühnen**: Sonst
+schnitte das Feuerwerk das Konfetti der dritten richtigen Antwort 700 ms
+später mitten im Flug ab.
+
+Jede Rakete räumt sich nach ihrem Ausklang selbst ab, sonst wüchse die Seite
+mit jeder um achtzehn Elemente; gemessen sind nie mehr als zwei gleichzeitig
+in der Luft. In einem versteckten Tab steigt keine — eine Uhr, die dort
+weiterläuft, kostet Strom für etwas, das niemand sieht.
+
+Bei `prefers-reduced-motion` bleibt das Lob stehen, die Schnipsel und Funken
+fallen weg.
+
+### Der Kalender im Konto
+
+Unter „Deine Serie" steht ein **Monatskalender**: sieben Spalten, Montag
+links, und in jedem Kästchen die Zahl der richtigen Antworten dieses Tages —
+bis zu dreistellig. Die Nummer des Tages steht nicht darin: Sie ergibt sich
+aus der Stelle im Gitter, und zwei Zahlen in einem Kästchen dieser Grösse
+liest niemand mehr. Wochentagsköpfe braucht es auch keine; im Kalender weiss
+jeder, wo er steht.
+
+Hier standen dreissig Kästchen in einer Reihe — eine Zeitleiste ohne Bezug.
+Sie beantwortete „wie viele Tage am Stück", aber nicht „wann eigentlich": Der
+vierte Kasten von links war irgendein Dienstag.
+
+Geblättert wird mit zwei Pfeilen, **zwölf Monate zurück** — oder bis zu dem
+Monat, in dem das Konto entstanden ist, wenn das später war. In Monate zu
+blättern, in denen es das Konto noch gar nicht gab, sähe aus wie ein Fehler.
+Weiter zurück hält die Tabelle ohnehin nichts: `streak_aufraeumen()` räumt
+weg, was älter ist als die Historie der Serie — selten und nebenbei, wie die
+Quittungen in `api/bundle.php`, denn dieses Projekt hat keinen Cron.
+
+Gerechnet wird durchweg in **UTC**. Die Zeitumstellung macht einen Tag 23
+oder 25 Stunden lang, und ein Kalender, der im Oktober einen Tag verliert,
+ist schlimmer als keiner.
+
+Die Hülle (`index.php`) bekommt den Kalender **nicht** mit — sie wird nie
+zwischengespeichert und bei jedem Seitenaufruf neu gebaut. Sie holt nur, was
+das Abzeichen braucht (`streak_stand($uid, false)`); der Kalender kommt mit
+dem Bündel, denn das liegt ohnehin im Gerät und soll auch ohne Netz etwas
+zeigen.
+
+### Der Ton
+
+Bei jeder richtigen Antwort ein kleines Glöckchen — im Browser erzeugt statt
+als Datei geladen, damit es ohne Netz und beim allerersten Mal sofort da ist.
+Abschaltbar im rechten Menü; die Einstellung gehört dem Gerät, nicht dem
+Konto, wie die Farbwahl auch.
+
+**Warum mehrere Töne je Anschlag.** Hier stand ein Dreieckton mit einer
+Hüllkurve von 0,28 Sekunden: ein Piepser, abgeschnitten, bevor er klingen
+konnte, und mit der Obertonreihe eines Rechtecksignals eher Spielzeugtrompete
+als Glocke. Eine Glocke besteht aus mehreren Teiltönen, die **nicht** die
+ganzzahligen Vielfachen des Grundtons sind — beim Glockenspiel ungefähr
+1 : 2,76 : 5,40 : 8,93 — und die verschieden schnell verklingen: Die hohen
+sind im Anschlag am lautesten und als erste weg, der Grundton trägt den
+Nachhall. Genau dieses Auseinanderlaufen ist der Unterschied zwischen
+„Glocke" und „Ton"; nachgebaut wird es mit einem Oszillator je Teilton.
+
+Gemessen: Der Ausklang geht von **344 ms auf 1527 ms**, und er endet
+tatsächlich bei null. Der alte Ton lief exponentiell auf 0,0001 und wurde
+dort abgeschaltet — ein exponentieller Verlauf erreicht die Null nie, und ein
+Oszillator, der bei einem Restwert aufhört, knackt. Die letzten dreissig
+Millisekunden gehen deshalb linear auf die Null.
+
+Alle Anschläge laufen über einen gemeinsamen Regler. Beim zügigen Üben kommt
+der nächste, bevor der vorige verklungen ist; ohne ihn addierte sich das
+irgendwann über die Eins, und Übersteuerung klingt nach kaputt, nicht nach
+laut. Nachgemessen bleibt der Spitzenwert auch bei sechs Antworten in Folge
+im Abstand von 700 ms genau dort, wo er bei einer einzelnen liegt.
+
 ## Der Lehrkraft-Bereich beginnt bei der Arbeit
 
 **Die Startseite sind die eigenen Kurse.** Vorher war es die Klassenliste —
@@ -273,8 +664,8 @@ eins nach dem anderen:
    den Kurs" gegen „Bleibt leer — Kinder nimmst du einzeln auf"). Eine
    Klasse, die es noch nicht gibt, lässt sich hier anlegen; sonst wäre der
    erste Schritt für eine neue Lehrkraft eine Sackgasse.
-2. **Für welche Sprache?** Die fünf Schulsprachen als Kacheln — so war es
-   in der Familien-App —, alle übrigen im durchsuchbaren Feld darunter.
+2. **Für welche Sprache?** Die fünf Schulsprachen als Kacheln, alle
+   übrigen im durchsuchbaren Feld darunter.
    Jede Kachel ist ein Absendeknopf, der seinen Sprachnamen trägt;
    abgeschickt wird nur der gedrückte. Das kann HTML von sich aus.
 
@@ -294,7 +685,8 @@ Formular des Lehrkraft-Bereichs und die Anmeldung der App —, und der zweite
 kannte nur ein Ziel: die Kachelansicht. Eine Lehrkraft landete damit in der
 Ansicht ihrer Klasse und musste sich erst in die Verwaltung durchklicken.
 Jetzt liefert `api/auth.php` das Ziel je nach Rolle mit. Die Ansicht der
-Klasse bleibt ihr offen, aber als eigener Griff: „So sieht es die Klasse“.
+Klasse bleibt ihr offen, aber als eigener Griff: der Ansichtsschalter im
+Zahnrad.
 Ein Geräte-Token entsteht dabei keiner — der ist der Schlüssel der
 installierten App, und wer in die Verwaltung geht, braucht ihn nicht.
 
@@ -410,6 +802,19 @@ Abmelden. Das Zahnrad führt in dieselben Einstellungen wie in der App
 Seite man kommt, und eine zweite Fassung davon wären bald zwei
 verschiedene.
 
+**Am Zahnrad steht rot, was die Kinder gemeldet haben.** In jeder Übung
+steht ein ⚑ — beim Auswählen oben in der Fragekarte, im Lückentext
+neben „Prüfen". Nach der Rückfrage „Diese Vokabel deiner Lehrkraft
+melden?" — eine Karte in der Seite, kein Kästchen des Browsers — geht die Meldung in dieselbe Warteschlange wie die Antworten, kommt
+also auch ohne Netz an. Gezählt werden Vokabeln, nicht Meldungen: Stolpern
+fünf Kinder über dasselbe Wort, ist das eine Sache zu richten. Unter
+`teacher/meldungen.php` kommen sie eine nach der anderen, die meistgemeldete
+zuerst — mit dem Wortpaar, wenn beim Auswählen gemeldet wurde, und mit dem
+Lückensatz samt dem, was die Kinder getippt hatten, wenn es dort war. „Ändern"
+speichert und erledigt, „Stimmt so" erledigt nur; danach steht die nächste da.
+Der Admin sieht dieselbe Liste über alle Schulen unter **Meldungen**. Die
+Regeln stehen in `lib/meldungen.php`.
+
 **Die Überschrift einer Lerneinheit ist der Weg zurück — und das
 Umbenennen.** Sie lautet „Englisch - 5B › Unit 4": Der Kurs davor ist ein
 Knopf, und er sieht auch nach einem aus; ein unterstrichenes Wort in einer
@@ -423,30 +828,89 @@ da; das Skript blendet nur um.
 
 Beim Einlesen trägt die Ansicht neben dem Kursnamen den Knopf „‹ Meine
 Kurse", und **nach** dem Einlesen landet eine Lehrkraft in der Freigabe der
-Lerneinheit, nicht in der Schüleransicht: Eingelesen ist noch nicht
+Lerneinheit, nicht in der Lernansicht: Eingelesen ist noch nicht
 aufgemacht, und dort sähe sie eine leere Liste. Für ein Kind bleibt es die
 Lerneinheit in der App — es hat gerade seine eigenen Vokabeln eingelesen und
 will üben.
 
-Von Kurs und Lerneinheit führt ein Knopf **in der Zeile der Überschrift** in
-die Schüleransicht: „So sieht es die Klasse". Die App sagt dort, dass man
-gerade die Schüleransicht vor sich hat — ohne diesen Satz ist es nur eine
-Seite, die weniger zeigt als die Verwaltung, und das sieht nach einem Fehler
-aus. Für Kinder steht dort nichts.
+### Der Wechsel zwischen den beiden Ansichten
 
-**Im selben Fenster**, nicht in einem zweiten. Der Knopf stand einmal auf
-`target="_blank"`, und damals war das der einzige Weg zurück: Tab zu. Seit
-die Schüleransicht selbst einen Knopf trägt, der auf genau die Seite zeigt,
-von der man kam, ist der zweite Tab keine Hilfe mehr, sondern eine Ablage —
-wer zweimal nachsieht, hat drei Fenster offen und weiß in keinem, wo er
-ist.
+**Ein Schalter mit zwei Stellungen, im Zahnrad** — unter „Passwort ändern"
+und über den Farben, in beiden Bereichen an derselben Stelle und von
+derselben Bauart wie die Farbwahl darunter. Er zeigt, in welcher Ansicht man
+steht, und führt mit einem Griff in die andere.
+
+Er führt dabei auf die **Entsprechung dieser Seite**, nicht auf die
+Startseite. Drei Seiten haben eine:
+
+| Verwaltung | Lernansicht |
+|---|---|
+| Meine Kurse | Meine Kurse |
+| Kurs | Kurs |
+| Lerneinheit | Lerneinheit |
+
+Üben und Lückentext zählen zu ihrer Lerneinheit — es ist dieselbe, nur in
+Betrieb. Alles andere (Klassenlisten, das eigene Konto, der Anlege-Assistent)
+gibt es drüben nicht; von dort führt der Wechsel auf die Startseite, nicht
+ins Leere.
+
+Vorher waren es zwei halbe Wege: ein Knopf „So sieht es die Klasse" neben
+der Überschrift — auf zwei von sieben Seiten und nur in eine Richtung — und
+zurück ein Knopf im Hinweis der Lernansicht, den es auch nicht überall
+gab. Dazu ein Eintrag „Zur Verwaltung" im *linken* Menü, der immer auf die
+Startseite führte. Drei Bedienelemente für eine Bewegung, keines davon
+vollständig. Jetzt eines, und links stehen wieder nur die Kurse.
+
+Die Kennung des Kurses steht dabei nicht in der Adresse der App — dort steht
+die der **Sprache**. Sie kommt aus der Kursliste, die `app.js` in `core.js`
+hereinreicht, und nur eine Lehrkraft bekommt sie überhaupt mitgeliefert.
+Umgekehrt sucht die Verwaltung den Kurs in der Kursliste *dieser* Lehrkraft:
+Eine Kennung aus der Adresse, die darin nicht vorkommt, führt damit von
+selbst auf die Startseite statt auf einen fremden Kurs.
+
+### Der Streifen statt des Hinweiskastens
+
+Die App sagt weiterhin, dass man die Lernansicht vor sich hat — ohne dieses
+Wort ist es nur eine Seite, die weniger zeigt als die Verwaltung, und das
+sieht nach einem Fehler aus.
+
+Gesagt wird es aber in **einem Wort**, in einem Streifen von rund 26 px ganz
+oben, und nicht mehr in einem Hinweiskasten mit vier Zeilen Erklärung über
+den Kursen. Der Kasten war richtig, solange er die einzige Auskunft war;
+seit im Zahnrad ein Schalter steht, der dasselbe sagt **und** den Weg zurück
+kennt, waren es zwei Erklärungen für eine Sache — und die grössere stand
+ausgerechnet über dem, weswegen man hergekommen ist.
+
+Der Streifen zieht sich mit negativen Rändern bis an die Kanten: Einer, der
+die Einrückung des Inhalts mitmacht, sieht aus wie ein Kasten, der nicht
+ganz passt. Oben kommt der Sicherheitsabstand des Geräts als Polster zurück,
+damit das Wort auf einem iPhone nicht unter der Uhr liegt.
+
+Er steht auf denselben drei Seiten wie der Schalter — **nicht** im Quiz und
+im Lückentext. Die binden sich an die sichtbare Höhe (`.app.fitted` ist
+fixiert und genau so hoch wie das Fenster), und ein Streifen darüber schöbe
+die Eingabezeile aus dem Bild.
+
+Für Kinder steht dort nichts. Sie brauchen nicht erklärt zu bekommen, dass
+sie ihre eigene App sehen — sie kennen gar keine andere.
+
+Über den Kacheln stand für eine Lehrkraft ausserdem eine Zeile
+„Verwaltung". Auch die ist weg: Der Schalter kann dasselbe und mehr, und
+eine zweite Tür daneben kostete den Platz über genau dem, weswegen man
+hergekommen ist — den eigenen Kursen.
+
+**Im selben Fenster**, nicht in einem zweiten. Der alte Knopf stand einmal
+auf `target="_blank"`, und damals war das der einzige Weg zurück: Tab zu.
+Seit der Weg zurück überall an derselben Stelle steht, ist der zweite Tab
+keine Hilfe mehr, sondern eine Ablage — wer zweimal nachsieht, hat drei
+Fenster offen und weiß in keinem, wo er ist.
 
 **Und sonst steht dort nichts, was ein Kind nicht auch sieht.** „Vokabeln
 einlesen" hing an `canImport`, und das hat eine Lehrkraft — die Probe zeigte
 ihr damit eine Seite, die es so gar nicht gibt. Ebenso „Umbenennen" und
 „Lerneinheit löschen" in der Lerneinheit. Beides gilt jetzt nur noch für
-`canImport && !isTeacher`, also für ein Kind in einer Familie, das seine
-Lerneinheiten selbst anlegt.
+`canImport && !isTeacher`, also für ein Kind, dem die Lehrkraft das Einlesen
+ausdrücklich erlaubt hat und das seine Lerneinheiten damit selbst anlegt.
 
 Umbenennen und Löschen sind dabei nicht verschwunden, sondern umgezogen: Sie
 stehen unter „Diese Lerneinheit" im Lehrkraft-Bereich, auf derselben
@@ -484,6 +948,27 @@ einmal „DEUTSCH", und die erste Zelle war ein Block statt einer Zelle. Am
 Quelltext sah die Ausnahme richtig aus; gerechnet wurde etwas anderes — das
 sieht nur ein Browser, und deshalb steht die Prüfung dafür in der fünften
 Suite.
+
+**Die beiden Mengen-Knöpfe hängen an den Enden der Tabelle.** Oben, als
+allererste Zeile, „Nichts freigeben"; unten, unter der Anlegezeile, „Alles
+freigeben". Beide spannen die volle Breite und haben keine eigene Rundung —
+die Rundung der Tabelle beschneidet sie, sie sitzen bündig in den Ecken.
+
+Der Grund ist der Balken dazwischen: Die beiden sind seine Endstellungen.
+Als Knopfreihe *über* der Tabelle sagten sie nichts darüber, wohin sie
+greifen; an den Enden sieht man die Strecke, auf der sie wirken. Und sie
+tragen die Farbe, die sie bewirken — oben das Grau der gesperrten Zeilen,
+unten das Grün der freigegebenen.
+
+Dass „Alles freigeben" *unter* der Anlegezeile steht, ist Absicht: Wer
+gerade von Hand eine Vokabel angefügt hat, will sie mitfreigeben. Stünde der
+Knopf darüber, läge die frisch getippte Zeile ausserhalb dessen, worauf er
+zu zeigen scheint — und genau diese Frage soll er nicht aufwerfen.
+
+Technisch hängen beide über `form="releaseform"` am Formular unter der
+Tabelle: Ein `<form>` kann in HTML nicht um Tabellenzeilen herumstehen.
+Denselben Weg gehen die Knöpfe je Zeile schon, die ohne JavaScript der
+Rückfallweg sind.
 
 Dazu wurde die Tabelle auf das eingedampft, was ein Telefon trägt: **drei
 Spalten** statt fünf. Die laufende Nummer und die Zahl der Lückensätze sind
@@ -639,9 +1124,9 @@ hängt per `ON DELETE CASCADE` daran. Die Rückfrage sagt das.
 
 Wer Englisch in der 5B und in der 6A gibt, sah in der App zweimal die Kachel
 „Englisch" und konnte nicht raten, welche welche ist. Die Kachel trägt
-deshalb den Namen des Kurses — **aber nur dann**: In einer Familie heisst
-der Kurs „Englisch Lilli M.", und der eigene Name auf der eigenen Kachel ist
-keine Auskunft, sondern Lärm. Entschieden wird je Konto, denn es geht darum,
+deshalb den Namen des Kurses — **aber nur dann**: Legt ein Kind selbst eine
+Sprache an, heisst sein Kurs „Englisch Lilli M.", und der eigene Name auf der
+eigenen Kachel ist keine Auskunft, sondern Lärm. Entschieden wird je Konto, denn es geht darum,
 was *dieser* Mensch vor sich hat. Die Seite hinter der Kachel trägt
 denselben Namen; stünde dort etwas anderes, wäre der Weg dorthin eine
 Überraschung.
@@ -672,13 +1157,19 @@ index.php            App-Shell; rendert Manifest-Link und iOS-Meta pro Kind
 manifest.php         dynamisches Manifest (Name, start_url mit Token)
 icon.php             PNG-Icon aus Farbe + Initiale (GD), gecacht
 app.js / core.js     Router und gemeinsame Bausteine
-views/               login, languages, language, units, unit, import, quiz, cloze
+vorrat.js            alles zum Üben im Gerät; rechnet offline wie der Server
+menue.js             die beiden Schubladen, für App und Lehrkraft-Bereich
+views/               login, languages, language, unit, import, quiz, cloze,
+                     frei (Freies Ueben), profile, bilder
 sw.js                Service Worker (nur statische Dateien)
 api/                 auth, languages, units, import, quiz, cloze  (JSON)
 admin/               Kosten, Accounts, Sprachen und Vokabeln, Einstellungen, Selbsttest
 lib/                 db, auth, settings, ai, keyvault, cost, json, config,
                      schema (Spalten nachziehen), wordtypes,
-                     progress (Lernregel), sentences (Lückensätze)
+                     progress (Lernregel), streak (die Serie),
+                     sentences (Lückensätze)
+assets/fonts/        Fredoka und Nunito, selbst ausgeliefert
+assets/vokidoki.svg  das Wortzeichen; das V ist Voki, "okidoki" sind Pfade
 schema.sql           Datenbankschema
 ```
 

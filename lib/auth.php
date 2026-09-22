@@ -134,15 +134,21 @@ function device_token_user(string $token): ?array
     return $row;
 }
 
-/** Besitzform des Anzeigenamens: "Lilli" -> "Lillis", "Max" -> "Max'". */
+/**
+ * Besitzform des Anzeigenamens: "Lilli" -> "Lillis", "Max" -> "Max'".
+ *
+ * Ein Name, der schon auf einen Zischlaut endet, bekommt KEIN zweites s -
+ * "Hannes" wird nicht zu "Hanness", sondern zu "Hannes'". So steht es im
+ * Duden, und auf dem Home-Bildschirm steht der Name eines Kindes.
+ */
 function possessive(string $name): string
 {
     $last = mb_strtolower(mb_substr($name, -1));
     return in_array($last, ['s', 'x', 'z', 'ß'], true) ? $name . "'" : $name . 's';
 }
 
-/** App-Name für Manifest und iOS-Homescreen, z. B. "Lillis Vokabeln". */
+/** App-Name für Manifest und iOS-Homescreen, z. B. "Lillis Vokidoki". */
 function app_name_for(array $user): string
 {
-    return possessive($user['display_name']) . ' Vokabeln';
+    return possessive($user['display_name']) . ' Vokidoki';
 }

@@ -188,10 +188,28 @@ switch (action()) {
                  */
                 vocab_append($unitId, $paare, $lang['code'] ?? null);
             } else {
-                // Die Lerneinheit gehoert dem Kurs. Ohne course_id waere sie
-                // nach der Umstellung der Zugriffsregeln fuer niemanden sichtbar.
+/*
+                 * Die Lerneinheit gehoert dem Kurs.
+                 *
+                 * Hier stand einmal "kein Kurs? dann eben course_id = NULL" -
+                 * ein Rest aus der Zeit, als eine Lerneinheit einem Kind
+                 * gehoerte statt einem Kurs. Das Ergebnis waere eine
+                 * Lerneinheit, die NIEMAND sieht, auch die Lehrkraft nicht,
+                 * die sie gerade eingelesen hat: Sichtbarkeit laeuft ueber
+                 * die Kursmitgliedschaft.
+                 *
+                 * Im heutigen Modell kann es nicht mehr dazu kommen - eine
+                 * Sprache entsteht immer zusammen mit ihrem Kurs, und mit dem
+                 * letzten Kurs verschwindet sie wieder. Kaeme es doch dazu,
+                 * ist eine klare Absage besser als stilles Verschwinden.
+                 */
                 $kurs = course_for_language((int) $lang['id']);
-                $kursId = $kurs === null ? null : (int) $kurs['id'];
+                if ($kurs === null) {
+                    $pdo->rollBack();
+                    json_fail('Zu dieser Sprache gibt es keinen Kurs. '
+                              . 'Bitte im Lehrkraft-Bereich einen anlegen.', 409);
+                }
+                $kursId = (int) $kurs['id'];
                 q(
                     'INSERT INTO units (language_id, course_id, title,
                                         released_position, position)

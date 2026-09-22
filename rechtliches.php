@@ -58,7 +58,7 @@ header('Referrer-Policy: same-origin');
 <html lang="de"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title><?= h($dok['titel']) ?> - Vokabeltrainer</title>
+<title><?= h($dok['titel']) ?> - Vokidoki</title>
 <link rel="stylesheet" href="<?= h(url('/style.css?v=' . app_version())) ?>">
 <?= thema_kopf_skript() ?>
 </head><body class="rechtsseite">

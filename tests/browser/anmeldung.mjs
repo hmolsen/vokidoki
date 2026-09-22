@@ -69,25 +69,49 @@ export async function pruefe(f, aus) {
          * Der Hinweis sagte, wo man ist, aber nicht, wie man zurueckkommt.
          * Die installierte App hat keine Adresszeile, und ihr Zurueck fuehrt
          * tiefer hinein statt heraus - wer nur ausprobieren wollte, sass
-         * fest. Der Knopf zeigt auf genau die Stelle, an der man war.
+         * fest. Der Weg steht jetzt im Zahnrad, als Schalter mit zwei
+         * Stellungen, und er zeigt auf die Entsprechung DIESER Seite.
          */
-        const hinweis = await b.js(`(() => {
-            const k = document.querySelector('.notice.pupilview');
-            const a = k?.querySelector('a.btn');
+        const streifen = await b.js(`(() => {
+            const app = document.getElementById('app');
+            const k = app.firstElementChild;
+            const ist = k?.classList.contains('lernansicht') ?? false;
+            const r = ist ? k.getBoundingClientRect() : null;
+            return { da: ist, text: (k?.textContent ?? '').trim(),
+                     hoehe: r ? Math.round(r.height) : null,
+                     oben: r ? Math.round(r.top) : null,
+                     kasten: !!document.querySelector('.notice.pupilview') };
+        })()`);
+        ok('Ein Streifen ganz oben sagt der Lehrkraft, wo sie ist', streifen.da);
+        ok('Er heisst „Lernansicht"', streifen.text === 'Lernansicht', streifen.text);
+        ok('Er steht wirklich ganz oben und ist schmal',
+           streifen.oben === 0 && streifen.hoehe > 12 && streifen.hoehe < 34,
+           streifen.oben + ' px von oben, ' + streifen.hoehe + ' px hoch');
+        ok('Und der alte Hinweiskasten ist weg', !streifen.kasten,
+           'zwei Erklärungen für eine Sache sind eine zu viel');
+
+        const schalter = await b.js(`(async () => {
+            const m = document.getElementById('menuRechts');
+            m.querySelector('summary').click();
+            await new Promise((r) => setTimeout(r, 350));
+            const w = m.querySelector('.ansichtwahl');
+            const hin = w?.querySelector('a.ansichtknopf');
+            const hier = w?.querySelector('.ansichtknopf.on');
             return {
-                da:   !!k,
-                text: a?.textContent?.trim().replace(/\s+/g, ' ') ?? '',
-                ziel: a?.getAttribute('href') ?? '',
+                da: !!w,
+                ziel: hin?.getAttribute('href') ?? '',
+                hin: (hin?.textContent ?? '').replace(/\\s+/g, ' ').trim(),
+                hier: (hier?.textContent ?? '').replace(/\\s+/g, ' ').trim(),
             };
         })()`);
+        ok('Im Zahnrad steht der Schalter für die Ansicht', schalter.da);
+        ok('Er zeigt, dass man in der Lernansicht steht',
+           schalter.hier.includes('Lernansicht'), schalter.hier);
+        ok('Und führt in die Verwaltung', schalter.hin.includes('Verwaltung'), schalter.hin);
+        ok('Und zwar auf genau diesen Kurs',
+           schalter.ziel.includes('/teacher/course.php?id=' + f.kurs), schalter.ziel);
 
-        ok('Die Schüleransicht sagt der Lehrkraft, was sie da sieht', hinweis.da);
-        ok('Und trägt einen Weg zurück in die Verwaltung',
-           hinweis.text.includes('Zurück zur Verwaltung'), hinweis.text);
-        ok('Der auf genau diesen Kurs zeigt',
-           hinweis.ziel.includes('/teacher/course.php?id=' + f.kurs), hinweis.ziel);
-
-        await b.js(`document.querySelector('.notice.pupilview a.btn').click()`);
+        await b.js(`document.querySelector('.ansichtwahl a.ansichtknopf').click()`);
         await schlafe(1800);
         const zurueck = await b.js(`({
             ort:   location.pathname + location.search,
@@ -96,6 +120,28 @@ export async function pruefe(f, aus) {
         ok('Und ein Druck darauf führt wirklich dorthin',
            zurueck.ort.includes('course.php?id=' + f.kurs), zurueck.ort);
         ok('Nämlich auf die Kursseite', zurueck.titel !== '', zurueck.titel);
+
+        /*
+         * Und dort steht der Schalter wieder, nur andersherum gestellt -
+         * dieselbe Stelle, dieselbe Bauart, die andere Stellung aktiv.
+         */
+        const drueben = await b.js(`(async () => {
+            const m = document.getElementById('menuRechts');
+            m.querySelector('summary').click();
+            await new Promise((r) => setTimeout(r, 350));
+            const w = m.querySelector('.ansichtwahl');
+            return {
+                hier: (w?.querySelector('.ansichtknopf.on')?.textContent ?? '')
+                        .replace(/\\s+/g, ' ').trim(),
+                ziel: w?.querySelector('a.ansichtknopf')?.getAttribute('href') ?? '',
+            };
+        })()`);
+        ok('In der Verwaltung steht derselbe Schalter',
+           drueben.hier.includes('Verwaltung'), drueben.hier);
+        ok('Und er führt zurück auf genau diesen Kurs',
+           drueben.ziel.includes('#/lang/' + f.sprache), drueben.ziel);
+        ok('Der alte Knopf neben der Überschrift ist weg',
+           (await b.js(`!document.body.textContent.includes('So sieht es die Klasse')`)) === true);
 
         /*
          * Und sonst steht dort nichts, was ein Kind nicht auch sieht.
@@ -110,32 +156,47 @@ export async function pruefe(f, aus) {
             const text = document.getElementById('app')?.textContent ?? '';
             return {
                 einlesen: text.includes('Vokabeln einlesen'),
-                banner:   !!document.querySelector('.notice.pupilview'),
-                zeilen:   document.querySelectorAll('[data-go]').length,
+                banner:   !!document.querySelector('.lernansicht'),
+                zeilen:   [...document.querySelectorAll('[data-go]')]
+                            .map((e) => e.dataset.go),
             };
         })()`);
-        ok('Kein Einlesen in der Schüleransicht', !sichtbar.einlesen,
-           'sie soll genau so aussehen wie die Schüleransicht');
-        ok('Der Hinweis bleibt als einziger Unterschied', sichtbar.banner);
+        ok('Kein Einlesen in der Lernansicht', !sichtbar.einlesen,
+           'sie soll genau so aussehen, wie ein Kind sie hat');
+        ok('Der Streifen bleibt als einziger Unterschied', sichtbar.banner);
+        /*
+         * Übrig bleiben darf nur, was ein Kind auch hat. Freies Üben ist
+         * für alle da - das Einlesen nicht, und genau darum ging es hier.
+         */
         ok('Und es steht keine Zeile mehr da, die ein Kind nicht hat',
-           sichtbar.zeilen === 0, String(sichtbar.zeilen));
+           sichtbar.zeilen.every((z) => z.startsWith('/frei/')),
+           sichtbar.zeilen.join(', ') || '(keine)');
 
         // In einer Lerneinheit zeigt er auf die Lerneinheit, nicht auf den Kurs.
         await b.geh(f.basis + '/#/unit/' + f.unit, 2200);
         const inEinheit = await b.js(`(() => {
             const text = document.getElementById('app')?.textContent ?? '';
             return {
-                ziel:       document.querySelector('.notice.pupilview a.btn')
-                                ?.getAttribute('href') ?? '',
+                hinweis:    !!document.querySelector('.lernansicht'),
                 umbenennen: !!document.getElementById('rename'),
                 loeschen:   !!document.getElementById('delete'),
                 ruecksetzen: !!document.getElementById('reset'),
                 verwalten:  text.includes('Verwalten'),
             };
         })()`);
-        ok('In der Lerneinheit zeigt er auf die Lerneinheit',
-           inEinheit.ziel.includes('/teacher/unit.php?id=' + f.unit),
+        ok('Auch die Lerneinheit trägt den Streifen', inEinheit.hinweis);
+        const zielEinheit = await b.js(`(async () => {
+            const m = document.getElementById('menuRechts');
+            m.querySelector('summary').click();
+            await new Promise((r) => setTimeout(r, 350));
+            return m.querySelector('.ansichtwahl a.ansichtknopf')
+                    ?.getAttribute('href') ?? '';
+        })()`);
+        ok('Und der Schalter zeigt auf genau diese Lerneinheit',
+           zielEinheit.includes('/teacher/unit.php?id=' + f.unit),
            'nicht auf die Startseite - man war ja irgendwo');
+        await b.js(`document.getElementById('menuRechts').querySelector('summary').click()`);
+        await schlafe(350);
         ok('Umbenennen steht dort nicht mehr', !inEinheit.umbenennen,
            'das gehört in den Lehrkraft-Bereich, auf dieselbe Lerneinheit');
         ok('Löschen auch nicht', !inEinheit.loeschen);

@@ -36,6 +36,8 @@ import { pruefe as vorrat, pruefeKaltstart, pruefeFreigabeKommtAn } from './vorr
 import { pruefe as menues }  from './menues.mjs';
 import { pruefe as sortieren } from './sortieren.mjs';
 import { pruefe as kursanlegen } from './kursanlegen.mjs';
+import { pruefe as feiern } from './feiern.mjs';
+import { pruefe as melden } from './melden.mjs';
 
 const hier  = dirname(fileURLToPath(import.meta.url));
 const wurzel = resolve(hier, '..', '..');
@@ -75,6 +77,12 @@ try {
     await pruefeFreigabeKommtAn(f, aus);
     await menues(f, aus);
     await sortieren(f, aus);
+    /*
+     * Spaet: gibt in der Lerneinheit nur noch EINE Vokabel frei und raeumt
+     * den Lernstand weg. Wer davor zaehlt, zaehlt sonst etwas anderes.
+     */
+    await feiern(f, aus, wurzel);
+    await melden(f, aus, wurzel);
     // Zuletzt: legt einen Kurs an, und die Navigation zaehlt vorher Karten.
     await kursanlegen(f, aus);
 } finally {

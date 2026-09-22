@@ -13,9 +13,10 @@ admin_require();
  * denn beides haengt am Kurs und ein Kurs an der Schule. Deshalb steht die
  * Seite auch als erste im Menue.
  *
- * Angelegt wird hier, und nur hier. Frueher entstand still eine Schule
- * namens "Familie" - das war der Weg, den vorhandenen Bestand aus der
- * Familien-App zu retten, und kein Modell fuer eine Neuinstallation.
+ * Angelegt wird hier, und nur hier: Eine Schule ist eine Entscheidung des
+ * Betreibers, kein Seiteneffekt. Still eine anzulegen, damit irgendetwas
+ * funktioniert, hiesse einen Posten zu erzeugen, den spaeter jemand
+ * wegraeumen muss - und niemand wuesste, woher er kommt.
  */
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {

@@ -241,15 +241,6 @@ $offene     = course_candidates($courseId, $schoolId);
 $verlust    = course_delete_preview($courseId);
 
 /*
- * Der Weg in die Schueleransicht.
- *
- * Eine Lehrkraft sieht in der App genau das, was ihre Klasse sieht - das
- * ist seit der Freigabe so gewollt. Dann muss sie auch hinkommen, und zwar
- * von der Stelle aus, an der sie gerade etwas eingestellt hat.
- */
-$schuelerUrl = url('/') . '#/lang/' . (int) $kurs['language_id'];
-
-/*
  * Die Fahne vor den Kursnamen, und die Zeile mit der Sprache darunter
  * faellt weg: "Englisch - 6B" und darunter noch einmal "Englisch" ist
  * dieselbe Auskunft zweimal.
@@ -257,12 +248,16 @@ $schuelerUrl = url('/') . '#/lang/' . (int) $kurs['language_id'];
 $kursTitel = flag_html((string) $kurs['flag_emoji'] ?: FLAG_FALLBACK, 'kopfflagge')
            . h((string) $kurs['name']);
 
-teacher_head($kurs['name'], $user, sprintf(
-    '<a class="btn small secondary" href="%s" '
-    . 'title="Die Ansicht, die deine Klasse sieht">'
-    . '<span aria-hidden="true">&#128065;</span> So sieht es die Klasse</a>',
-    h($schuelerUrl),
-), $kursTitel, $courseId);
+/*
+ * Neben der Ueberschrift steht kein Knopf mehr.
+ *
+ * "So sieht es die Klasse" stand hier und auf der Lerneinheit - auf zwei
+ * von sieben Seiten, und nur in eine Richtung. Der Wechsel zwischen den
+ * beiden Ansichten gehoert nicht neben eine Ueberschrift, sondern dorthin,
+ * wo man einstellt, wie man die Anwendung sieht: ins Zahnrad, ueber die
+ * Farbwahl. Dort steht er jetzt, auf jeder Seite und in beide Richtungen.
+ */
+teacher_head($kurs['name'], $user, '', $kursTitel, $courseId);
 teacher_flash_render();
 ?>
 

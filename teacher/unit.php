@@ -192,8 +192,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['catch_up'])) 
 /*
  * Umbenennen und Loeschen - jetzt hier statt in der App.
  *
- * Beides stand in der Schueleransicht, unter "Verwalten", und war fuer eine
- * Lehrkraft der einzige Weg dorthin. Nur ist die Schueleransicht das, was
+ * Beides stand in der Lernansicht, unter "Verwalten", und war fuer eine
+ * Lehrkraft der einzige Weg dorthin. Nur ist die Lernansicht das, was
  * die Klasse sieht: Wer sie aufmacht, um auszuprobieren, wie eine
  * Lerneinheit ankommt, soll genau das sehen und nicht zwei Knoepfe mehr.
  * Also stehen sie dort, wo verwaltet wird - auf derselben Lerneinheit.
@@ -515,12 +515,11 @@ $titelHtml = sprintf(
     h((string) $unit['title']),
 );
 
-teacher_head($unit['title'], $user, sprintf(
-    '<a class="btn small secondary" href="%s" '
-    . 'title="Die Ansicht, die deine Klasse sieht">'
-    . '<span aria-hidden="true">&#128065;</span> So sieht es die Klasse</a>',
-    h(url('/') . '#/unit/' . $unitId),
-), $titelHtml, (int) $unit['course_id']);
+/*
+ * Neben der Ueberschrift steht kein Knopf mehr - siehe course.php. Der
+ * Wechsel in die Lernansicht steht im Zahnrad, ueber der Farbwahl.
+ */
+teacher_head($unit['title'], $user, '', $titelHtml, (int) $unit['course_id']);
 
 teacher_flash_render();
 ?>
@@ -638,49 +637,16 @@ $neu = max(0, min($gesamt, (int) ($_GET['neu'] ?? 0)));
 
 <?php
 /*
- * Die Knoepfe in einer Reihe und von gleicher Bauart.
+ * Die beiden Knoepfe stehen NICHT mehr ueber der Tabelle, sondern an ihren
+ * Enden - siehe weiter unten in <thead> und <tfoot>.
  *
- * "Alles freigeben" war ein Knopf, "Freigabe zuruecknehmen" ein roter Text
- * mit Schloss daneben, und beide verschwanden abwechselnd - je nachdem, ob
- * sie gerade etwas bewirkt haetten. Die Reihe sprang dadurch bei jedem
- * Freigeben um. Jetzt stehen beide immer da, gleich gebaut und gleich gross;
- * was nichts bewirken wuerde, ist abgeblendet und sagt im Titel, warum.
- *
- * Ein Formular fuer alle drei: Sie gehen an dieselbe Adresse und
- * unterscheiden sich nur im Namen des Knopfes.
+ * Der Grund ist der Balken dazwischen: "Nichts freigeben" schiebt ihn ganz
+ * nach oben, "Alles freigeben" ganz nach unten. Als Knopfreihe ueber der
+ * Tabelle sagten die beiden nichts darueber, wohin sie greifen; an den
+ * Enden der Tabelle sind sie die beiden Endstellungen des Balkens, den man
+ * dazwischen von Hand zieht. Man sieht die Strecke, auf der sie wirken.
  */
-$fehlen = vocab_without_sentences($unitId);
 ?>
-<form method="post">
-    <?= teacher_csrf_field() ?>
-    <input type="hidden" name="unit_id" value="<?= $unitId ?>">
-
-    <div class="buttonrow">
-        <button class="btn small" name="release" value="<?= $gesamt ?>"
-                <?= $alles ? 'disabled title="Es ist schon alles freigegeben."' : '' ?>
-                data-confirm="Alle <?= $gesamt ?> Vokabeln freigeben? Die Klasse sieht dann die ganze Lerneinheit.">
-            Alles freigeben
-        </button>
-
-        <button class="btn small secondary" name="release" value="0"
-                <?= $frei === 0 ? 'disabled title="Es ist nichts freigegeben."' : '' ?>
-                data-confirm="Die ganze Lerneinheit wieder zumachen? Die Klasse sieht sie dann als leer. Gelernt bleibt gelernt.">
-            Nichts freigeben
-        </button>
-
-        <?php
-        /*
-         * Hier stand ein Knopf "Sätze nachtragen (N)".
-         *
-         * Er ist weg, weil er eine Frage stellte, die sich nicht stellt:
-         * Sätze entstehen jetzt beim Freigeben, und was nicht freigegeben
-         * ist, braucht keinen. Uebrig bleibt der eine Fall, in dem wirklich
-         * etwas nachzuholen ist - ein Lauf, der abgebrochen ist -, und den
-         * bietet die Meldung oben an.
-         */
-        ?>
-    </div>
-</form>
 <?php endif; /* $gesamt > 0 */ ?>
 
 <?php
@@ -717,6 +683,32 @@ $fehlen = vocab_without_sentences($unitId);
 ?>
 <table class="data release" id="freigabe" data-released="<?= $frei ?>">
     <thead>
+        <?php
+        /*
+         * Ganz oben "Nichts freigeben" - die obere Endstellung des Balkens.
+         *
+         * Als <td> und nicht als <th>: Die Kopfzellen kleben beim Rollen
+         * oben fest (position: sticky), und das soll fuer diesen Knopf
+         * gerade nicht gelten. Ein Knopf, der eine ganze Lerneinheit
+         * zumacht, muss nicht die ganze Zeit in Reichweite haengen - er
+         * gehoert an seinen Platz am Anfang der Liste.
+         *
+         * Er haengt per form= am Formular unter der Tabelle: Ein <form>
+         * kann in HTML nicht um Tabellenzeilen herumstehen. Denselben Weg
+         * gehen die Knoepfe je Zeile schon.
+         */
+        ?>
+        <?php if ($gesamt > 0): ?>
+        <tr class="mengen">
+            <td colspan="3">
+                <button class="mengenknopf zu" name="release" value="0" form="releaseform"
+                        <?= $frei === 0 ? 'disabled title="Es ist nichts freigegeben."' : '' ?>
+                        data-confirm="Die ganze Lerneinheit wieder zumachen? Die Klasse sieht sie dann als leer. Gelernt bleibt gelernt.">
+                    <span aria-hidden="true">&#128274;</span> Nichts freigeben
+                </button>
+            </td>
+        </tr>
+        <?php endif; ?>
         <?php
         /*
          * Im Kopf steht die Sprache, nicht das Wort "Fremdsprache".
@@ -823,6 +815,35 @@ $fehlen = vocab_without_sentences($unitId);
         <td colspan="3"></td>
     </tr>
     </tbody>
+
+    <?php
+    /*
+     * Und ganz unten "Alles freigeben" - die untere Endstellung des Balkens.
+     *
+     * Unter der Anlegezeile, nicht darueber: Wer gerade von Hand eine
+     * Vokabel angefuegt hat, will sie mit freigeben. Stuende der Knopf
+     * darueber, laege die frisch getippte Zeile ausserhalb dessen, worauf
+     * er zu zeigen scheint - und genau diese Frage ("ist die neue mit
+     * dabei?") soll er nicht aufwerfen.
+     *
+     * Als <tfoot> nach dem <tbody> im Markup: So steht er auch ohne
+     * Stilblatt an der richtigen Stelle.
+     */
+    ?>
+    <?php if ($gesamt > 0): ?>
+    <tfoot>
+        <tr class="mengen">
+            <td colspan="3">
+                <button class="mengenknopf auf" name="release" value="<?= $gesamt ?>"
+                        form="releaseform"
+                        <?= $alles ? 'disabled title="Es ist schon alles freigegeben."' : '' ?>
+                        data-confirm="Alle <?= $gesamt ?> Vokabeln freigeben? Die Klasse sieht dann die ganze Lerneinheit.">
+                    <span aria-hidden="true">&#128275;</span> Alles freigeben
+                </button>
+            </td>
+        </tr>
+    </tfoot>
+    <?php endif; ?>
 </table>
 
 <form method="post" id="neueVokabel"

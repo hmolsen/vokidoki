@@ -91,15 +91,29 @@ export async function pruefe(f, aus) {
         const ruhig = await b.js(`(() => {
             const th = document.querySelector('#freigabe thead th');
             const t  = document.getElementById('freigabe');
+            const m  = document.querySelector('#freigabe thead tr.mengen td');
             return {
                 kopf:    Math.round(th.getBoundingClientRect().top),
                 tabelle: Math.round(t.getBoundingClientRect().top),
+                mengen:  m ? Math.round(m.getBoundingClientRect().bottom) : null,
+                mengenOben: m ? Math.round(m.getBoundingClientRect().top) : null,
             };
         })()`);
-        ok('Ungerollt sitzt der Kopf oben in der Tabelle',
-           Math.abs(ruhig.kopf - ruhig.tabelle) <= 2,
-           ruhig.kopf + ' gegen ' + ruhig.tabelle
-           + ' - mit overflow: hidden rutscht er mitten hinein');
+        /*
+         * Oben in der Tabelle steht jetzt "Nichts freigeben", und erst
+         * darunter die Spaltenzeile. Geprueft wird deshalb gegen die
+         * Unterkante dieses Knopfes - der Fehler, um den es hier geht,
+         * bleibt derselbe: Mit overflow: hidden wird die Tabelle selbst zum
+         * Bezug des Klebens, und der Kopf sitzt dann um die Leistenhoehe
+         * versetzt mitten in der Liste.
+         */
+        ok('Der Mengen-Knopf sitzt ganz oben in der Tabelle',
+           ruhig.mengenOben !== null && Math.abs(ruhig.mengenOben - ruhig.tabelle) <= 2,
+           ruhig.mengenOben + ' gegen ' + ruhig.tabelle);
+        ok('Und die Spaltenzeile ungerollt direkt darunter',
+           Math.abs(ruhig.kopf - ruhig.mengen) <= 2,
+           ruhig.kopf + ' gegen ' + ruhig.mengen
+           + ' - mit overflow: hidden rutscht sie mitten hinein');
 
         await b.js(`window.scrollTo(0, 600)`);
         await schlafe(400);

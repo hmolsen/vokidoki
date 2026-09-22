@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/progress.php';
+require_once __DIR__ . '/../lib/streak.php';
 require_once __DIR__ . '/../lib/sentences.php';
 
 require_api_request();
@@ -72,7 +73,7 @@ switch (action()) {
                 . ($result['failed'] !== null ? ' - ' . scrub_secrets($result['failed']) : ''));
             json_fail(
                 'Für diese Lerneinheit ließen sich keine Lückensätze erzeugen. '
-                . 'Papa kann im Admin-Bereich nachsehen.',
+                . 'Deine Lehrkraft kann nachsehen, woran es liegt.',
                 422,
             );
         }
@@ -150,7 +151,6 @@ switch (action()) {
         $_SESSION['cloze'][$nonce] = [
             'vocab_id'    => (int) $card['id'],
             'unit_id'     => (int) $unit['id'],
-            'sentence_id' => (int) $sentence['id'],
             'answer'      => (string) $sentence['answer'],
         ];
         if (count($_SESSION['cloze']) > 20) {
@@ -194,9 +194,6 @@ switch (action()) {
 
         json_out([
             'ok'           => true,
-            // Für das Melden eines schiefen Satzes. Wer sie missbraucht,
-            // kommt trotzdem nur an eigene Sätze - 'flag' prüft das.
-            'sentence_id'  => (int) $pending['sentence_id'],
             'correct'      => $check['correct'],
             // exact=false bei richtiger Antwort heißt: Schreibweise zeigen.
             'exact'        => $check['exact'],
@@ -206,27 +203,8 @@ switch (action()) {
             'known'        => $known,
             'total'        => $total,
             'done'         => $total > 0 && $known >= $total,
+            'serie'        => streak_stand($uid),
         ]);
-
-    case 'flag':
-        require_post();
-        $b     = json_body();
-        $satzId = body_int($b, 'sentence_id');
-        $typed  = body_str($b, 'text', 128);
-
-        // Der Satz muss zu einer Lerneinheit gehören, die dieses Kind sehen darf.
-        view_sentence($user, $satzId);
-
-        // Zweimal melden ändert nichts - der eindeutige Schlüssel fängt das
-        // ab, und das Kind bekommt trotzdem seine Bestätigung.
-        q(
-            'INSERT INTO sentence_flags (sentence_id, user_id, typed)
-             VALUES (?, ?, ?)
-             ON DUPLICATE KEY UPDATE typed = VALUES(typed), created_at = NOW()',
-            [$satzId, $uid, $typed === '' ? null : $typed],
-        );
-
-        json_out(['ok' => true]);
 
     default:
         json_fail('Unbekannte Aktion.', 404);

@@ -529,17 +529,35 @@ export function antwortMerken(vocabId, modus, richtig) {
         p.w += 1;
     }
     const jetztGekonnt = p.s >= schwelle();
+    /*
+     * Und jetzt zum ERSTEN Mal gekonnt - nicht dasselbe. jetztGekonnt steht
+     * ab der dritten richtigen Antwort bei jeder weiteren wieder da; für die
+     * Serie zählt der Übergang. Genau wie record_answer() es auf dem Server
+     * an known_at abliest, liest die App es hier an p.k ab.
+     */
+    const neuGekonnt = jetztGekonnt && p.k !== 1;
+
     // Einmal gekonnt bleibt gekonnt, solange die Serie hält - wie auf dem Server.
     p.k = jetztGekonnt ? 1 : 0;
 
     v.stand.set(schl, p);
     sichern();
 
+    const tagGeschafft = serieVerbuchen(richtig, neuGekonnt);
+
     warteschlangeAnhaengen({
         e: kennung(), v: Number(vocabId), m: modus, r: richtig ? 1 : 0,
+        // Der Tag, an dem geantwortet wurde. Er geht mit, weil der Stapel
+        // Tage später ankommen kann - siehe lib/streak.php.
+        d: heute(),
     });
 
-    return { streak: p.s, just_learned: jetztGekonnt };
+    return {
+        streak: p.s,
+        just_learned: jetztGekonnt,
+        newly_learned: neuGekonnt,
+        tag_geschafft: tagGeschafft,
+    };
 }
 
 /** „Noch einmal üben" - der Lernstand dieser Einheit auf null. */
@@ -556,6 +574,324 @@ export function zuruecksetzen(unitId, modus = null) {
     sichern();
     warteschlangeAnhaengen({
         e: kennung(), k: 'reset', u: Number(unitId), m: modus ?? '',
+    });
+}
+
+// ------------------------------------------------------------------ Die Serie
+
+/*
+ * Die Serie im Gerät - Spiegel von lib/streak.php.
+ *
+ * Zwei Fassungen derselben Regel, und wie beim Vergleich der Lückenantwort
+ * ist es hier nicht zu vermeiden: Das Abzeichen steht in der Leiste jeder
+ * Seite und muss auch ohne Netz stimmen. Dagegen steht dieselbe Sicherung
+ * wie dort - eine gemeinsame Fallsammlung (tests/faelle/serien.json), die
+ * beide Seiten prüfen.
+ *
+ * Nachgerechnet wird dabei bewusst NICHT die ganze Kette: Das Gerät kennt
+ * nur die letzten dreissig Tage, der Server alle. Vom Server kommen deshalb
+ * zwei Zahlen - wie lang die Kette an ihrem letzten Lerntag war und wann
+ * dieser Tag war -, und daraus fällt hier heraus, was heute auf dem
+ * Bildschirm steht. Das reicht auch nach einer Woche im Hintergrund.
+ */
+
+/** Ab so vielen richtigen Antworten zählt ein Tag auch ohne neue Vokabel. */
+const SERIE_UEBUNG_MIN = 10;
+
+/** So viele Tage Abstand hält eine Serie noch aus. Zwei: einer wird verziehen. */
+const SERIE_ABSTAND_MAX = 2;
+
+/** Der heutige Tag, wie das Gerät ihn sieht - als 'JJJJ-MM-TT'. */
+export function heute() {
+    const d = new Date();
+    const zwei = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${zwei(d.getMonth() + 1)}-${zwei(d.getDate())}`;
+}
+
+/*
+ * Abstand zweier Tage in Tagen.
+ *
+ * Über Date.UTC und nicht über die lokale Zeit: In der Nacht der
+ * Zeitumstellung hat ein Tag 23 oder 25 Stunden, und eine Division durch
+ * 24 Stunden ergäbe dann 0,96 oder 1,04 Tage. Einmal abgerundet wäre aus
+ * "gestern" ein "heute" geworden - und die Serie eines Kindes hinge daran,
+ * ob im Oktober die Uhr umgestellt wurde. In UTC hat jeder Tag 24 Stunden.
+ */
+export function tagAbstand(a, b) {
+    const zahl = (s) => {
+        const [j, m, t] = String(s).split('-').map(Number);
+        return Date.UTC(j, m - 1, t);
+    };
+    return Math.round((zahl(b) - zahl(a)) / 86400000);
+}
+
+/** Zählt dieser Tag für die Serie? */
+export function tagZaehlt(gelernt, richtig) {
+    return gelernt >= 1 || richtig >= SERIE_UEBUNG_MIN;
+}
+
+/**
+ * Was das Abzeichen zeigt - aus Kette, letztem Lerntag und heute.
+ *
+ *   heute   Heute schon gelernt. Zahl grün, Voki froh und farbig.
+ *   offen   Gestern gelernt, heute noch nicht. Zahl grau, Voki froh, aber grau.
+ *   gefahr  Ein Tag ausgelassen. Die Zahl steht noch, aber Voki ist traurig
+ *           und grau - heute nichts mehr, und sie ist weg.
+ *   aus     Zwei Tage ausgelassen, oder noch nie gelernt. Null, Voki traurig.
+ */
+export function serieAnzeige(kette, letzter, tag = heute()) {
+    if (!letzter || kette <= 0) {
+        return { zahl: 0, lage: 'aus', abstand: null };
+    }
+
+    let abstand = tagAbstand(letzter, tag);
+    if (abstand < 0) abstand = 0;          // Uhr läuft vor; dann eben heute
+    if (abstand > SERIE_ABSTAND_MAX) {
+        return { zahl: 0, lage: 'aus', abstand };
+    }
+
+    return {
+        zahl:    kette,
+        lage:    abstand === 0 ? 'heute' : (abstand === 1 ? 'offen' : 'gefahr'),
+        abstand,
+    };
+}
+
+/** Der Stand, wie er im Vorrat liegt - oder ein leerer, solange keiner da ist. */
+export function serie() {
+    const v = vorratLaden();
+    const s = v?.daten.serie ?? VT.serie ?? null;
+    return {
+        kette: 0, letzter: null, best: 0, schwelle: SERIE_UEBUNG_MIN,
+        monate: 12, seit: heute(), heute: heute(), tage: [],
+        ...(s ?? {}),
+    };
+}
+
+/** Was heute auf dem Abzeichen steht. */
+export function serieHeute() {
+    const s = serie();
+    return { ...serieAnzeige(s.kette, s.letzter, heute()), best: s.best, schwelle: s.schwelle };
+}
+
+/** Die letzten dreissig Tage, für den Kalender im Konto. */
+export function serieTage() {
+    return serie().tage ?? [];
+}
+
+/**
+ * Eine Antwort auf den heutigen Tag schreiben - und sehen, ob er dadurch zählt.
+ *
+ * Gibt zurück, ob der Tag GERADE EBEN geschafft wurde. Genau darauf wartet
+ * die kleine Feier oben in der Leiste: Sie soll einmal laufen, in dem
+ * Augenblick, in dem die Zahl weiterspringt, und nicht bei jeder weiteren
+ * richtigen Antwort des Tages.
+ */
+function serieVerbuchen(richtig, neuGekonnt) {
+    const v = vorratLaden();
+    if (v === null) return false;
+
+    const tag = heute();
+
+    /*
+     * Über serie() und nicht über v.daten.serie: Ein Vorrat, der noch aus
+     * der Zeit vor der Serie im Gerät liegt, hat den Eintrag nicht - und
+     * dann gilt der Stand, den die Hülle mitgebracht hat. Ohne das fiele
+     * eine lange Serie beim ersten Üben nach einer Aktualisierung auf 1
+     * zurück, bis der Server sie ein paar Sekunden später richtigstellt.
+     */
+    const s = { ...serie() };
+    const vorher = serieAnzeige(s.kette, s.letzter, tag);
+
+    // Eigene Kopie der Tage: serie() kann die Liste aus VT liefern, und die
+    // gehört der Hülle. Hier wird gleich darin gezählt.
+    const tage = (s.tage ?? []).map((t) => ({ ...t }));
+    let eintrag = tage.find((t) => t.d === tag);
+    if (!eintrag) {
+        eintrag = { d: tag, l: 0, c: 0 };
+        tage.unshift(eintrag);
+    }
+    if (neuGekonnt) eintrag.l += 1;
+    if (richtig)    eintrag.c += 1;
+
+    const zaehltJetzt = tagZaehlt(eintrag.l, eintrag.c);
+    const geschafft   = zaehltJetzt && vorher.lage !== 'heute';
+
+    if (geschafft) {
+        /*
+         * Die Kette wächst um eins - ausser sie war gerissen, dann fängt
+         * sie bei eins an. Welcher Fall gilt, steht in der Lage von vorhin:
+         * 'aus' heisst gerissen, alles andere heisst, sie lief noch.
+         */
+        s.kette   = vorher.lage === 'aus' ? 1 : s.kette + 1;
+        s.letzter = tag;
+        s.best    = Math.max(s.best ?? 0, s.kette);
+    }
+
+    /*
+     * Die letzten gut dreizehn Monate behalten - so weit laesst sich der
+     * Kalender im Konto blaettern. Frueher standen hier dreissig Tage; seit
+     * der Kalender in Monaten blaettert, waere der Vormonat schon leer.
+     * Nach oben begrenzt bleibt es trotzdem: Wer ein Jahr offline uebt,
+     * soll den Vorrat nicht unbegrenzt wachsen lassen.
+     */
+    s.tage = tage
+        .filter((t) => tagAbstand(t.d, tag) <= 400)
+        .sort((a, b) => (a.d < b.d ? 1 : -1))
+        .slice(0, 400);
+    v.daten.serie = s;
+    sichern();
+
+    return geschafft;
+}
+
+// --------------------------------------------------------------- Freies Üben
+
+/*
+ * Freies Üben rührt den Lernstand NICHT an.
+ *
+ * Das ist der ganze Unterschied zu den beiden anderen Übungen, und er ist
+ * Absicht: Geübt wird hier alles, auch was längst sitzt, und ein Fehler beim
+ * lockeren Wiederholen soll keine Serie einreissen, die über Wochen
+ * entstanden ist. „Gekonnt" bleibt die Aussage der strukturierten Übung.
+ *
+ * Gezählt wird trotzdem: Jede richtige Antwort geht als Tag-Ereignis an den
+ * Server und wandert damit in die Serie, den Kalender und die Zahl im
+ * Abzeichen. Geübt ist geübt.
+ */
+
+/** Alle freigegebenen Vokabeln dieser Lerneinheiten, in einer Liste. */
+export function vokabelnDerEinheiten(unitIds) {
+    const v = vorratLaden();
+    if (v === null) return [];
+
+    const raus = [];
+    for (const id of unitIds) {
+        for (const w of v.proEinheit.get(Number(id)) ?? []) raus.push(w);
+    }
+    return raus;
+}
+
+/** Wie viele davon einen Lückensatz haben - ohne sie gibt es nur Auswählen. */
+export function freiUmfang(unitIds) {
+    const v = vorratLaden();
+    const alle = vokabelnDerEinheiten(unitIds);
+    return {
+        vokabeln: alle.length,
+        saetze: v === null ? 0
+            : alle.filter((w) => (v.saetze.get(w.i)?.length ?? 0) > 0).length,
+    };
+}
+
+/**
+ * Die nächste Aufgabe beim freien Üben.
+ *
+ * Gewürfelt wird zweierlei: welche Vokabel und welche Übungsart. Der
+ * Lückentext kommt nur für Vokabeln in Frage, zu denen es einen Satz gibt -
+ * sonst fiele die Hälfte der Aufgaben aus.
+ *
+ * Es gibt kein „fertig": Die Runde läuft, bis jemand aufhört. Deshalb auch
+ * kein Filter auf „noch nicht gekonnt" - der liesse sie nach zwanzig
+ * Antworten leerlaufen.
+ */
+export function frageFrei(unitIds) {
+    const v = vorratLaden();
+    if (v === null) return null;
+
+    const alle = vokabelnDerEinheiten(unitIds);
+    if (alle.length === 0) return { leer: true };
+
+    const karte = wuerfel(alle);
+    const saetze = v.saetze.get(karte.i) ?? [];
+
+    /*
+     * Drei von fünf Aufgaben als Lückentext, wenn es Sätze gibt: Er ist die
+     * schwerere Übung, und wer frei übt, hat das Auswählen meist hinter
+     * sich. Eine einzelne Vokabel ohne Satz bekommt trotzdem ihre Frage.
+     */
+    if (saetze.length > 0 && Math.random() < 0.6) {
+        const satz = wuerfel(saetze);
+        const spr  = sprache(v.einheit.get(karte.u)?.l);
+        return {
+            art:      MODUS_LUECKE,
+            vocabId:  karte.i,
+            satzId:   satz.i,
+            native:   satz.n,
+            foreign:  satz.f,
+            loesung:  satz.a,
+            language: spr?.name ?? '',
+            lang:     spr?.code ?? '',
+        };
+    }
+
+    const nachVorn = Math.random() < 0.5;
+    const frage    = nachVorn ? karte.f : karte.n;
+    const loesung  = nachVorn ? karte.n : karte.f;
+    const feld     = nachVorn ? 'n' : 'f';
+
+    // Die Ablenker aus demselben Vorrat wie die Frage - und wenn der zu
+    // klein ist, aus der ganzen Sprache. Dieselbe Regel wie beim Quiz.
+    const genommen = new Set([loesung]);
+    const optionen = [loesung];
+    const nachlegen = (quelle) => {
+        for (const kandidat of mischen([...quelle])) {
+            if (optionen.length >= ANZAHL_OPTIONEN) return;
+            const wort = kandidat[feld];
+            if (kandidat.i === karte.i || genommen.has(wort)) continue;
+            genommen.add(wort);
+            optionen.push(wort);
+        }
+    };
+    nachlegen(alle);
+    if (optionen.length < ANZAHL_OPTIONEN) {
+        nachlegen(v.vokabelnDerSprache.get(v.einheit.get(karte.u)?.l) ?? []);
+    }
+
+    const gemischt = mischen(optionen);
+    const spr = sprache(v.einheit.get(karte.u)?.l);
+    return {
+        art:      MODUS_WAHL,
+        vocabId:  karte.i,
+        frage,
+        optionen: gemischt,
+        richtig:  gemischt.indexOf(loesung),
+        nachVorn,
+        language: spr?.name ?? '',
+    };
+}
+
+/**
+ * Eine Antwort beim freien Üben verbuchen.
+ *
+ * Nur der Tag, kein Lernstand. Das Ereignis trägt trotzdem die Vokabel mit:
+ * Der Server prüft an ihr, ob dieses Konto überhaupt antworten darf -
+ * dieselbe Schranke wie bei jeder anderen Antwort.
+ */
+export function freiMerken(vocabId, richtig) {
+    const tagGeschafft = serieVerbuchen(richtig, false);
+
+    warteschlangeAnhaengen({
+        e: kennung(), k: 'frei', v: Number(vocabId), r: richtig ? 1 : 0, d: heute(),
+    });
+
+    return { tag_geschafft: tagGeschafft };
+}
+
+/**
+ * "Stimmt hier etwas nicht?" - eine Vokabel der Lehrkraft melden.
+ *
+ * In die Warteschlange wie eine Antwort, nicht als eigener Abruf: Geübt
+ * wird auch ohne Netz, und eine Meldung aus dem Zug soll ankommen, sobald
+ * wieder eines da ist, statt mit "Bist du online?" verloren zu gehen.
+ *
+ * satzId ist der Lückensatz, an dem es auffiel, oder 0 beim Auswählen -
+ * dann ist das Wortpaar selbst gemeint. Das Getippte kommt mit, weil es
+ * beim Lückentext meist entscheidet, ob der Satz oder die Lösung schief war.
+ */
+export function vokabelMelden(vocabId, satzId = 0, getippt = '') {
+    warteschlangeAnhaengen({
+        e: kennung(), k: 'melden', v: Number(vocabId), s: Number(satzId) || 0,
+        t: String(getippt).slice(0, 128),
     });
 }
 
@@ -631,6 +967,9 @@ export async function warteschlangeSenden() {
         const v = vorratLaden();
         if (v !== null && Array.isArray(antwort.stand)) {
             v.stand = new Map(antwort.stand.map((p) => [`${p.v}:${p.m}`, p]));
+            // Und die Serie mit: Der Server kennt auch den Nachmittag auf
+            // dem Tablet der Schule, das Gerät hier nur sich selbst.
+            if (antwort.serie) v.daten.serie = antwort.serie;
             sichern();
         }
         return true;

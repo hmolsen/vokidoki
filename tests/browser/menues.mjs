@@ -68,6 +68,30 @@ export async function pruefe(f, aus) {
         ok('Der offene Kurs ist im Menü markiert', beimUeben.markiert !== '',
            'die Adresse nennt hier nur die Lerneinheit');
 
+        /*
+         * Das Abzeichen erneuert sich mitten im Ueben an Ort und Stelle -
+         * die Leiste wird dabei nicht neu gezeichnet. Wurden die Menues
+         * daneben dadurch ein zweites Mal verdrahtet, hingen an ihrem Knopf
+         * zwei Hoerer: aufklappen und sofort wieder zu. Nach ein paar
+         * richtigen Antworten ging das Menue gar nicht mehr auf.
+         */
+        await b.js(`(async () => {
+            const c = await import('${f.basis}/core.js');
+            for (let i = 0; i < 5; i++) c.serieAktualisieren(false);
+        })()`);
+        await schlafe(400);
+        await b.js(`document.querySelector('#menuLinks > summary').click()`);
+        await schlafe(500);
+
+        ok('Das Menue geht auch nach mehreren Erneuerungen des Abzeichens auf',
+           (await b.js(`document.querySelector('#menuLinks').open`)) === true,
+           'zwei Hoerer an einem Knopf klappen sofort wieder zu');
+        ok('Und es steht genau ein Abzeichen in der Leiste',
+           (await b.js(`document.querySelectorAll('.seriebtn').length`)) === 1);
+        await b.js(`document.querySelector('#menuLinks .schleier')?.click()`);
+        await schlafe(400);
+
+
         // ---- Die Schublade fliegt herein.
 
         const fliegt = await b.js(`(() => {

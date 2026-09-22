@@ -14,8 +14,8 @@ switch (action()) {
         $rows = qa(
             /*
              * Die Sprachen, in deren Kurs dieses Konto ist - nicht die, die
-             * es angelegt hat. Fuer eine Familie ist das dasselbe, in einer
-             * Klasse hat die Lehrkraft angelegt und die Kinder lernen.
+             * es angelegt hat: Angelegt hat die Lehrkraft, gelernt wird von
+             * der Klasse.
              *
              * Gezaehlt wird nur Freigegebenes. Sonst stuende hier "20
              * Vokabeln", waehrend die Lerneinheit drei zeigt.
@@ -41,8 +41,9 @@ switch (action()) {
          * Wort und musste raten. Dann - und nur dann - traegt die Kachel
          * den Namen des Kurses: "Englisch - 5B".
          *
-         * Nicht immer, denn in einer Familie heisst der Kurs "Englisch
-         * Lilli M.", und auf der Kachel eines Kindes seinen eigenen Namen
+         * Nicht immer, denn legt ein Kind selbst eine Sprache an, heisst
+         * sein Kurs "Englisch Lilli M.", und auf der eigenen Kachel den
+         * eigenen Namen
          * zu lesen ist keine Auskunft, sondern Laerm. Entschieden wird je
          * Konto: Es geht darum, was DIESER Mensch vor sich hat.
          */
@@ -72,8 +73,8 @@ switch (action()) {
          * Eine Sprache anlegen heisst einen Kurs anlegen - und das ist
          * dieselbe Befugnis wie das Einlesen. Ein Kind ohne dieses Recht
          * uebt, was seine Lehrkraft freigegeben hat; es legt keine eigenen
-         * Kurse an. In einer Familie aendert sich dadurch nichts, dort
-         * tragen die Kinder das Recht.
+         * Kurse an. Wer das Recht ausdruecklich bekommen hat, legt weiter
+         * selbst an.
          */
         require_cap($user, CAP_IMPORT);
 

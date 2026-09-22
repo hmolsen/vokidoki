@@ -1,9 +1,11 @@
 import {
     render, esc, $, $$, go, topbar, wireBack, progressBar, showError,
+    babing, serieAktualisieren, punkteAktualisieren, konfetti, feuerwerk,
 } from '../core.js';
 import {
     frageWahl, antwortMerken, zuruecksetzen, MODUS_WAHL, sprache, einheit,
 } from '../vorrat.js';
+import { meldeKnopf, meldenVerdrahten } from '../melden.js';
 
 const NEXT_DELAY_CORRECT = 700;    // richtig: zügig weiter
 const NEXT_DELAY_WRONG   = 1900;   // falsch: Zeit, die richtige Lösung zu lesen
@@ -72,6 +74,7 @@ function nextQuestion(unitId) {
                 <div class="dir">${dirLabel}</div>
                 <div class="word">${esc(data.frage)}</div>
             </div>
+            ${meldeKnopf(true)}
         </div>
 
         <div class="options" id="options">
@@ -84,6 +87,9 @@ function nextQuestion(unitId) {
     `);
 
     wireBack();
+
+    // Beim Auswählen ist das Wortpaar gemeint - einen Satz gibt es hier nicht.
+    meldenVerdrahten($('[data-melden]'), () => ({ vocabId: data.vocabId }));
 
     const box = $('#options');
     let answered = false;
@@ -106,11 +112,30 @@ function nextQuestion(unitId) {
                 verdict.textContent = result.just_learned
                     ? 'Sitzt! Diese Vokabel kannst du jetzt.'
                     : 'Richtig!';
+                babing();
+
+                /*
+                 * Der Punkt springt sofort an, nicht erst mit der naechsten
+                 * Frage. Wer zweimal richtig lag, sah sonst zwei Punkte -
+                 * und beim dritten Mal, auf das es ankommt, immer noch zwei.
+                 */
+                punkteAktualisieren(document, result.streak);
+
+                // Und wenn sie damit sitzt: Konfetti. Es haengt an <body>
+                // und fliegt ueber der naechsten Frage weiter - die Zeit bis
+                // dahin aendert sich dadurch nicht.
+                if (result.newly_learned) konfetti();
+                // Die Leiste wird beim Üben nicht neu gezeichnet - das
+                // Abzeichen muss sich also selbst melden. Gefeiert wird
+                // genau einmal: in dem Augenblick, in dem der Tag steht.
+                serieAktualisieren(result.tag_geschafft);
             } else {
                 button.classList.add('wrong');
                 $$('.option')[result.correct_index]?.classList.add('correct');
                 verdict.className = 'verdict bad';
                 verdict.textContent = 'Nicht ganz - so ist es richtig.';
+                // Die Serie ist hin - das sollen die Punkte auch zeigen.
+                punkteAktualisieren(document, 0);
             }
 
             setTimeout(
@@ -132,6 +157,13 @@ function showFinished(unitId, data) {
         <button class="btn" id="again">Noch einmal üben</button>
         <button class="btn ghost" data-back="/unit/${unitId}">Zur Übersicht</button>
     `);
+
+    /*
+     * Erst zeichnen, dann anzuenden: render() macht ein laufendes Feuerwerk
+     * aus - so hoert es bei jedem Wechsel der Ansicht von selbst auf. Stuende
+     * der Aufruf davor, loeschte die eigene Seite ihn sofort wieder.
+     */
+    feuerwerk();
 
     wireBack();
 

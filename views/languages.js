@@ -1,6 +1,6 @@
 import {
     VT, api, render, esc, $, on, go, topbar, showError, clearError, withBusy,
-    flagHtml,
+    flagHtml, lernansicht,
     rechtsZeile,
 } from '../core.js';
 import { sprachen, einheitenDerSprache, vokabelnDerEinheit } from '../vorrat.js';
@@ -36,9 +36,9 @@ export async function languagesView() {
     }).join('');
 
     render(`
+        ${lernansicht()}
         ${topbar(VT.user.appName)}
         <div id="msg"></div>
-        ${teacherLink()}
         ${languages.length === 0 ? `
             <div class="empty">
                 <span class="big">\u{1F310}</span>
@@ -73,37 +73,24 @@ export async function languagesView() {
  * bekäme einen Kurs ohne Klasse und mit dem falschen Namen; zwei Wege zum
  * selben Ergebnis, von denen einer schlechter ist, sind ein Weg zu viel.
  *
- * Für ein Kind mit Einlese-Recht bleibt es: In einer Familie ist genau das
- * der Weg, und es gibt dort niemanden, der Kurse verwaltet.
+ * Für ein Kind mit Einlese-Recht bleibt es: Wem die Lehrkraft das Einlesen
+ * erlaubt hat, der geht genau hier entlang - einen Lehrkraft-Bereich hat es
+ * nicht.
  */
 function darfAnlegen() {
     return VT.user.canImport && !VT.user.isTeacher;
 }
 
-/**
- * Für Lehrkräfte der Weg in die Verwaltung.
+/*
+ * Hier stand fuer eine Lehrkraft eine Zeile "Verwaltung", ueber ihren
+ * eigenen Kursen.
  *
- * Sie soll nicht wissen müssen, dass es unter /teacher/ etwas gibt - sie
- * meldet sich normal an und findet den Weg dort, wo sie ohnehin ist. Eine
- * echte Seitennavigation statt eines Wechsels innerhalb der App: Der
- * Lehrkraft-Bereich wird vom Server gebaut und ist kein Teil der PWA.
- *
- * Nur in der Browser-Ansicht. Die installierte App gehört einem Gerät und
- * einem Zweck - dort zu verwalten, ginge auf einem Handy-Bildschirm ohnehin
- * schlecht.
+ * Sie ist weg: Der Schalter im Zahnrad kann dasselbe und mehr - er fuehrt
+ * auf die Entsprechung DIESER Seite statt immer auf die Startseite, und er
+ * steht auf jeder Seite an derselben Stelle. Eine zweite Tuer daneben, die
+ * nur von einer Seite aus aufgeht, kostete den Platz ueber genau dem,
+ * weswegen man hergekommen ist: den eigenen Kursen.
  */
-function teacherLink() {
-    if (!VT.user.isTeacher || VT.standalone) return '';
-    return `
-        <a class="row" href="${VT.base}/teacher/">
-            <span class="lead">\u{1F5C2}\u{FE0F}</span>
-            <span class="body">
-                <span class="title">Verwaltung</span>
-                <span class="tiny muted">Klassen, Kurse, Zugangsdaten und Freigaben</span>
-            </span>
-            <span class="chev">&#8250;</span>
-        </a>`;
-}
 
 /**
  * iOS-Nutzern erklären, wie das eigene App-Symbol entsteht. Nur in Safari

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/access.php';
+require_once __DIR__ . '/streak.php';
 
 /**
  * Lernlogik, gemeinsam für alle Übungsarten.
@@ -57,10 +58,22 @@ function unit_progress(int $unitId, int $userId, string $mode): array
  * eigene Zeile und danach UPDATE über den Primärschlüssel hängt an gar keinem
  * eindeutigen Index und ist in beiden Zuständen richtig.
  *
- * @return array{streak:int, just_learned:bool}
+ * Und hier wird auch der Tag verbucht, an dem geübt wurde - die Serie hängt
+ * daran. Ausdrücklich an dieser Stelle und nicht bei den drei Aufrufern:
+ * Üben geht über das Bündel, über das Quiz und über den Lückentext, und der
+ * vierte Weg, der das eines Tages vergisst, kommt bestimmt. $tag ist der
+ * Tag des GERÄTS, weil offline geübt und später geschickt wird; fehlt er,
+ * gilt heute.
+ *
+ * @return array{streak:int, just_learned:bool, newly_learned:bool}
  */
-function record_answer(int $userId, int $vocabId, string $mode, bool $correct): array
-{
+function record_answer(
+    int $userId,
+    int $vocabId,
+    string $mode,
+    bool $correct,
+    ?string $tag = null,
+): array {
     $cur = q1(
         'SELECT id, streak, correct_count, wrong_count, known_at
            FROM progress
@@ -80,6 +93,20 @@ function record_answer(int $userId, int $vocabId, string $mode, bool $correct): 
         $wrongN++;
     }
     $nowKnown = $streak >= KNOWN_THRESHOLD;
+
+    /*
+     * Und jetzt zum ersten Mal gekonnt - das ist nicht dasselbe wie
+     * $nowKnown.
+     *
+     * $nowKnown steht ab der dritten richtigen Antwort bei JEDER weiteren
+     * wieder da: Die Serie bleibt ja über der Schwelle. Für die Rückmeldung
+     * „Sitzt!" war das nie ein Problem, weil das Quiz nur Vokabeln vorlegt,
+     * die noch nicht gekonnt sind. Für die Serie wäre es eines gewesen -
+     * der Lückentext legt dieselbe Vokabel später wieder vor, und dann
+     * hätte ein einziges Wort jeden Tag aufs Neue „neu gelernt" gemeldet.
+     * Gemeint ist der Übergang, und der steht in known_at.
+     */
+    $neuGekonnt = $nowKnown && ($cur === null || $cur['known_at'] === null);
 
     if ($cur === null) {
         q(
@@ -105,7 +132,13 @@ function record_answer(int $userId, int $vocabId, string $mode, bool $correct): 
         );
     }
 
-    return ['streak' => $streak, 'just_learned' => $nowKnown];
+    streak_verbuchen($userId, streak_tag_pruefen($tag), $correct, $neuGekonnt);
+
+    return [
+        'streak'        => $streak,
+        'just_learned'  => $nowKnown,
+        'newly_learned' => $neuGekonnt,
+    ];
 }
 
 /**

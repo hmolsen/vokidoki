@@ -2,7 +2,9 @@
    Hash-Routing, damit die App ohne Rewrite-Regeln in jedem Unterverzeichnis
    eines Shared-Hostings läuft. */
 
-import { VT, go, render, notice, api, hardRefresh, navQuelle, navAbmelden } from './core.js';
+import {
+    VT, go, render, notice, api, hardRefresh, navQuelle, navAbmelden, serieQuelle,
+} from './core.js';
 import { loginView } from './views/login.js';
 import { languagesView } from './views/languages.js';
 import { languageView } from './views/language.js';
@@ -11,9 +13,10 @@ import { unitView } from './views/unit.js';
 import { quizView } from './views/quiz.js';
 import { clozeView } from './views/cloze.js';
 import { profileView } from './views/profile.js';
+import { freiView, freiWahlView } from './views/frei.js';
 import {
     vorratAuffrischen, vorratLaden, vorratAlter, vorratVergessen,
-    sprachen, einheit,
+    sprachen, einheit, serieHeute,
 } from './vorrat.js';
 
 /*
@@ -27,6 +30,17 @@ import {
  */
 navQuelle(() => ({ kurse: sprachen(), aktiv: aktiverKurs() }));
 navAbmelden(async () => { vorratVergessen(); });
+
+/*
+ * Und woher das Abzeichen in der Leiste seine Zahl nimmt.
+ *
+ * Gerechnet wird bei jedem Zeichnen neu und nicht einmal beim Start: Die
+ * installierte App liegt wochenlang im Hintergrund, und zwischen zwei
+ * Blicken auf den Bildschirm kann Mitternacht liegen. Eine beim Start
+ * festgehaltene Lage stuende dann noch auf "heute schon gelernt", obwohl
+ * der Tag laengst ein anderer ist.
+ */
+serieQuelle(() => serieHeute());
 
 /**
  * Welcher Kurs gerade offen ist - damit er im Menue markiert steht.
@@ -59,6 +73,17 @@ const ROUTES = [
     [/^\/unit\/(\d+)$/,           unitView],
     [/^\/quiz\/(\d+)$/,           quizView],
     [/^\/cloze\/(\d+)$/,          clozeView],
+    /*
+     * Freies Ueben. Zwei Wege hinein: von einer Lerneinheit direkt
+     * (#/frei/12) und vom Kurs ueber die Auswahl, die dann mehrere
+     * Kennungen mitbringt (#/frei/12-13-15).
+     *
+     * Die Auswahl steht in der Adresse und nicht in einer Variablen: So
+     * ueberlebt eine Runde das Neuladen, und der Zurueck-Pfeil des Browsers
+     * fuehrt dorthin, wo man war.
+     */
+    [/^\/frei\/waehlen\/(\d+)$/,  freiWahlView],
+    [/^\/frei\/([\d-]+)$/,        freiView],
     [/^\/konto$/,                 profileView],
     // Dieselbe Seite, aber gleich beim Passwort: Der Lehrkraft-Bereich hat
     // dafuer einen eigenen Knopf, und "erst suchen, dann tippen" ist kein

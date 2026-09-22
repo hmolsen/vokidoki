@@ -16,6 +16,7 @@ require_once __DIR__ . '/../lib/schema.php';
 require_once __DIR__ . '/../lib/wordtypes.php';
 require_once __DIR__ . '/../lib/throttle.php';
 require_once __DIR__ . '/../lib/courses.php';
+require_once __DIR__ . '/../lib/meldungen.php';
 require_once __DIR__ . '/../lib/letter.php';
 require_once __DIR__ . '/../lib/passwords.php';
 
@@ -124,7 +125,7 @@ function admin_login_page(?string $error): never
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="robots" content="noindex, nofollow">
-        <title>Admin - Vokabeltrainer</title>
+        <title>Admin - Vokidoki</title>
         <link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
         <link rel="stylesheet" href="<?= h(admin_url('admin.css')) ?>">
     </head>
@@ -133,7 +134,7 @@ function admin_login_page(?string $error): never
         <div class="center" style="margin:12vh 0 6px">
             <div style="font-size:3rem">&#128274;</div>
             <h1>Administration</h1>
-            <p class="sub">Vokabeltrainer</p>
+            <p class="sub">Vokidoki</p>
         </div>
         <?php if ($error !== null): ?>
             <div class="notice"><?= h($error) ?></div>
@@ -236,9 +237,13 @@ function admin_head(string $title, string $active): void
         'users.php'     => 'Accounts',
         'vocab.php'     => 'Vokabeln',
         'sentences.php' => 'Lückensätze',
+        'meldungen.php' => 'Meldungen',
         'settings.php'  => 'Einstellungen',
         'selfcheck.php' => 'Selbsttest',
     ];
+    // Rot hinter "Meldungen", solange etwas wartet - dieselbe Zahl, die die
+    // Lehrkraft an ihrem Zahnrad sieht, nur ueber alle Schulen.
+    $gemeldet = meldungen_zahl(null);
     ?>
     <!doctype html>
     <html lang="de">
@@ -246,16 +251,18 @@ function admin_head(string $title, string $active): void
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="robots" content="noindex, nofollow">
-        <title><?= h($title) ?> - Vokabeltrainer Admin</title>
+        <title><?= h($title) ?> - Vokidoki Admin</title>
         <link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
         <link rel="stylesheet" href="<?= h(admin_url('admin.css')) ?>">
     </head>
     <body class="admin">
     <header class="adminbar">
-        <strong>Vokabeltrainer</strong>
+        <strong>Vokidoki</strong>
         <nav>
             <?php foreach ($nav as $file => $label): ?>
-                <a href="<?= h(admin_url($file)) ?>"<?= $file === $active ? ' class="on"' : '' ?>><?= h($label) ?></a>
+                <a href="<?= h(admin_url($file)) ?>"<?= $file === $active ? ' class="on"' : '' ?>><?= h($label) ?><?=
+                    $file === 'meldungen.php' && $gemeldet > 0
+                        ? '<span class="zaehler">' . $gemeldet . '</span>' : '' ?></a>
             <?php endforeach; ?>
         </nav>
         <form method="post" action="<?= h(admin_url('index.php')) ?>" class="logout">

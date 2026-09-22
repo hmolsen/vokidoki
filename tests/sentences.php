@@ -304,33 +304,32 @@ ok('Der Fortschritt bleibt auch bei offener Tastatur stehen',
 ok('Der Fortschritt steht neben dem Titel, nicht in einer eigenen Zeile',
    str_contains($js, 'class="topbar-progress"')
    && preg_match('/\.topbar-progress\s*\{[^}]*display:\s*flex/s', $css) === 1);
-section('Aufgabe melden');
+section('Vokabel melden');
 
-// Der Meldeknopf erscheint nur nach einer falschen Antwort - genau dann ist
-// der Verdacht berechtigt, dass nicht das Kind danebenlag, sondern der Satz.
-ok('Der Meldeknopf steht neben dem Weiter-Knopf',
-   str_contains($js, 'class="btn flagbtn"')
+/*
+ * Der Meldeknopf steht jetzt bei jeder Aufgabe, nicht erst nach einer
+ * falschen Antwort - ein schiefer Satz faellt auch dem auf, der die Loesung
+ * wusste. Wie er meldet, steht einmal in melden.js; hier nur, wie er im
+ * Lueckentext sitzt.
+ */
+ok('Der Meldeknopf steht neben dem Pruefen-Knopf',
+   preg_match('/id="check">Prüfen<\/button>\s*\$\{meldeKnopf\(\)\}/', $js) === 1
    && preg_match('/\.cloze-actions\s*\{[^}]*display:\s*flex/s', $css) === 1);
-ok('Der Weiter-Knopf nimmt dann nicht mehr die ganze Breite',
+ok('Der Pruefen-Knopf nimmt dann nicht mehr die ganze Breite',
    preg_match('/\.cloze-actions \.cloze-check\s*\{[^}]*flex:\s*1/s', $css) === 1);
 ok('Und der Meldeknopf ist quadratisch',
    preg_match('/\.flagbtn\s*\{[^}]*width:\s*var\(--tap\)/s', $css) === 1);
+$melden = (string) file_get_contents(__DIR__ . '/../melden.js');
+ok('Er ist nicht mehr verborgen, bis etwas falsch war',
+   str_contains($melden, 'data-melden') && !preg_match('/data-melden[^>]*hidden/s', $melden)
+   && !str_contains($js, '.hidden = false'));
+ok('Bei jeder Vokabel faengt er neu an, mit Satz und Getipptem',
+   preg_match('/meldenVerdrahten\([^;]*satzId:\s*data\.satzId,\s*getippt: input\.value/s', $js) === 1);
 
-ok('Er ist zunaechst verborgen',
-   preg_match('/id="flag" hidden/', $js) === 1);
-ok('Und erscheint erst bei einer falschen Antwort',
-   preg_match('/\$\(.#flag.\)\.hidden = false;/', $js) === 1);
-ok('Bei der naechsten Vokabel ist er wieder weg',
-   preg_match('/flagge\.hidden = true;/', $js) === 1);
-
-ok('Gemeldet wird ueber die API',
-   str_contains($js, "api('cloze', 'flag'"));
-ok('Mit dem, was das Kind getippt hatte',
-   preg_match('/sentence_id: Number\(z\.sentenceId\), text: z\.typed/', $js) === 1);
-ok('Das Kind bekommt eine Bestaetigung',
-   str_contains($js, 'flag-done') && str_contains($js, 'Danke!'));
-ok('Und der Knopf nimmt dem Feld den Fokus nicht',
-   preg_match('/\$\(.#flag.\)\.addEventListener\(.mousedown./', $js) === 1);
+ok('Und er nimmt dem Feld den Fokus nicht',
+   str_contains($melden, 'knopf.onmousedown = (event) => event.preventDefault();'));
+ok('Nach dem Melden zeigt er einen Haken',
+   str_contains($melden, "knopf.textContent = '\\u{2713}';"));
 
 section('Tastatur bleibt offen');
 
@@ -568,6 +567,71 @@ ok('Gesunde Verbindung bleibt bestehen', (int) qv('SELECT CONNECTION_ID()') === 
 ok('wait_timeout ist grosszügig gesetzt',
    (int) qv('SELECT @@SESSION.wait_timeout') >= 600,
    (string) qv('SELECT @@SESSION.wait_timeout'));
+
+section('Die Serie - gemeinsame Fallsammlung');
+
+/*
+ * Dieselben Faelle prueft die Browser-Suite gegen vorrat.js.
+ *
+ * Und aus demselben Grund wie oben bei den Antworten: Das Abzeichen steht
+ * in der Leiste jeder Seite und muss auch ohne Netz stimmen, also gibt es
+ * die Regel zweimal. Wer hier die Nachsicht von zwei Tagen aendert und dort
+ * nicht, laesst ein Kind vor zwei verschiedenen Zahlen stehen - und
+ * ausgerechnet vor der, auf die es stolz ist.
+ */
+require_once __DIR__ . '/../lib/streak.php';
+
+$serien = json_decode(
+    (string) file_get_contents(__DIR__ . '/faelle/serien.json'), true,
+);
+ok('Die Fallsammlung der Serien ist lesbar',
+   is_array($serien) && count($serien) >= 15,
+   is_array($serien) ? count($serien) . ' Faelle' : 'nicht lesbar');
+
+$schiefeSerien = [];
+foreach ($serien as $fall) {
+    $r = streak_rechnen($fall['tage'], $fall['heute']);
+    $a = streak_anzeige($r['kette'], $r['letzter'], $fall['heute']);
+
+    if ($r['kette'] !== $fall['kette']
+        || $r['letzter'] !== $fall['letzter']
+        || $a['zahl'] !== $fall['zahl']
+        || $a['lage'] !== $fall['lage']) {
+        $schiefeSerien[] = $fall['was'] . ': ' . json_encode($r + $a);
+    }
+}
+ok('streak_rechnen() stimmt mit jedem Fall darin ueberein', $schiefeSerien === [],
+   implode(' | ', array_slice($schiefeSerien, 0, 3)));
+
+section('Die Serie - der Tag einer Antwort');
+
+/*
+ * Der Tag kommt vom Geraet, und ein Geraet kann sich irren oder luegen.
+ * Abgelehnt wird trotzdem nichts: Die Antwort selbst war ja richtig.
+ */
+$streakHeute = '2026-09-21';
+foreach ([
+    ['2026-09-21', '2026-09-21', 'heute'],
+    ['2026-09-19', '2026-09-19', 'vorgestern, aus der Warteschlange'],
+    ['2026-09-07', '2026-09-07', 'vierzehn Tage alt - gerade noch'],
+    ['2026-09-06', $streakHeute, 'fuenfzehn Tage alt - auf heute gezogen'],
+    ['2026-09-22', $streakHeute, 'morgen - falsch gestellte Uhr'],
+    ['2026-02-31', $streakHeute, 'den Tag gibt es nicht'],
+    ['quatsch',    $streakHeute, 'gar kein Datum'],
+    [null,         $streakHeute, 'nichts mitgeschickt - aeltere App'],
+    [12345,        $streakHeute, 'keine Zeichenkette'],
+] as [$roh, $erwartet, $was]) {
+    $wurde = streak_tag_pruefen($roh, $streakHeute);
+    ok("Tag einer Antwort: $was", $wurde === $erwartet, "wurde $wurde");
+}
+
+// Die zweite Tuer: Wiederholen haelt die Serie am Leben, wenn nichts Neues
+// mehr freigegeben ist. Die Schwelle steht an genau einer Stelle.
+ok('Eine neue Vokabel reicht immer',        streak_tag_zaehlt(1, 1));
+ok('Knapp unter der Uebungsschwelle nicht', !streak_tag_zaehlt(0, STREAK_UEBUNG_MIN - 1));
+ok('Genau auf der Schwelle schon',          streak_tag_zaehlt(0, STREAK_UEBUNG_MIN));
+ok('Gar nichts zaehlt nicht',               !streak_tag_zaehlt(0, 0));
+
 
 echo "\n" . str_repeat('-', 52) . "\n";
 printf("%d bestanden, %d fehlgeschlagen\n", $passed, $failed);

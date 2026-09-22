@@ -104,6 +104,36 @@ export function themaWahlHtml() {
         </div>`;
 }
 
+// ------------------------------------------------------- Welche Ansicht
+
+/**
+ * Der Umschalter zwischen Verwaltung und Lernansicht.
+ *
+ * Nur für eine Lehrkraft - einem Kind sagt er nichts, und es gibt für es
+ * auch keine Verwaltung.
+ *
+ * Als Zeichenkette und nicht als DOM-Bau, aus demselben Grund wie die
+ * Farbwahl darüber: Beide Aufrufer setzen ihre Menüs als Text zusammen,
+ * der eine in PHP, der andere in JavaScript. Diese Fassung ist für die
+ * App; teacher/_boot.php schreibt dieselbe in PHP, und eine Prüfung hält
+ * beide zusammen.
+ *
+ * @param verwaltungUrl Wohin "Verwaltung" führt - die Entsprechung der
+ *                      Seite, auf der man gerade steht.
+ */
+export function ansichtWahlHtml(verwaltungUrl) {
+    return `
+        <p class="mkopf klein">Ansicht</p>
+        <div class="ansichtwahl" role="group" aria-label="Ansicht">
+            <a class="ansichtknopf" href="${verwaltungUrl}">
+                <span aria-hidden="true">&#128203;</span> Verwaltung
+            </a>
+            <span class="ansichtknopf on" aria-current="page">
+                <span aria-hidden="true">&#128065;</span> Lernansicht
+            </span>
+        </div>`;
+}
+
 // ------------------------------------------------------------ Auf und zu
 
 /**
@@ -174,6 +204,21 @@ export function menueAktivieren(wurzel = document) {
     };
 
     menues.forEach((m) => {
+        /*
+         * Zweimal verdrahten wäre schlimmer als gar nicht.
+         *
+         * Normalerweise kommt das nicht vor: Die App zeichnet ihre Leiste
+         * bei jedem Wechsel neu, und ein frisch gebautes <details> hat noch
+         * keinen Hörer. Das Abzeichen der Serie erneuert sich aber mitten
+         * im Üben an Ort und Stelle, ohne dass die Leiste neu entsteht -
+         * und danach lief diese Schleife ein zweites Mal über dieselben
+         * Menüs. Zwei Hörer an einem Knopf heisst: aufklappen und sofort
+         * wieder zu. Nach ein paar richtigen Antworten ging das Menü gar
+         * nicht mehr auf.
+         */
+        if (m.dataset.verdrahtet === '1') return;
+        m.dataset.verdrahtet = '1';
+
         /*
          * Den Klick auf den Knopf selbst übernehmen: Der Browser würde
          * open sofort umlegen, und damit wäre das Zuklappen vorbei, bevor

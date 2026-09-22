@@ -1,10 +1,12 @@
 import {
     VT, api, render, esc, $, go, topbar, wireBack, progressBar, showError,
+    babing, serieAktualisieren, punkteAktualisieren, konfetti, feuerwerk,
 } from '../core.js';
 import {
     frageLuecke, antwortPruefen, antwortMerken, zuruecksetzen, MODUS_LUECKE,
     sprache, einheit, vorratAuffrischen,
 } from '../vorrat.js';
+import { meldeKnopf, meldenVerdrahten } from '../melden.js';
 
 const NEXT_DELAY_CORRECT = 900;
 const NEXT_DELAY_HINT    = 2400;   // Schreibweise lesen können
@@ -118,15 +120,89 @@ async function nextQuestion(unitId) {
         return;
     }
 
-    // Steht der Bildschirm schon, wird nur die Karte getauscht.
+    lueckeZeigen(lueckeArt(unitId), data);
+}
+
+/*
+ * Was an einer Lückentextaufgabe von aussen kommt.
+ *
+ * Der Bildschirm selbst - Satz, Feld in der Lücke, Zeichenreihe, der Knopf,
+ * der Richtig und Falsch trägt - ist für jede Lückenaufgabe derselbe. Das
+ * freie Üben hatte eine eigene, schlichtere Fassung, und nebeneinander sah
+ * man es: kleineres Feld, Knopf über die ganze Breite, keine Zeichenreihe,
+ * und die Tastatur klappte bei jeder Aufgabe zu. Jetzt übergibt es seine
+ * Aufgaben hierher und bringt nur mit, was bei ihm anders ist:
+ *
+ *   schluessel  wann der stehende Bildschirm weiterbenutzt werden darf
+ *   kopf()      was über dem Satz steht
+ *   punkte      ob die drei Punkte des Lernstands darunter stehen
+ *   zeigen()    was bei jeder neuen Aufgabe sonst noch nachzuziehen ist
+ *   merken()    die Antwort verbuchen - liefert just_learned
+ *   weiter()    die nächste Aufgabe
+ */
+function lueckeArt(unitId) {
+    return {
+        schluessel: `cloze:${unitId}`,
+        kopf: () => topbar('Lückentext', {
+            backTo: `/unit/${unitId}`,
+            action: '<div class="topbar-progress" id="progress"></div>',
+        }),
+        punkte: true,
+        zeigen(data) {
+            $('#dots').innerHTML = [0, 1, 2]
+                .map((i) => `<i class="${i < Math.min(3, data.streak) ? 'on' : ''}"></i>`)
+                .join('');
+
+            const fortschritt = $('#progress');
+            fortschritt.innerHTML = `
+                ${progressBar(data.known, data.total)}
+                <span class="tiny muted">${data.known}/${data.total}</span>`;
+            fortschritt.title = `${data.known} von ${data.total} gelernt`;
+        },
+        merken(data, richtig) {
+            const result = antwortMerken(data.vocabId, MODUS_LUECKE, richtig);
+
+            if (richtig) {
+                babing();
+
+                /*
+                 * Der Punkt springt sofort an, nicht erst mit der naechsten
+                 * Frage - und beim dritten fliegt Konfetti. Es haengt an
+                 * <body> und fliegt ueber der naechsten Aufgabe weiter; die
+                 * Zeit bis dahin aendert sich dadurch nicht.
+                 */
+                punkteAktualisieren(document, result.streak);
+                if (result.newly_learned) konfetti();
+
+                // Die Leiste wird beim Üben nicht neu gezeichnet - das
+                // Abzeichen muss sich also selbst melden. Gefeiert wird
+                // genau einmal: in dem Augenblick, in dem der Tag steht.
+                serieAktualisieren(result.tag_geschafft);
+            } else {
+                // Die Serie ist hin - das sollen die Punkte auch zeigen.
+                punkteAktualisieren(document, 0);
+            }
+            return result;
+        },
+        weiter: () => nextQuestion(unitId),
+    };
+}
+
+/**
+ * Eine Lückenaufgabe zeigen - von hier und vom freien Üben aus.
+ *
+ * Steht der Bildschirm derselben Art schon, wird nur die Karte getauscht.
+ */
+export function lueckeZeigen(art, data) {
     if (zustand !== null
-        && zustand.unitId === String(unitId)
+        && zustand.art.schluessel === art.schluessel
         && document.getElementById('answer') !== null) {
+        zustand.art = art;
         showCard(data);
         return;
     }
 
-    buildScreen(unitId, data);
+    buildScreen(art, data);
 }
 
 /**
@@ -138,14 +214,11 @@ async function nextQuestion(unitId) {
  * es ist auch das, was die Übung meint: Das Kind füllt die Lücke, es
  * beantwortet nicht daneben eine Frage.
  */
-function buildScreen(unitId, data) {
+function buildScreen(art, data) {
     render(`
         <div class="screen">
             <div class="screen-top">
-                ${topbar('Lückentext', {
-                    backTo: `/unit/${unitId}`,
-                    action: '<div class="topbar-progress" id="progress"></div>',
-                })}
+                ${art.kopf()}
             </div>
 
             <form id="form" class="screen-body" autocomplete="off">
@@ -171,24 +244,17 @@ function buildScreen(unitId, data) {
                         ><span id="gap-after"></span>
                     </p>
 
-                    <div class="cloze-dots"><span class="dots" id="dots"></span></div>
+                    ${art.punkte
+                        ? '<div class="cloze-dots"><span class="dots" id="dots"></span></div>'
+                        : ''}
                     <div class="verdict" id="verdict"></div>
                 </div>
 
                 <div class="screen-bottom">
                     <div class="cloze-actions">
                         <button class="btn cloze-check" type="submit" id="check">Prüfen</button>
-                        <!--
-                            Erscheint nur nach einer falschen Antwort. Genau
-                            dann ist der Verdacht berechtigt, dass nicht das
-                            Kind danebenlag, sondern der Satz.
-                        -->
-                        <button type="button" class="btn flagbtn" id="flag" hidden
-                                aria-label="Diese Aufgabe melden"
-                                title="Stimmt hier etwas nicht?">\u{2691}</button>
+                        ${meldeKnopf()}
                     </div>
-
-                    <p class="flag-done" id="flag-done" hidden></p>
 
                     ${accentRow(data.lang)}
                     <div id="msg"></div>
@@ -203,7 +269,7 @@ function buildScreen(unitId, data) {
     const check = $('#check');
 
     zustand = {
-        unitId: String(unitId),
+        art,
         data,
         input,
         check,
@@ -217,14 +283,11 @@ function buildScreen(unitId, data) {
     // Wie bei den Zeichentasten: Ohne das nimmt der Knopf dem Feld den Fokus,
     // und die Tastatur klappt bei jedem Prüfen zu.
     check.addEventListener('mousedown', (event) => event.preventDefault());
-    $('#flag').addEventListener('mousedown', (event) => event.preventDefault());
 
     $('#form').addEventListener('submit', (event) => {
         event.preventDefault();
-        onSubmit(unitId);
+        onSubmit();
     });
-
-    $('#flag').addEventListener('click', () => reportSentence());
 
     wireAccents(input, () => zustand.answered);
     showCard(data);
@@ -256,31 +319,22 @@ function showCard(data) {
 
     // Die Meldemöglichkeit gehört zur Aufgabe, nicht zum Bildschirm - bei
     // jeder neuen Vokabel fängt sie wieder bei null an.
-    const flagge = $('#flag');
-    flagge.hidden = true;
-    flagge.disabled = false;
-    flagge.classList.remove('done');
-    flagge.textContent = '\u{2691}';
-    $('#flag-done').hidden = true;
+    meldenVerdrahten(document.querySelector('[data-melden]'), () => ({
+        vocabId: data.vocabId,
+        satzId:  data.satzId,
+        getippt: input.value.trim(),
+    }));
 
     const verdict = $('#verdict');
     verdict.className = 'verdict';
     verdict.textContent = '';
 
-    $('#dots').innerHTML = [0, 1, 2]
-        .map((i) => `<i class="${i < Math.min(3, data.streak) ? 'on' : ''}"></i>`)
-        .join('');
-
-    const fortschritt = $('#progress');
-    fortschritt.innerHTML = `
-        ${progressBar(data.known, data.total)}
-        <span class="tiny muted">${data.known}/${data.total}</span>`;
-    fortschritt.title = `${data.known} von ${data.total} gelernt`;
+    zustand.art.zeigen(data);
 
     input.focus();
 }
 
-async function onSubmit(unitId) {
+async function onSubmit() {
     const z = zustand;
     const { input, check } = z;
 
@@ -288,7 +342,7 @@ async function onSubmit(unitId) {
     const naechste = () => {
         if (z.weiter) return;
         z.weiter = true;
-        nextQuestion(unitId);
+        z.art.weiter();
     };
 
     // Nach einer falschen Antwort ist der Knopf der Weiter-Knopf. Nach einer
@@ -312,11 +366,10 @@ async function onSubmit(unitId) {
 
     const geprueft = antwortPruefen(text, z.data.loesung);
     const result = {
-        ...antwortMerken(z.data.vocabId, MODUS_LUECKE, geprueft.correct),
+        ...z.art.merken(z.data, geprueft.correct),
         correct: geprueft.correct,
         exact:   geprueft.exact,
         answer:  z.data.loesung,
-        sentence_id: z.data.satzId,
     };
 
     const verdict = $('#verdict');
@@ -351,44 +404,7 @@ async function onSubmit(unitId) {
         check.textContent = 'Weiter';
         verdict.className = 'verdict bad';
         verdict.innerHTML = `Nicht ganz. Richtig ist:<br><strong>${esc(result.answer)}</strong>`;
-
-        // Vielleicht lag ja gar nicht das Kind daneben, sondern der Satz.
-        z.sentenceId = result.sentence_id;
-        z.typed = text;
-        $('#flag').hidden = false;
     }
-}
-
-/**
- * Meldet, dass mit dieser Aufgabe etwas nicht stimmt.
- *
- * Das Getippte geht mit: Im Admin entscheidet meist genau das, ob der Satz
- * schief war oder die erwartete Antwort - ohne diese Angabe bliebe nur die
- * Vermutung.
- */
-async function reportSentence() {
-    const z = zustand;
-    const flagge = $('#flag');
-    const fertig = $('#flag-done');
-
-    if (!z || !z.sentenceId || flagge.disabled) return;
-
-    flagge.disabled = true;
-
-    try {
-        await api('cloze', 'flag', {
-            body: { sentence_id: Number(z.sentenceId), text: z.typed ?? '' },
-        });
-    } catch (err) {
-        flagge.disabled = false;
-        showError(err.message);
-        return;
-    }
-
-    flagge.classList.add('done');
-    flagge.textContent = '\u{2713}';
-    fertig.textContent = 'Danke! Papa schaut sich die Aufgabe an.';
-    fertig.hidden = false;
 }
 
 /**
@@ -506,6 +522,13 @@ function showFinished(unitId, data) {
         <button class="btn" id="again">Noch einmal üben</button>
         <button class="btn ghost" data-back="/unit/${unitId}">Zur Übersicht</button>
     `);
+
+    /*
+     * Erst zeichnen, dann anzuenden: render() macht ein laufendes Feuerwerk
+     * aus - so hoert es bei jedem Wechsel der Ansicht von selbst auf. Stuende
+     * der Aufruf davor, loeschte die eigene Seite ihn sofort wieder.
+     */
+    feuerwerk();
 
     wireBack();
 

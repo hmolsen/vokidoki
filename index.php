@@ -17,6 +17,7 @@ require_once __DIR__ . '/lib/access.php';
 require_once __DIR__ . '/lib/errors.php';
 require_once __DIR__ . '/lib/version.php';
 require_once __DIR__ . '/lib/thema.php';
+require_once __DIR__ . '/lib/streak.php';
 
 boot_error_handling();
 
@@ -84,7 +85,7 @@ if ($user !== null) {
     }
 }
 
-$appName = $user !== null ? app_name_for($user) : 'Vokabeln';
+$appName = $user !== null ? app_name_for($user) : 'Vokidoki';
 $color   = $user !== null ? $user['color'] : '#4f7cff';
 $e       = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 
@@ -138,6 +139,15 @@ window.VT = {
         'canImport' => user_can($user, CAP_IMPORT),
         'isTeacher' => user_is_teacher($user),
     ], JSON_UNESCAPED_UNICODE) ?>,
+    /*
+     * Die Serie gleich mit der Huelle, nicht erst mit dem Buendel.
+     *
+     * Das Abzeichen steht in der Leiste jeder Seite. Kaeme es erst mit dem
+     * ersten Abruf, blitzte auf jeder Seite kurz eine Null auf und spraenge
+     * dann auf die richtige Zahl - ausgerechnet bei der Zahl, auf die ein
+     * Kind stolz ist.
+     */
+    serie: <?= $user === null ? 'null' : json_encode(streak_stand((int) $user['id'], false)) ?>,
     standalone: false,
     version: <?= json_encode($appVersion) ?>,
     // Damit "Aktualisieren" jede Datei frisch holen kann, statt zu hoffen,

@@ -83,28 +83,32 @@ export async function pruefe(f, aus) {
            drin.ort.includes('id=' + f.unit) && drin.balken, drin.ort + ' / ' + drin.h1);
 
         /*
-         * "So sieht es die Klasse" bleibt im selben Fenster.
+         * Der Wechsel in die Lernansicht - jetzt aus dem Zahnrad.
          *
-         * Der Knopf stand auf target="_blank" - damals war das der einzige
-         * Weg zurueck: Tab zu. Seit die Ansicht selbst einen Knopf zurueck
-         * traegt, ist der zweite Tab keine Hilfe mehr. Ob er einen oeffnet,
-         * sieht man hier daran, dass DIESES Fenster stehenbliebe.
+         * Er stand einmal als Knopf neben der Ueberschrift, auf zwei von
+         * sieben Seiten und nur in eine Richtung. Jetzt ist es ein Schalter
+         * mit zwei Stellungen, an derselben Stelle auf jeder Seite. Dass er
+         * im selben Fenster bleibt, sieht man hier daran, dass DIESES
+         * Fenster mitgeht.
          */
-        await b.js(`[...document.querySelectorAll('.titelzeile a.btn')]
-                      .find((a) => a.textContent.includes('So sieht es die Klasse')).click()`);
+        await b.js(`document.getElementById('menuRechts').querySelector('summary').click()`);
+        await schlafe(400);
+        await b.js(`document.querySelector('.ansichtwahl a.ansichtknopf').click()`);
         await schlafe(2200);
         const probe = await b.js(`({
             ort:    location.pathname + location.hash,
-            banner: !!document.querySelector('.notice.pupilview'),
+            banner: !!document.querySelector('.lernansicht'),
         })`);
-        ok('Die Schüleransicht öffnet im selben Fenster',
+        ok('Die Lernansicht öffnet im selben Fenster',
            probe.ort.includes('/unit/' + f.unit) && !probe.ort.includes('unit.php'),
-           probe.ort + ' - mit target=_blank stünde hier noch die Freigabe');
-        ok('Und sie ist die Schüleransicht', probe.banner);
+           probe.ort + ' - in einem zweiten Tab stünde hier noch die Freigabe');
+        ok('Und sie trägt den Streifen „Lernansicht"', probe.banner);
 
-        await b.js(`document.querySelector('.notice.pupilview a.btn').click()`);
+        await b.js(`document.getElementById('menuRechts').querySelector('summary').click()`);
+        await schlafe(400);
+        await b.js(`document.querySelector('.ansichtwahl a.ansichtknopf').click()`);
         await schlafe(1800);
-        ok('Und der Knopf darin führt in dieselbe Lerneinheit zurück',
+        ok('Und der Schalter führt in dieselbe Lerneinheit zurück',
            (await b.js(`location.pathname + location.search`))
                .includes('unit.php?id=' + f.unit));
 

@@ -1,0 +1,266 @@
+[
+    {
+        "was": "noch nie geuebt",
+        "heute": "2026-09-21",
+        "tage": [],
+        "kette": 0,
+        "letzter": null,
+        "zahl": 0,
+        "lage": "aus"
+    },
+    {
+        "was": "heute die erste Vokabel gelernt",
+        "heute": "2026-09-21",
+        "tage": [{ "day": "2026-09-21", "learned": 1, "correct": 3 }],
+        "kette": 1,
+        "letzter": "2026-09-21",
+        "zahl": 1,
+        "lage": "heute"
+    },
+    {
+        "was": "heute nur zwei richtige Antworten - zu wenig",
+        "heute": "2026-09-21",
+        "tage": [{ "day": "2026-09-21", "learned": 0, "correct": 2 }],
+        "kette": 0,
+        "letzter": null,
+        "zahl": 0,
+        "lage": "aus"
+    },
+    {
+        "was": "heute zehn richtige Antworten, nichts Neues - zaehlt trotzdem",
+        "heute": "2026-09-21",
+        "tage": [{ "day": "2026-09-21", "learned": 0, "correct": 10 }],
+        "kette": 1,
+        "letzter": "2026-09-21",
+        "zahl": 1,
+        "lage": "heute"
+    },
+    {
+        "was": "gestern gelernt, heute noch nicht",
+        "heute": "2026-09-21",
+        "tage": [{ "day": "2026-09-20", "learned": 1, "correct": 4 }],
+        "kette": 1,
+        "letzter": "2026-09-20",
+        "zahl": 1,
+        "lage": "offen"
+    },
+    {
+        "was": "ein Tag ausgelassen - die Serie steht noch, aber sie wackelt",
+        "heute": "2026-09-21",
+        "tage": [{ "day": "2026-09-19", "learned": 1, "correct": 4 }],
+        "kette": 1,
+        "letzter": "2026-09-19",
+        "zahl": 1,
+        "lage": "gefahr"
+    },
+    {
+        "was": "zwei Tage ausgelassen - zurueck auf null",
+        "heute": "2026-09-21",
+        "tage": [{ "day": "2026-09-18", "learned": 1, "correct": 4 }],
+        "kette": 1,
+        "letzter": "2026-09-18",
+        "zahl": 0,
+        "lage": "aus"
+    },
+    {
+        "was": "drei Tage am Stueck",
+        "heute": "2026-09-21",
+        "tage": [
+            { "day": "2026-09-19", "learned": 1, "correct": 5 },
+            { "day": "2026-09-20", "learned": 2, "correct": 8 },
+            { "day": "2026-09-21", "learned": 1, "correct": 3 }
+        ],
+        "kette": 3,
+        "letzter": "2026-09-21",
+        "zahl": 3,
+        "lage": "heute"
+    },
+    {
+        "was": "eine Luecke von einem Tag mitten in der Serie wird ueberbrueckt",
+        "heute": "2026-09-21",
+        "tage": [
+            { "day": "2026-09-17", "learned": 1, "correct": 5 },
+            { "day": "2026-09-18", "learned": 1, "correct": 5 },
+            { "day": "2026-09-20", "learned": 1, "correct": 5 },
+            { "day": "2026-09-21", "learned": 1, "correct": 5 }
+        ],
+        "kette": 4,
+        "letzter": "2026-09-21",
+        "zahl": 4,
+        "lage": "heute"
+    },
+    {
+        "was": "zwei Tage Luecke mitten drin - davor zaehlt nicht mehr mit",
+        "heute": "2026-09-21",
+        "tage": [
+            { "day": "2026-09-14", "learned": 1, "correct": 5 },
+            { "day": "2026-09-15", "learned": 1, "correct": 5 },
+            { "day": "2026-09-16", "learned": 1, "correct": 5 },
+            { "day": "2026-09-19", "learned": 1, "correct": 5 },
+            { "day": "2026-09-20", "learned": 1, "correct": 5 },
+            { "day": "2026-09-21", "learned": 1, "correct": 5 }
+        ],
+        "kette": 3,
+        "letzter": "2026-09-21",
+        "zahl": 3,
+        "lage": "heute"
+    },
+    {
+        "was": "der Zeitplan aus der Abstimmung - Sonnabend, die Serie wackelt",
+        "heute": "2026-09-19",
+        "tage": [
+            { "day": "2026-09-14", "learned": 1, "correct": 4 },
+            { "day": "2026-09-15", "learned": 1, "correct": 4 },
+            { "day": "2026-09-17", "learned": 1, "correct": 4 }
+        ],
+        "kette": 3,
+        "letzter": "2026-09-17",
+        "zahl": 3,
+        "lage": "gefahr"
+    },
+    {
+        "was": "derselbe Zeitplan einen Tag spaeter - Sonntag, alles weg",
+        "heute": "2026-09-20",
+        "tage": [
+            { "day": "2026-09-14", "learned": 1, "correct": 4 },
+            { "day": "2026-09-15", "learned": 1, "correct": 4 },
+            { "day": "2026-09-17", "learned": 1, "correct": 4 }
+        ],
+        "kette": 3,
+        "letzter": "2026-09-17",
+        "zahl": 0,
+        "lage": "aus"
+    },
+    {
+        "was": "ein Tag mit Uebung unter der Schwelle unterbricht die Serie",
+        "heute": "2026-09-21",
+        "tage": [
+            { "day": "2026-09-19", "learned": 1, "correct": 5 },
+            { "day": "2026-09-20", "learned": 0, "correct": 4 },
+            { "day": "2026-09-21", "learned": 1, "correct": 5 }
+        ],
+        "kette": 2,
+        "letzter": "2026-09-21",
+        "zahl": 2,
+        "lage": "heute"
+    },
+    {
+        "was": "ueber den Monatswechsel",
+        "heute": "2026-10-02",
+        "tage": [
+            { "day": "2026-09-30", "learned": 1, "correct": 5 },
+            { "day": "2026-10-01", "learned": 1, "correct": 5 },
+            { "day": "2026-10-02", "learned": 1, "correct": 5 }
+        ],
+        "kette": 3,
+        "letzter": "2026-10-02",
+        "zahl": 3,
+        "lage": "heute"
+    },
+    {
+        "was": "ueber den Jahreswechsel",
+        "heute": "2027-01-01",
+        "tage": [
+            { "day": "2026-12-30", "learned": 1, "correct": 5 },
+            { "day": "2026-12-31", "learned": 1, "correct": 5 },
+            { "day": "2027-01-01", "learned": 1, "correct": 5 }
+        ],
+        "kette": 3,
+        "letzter": "2027-01-01",
+        "zahl": 3,
+        "lage": "heute"
+    },
+    {
+        "was": "ueber die Umstellung auf Winterzeit - der Tag hat 25 Stunden",
+        "heute": "2026-10-26",
+        "tage": [
+            { "day": "2026-10-24", "learned": 1, "correct": 5 },
+            { "day": "2026-10-25", "learned": 1, "correct": 5 },
+            { "day": "2026-10-26", "learned": 1, "correct": 5 }
+        ],
+        "kette": 3,
+        "letzter": "2026-10-26",
+        "zahl": 3,
+        "lage": "heute"
+    },
+    {
+        "was": "ueber die Umstellung auf Sommerzeit - der Tag hat 23 Stunden",
+        "heute": "2026-03-30",
+        "tage": [
+            { "day": "2026-03-28", "learned": 1, "correct": 5 },
+            { "day": "2026-03-29", "learned": 1, "correct": 5 },
+            { "day": "2026-03-30", "learned": 1, "correct": 5 }
+        ],
+        "kette": 3,
+        "letzter": "2026-03-30",
+        "zahl": 3,
+        "lage": "heute"
+    },
+    {
+        "was": "ein Schaltjahr - der 29. Februar zaehlt wie jeder andere Tag",
+        "heute": "2028-03-01",
+        "tage": [
+            { "day": "2028-02-28", "learned": 1, "correct": 5 },
+            { "day": "2028-02-29", "learned": 1, "correct": 5 },
+            { "day": "2028-03-01", "learned": 1, "correct": 5 }
+        ],
+        "kette": 3,
+        "letzter": "2028-03-01",
+        "zahl": 3,
+        "lage": "heute"
+    },
+    {
+        "was": "ein Tag in der Zukunft zaehlt heute noch nicht",
+        "heute": "2026-09-21",
+        "tage": [
+            { "day": "2026-09-21", "learned": 1, "correct": 5 },
+            { "day": "2026-09-25", "learned": 9, "correct": 99 }
+        ],
+        "kette": 1,
+        "letzter": "2026-09-21",
+        "zahl": 1,
+        "lage": "heute"
+    },
+    {
+        "was": "eine lange Serie mit erlaubten Luecken",
+        "heute": "2026-09-21",
+        "tage": [
+            { "day": "2026-09-09", "learned": 1, "correct": 5 },
+            { "day": "2026-09-11", "learned": 1, "correct": 5 },
+            { "day": "2026-09-13", "learned": 1, "correct": 5 },
+            { "day": "2026-09-15", "learned": 1, "correct": 5 },
+            { "day": "2026-09-17", "learned": 1, "correct": 5 },
+            { "day": "2026-09-19", "learned": 1, "correct": 5 },
+            { "day": "2026-09-21", "learned": 1, "correct": 5 }
+        ],
+        "kette": 7,
+        "letzter": "2026-09-21",
+        "zahl": 7,
+        "lage": "heute"
+    },
+    {
+        "was": "die Tage kommen unsortiert herein - das Ergebnis ist dasselbe",
+        "heute": "2026-09-21",
+        "tage": [
+            { "day": "2026-09-21", "learned": 1, "correct": 5 },
+            { "day": "2026-09-19", "learned": 1, "correct": 5 },
+            { "day": "2026-09-20", "learned": 1, "correct": 5 }
+        ],
+        "kette": 3,
+        "letzter": "2026-09-21",
+        "zahl": 3,
+        "lage": "heute"
+    },
+    {
+        "was": "genau an der Schwelle - neun richtige reichen nicht, zehn schon",
+        "heute": "2026-09-21",
+        "tage": [
+            { "day": "2026-09-20", "learned": 0, "correct": 9 },
+            { "day": "2026-09-21", "learned": 0, "correct": 10 }
+        ],
+        "kette": 1,
+        "letzter": "2026-09-21",
+        "zahl": 1,
+        "lage": "heute"
+    }
+]

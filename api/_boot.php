@@ -86,16 +86,6 @@ function edit_unit(array $user, int $unitId): array
     return $row;
 }
 
-/** Lückensatz zum Ansehen, oder abbrechen. */
-function view_sentence(array $user, int $sentenceId): array
-{
-    $row = load_sentence_for_view($user, $sentenceId);
-    if ($row === null) {
-        json_fail('Diesen Satz gibt es nicht.', 404);
-    }
-    return $row;
-}
-
 /** Eine Fähigkeit verlangen, sonst abbrechen. */
 function require_cap(array $user, string $cap): void
 {

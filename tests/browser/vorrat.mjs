@@ -182,6 +182,42 @@ export async function pruefe(f, aus) {
            Array.isArray(schief) && schief.length === 0,
            (schief ?? []).slice(0, 3).join(' | '));
 
+        /*
+         * Und dieselbe Sammlung fuer die Serie.
+         *
+         * Auch sie gibt es zweimal: lib/streak.php rechnet sie auf dem
+         * Server, vorrat.js im Geraet - das Abzeichen steht in der Leiste
+         * jeder Seite und muss auch ohne Netz stimmen. Geprueft wird hier
+         * die Anzeige, denn genau die rechnet die App selbst: Wie lang die
+         * Kette ist, sagt ihr der Server; ob sie heute noch steht, muss sie
+         * selbst wissen, auch nach einer Woche im Hintergrund.
+         */
+        const serienFaelle = JSON.parse(readFileSync(
+            new URL('../faelle/serien.json', import.meta.url), 'utf8'));
+
+        const serienSchief = await b.js(`(async () => {
+            const { serieAnzeige, tagZaehlt } = await import('${f.basis}/vorrat.js');
+            const faelle = ${JSON.stringify(serienFaelle)};
+            const schief = [];
+            for (const fall of faelle) {
+                const a = serieAnzeige(fall.kette, fall.letzter, fall.heute);
+                if (a.zahl !== fall.zahl || a.lage !== fall.lage) {
+                    schief.push(fall.was + ': ' + JSON.stringify(a));
+                }
+                for (const t of fall.tage) {
+                    if (tagZaehlt(t.learned, t.correct) !== (t.learned >= 1 || t.correct >= 10)) {
+                        schief.push(fall.was + ': tagZaehlt ' + JSON.stringify(t));
+                    }
+                }
+            }
+            return schief;
+        })()`);
+
+        ok('serieAnzeige() stimmt mit jedem Fall der Sammlung ueberein',
+           Array.isArray(serienSchief) && serienSchief.length === 0,
+           (serienSchief ?? []).slice(0, 3).join(' | '));
+
+
         // ---- Netz wieder an: Die Antworten gehen raus.
 
         await flugmodus(false);

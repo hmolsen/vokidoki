@@ -1,13 +1,21 @@
 import {
-    api, render, $, withBusy, showError, clearError, rechtsZeile,
+    VT, api, render, esc, $, withBusy, showError, clearError, rechtsZeile,
 } from '../core.js';
 
 export async function loginView() {
     render(`
         <div style="height:6vh"></div>
         <div class="center">
-            <div style="font-size:3.4rem;line-height:1">&#128218;</div>
-            <h1>Vokabeln</h1>
+            <!--
+                Das Wortzeichen als Bild und nicht als Schrift: Das V ist
+                Voki selbst, und die sieben Buchstaben dahinter stehen als
+                Pfade in der Datei. So sieht es ueberall gleich aus - auch
+                in dem Augenblick vor dem ersten Bild, in dem die Schrift
+                noch gar nicht da ist. Ausgerechnet der Name der App duerfte
+                dort nicht in einer fremden Schrift aufblitzen.
+            -->
+            <img class="logo" src="${esc(VT.base)}/assets/vokidoki.svg"
+                 alt="Vokidoki" width="415" height="121">
             <p class="sub">Melde dich mit deinem Namen an.</p>
         </div>
 

@@ -220,9 +220,8 @@ $klassen = classes_for_school($schoolId);
 <?php
 /*
  * Schritt 2. Die fuenf Schulsprachen als Kacheln, alles andere in der
- * durchsuchbaren Liste darunter - so war es in der Familien-App, und es
- * stimmt hier genauso: Neunundneunzig von hundert Kursen sind eine dieser
- * fuenf, aber der hundertste muss trotzdem gehen.
+ * durchsuchbaren Liste darunter: Neunundneunzig von hundert Kursen sind eine
+ * dieser fuenf, aber der hundertste muss trotzdem gehen.
  *
  * Jede Kachel ist ein Absendeknopf desselben Formulars und traegt ihren
  * Sprachnamen als Wert. Abgeschickt wird nur der gedrueckte - das kann

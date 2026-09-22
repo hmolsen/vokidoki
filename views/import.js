@@ -302,7 +302,7 @@ function showReview(languageId, title, entries, fromDraft) {
                  * gerade seine eigenen Vokabeln eingelesen und will ueben.
                  * Fuer eine Lehrkraft ist es die Freigabe: Eingelesen ist
                  * noch nicht aufgemacht, und der naechste Griff ist immer
-                 * derselbe. Sie in der Schueleransicht abzusetzen hiess,
+                 * derselbe. Sie in der Lernansicht abzusetzen hiess,
                  * ihr eine leere Liste zu zeigen - freigegeben ist ja noch
                  * nichts.
                  */

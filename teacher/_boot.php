@@ -11,6 +11,7 @@ require_once __DIR__ . '/../lib/courses.php';
 require_once __DIR__ . '/../lib/roster.php';
 require_once __DIR__ . '/../lib/worldlanguages.php';
 require_once __DIR__ . '/../lib/flags.php';
+require_once __DIR__ . '/../lib/meldungen.php';
 require_once __DIR__ . '/../lib/throttle.php';
 require_once __DIR__ . '/../lib/settings.php';
 require_once __DIR__ . '/../lib/errors.php';
@@ -263,12 +264,12 @@ function teacher_login_page(?string $error): never
     ?><!doctype html>
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Anmeldung - Vokabeltrainer</title>
+<title>Anmeldung - Vokidoki</title>
 <link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
 <link rel="stylesheet" href="<?= h(url('/admin/admin.css')) ?>">
 <?= thema_kopf_skript() ?>
 </head><body class="admin"><main class="adminmain" style="max-width:420px">
-<h1>Vokabeltrainer</h1>
+<h1>Vokidoki</h1>
 <p class="muted">Bereich für Lehrkräfte</p>
 <?php if ($error !== null): ?><div class="notice"><?= h($error) ?></div><?php endif; ?>
 <form method="post" class="card">
@@ -291,7 +292,7 @@ function teacher_blocked_page(): never
     ?><!doctype html>
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kurz Geduld - Vokabeltrainer</title>
+<title>Kurz Geduld - Vokidoki</title>
 <link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
 <link rel="stylesheet" href="<?= h(url('/admin/admin.css')) ?>">
 <?= thema_kopf_skript() ?>
@@ -306,6 +307,67 @@ function teacher_blocked_page(): never
 </main></body></html>
     <?php
     exit;
+}
+
+/**
+ * Die Entsprechung der aktuellen Seite in der Lernansicht.
+ *
+ * Drei Seiten haben eine: "Meine Kurse", ein Kurs und eine Lerneinheit.
+ * Alles andere - Klassenlisten, das eigene Konto, der Anlege-Assistent -
+ * gibt es dort nicht; von dort fuehrt der Wechsel auf die Startseite.
+ *
+ * Der Kurs wird aus der Kursliste dieser Lehrkraft herausgesucht und nicht
+ * frisch abgefragt. Das spart nicht nur eine Abfrage: Die Liste enthaelt
+ * genau die Kurse, die ihr gehoeren - eine Kennung aus der Adresse, die
+ * darin nicht vorkommt, fuehrt damit von selbst auf die Startseite statt
+ * auf einen fremden Kurs.
+ */
+function teacher_lernblick(array $meine, ?int $kursId): string
+{
+    $seite = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    $start = url('/');
+
+    if ($seite === 'unit.php') {
+        $unitId = (int) ($_GET['id'] ?? 0);
+        return $unitId > 0 ? $start . '#/unit/' . $unitId : $start;
+    }
+
+    if ($seite === 'course.php' && $kursId !== null) {
+        foreach ($meine as $k) {
+            if ((int) $k['id'] === $kursId) {
+                return $start . '#/lang/' . (int) $k['language_id'];
+            }
+        }
+    }
+
+    return $start;
+}
+
+/**
+ * Der Umschalter zwischen den beiden Ansichten.
+ *
+ * Er stand einmal als Knopf "So sieht es die Klasse" neben der
+ * Ueberschrift - auf zwei von sieben Seiten, und nur in eine Richtung.
+ * Zurueck ging es ueber einen Hinweis in der App, den es auch nicht
+ * ueberall gab. Zwei halbe Wege fuer eine Bewegung.
+ *
+ * Jetzt ist es ein Schalter mit zwei Stellungen, an derselben Stelle wie
+ * die Farbwahl darunter: Man sieht, in welcher Ansicht man steht, und
+ * kommt mit einem Griff in die andere - und zwar auf dieselbe Seite,
+ * nicht auf irgendeine.
+ *
+ * Dasselbe Markup baut ansichtWahlHtml() in menue.js fuer die
+ * Kinderansicht. Eine Pruefung haelt beide zusammen.
+ */
+function teacher_ansicht_wahl(string $lernUrl): string
+{
+    return '<p class="mkopf klein">Ansicht</p>'
+        . '<div class="ansichtwahl" role="group" aria-label="Ansicht">'
+        . '<span class="ansichtknopf on" aria-current="page">'
+        . '<span aria-hidden="true">&#128203;</span> Verwaltung</span>'
+        . '<a class="ansichtknopf" href="' . h($lernUrl) . '">'
+        . '<span aria-hidden="true">&#128065;</span> Lernansicht</a>'
+        . '</div>';
 }
 
 /**
@@ -329,6 +391,7 @@ function teacher_blocked_page(): never
 function teacher_nav(array $user, ?int $kursId = null): void
 {
     $meine = courses_for_teacher((int) $user['id'], (int) ($user['school_id'] ?? 0));
+    $gemeldet = meldungen_zahl((int) $user['id']);
     ?>
 <div class="adminbar" data-menue="<?= h(url('/menue.js') . '?v=' . app_version()) ?>">
     <details class="menue" id="menuLinks">
@@ -399,12 +462,37 @@ function teacher_nav(array $user, ?int $kursId = null): void
      * statt woandershin zu führen.
      */
     ?>
+    <?php
+    /*
+     * Die Zahl am Zahnrad: So viele Vokabeln haben Kinder gemeldet.
+     *
+     * Sie sitzt auf dem geschlossenen Knopf, nicht erst im Menue - sonst
+     * erfaehrt man davon nur, wenn man ohnehin gerade dort hineinsieht.
+     * Gezaehlt werden Vokabeln, nicht Meldungen: Fuenf Kinder, die ueber
+     * dasselbe Wort stolpern, sind eine Sache zu richten.
+     */
+    $meldeText = $gemeldet === 1 ? '1 gemeldete Vokabel' : $gemeldet . ' gemeldete Vokabeln';
+    ?>
     <details class="menue rechts" id="menuRechts">
-        <summary class="burger" aria-label="Einstellungen" title="Einstellungen">
+        <summary class="burger" aria-label="Einstellungen<?= $gemeldet > 0 ? ' - ' . h($meldeText) : '' ?>"
+                 title="Einstellungen">
             <span aria-hidden="true">&#9881;</span>
+            <?php if ($gemeldet > 0): ?>
+                <span class="zaehler" aria-hidden="true"><?= $gemeldet ?></span>
+            <?php endif; ?>
         </summary>
         <span class="schleier" data-zu></span>
         <nav class="schublade" aria-label="Einstellungen">
+            <?php if ($gemeldet > 0): ?>
+                <a class="mitem meldungen" href="<?= h(teacher_url('meldungen.php')) ?>">
+                    <span class="micon" aria-hidden="true">&#9873;</span>
+                    <span><?= h($meldeText) ?></span>
+                    <span class="zaehler" aria-hidden="true"><?= $gemeldet ?></span>
+                </a>
+
+                <hr class="mtrenner">
+            <?php endif; ?>
+
             <a class="mitem" href="<?= h(teacher_url('konto.php')) ?>">
                 <span class="micon" aria-hidden="true">&#128100;</span>
                 <span>Mein Profil</span>
@@ -413,6 +501,19 @@ function teacher_nav(array $user, ?int $kursId = null): void
                 <span class="micon" aria-hidden="true">&#128273;</span>
                 <span>Passwort ändern</span>
             </a>
+
+            <hr class="mtrenner">
+
+            <?php
+            /*
+             * Der Wechsel in die Lernansicht - und wieder zurueck.
+             *
+             * Er fuehrt auf die Entsprechung DIESER Seite, nicht auf die
+             * Startseite: Wer gerade eine Lerneinheit freigibt, will sehen,
+             * wie genau diese Lerneinheit bei der Klasse ankommt.
+             */
+            ?>
+            <?= teacher_ansicht_wahl(teacher_lernblick($meine, $kursId)) ?>
 
             <hr class="mtrenner">
 
@@ -505,7 +606,7 @@ function teacher_head(
     ?><!doctype html>
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title><?= h($title) ?> - Vokabeltrainer</title>
+<title><?= h($title) ?> - Vokidoki</title>
 <link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
 <link rel="stylesheet" href="<?= h(url('/admin/admin.css')) ?>">
 <?php
@@ -523,7 +624,7 @@ function teacher_head(
  * Die Ueberschrift, und daneben Platz fuer einen Knopf.
  *
  * Gebraucht von Kurs und Lerneinheit: Von dort fuehrt ein Weg in die
- * Schueleransicht - nicht als Randnotiz weiter unten, sondern dort, wo der
+ * Lernansicht - nicht als Randnotiz weiter unten, sondern dort, wo der
  * Name der Sache steht.
  */
 ?>

@@ -104,7 +104,7 @@ function report_fatal(
     if ($json) {
         echo json_encode([
             'ok'        => false,
-            'error'     => 'Unerwarteter Serverfehler. Bitte Papa Bescheid sagen.',
+            'error'     => 'Unerwarteter Serverfehler. Bitte der Lehrkraft Bescheid sagen.',
             'reference' => $ref,
             'detail'    => $detail,
         ], JSON_UNESCAPED_UNICODE);

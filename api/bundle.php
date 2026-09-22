@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/progress.php';
+require_once __DIR__ . '/../lib/streak.php';
+require_once __DIR__ . '/../lib/meldungen.php';
 
 /*
  * Alles auf einmal - und alles auf einmal zurück.
@@ -47,8 +49,8 @@ switch (action()) {
     case 'get':
         /*
          * Die Kurse dieses Kontos - über die Mitgliedschaft, nicht über
-         * "wer hat es angelegt". In einer Familie ist das dasselbe, in
-         * einer Klasse hat die Lehrkraft angelegt und die Kinder lernen.
+         * "wer hat es angelegt": Angelegt hat die Lehrkraft, gelernt wird
+         * von der Klasse.
          */
         $sprachen = qa(
             'SELECT l.id, l.name, l.flag_emoji, l.code,
@@ -65,7 +67,8 @@ switch (action()) {
          * Zwei Kacheln "Englisch" nebeneinander bekommen den Kursnamen -
          * dieselbe Regel wie in api/languages.php, und aus demselben Grund:
          * Wer Englisch in der 5B und in der 6A hat, muss sie unterscheiden
-         * können, und in einer Familie heisst der Kurs nach dem Kind.
+         * können - und legt ein Kind selbst eine Sprache an, heisst sein
+         * Kurs nach ihm.
          */
         $wieOft = [];
         foreach ($sprachen as $r) {
@@ -202,6 +205,7 @@ switch (action()) {
             'vokabeln'  => $vokabeln,
             'saetze'    => $saetze,
             'stand'     => $stand,
+            'serie'     => streak_stand($uid),
         ];
 
         json_out($daten);
@@ -271,6 +275,14 @@ switch (action()) {
             $vocabId = (int) ($e['v'] ?? 0);
             $modus   = (string) ($e['m'] ?? '');
             $richtig = !empty($e['r']);
+            /*
+             * Der Tag, an dem geantwortet wurde - vom Geraet, nicht von
+             * hier. Wer Montag im Zug uebt und Mittwoch wieder online ist,
+             * soll den Montag bekommen. streak_tag_pruefen() stutzt ihn auf
+             * ein glaubhaftes Mass; aeltere Fassungen der App schicken gar
+             * keinen, dann gilt heute.
+             */
+            $tag     = streak_tag_pruefen($e['d'] ?? null);
 
             if ($kennung === '' || mb_strlen($kennung) > 36) {
                 continue;
@@ -294,6 +306,59 @@ switch (action()) {
                 continue;
             }
 
+            /*
+             * Freies Ueben: zaehlt den Tag, ruehrt den Lernstand nicht an.
+             *
+             * Das ist der ganze Unterschied zu einer gewoehnlichen Antwort.
+             * Geuebt wird dort alles, auch was laengst sitzt, und ein Fehler
+             * beim lockeren Wiederholen soll keine Serie einreissen, die
+             * ueber Wochen entstanden ist. "Gekonnt" bleibt die Aussage der
+             * strukturierten Uebung.
+             *
+             * Die Vokabel kommt trotzdem mit: An ihr prueft dieselbe
+             * Schranke wie sonst, ob dieses Konto ueberhaupt antworten darf.
+             */
+            if ($art === 'frei') {
+                if (!isset($erlaubt[$vocabId])) {
+                    $fremd++;
+                    continue;
+                }
+                if (!bundle_quittung($uid, $kennung)) {
+                    $doppelt++;
+                    continue;
+                }
+                streak_verbuchen($uid, $tag, $richtig, false);
+                $genommen++;
+                continue;
+            }
+
+            /*
+             * "Stimmt hier etwas nicht?" - aus jeder Uebung.
+             *
+             * Im selben Strom wie die Antworten, weil ohne Netz geuebt wird:
+             * Wer im Zug meldet, soll nicht "Bist du online?" lesen, und die
+             * Meldung soll nicht verloren sein, bloss weil gerade keines da
+             * war. Dieselbe Schranke wie bei einer Antwort - melden kann
+             * man nur, was man auch ueben darf.
+             */
+            if ($art === 'melden') {
+                if (!isset($erlaubt[$vocabId])) {
+                    $fremd++;
+                    continue;
+                }
+                if (!bundle_quittung($uid, $kennung)) {
+                    $doppelt++;
+                    continue;
+                }
+                if (meldung_aufnehmen($uid, $vocabId, (int) ($e['s'] ?? 0),
+                                      mb_substr((string) ($e['t'] ?? ''), 0, 128))) {
+                    $genommen++;
+                } else {
+                    $fremd++;
+                }
+                continue;
+            }
+
             if (!in_array($modus, [MODE_CHOICE, MODE_CLOZE], true)) {
                 continue;
             }
@@ -313,7 +378,7 @@ switch (action()) {
                 continue;
             }
 
-            record_answer($uid, $vocabId, $modus, $richtig);
+            record_answer($uid, $vocabId, $modus, $richtig, $tag);
             $genommen++;
         }
 
@@ -352,6 +417,10 @@ switch (action()) {
             'doppelt'  => $doppelt,
             'fremd'    => $fremd,
             'stand'    => $stand,
+            // Die Serie rechnet das Geraet zwar selbst mit, aber die Zahl
+            // vom Server ist die, die gilt - sie kennt auch den Nachmittag
+            // auf dem Tablet der Schule.
+            'serie'    => streak_stand($uid),
         ]);
 
     default:
@@ -383,5 +452,6 @@ function bundle_leer(): array
         'vokabeln'  => [],
         'saetze'    => [],
         'stand'     => [],
+        'serie'     => streak_leer(),
     ];
 }

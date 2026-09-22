@@ -4,7 +4,7 @@ declare(strict_types=1);
 /**
  * Dynamisches Web-App-Manifest - pro Kind eines.
  *
- * Der Geräte-Token steckt in der start_url. Dadurch bekommt jede Tochter
+ * Der Geräte-Token steckt in der start_url. Dadurch bekommt jedes Kind
  * (a) einen eigenen App-Namen und (b) eine eigene start_url, weshalb iOS die
  * Installationen als getrennte Apps mit getrenntem Storage führt. Erst das
  * macht "zwei Icons auf einem iPhone, jedes dauerhaft beim eigenen Kind
@@ -22,8 +22,8 @@ $user  = $token !== '' ? device_token_user($token) : null;
 if ($user === null) {
     // Ohne gültigen Token ein generisches Manifest, das im Login landet.
     echo json_encode([
-        'name'             => 'Vokabeln',
-        'short_name'       => 'Vokabeln',
+        'name'             => 'Vokidoki',
+        'short_name'       => 'Vokidoki',
         'start_url'        => url('/'),
         'scope'            => url('/'),
         'display'          => 'standalone',
@@ -39,7 +39,7 @@ $uid = (int) $user['id'];
 echo json_encode([
     'name'             => app_name_for($user),
     'short_name'       => $user['display_name'],
-    'description'      => 'Vokabeltrainer von ' . $user['display_name'],
+    'description'      => 'Vokidoki von ' . $user['display_name'],
     'start_url'        => url('/?t=' . urlencode($token)),
     'scope'            => url('/'),
     'display'          => 'standalone',

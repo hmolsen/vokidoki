@@ -33,6 +33,13 @@ Options -Indexes
     Header set Cache-Control "no-cache, must-revalidate"
   </FilesMatch>
 
+  # Schriften dagegen aendern sich nie - sie tragen ihren Namen und ihren
+  # Schnitt in sich. Ein Jahr aufheben spart bei jedem Start die 90 KB, die
+  # Fredoka und Nunito zusammen ausmachen.
+  <FilesMatch "\.woff2$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+
   Header always set X-Content-Type-Options "nosniff"
   Header always set X-Frame-Options "SAMEORIGIN"
   Header always set Referrer-Policy "same-origin"

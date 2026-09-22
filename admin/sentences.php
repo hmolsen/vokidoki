@@ -21,10 +21,9 @@ $langId = (int) ($_REQUEST['language'] ?? 0);
 $unitId = (int) ($_REQUEST['unit'] ?? 0);
 $suche  = trim((string) ($_REQUEST['q'] ?? ''));
 $seite  = max(1, (int) ($_REQUEST['p'] ?? 1));
-$nurGemeldet = (int) ($_REQUEST['flagged'] ?? 0) === 1;
 
 $filter = ['user' => $userId, 'language' => $langId, 'unit' => $unitId,
-           'q' => $suche, 'p' => $seite, 'flagged' => $nurGemeldet ? 1 : 0];
+           'q' => $suche, 'p' => $seite];
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     csrf_check();
@@ -55,42 +54,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
 
         foreach ($nat as $id => $_v) {
-            $id  = (int) $id;
-            $row = sentence_clean([
-                // Die Zugehörigkeit steht in der Datenbank; hier zählt nur die Form.
-                'vocab_id' => 1,
-                'native'   => (string) ($nat[$id] ?? ''),
-                'foreign'  => (string) ($frn[$id] ?? ''),
-                'answer'   => (string) ($ans[$id] ?? ''),
-            ], [1], $codes[$id] ?? null);
-
-            if ($row === null) {
+            $id   = (int) $id;
+            $neue = sentence_update($id, (string) ($nat[$id] ?? ''),
+                                    (string) ($frn[$id] ?? ''),
+                                    (string) ($ans[$id] ?? ''), $codes[$id] ?? null);
+            if ($neue === null) {
                 $bad++;
-                continue;   // lieber nichts ändern als kaputt speichern
+                continue;
             }
-            $n += q(
-                'UPDATE sentences SET native_text = ?, foreign_text = ?, answer = ? WHERE id = ?',
-                [$row['native'], $row['foreign'], $row['answer'], $id],
-            )->rowCount();
+            $n += $neue;
         }
 
         $text = $n === 0 ? 'Nichts geändert.' : $n . ' Satz/Sätze aktualisiert.';
         if ($bad > 0) {
-            flash($text . sprintf(' %d wurde(n) nicht gespeichert, weil die Form nicht stimmt '
-                . '(genau eine Lücke {} im fremdsprachigen Satz, Lösung nicht leer '
-                . 'und nicht daneben im Satz).', $bad), 'bad');
+            flash($text . sprintf(' %d wurde(n) nicht gespeichert, weil die Form nicht stimmt (%s).',
+                $bad, SENTENCE_FORM_HINT), 'bad');
         } else {
             flash($text);
         }
-        back_to_view($filter);
-    }
-
-    if (isset($_POST['clear_flags'])) {
-        $id = (int) $_POST['clear_flags'];
-        $n  = q('DELETE FROM sentence_flags WHERE sentence_id = ?', [$id])->rowCount();
-        flash($n === 0
-            ? 'Für diesen Satz lag keine Meldung vor.'
-            : sprintf('Meldung zurückgenommen (%d Eintrag/Einträge).', $n));
         back_to_view($filter);
     }
 
@@ -111,8 +92,8 @@ $users = qa('SELECT id, display_name FROM users ORDER BY display_name');
  * Frueher gehoerte eine Sprache genau einem Konto. Jetzt gehoert sie einem
  * Kurs, und ein Kind ist darin Mitglied - oft zusammen mit 27 anderen. Der
  * Filter beantwortet deshalb nicht mehr "was hat Lilli angelegt", sondern
- * "womit arbeitet Lilli". Fuer eine Familie ist das dieselbe Liste, fuer
- * eine Klasse die einzig sinnvolle.
+ * "womit arbeitet Lilli" - die einzig sinnvolle Frage, sobald eine ganze
+ * Klasse an denselben Unterlagen sitzt.
  */
 $languages = $userId > 0
     /*
@@ -152,9 +133,6 @@ if ($suche !== '') {
     $like     = '%' . $suche . '%';
     array_push($params, $like, $like, $like, $like);
 }
-if ($nurGemeldet) {
-    $where[] = 'EXISTS (SELECT 1 FROM sentence_flags f WHERE f.sentence_id = s.id)';
-}
 $sql = $where === [] ? '' : ' WHERE ' . implode(' AND ', $where);
 
 $gesamt = (int) qv(
@@ -169,46 +147,25 @@ $seite  = min($seite, $seiten);
 $offset = ($seite - 1) * PER_PAGE;
 
 /*
- * Gemeldete Sätze stehen immer oben, auch ohne Filter.
- *
- * Sie zwischen hunderten heraussuchen zu müssen, wäre die sicherste Art,
- * sie nie zu bearbeiten - und ein gemeldeter Satz ist genau der, der Arbeit
- * verlangt.
+ * Gemeldete Sätze stehen nicht mehr hier, sondern unter "Meldungen" - dort,
+ * wo auch die Lehrkraft sie sieht, eine nach der anderen, zusammen mit den
+ * Meldungen aus dem Auswählen.
  */
 $rows = qa(
     // Statt "wem gehoert der Satz" steht hier jetzt der Kurs. Ein Satz hat
     // keinen Besitzer mehr - er gehoert zu Unterlagen, mit denen eine ganze
     // Gruppe arbeitet.
     'SELECT s.*, v.term_foreign, v.term_native, t.title AS unit_title,
-            l.name AS language, co.name AS display_name,
-            (SELECT COUNT(*) FROM sentence_flags f WHERE f.sentence_id = s.id) AS flags
+            l.name AS language, co.name AS display_name
        FROM sentences s
        JOIN vocab v ON v.id = s.vocab_id
        JOIN units t ON t.id = v.unit_id
        JOIN languages l ON l.id = t.language_id
        LEFT JOIN courses co ON co.id = t.course_id' . $sql . '
-      ORDER BY flags DESC, co.name, l.name, t.position, t.id, v.position, s.id
+      ORDER BY co.name, l.name, t.position, t.id, v.position, s.id
       LIMIT ' . PER_PAGE . ' OFFSET ' . $offset,
     $params,
 );
-
-// Wer hat gemeldet, und was war eingetippt? Genau das entscheidet meist, ob
-// der Satz schief war oder die erwartete Antwort.
-$meldungen = [];
-$ids = array_map(static fn (array $r): int => (int) $r['id'], $rows);
-if ($ids !== []) {
-    foreach (qa(
-        'SELECT f.sentence_id, f.typed, u.display_name, f.created_at
-           FROM sentence_flags f
-           JOIN users u ON u.id = f.user_id
-          WHERE f.sentence_id IN (' . implode(',', $ids) . ')
-          ORDER BY f.created_at DESC'
-    ) as $f) {
-        $meldungen[(int) $f['sentence_id']][] = $f;
-    }
-}
-
-$offeneMeldungen = (int) qv('SELECT COUNT(DISTINCT sentence_id) FROM sentence_flags');
 
 /** Erhält die Filter beim Blättern. */
 function page_link(array $filter, int $seite): string
@@ -222,22 +179,6 @@ function page_link(array $filter, int $seite): string
 admin_head('Lückensätze', 'sentences.php');
 flash_render();
 ?>
-
-<?php if ($offeneMeldungen > 0): ?>
-<div class="card flagged-note">
-    <strong>&#9873; <?= $offeneMeldungen ?> gemeldete<?= $offeneMeldungen === 1 ? 'r' : '' ?> Satz/Sätze</strong>
-    <p class="tiny muted" style="margin:6px 0 12px">
-        Ein Kind hat hier etwas als möglicherweise falsch markiert. Gemeldete
-        Sätze stehen in der Liste immer oben - unabhängig von Filter und Seite.
-        War die Meldung unbegründet, nimmt <em>erledigt</em> sie zurück.
-    </p>
-    <?php if (!$nurGemeldet): ?>
-        <a class="btn small" href="<?= h(admin_url('sentences.php') . '?flagged=1') ?>">Nur gemeldete zeigen</a>
-    <?php else: ?>
-        <a class="btn small secondary" href="<?= h(admin_url('sentences.php')) ?>">Alle Sätze zeigen</a>
-    <?php endif; ?>
-</div>
-<?php endif; ?>
 
 <div class="card filters">
     <?= filter_chips('Kind',
@@ -301,8 +242,7 @@ flash_render();
 <form method="post">
     <?= csrf_field() ?>
     <?php foreach (['user' => $userId, 'language' => $langId, 'unit' => $unitId,
-                    'q' => $suche, 'p' => $seite,
-                    'flagged' => $nurGemeldet ? 1 : 0] as $k => $v): ?>
+                    'q' => $suche, 'p' => $seite] as $k => $v): ?>
         <input type="hidden" name="<?= h($k) ?>" value="<?= h((string) $v) ?>">
     <?php endforeach; ?>
 
@@ -310,7 +250,7 @@ flash_render();
         <tr>
             <th>Wo</th><th>Vokabel</th><th>Deutscher Satz</th>
             <th>Fremdsprache (<code>{}</code> = Lücke)</th><th>Lösung</th>
-            <th>Gemeldet</th><th></th>
+            <th></th>
         </tr>
         <?php foreach ($rows as $s): ?>
             <?php
@@ -328,7 +268,7 @@ flash_render();
                 (string) $s['foreign_text'], (string) $s['answer'],
             ]));
             ?>
-            <tr data-suchtext="<?= h($suchtext) ?>"<?= (int) $s['flags'] > 0 ? ' class="flagged"' : '' ?>>
+            <tr data-suchtext="<?= h($suchtext) ?>">
                 <td class="tiny muted">
                     <?= h((string) ($s['display_name'] ?? '&ndash;')) ?><br>
                     <?= h($s['language']) ?> &middot; <?= h($s['unit_title']) ?>
@@ -343,23 +283,6 @@ flash_render();
                            value="<?= h($s['foreign_text']) ?>" maxlength="255"></td>
                 <td><input type="text" name="sa[<?= (int) $s['id'] ?>]"
                            value="<?= h($s['answer']) ?>" maxlength="128" style="width:130px"></td>
-                <td class="tiny">
-                    <?php if ((int) $s['flags'] > 0): ?>
-                        <span class="flagcount">&#9873; <?= (int) $s['flags'] ?></span>
-                        <?php foreach ($meldungen[(int) $s['id']] ?? [] as $f): ?>
-                            <div class="muted" style="margin-top:4px">
-                                <?= h($f['display_name']) ?>
-                                <?php if (($f['typed'] ?? '') !== ''): ?>
-                                    tippte &bdquo;<?= h($f['typed']) ?>&ldquo;
-                                <?php endif; ?>
-                            </div>
-                        <?php endforeach; ?>
-                        <button class="linkbtn" name="clear_flags" value="<?= (int) $s['id'] ?>"
-                                formnovalidate style="margin-top:4px">erledigt</button>
-                    <?php else: ?>
-                        <span class="muted">&ndash;</span>
-                    <?php endif; ?>
-                </td>
                 <td>
                     <button class="linkbtn" name="delete" value="<?= (int) $s['id'] ?>"
                             formnovalidate style="color:var(--bad)"

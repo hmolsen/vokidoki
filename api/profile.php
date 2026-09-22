@@ -10,10 +10,10 @@ require_once __DIR__ . '/../lib/profile.php';
 /*
  * Das eigene Konto - Name, Farbe, Passwort.
  *
- * Bisher konnte das nur der Betreiber im Admin. Für eine Familie ging das:
- * Papa sass daneben. In einer Schule nicht - ein Kind, das sein
- * Anfangspasswort "müder Gepard" behalten muss, weil niemand es ändern
- * kann, ist ein Kind mit einem Passwort, das auf einem Zettel steht.
+ * Ändern kann es das Kind selbst, nicht nur der Betreiber im Admin. Ein
+ * Kind, das sein Anfangspasswort "müder Gepard" behalten muss, weil niemand
+ * es ändern kann, ist ein Kind mit einem Passwort, das auf einem Zettel
+ * steht - und Zettel gehen in einer Klasse herum.
  */
 
 require_api_request();

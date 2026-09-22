@@ -154,6 +154,40 @@ function sentence_clean(array $row, array $allowedVocab, ?string $lang = null): 
 }
 
 /**
+ * Einen Satz von Hand ändern - mit denselben Prüfungen wie einen erzeugten.
+ *
+ * Steht hier und nicht im Admin, seit auch die Lehrkraft Sätze ändert: bei
+ * einer Meldung aus dem Lückentext. Zwei Fassungen hätten früher oder
+ * später zwei verschiedene Vorstellungen davon, was ein gültiger Satz ist.
+ *
+ * @return int|null Geänderte Zeilen, oder null, wenn die Form nicht stimmt -
+ *                  dann bleibt der Satz, wie er war.
+ */
+function sentence_update(int $sentenceId, string $native, string $foreign,
+                         string $answer, ?string $lang): ?int
+{
+    $row = sentence_clean([
+        // Die Zugehörigkeit steht in der Datenbank; hier zählt nur die Form.
+        'vocab_id' => 1,
+        'native'   => $native,
+        'foreign'  => $foreign,
+        'answer'   => $answer,
+    ], [1], $lang);
+
+    if ($row === null) {
+        return null;   // lieber nichts ändern als kaputt speichern
+    }
+    return q(
+        'UPDATE sentences SET native_text = ?, foreign_text = ?, answer = ? WHERE id = ?',
+        [$row['native'], $row['foreign'], $row['answer'], $sentenceId],
+    )->rowCount();
+}
+
+/** Die Form, die sentence_update() verlangt - für die Meldung, wenn sie fehlt. */
+const SENTENCE_FORM_HINT = 'genau eine Lücke {} im fremdsprachigen Satz, Lösung nicht leer '
+                         . 'und nicht daneben im Satz';
+
+/**
  * Steht die Lösung schon im Satz? Dann wäre die Übung sinnlos.
  *
  * Bewusst wortweise und erst ab vier Zeichen. Ein früherer Versuch verglich
@@ -249,8 +283,8 @@ function sentence_candidates(int $unitId): array
  *
  * Zweck ist ein besserer Prompt: Das Modell soll Saetze aus Woertern bauen,
  * die das Kind schon kennt. Frueher zaehlte dafuer die ganze Sprache. In
- * einer Familie ist das dasselbe, in einer Schule nicht - dann wanderte der
- * Wortschatz fremder Klassen in die Anfrage. Das bricht nichts, macht den
+ * einem einzelnen Kurs ist das dasselbe, an einer Schule mit mehreren nicht -
+ * dann wanderte der Wortschatz fremder Klassen in die Anfrage. Das bricht nichts, macht den
  * Prompt aber teurer und die Saetze schlechter, weil "bekannt" dann Woerter
  * meint, die dieses Kind nie gesehen hat.
  *
@@ -601,7 +635,7 @@ const SENTENCE_STALE_AFTER = 900;   // Sekunden
  * Den Lauf für sich beanspruchen. Gibt false zurück, wenn schon einer läuft.
  *
  * Bisher stand hier ein Prüfen und danach ein Setzen, mit einer Lücke
- * dazwischen. Bei einer Familie feuert das nie: Ein Kind stösst die
+ * dazwischen. Bei einem einzelnen Kind feuert das nie: Es stösst die
  * Satzerzeugung an, fertig. Bei einer Klasse sitzen 28 Kinder in derselben
  * Minute davor, alle sehen "noch keine Sätze", und alle starten denselben
  * Lauf - achtundzwanzig bezahlte Anfragen für ein Ergebnis.

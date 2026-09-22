@@ -42,9 +42,9 @@ switch (action()) {
          * Und der Kurs statt u.user_id.
          *
          * Bis hierher stand hier noch "die Einheit gehoert einem Konto".
-         * In einer Familie faellt das nicht auf, weil jede Sprache genau
-         * einem Kind gehoert - in einer Klasse waere die Liste leer, obwohl
-         * die Einheit da ist.
+         * Solange jede Sprache genau einem Kind gehoerte, fiel das nicht
+         * auf - in einer Klasse waere die Liste leer, obwohl die Einheit da
+         * ist.
          */
         $rows = qa(
             "SELECT u.id, u.title, u.created_at,
@@ -96,8 +96,7 @@ switch (action()) {
          *
          * Gebraucht beim Einlesen: Wer ueber einen Link oder einen QR-Code
          * direkt dort landet, sieht sonst nur "Vokabeln einlesen" und weiss
-         * nicht, in welchen Kurs das faellt. Bei einer Familie steht dort
-         * dasselbe wie der Sprachname, bei einer Schule "Englisch - 5B".
+         * nicht, in welchen Kurs das faellt: "Englisch - 5B".
          */
         $kursZeile = q1(
             'SELECT co.id, co.name FROM courses co

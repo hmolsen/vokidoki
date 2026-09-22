@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/progress.php';
+require_once __DIR__ . '/../lib/streak.php';
 
 require_api_request();
 $user = require_user();
@@ -182,6 +183,7 @@ switch (action()) {
             'known'         => $known,
             'total'         => $total,
             'done'          => $total > 0 && $known >= $total,
+            'serie'         => streak_stand($uid),
         ]);
 
     case 'stats':

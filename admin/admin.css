@@ -486,30 +486,62 @@ img.chipflag { width: 18px; height: 13px; object-fit: contain; vertical-align: -
     .pg { min-width: 34px; height: 34px; padding: 0 7px; }
 }
 
-/* ------------------------------------------------- Gemeldete Saetze */
+/* ------------------------------------------------------------ Meldungen */
 
 /*
- * Ein gemeldeter Satz ist der, der Arbeit verlangt. Er steht in der Liste
- * immer oben und hebt sich ab - ihn zwischen hunderten heraussuchen zu
- * muessen waere die sicherste Art, ihn nie zu bearbeiten.
+ * Die Zahl offener Meldungen - rot, weil sie Arbeit bedeutet.
+ *
+ * Am Zahnrad sitzt sie auf der Ecke des Knopfes: Das Menue ist zu, und
+ * trotzdem soll man sehen, dass darin etwas wartet. Im Menue selbst und in
+ * der Leiste des Admins steht sie hinter dem Wort.
  */
-.flagged-note {
-    border-left: 4px solid var(--bad);
-}
-
-tr.flagged > td {
-    background: var(--bad-bg);
-}
-
-.flagcount {
-    display: inline-block;
-    padding: 2px 8px;
+.zaehler {
+    display: inline-grid;
+    place-items: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
     border-radius: 999px;
     background: var(--bad);
     color: #fff;
-    font-weight: 600;
+    font-size: .75rem;
+    font-weight: 700;
+    line-height: 1;
     white-space: nowrap;
 }
+.menue > .burger { position: relative; }
+.burger > .zaehler {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    box-shadow: 0 0 0 2px var(--bg);
+}
+.mitem.meldungen { color: var(--bad); font-weight: 700; }
+.mitem.meldungen .zaehler { margin-left: auto; }
+.adminbar nav .zaehler { margin-left: 5px; }
+
+/*
+ * Eine Meldung nach der anderen.
+ *
+ * Keine Liste zum Durchsehen, sondern ein Stapel zum Abarbeiten: oben die
+ * Sache, die am meisten Kinder gestoert hat, darunter die Felder, um sie zu
+ * richten, und nach dem Knopf steht die naechste da.
+ */
+.meldung { border-left: 4px solid var(--bad); }
+.meldung .wo { margin: 0 0 4px; }
+.meldung h2 { margin: 0 0 14px; font-size: 1.25rem; }
+.meldung .stelle {
+    margin: 0 0 18px;
+    padding: 14px 0 0;
+    border-top: 1px solid var(--border);
+}
+.meldung .stelle h3 { margin: 0 0 10px; font-size: 1rem; }
+.meldung .wer { margin: 0 0 12px; padding: 0; list-style: none; }
+.meldung .wer li { margin: 0 0 3px; }
+.meldung .buttonrow { margin: 6px 0 0; }
+/* Ein Satz ist länger als ein Name - die 380 px aus dem Profil schnitten
+   ihn mitten in der Lücke ab. */
+.meldung.kontoform input[type=text] { max-width: 640px; }
 
 /* ---------------------------------------------------------- Sprachauswahl
  *
@@ -766,6 +798,103 @@ table.release thead th {
     z-index: 4;
     box-shadow: inset 0 -1px 0 var(--border);
 }
+
+/* ---------------------------------------------- Die Enden der Freigabe
+ *
+ * "Nichts freigeben" als erste Zeile der Tabelle, "Alles freigeben" als
+ * letzte - die beiden Endstellungen des Balkens, der dazwischen liegt.
+ *
+ * Deshalb sehen sie aus wie Zeilen und nicht wie Knoepfe auf der Seite: Sie
+ * spannen die ganze Breite, haben keine eigene Rundung und keinen eigenen
+ * Rand. Die Rundung der Tabelle beschneidet sie (table.data hat overflow),
+ * sie sitzen also buendig in den Ecken.
+ *
+ * Und sie tragen die Farben, die sie bewirken: oben das Grau der gesperrten
+ * Zeilen, unten das Gruen der freigegebenen. Wer den Knopf drueckt, sieht
+ * vorher, welche Farbe die Tabelle danach hat.
+ */
+/*
+ * Die Zelle traegt kein Polster - der Knopf darin ist die Zelle.
+ *
+ * Die lange Schreibweise ist noetig: Am Telefon steht dort
+ * "table.data.release td, table.data.release td:first-child" mit 8px 9px -
+ * und die Zelle IST das erste Kind ihrer Zeile. Gegen :first-child kommt
+ * nur eine Klasse mehr an. Ohne das stand der Knopf eingerueckt in der
+ * Zeile statt buendig darin.
+ */
+table.data tr.mengen td,
+table.data.release tr.mengen td { padding: 0; }
+
+.mengenknopf {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 46px;
+    padding: 12px 14px;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    font: inherit;
+    font-family: var(--schrift-kopf);
+    font-weight: 600;
+    font-size: .92rem;
+    color: var(--text);
+    cursor: pointer;
+    transition: background .15s ease;
+}
+
+/* Oben: zumachen. Das Grau der gesperrten Zeilen, und der Strich links wie
+   dort - nur ueber die ganze Breite. */
+.mengenknopf.zu {
+    background: var(--surface-2);
+    color: var(--text-soft);
+    box-shadow: inset 3px 0 0 var(--border);
+}
+.mengenknopf.zu:hover:not([disabled]) { background: var(--border); color: var(--text); }
+
+/* Unten: aufmachen. Dasselbe Gruen, mit dem eine freigegebene Zeile
+   gekennzeichnet ist. */
+.mengenknopf.auf {
+    background: var(--good-bg);
+    color: var(--good);
+    box-shadow: inset 3px 0 0 var(--good);
+}
+.mengenknopf.auf:hover:not([disabled]) {
+    background: var(--good);
+    color: var(--accent-text);
+}
+
+/*
+ * Abgeblendet heisst hier nicht weg.
+ *
+ * Was gerade nichts bewirken wuerde, bleibt stehen und sagt im Titel,
+ * warum - sonst spraenge die Tabelle bei jedem Freigeben um eine Zeile.
+ * Das war schon der Grund, als die beiden noch oben standen.
+ */
+.mengenknopf[disabled] { opacity: .45; cursor: default; }
+
+/*
+ * Die Striche macht die Tabelle selbst.
+ *
+ * Hier stand einmal ein eigener border-top am Fusszeilen-Knopf - und damit
+ * lagen zwei Striche uebereinander: Die Anlegezeile darueber bringt ihren
+ * border-bottom schon mit. Gegen das Grau der Anlegezeile faellt das nicht
+ * auf, gegen das Gruen des Knopfes schon.
+ *
+ * Nach unten braucht der Knopf keinen: "table.data tr:last-child td" nimmt
+ * ihn weg, und die letzte Zeile des <tfoot> ist genau das.
+ *
+ * Den Strich ueber dem Fuss zieht deshalb der Knopf selbst, und die
+ * Anlegezeile darueber gibt ihren ab. Ihre drei Zellen sind naemlich
+ * verschieden hoch - das Eingabefeld in der Mitte ist acht Punkte
+ * niedriger als der Plus-Knopf rechts -, und ihr Strich lief dadurch
+ * mitten durch die Zeile statt an ihrem Rand entlang. Auf dem Grau der
+ * Anlegezeile sah das niemand; ueber dem gruenen Knopf schon.
+ */
+table.data.release tr.newrow td { border-bottom: 0; }
+table.data.release tfoot tr.mengen td { border-top: 1px solid var(--border); }
 
 /* ------------------------------------------------------ Freigabe-Balken
  *
@@ -1583,6 +1712,16 @@ a.rowmain:hover { text-decoration: underline; }
     table.data.release tr:has(> th) { display: table-row; }
     table.data.kompakt,
     table.data.release { display: table; width: 100%; background: var(--surface); }
+    /*
+     * Und sie beschneidet weiter, anders als table.data darueber.
+     *
+     * Die beiden Mengen-Knoepfe sitzen buendig in den Ecken der Tabelle und
+     * haben selbst keine Rundung. Ohne das Beschneiden staken ihre eckigen
+     * Ecken ueber die runden der Tabelle hinaus - am Telefon, wo sie die
+     * ganze Breite einnehmen, faellt genau das auf.
+     */
+    table.data.kompakt,
+    table.data.release { overflow: clip; }
     table.data.kompakt thead,
     table.data.release thead { display: table-header-group; }
     table.data.kompakt tbody,

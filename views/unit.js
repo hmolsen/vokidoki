@@ -1,7 +1,8 @@
 import {
     VT, api, render, esc, $, go, topbar, loading, wireBack, progressBar,
-    showError, clearError, pupilHint,
+    showError, clearError, lernansicht,
 } from '../core.js';
+import { hantel } from './frei.js';
 import {
     einheit, vokabelListe, modusStand, zuruecksetzen, vorratAuffrischen,
 } from '../vorrat.js';
@@ -20,9 +21,9 @@ const EXERCISES = [
  * sieht, steht auch fuer sie nicht da. Umbenennen und Loeschen stehen im
  * Lehrkraft-Bereich, auf derselben Lerneinheit.
  *
- * Fuer ein Kind mit Einlese-Recht bleibt es: In einer Familie legt es seine
- * Lerneinheiten selbst an, und dann muss es sie auch wieder loswerden
- * koennen. Dieselbe Regel wie beim Einlesen in der Kursansicht.
+ * Fuer ein Kind mit Einlese-Recht bleibt es: Wer seine Lerneinheiten selbst
+ * anlegen darf, muss sie auch wieder loswerden koennen. Dieselbe Regel wie
+ * beim Einlesen in der Kursansicht.
  *
  * Das Zuruecksetzen bleibt fuer alle: Der Lernstand gehoert dem Konto, das
  * ihn erarbeitet hat.
@@ -74,9 +75,8 @@ export async function unitView(unitId) {
     `).join('');
 
     render(`
+        ${lernansicht()}
         ${topbar(unit.title, { backTo: `/lang/${unit.language_id}` })}
-        ${pupilHint('Das ist diese Lerneinheit, wie ein Kind sie vor sich hat.',
-                    `/teacher/unit.php?id=${unitId}`)}
         <div id="msg"></div>
 
         ${komplett ? '<div class="notice good">Diese Lerneinheit hast du in beiden Übungen geschafft!</div>' : ''}
@@ -86,6 +86,19 @@ export async function unitView(unitId) {
             ${exerciseRow(EXERCISES[0].mode, EXERCISES[0].icon, EXERCISES[0].title,
                 'Vier Antworten, eine ist richtig', modes.mc)}
             ${clozeRow(modes.cloze)}
+            <!--
+                Freies Ueben: alles, was freigegeben ist, ohne Ziel und ohne
+                Ende. Es ruehrt den Lernstand nicht an - deshalb steht hier
+                auch kein Fortschritt, sondern nur, was es tut.
+            -->
+            <button class="row" data-frei="${unit.id}">
+                <span class="lead">${hantel('hantel lead')}</span>
+                <span class="body">
+                    <span class="title">Freies Üben</span>
+                    <span class="tiny muted">Alle Vokabeln dieser Lerneinheit, so lange du magst</span>
+                </span>
+                <span class="chev">&#8250;</span>
+            </button>
         </div>
 
         ${quota === null ? '' : `
@@ -167,6 +180,11 @@ export async function unitView(unitId) {
  */
 function wireExercises(unitId, modes) {
     $('#exercises').addEventListener('click', async (event) => {
+        // Freies Ueben hat keinen Lernstand, der zurueckzusetzen waere - es
+        // geht ohne Umweg los.
+        const frei = event.target.closest('[data-frei]');
+        if (frei) { go(`/frei/${frei.dataset.frei}`); return; }
+
         const row = event.target.closest('[data-mode]');
         if (!row || row.disabled) return;
 

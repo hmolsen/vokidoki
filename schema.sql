@@ -15,6 +15,9 @@ CREATE TABLE IF NOT EXISTS users (
   -- nachdruckbar bleibt. Wird geleert, sobald das Kind es aendert.
   initial_password VARCHAR(64) NULL,
   color         CHAR(7)      NOT NULL DEFAULT '#4f7cff',
+  -- Die laengste Serie, die dieses Kind je hatte. Eine gerissene Serie
+  -- faengt bei null an - was einmal geschafft war, soll aber bleiben.
+  streak_best   SMALLINT UNSIGNED NOT NULL DEFAULT 0,
   active        TINYINT(1)   NOT NULL DEFAULT 1,
   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_users_username (username),
@@ -104,9 +107,6 @@ CREATE TABLE IF NOT EXISTS sentences (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Lernstand pro Vokabel und Trainer-Variante (mode): 'mc' und 'cloze'.
--- Gemeldete Lückensätze: eine Zeile je Kind und Satz, damit niemand
--- denselben Satz mehrfach meldet. Das Getippte kommt mit, weil es meist
--- entscheidet, ob der Satz oder die erwartete Antwort daneben lag.
 -- Schule, Klasse, Kurs.
 --
 -- Eine Schule ist der Mandant: Klassen, Kurse und Konten haengen daran.
@@ -178,16 +178,31 @@ CREATE TABLE IF NOT EXISTS course_members (
   CONSTRAINT fk_cmem_user   FOREIGN KEY (user_id)   REFERENCES users(id)   ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS sentence_flags (
+-- Gemeldete Vokabeln: "Stimmt hier etwas nicht?" aus jeder Uebung.
+--
+-- Eine Zeile je Kind, Vokabel und Stelle, damit ein veraergertes Kind mit
+-- zehn Druecken nicht zehn Meldungen erzeugt. Die Stelle ist der Lueckensatz,
+-- an dem es auffiel - oder 0, wenn es beim Auswaehlen war und also das
+-- Wortpaar selbst gemeint ist.
+--
+-- 0 statt NULL, weil der eindeutige Schluessel sonst nicht greift: NULL ist
+-- keinem anderen NULL gleich, und jede Meldung aus dem Auswaehlen waere
+-- eine neue Zeile. Deshalb haengt an sentence_id auch kein Fremdschluessel;
+-- wird ein Satz geloescht, fallen seine Meldungen in lib/meldungen.php aus
+-- der Liste, und das Erledigen raeumt sie mit weg.
+--
+-- Das Getippte kommt mit, weil es beim Lueckentext meist entscheidet, ob
+-- der Satz oder die erwartete Antwort daneben lag.
+CREATE TABLE IF NOT EXISTS vocab_flags (
   id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  sentence_id INT UNSIGNED NOT NULL,
+  vocab_id    INT UNSIGNED NOT NULL,
+  sentence_id INT UNSIGNED NOT NULL DEFAULT 0,
   user_id     INT UNSIGNED NOT NULL,
   typed       VARCHAR(128) NULL,
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_flag (sentence_id, user_id),
-  KEY idx_flag_sentence (sentence_id),
-  CONSTRAINT fk_flag_sentence FOREIGN KEY (sentence_id) REFERENCES sentences(id) ON DELETE CASCADE,
-  CONSTRAINT fk_flag_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  UNIQUE KEY uq_vflag (vocab_id, sentence_id, user_id),
+  CONSTRAINT fk_vflag_vocab FOREIGN KEY (vocab_id) REFERENCES vocab(id) ON DELETE CASCADE,
+  CONSTRAINT fk_vflag_user  FOREIGN KEY (user_id)  REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS progress (
@@ -238,8 +253,19 @@ CREATE TABLE IF NOT EXISTS ai_requests (
 
 -- Bausteine der Anfangspasswoerter: Adjektiv (Stamm, ohne Endung) und Tier
 -- mit Geschlecht. In der Datenbank und nicht im Quelltext, damit sich ein
--- Wort streichen laesst, ohne die Anwendung neu hochzuladen. Gefuellt wird
--- die Tabelle von password_seed_sql() in lib/passwords.php.
+-- Wort streichen laesst, ohne die Anwendung neu hochzuladen; im Admin unter
+-- Einstellungen ist beides aenderbar.
+--
+-- Der Anfangsbestand steht gleich darunter. Er stand einmal als
+-- password_seed_sql() in lib/passwords.php und lief als Schemaaenderung -
+-- ein Umweg aus der Zeit, als es Installationen gab, die aktualisiert
+-- werden mussten. Ohne ihn blieben die Listen leer, und password_generate()
+-- liefert dann bewusst gar kein Passwort: still ein unbrauchbares zu
+-- erzeugen waere schlimmer.
+--
+-- Nur regelmaessige Adjektive: "dunkel" wuerde zu "dunkler" (das e faellt
+-- weg), "hoch" zu "hoher". Solche Faelle gehoeren nicht in eine Liste, die
+-- jemand spaeter ohne Grammatikbuch bearbeiten soll.
 CREATE TABLE IF NOT EXISTS password_words (
   id      INT UNSIGNED NOT NULL AUTO_INCREMENT,
   kind    VARCHAR(16)  NOT NULL,
@@ -250,6 +276,220 @@ CREATE TABLE IF NOT EXISTS password_words (
   UNIQUE KEY uq_password_words (kind, word),
   KEY idx_password_words_pick (kind, active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO password_words (kind, word, gender) VALUES
+  ('adjective', 'müd', NULL),
+  ('adjective', 'schnell', NULL),
+  ('adjective', 'faul', NULL),
+  ('adjective', 'lustig', NULL),
+  ('adjective', 'klug', NULL),
+  ('adjective', 'mutig', NULL),
+  ('adjective', 'fröhlich', NULL),
+  ('adjective', 'ruhig', NULL),
+  ('adjective', 'wild', NULL),
+  ('adjective', 'sanft', NULL),
+  ('adjective', 'flink', NULL),
+  ('adjective', 'stark', NULL),
+  ('adjective', 'klein', NULL),
+  ('adjective', 'groß', NULL),
+  ('adjective', 'bunt', NULL),
+  ('adjective', 'frech', NULL),
+  ('adjective', 'brav', NULL),
+  ('adjective', 'neugierig', NULL),
+  ('adjective', 'freundlich', NULL),
+  ('adjective', 'tapfer', NULL),
+  ('adjective', 'schlau', NULL),
+  ('adjective', 'munter', NULL),
+  ('adjective', 'leise', NULL),
+  ('adjective', 'laut', NULL),
+  ('adjective', 'weich', NULL),
+  ('adjective', 'warm', NULL),
+  ('adjective', 'kühl', NULL),
+  ('adjective', 'hungrig', NULL),
+  ('adjective', 'satt', NULL),
+  ('adjective', 'wach', NULL),
+  ('adjective', 'verträumt', NULL),
+  ('adjective', 'glücklich', NULL),
+  ('adjective', 'zufrieden', NULL),
+  ('adjective', 'geduldig', NULL),
+  ('adjective', 'eifrig', NULL),
+  ('adjective', 'gemütlich', NULL),
+  ('adjective', 'heiter', NULL),
+  ('adjective', 'herzlich', NULL),
+  ('adjective', 'höflich', NULL),
+  ('adjective', 'artig', NULL),
+  ('adjective', 'keck', NULL),
+  ('adjective', 'lebhaft', NULL),
+  ('adjective', 'listig', NULL),
+  ('adjective', 'lieb', NULL),
+  ('adjective', 'nett', NULL),
+  ('adjective', 'offen', NULL),
+  ('adjective', 'ordentlich', NULL),
+  ('adjective', 'pfiffig', NULL),
+  ('adjective', 'prächtig', NULL),
+  ('adjective', 'putzig', NULL),
+  ('adjective', 'quirlig', NULL),
+  ('adjective', 'rasch', NULL),
+  ('adjective', 'sauber', NULL),
+  ('adjective', 'schüchtern', NULL),
+  ('adjective', 'sportlich', NULL),
+  ('adjective', 'stolz', NULL),
+  ('adjective', 'tapsig', NULL),
+  ('adjective', 'treu', NULL),
+  ('adjective', 'übermütig', NULL),
+  ('adjective', 'verspielt', NULL),
+  ('adjective', 'wachsam', NULL),
+  ('adjective', 'wendig', NULL),
+  ('adjective', 'witzig', NULL),
+  ('adjective', 'zart', NULL),
+  ('adjective', 'zäh', NULL),
+  ('adjective', 'fleißig', NULL),
+  ('adjective', 'geschickt', NULL),
+  ('adjective', 'gesund', NULL),
+  ('adjective', 'glatt', NULL),
+  ('adjective', 'grimmig', NULL),
+  ('adjective', 'hell', NULL),
+  ('adjective', 'jung', NULL),
+  ('adjective', 'kräftig', NULL),
+  ('adjective', 'langsam', NULL),
+  ('adjective', 'leicht', NULL),
+  ('adjective', 'nass', NULL),
+  ('adjective', 'niedlich', NULL),
+  ('adjective', 'rund', NULL),
+  ('adjective', 'schlank', NULL),
+  ('adjective', 'schwer', NULL),
+  ('adjective', 'sonnig', NULL),
+  ('adjective', 'sparsam', NULL),
+  ('adjective', 'still', NULL),
+  ('adjective', 'streng', NULL),
+  ('adjective', 'trocken', NULL),
+  ('adjective', 'verschmust', NULL),
+  ('adjective', 'vorsichtig', NULL),
+  ('adjective', 'weise', NULL),
+  ('adjective', 'wuschelig', NULL),
+  ('adjective', 'zutraulich', NULL),
+  ('adjective', 'brummig', NULL),
+  ('adjective', 'dankbar', NULL),
+  ('adjective', 'eilig', NULL),
+  ('adjective', 'emsig', NULL),
+  ('adjective', 'flauschig', NULL),
+  ('adjective', 'gelassen', NULL),
+  ('adjective', 'hilfsbereit', NULL),
+  ('adjective', 'kribbelig', NULL),
+  ('adjective', 'schusselig', NULL),
+  ('adjective', 'sprunghaft', NULL),
+  ('adjective', 'staunend', NULL),
+  ('adjective', 'zappelig', NULL),
+  ('animal', 'Gepard', 'm'),
+  ('animal', 'Bär', 'm'),
+  ('animal', 'Adler', 'm'),
+  ('animal', 'Affe', 'm'),
+  ('animal', 'Dachs', 'm'),
+  ('animal', 'Delfin', 'm'),
+  ('animal', 'Elefant', 'm'),
+  ('animal', 'Esel', 'm'),
+  ('animal', 'Falke', 'm'),
+  ('animal', 'Frosch', 'm'),
+  ('animal', 'Fuchs', 'm'),
+  ('animal', 'Hamster', 'm'),
+  ('animal', 'Hase', 'm'),
+  ('animal', 'Hirsch', 'm'),
+  ('animal', 'Hund', 'm'),
+  ('animal', 'Igel', 'm'),
+  ('animal', 'Käfer', 'm'),
+  ('animal', 'Kater', 'm'),
+  ('animal', 'Löwe', 'm'),
+  ('animal', 'Marder', 'm'),
+  ('animal', 'Panda', 'm'),
+  ('animal', 'Papagei', 'm'),
+  ('animal', 'Pinguin', 'm'),
+  ('animal', 'Rabe', 'm'),
+  ('animal', 'Schmetterling', 'm'),
+  ('animal', 'Seehund', 'm'),
+  ('animal', 'Specht', 'm'),
+  ('animal', 'Storch', 'm'),
+  ('animal', 'Tiger', 'm'),
+  ('animal', 'Wal', 'm'),
+  ('animal', 'Waschbär', 'm'),
+  ('animal', 'Wolf', 'm'),
+  ('animal', 'Biber', 'm'),
+  ('animal', 'Eisbär', 'm'),
+  ('animal', 'Elch', 'm'),
+  ('animal', 'Kranich', 'm'),
+  ('animal', 'Leopard', 'm'),
+  ('animal', 'Luchs', 'm'),
+  ('animal', 'Maulwurf', 'm'),
+  ('animal', 'Pfau', 'm'),
+  ('animal', 'Puma', 'm'),
+  ('animal', 'Salamander', 'm'),
+  ('animal', 'Schwan', 'm'),
+  ('animal', 'Uhu', 'm'),
+  ('animal', 'Wellensittich', 'm'),
+  ('animal', 'Zeisig', 'm'),
+  ('animal', 'Schnecke', 'f'),
+  ('animal', 'Ameise', 'f'),
+  ('animal', 'Biene', 'f'),
+  ('animal', 'Ente', 'f'),
+  ('animal', 'Eule', 'f'),
+  ('animal', 'Fledermaus', 'f'),
+  ('animal', 'Gans', 'f'),
+  ('animal', 'Giraffe', 'f'),
+  ('animal', 'Grille', 'f'),
+  ('animal', 'Hummel', 'f'),
+  ('animal', 'Katze', 'f'),
+  ('animal', 'Krähe', 'f'),
+  ('animal', 'Kuh', 'f'),
+  ('animal', 'Libelle', 'f'),
+  ('animal', 'Maus', 'f'),
+  ('animal', 'Meise', 'f'),
+  ('animal', 'Möwe', 'f'),
+  ('animal', 'Qualle', 'f'),
+  ('animal', 'Robbe', 'f'),
+  ('animal', 'Schildkröte', 'f'),
+  ('animal', 'Schlange', 'f'),
+  ('animal', 'Schwalbe', 'f'),
+  ('animal', 'Spinne', 'f'),
+  ('animal', 'Taube', 'f'),
+  ('animal', 'Ziege', 'f'),
+  ('animal', 'Amsel', 'f'),
+  ('animal', 'Eidechse', 'f'),
+  ('animal', 'Elster', 'f'),
+  ('animal', 'Forelle', 'f'),
+  ('animal', 'Krabbe', 'f'),
+  ('animal', 'Lerche', 'f'),
+  ('animal', 'Muschel', 'f'),
+  ('animal', 'Nachtigall', 'f'),
+  ('animal', 'Raupe', 'f'),
+  ('animal', 'Seekuh', 'f'),
+  ('animal', 'Nilpferd', 'n'),
+  ('animal', 'Eichhörnchen', 'n'),
+  ('animal', 'Fohlen', 'n'),
+  ('animal', 'Huhn', 'n'),
+  ('animal', 'Kamel', 'n'),
+  ('animal', 'Känguru', 'n'),
+  ('animal', 'Kaninchen', 'n'),
+  ('animal', 'Lamm', 'n'),
+  ('animal', 'Meerschweinchen', 'n'),
+  ('animal', 'Pferd', 'n'),
+  ('animal', 'Reh', 'n'),
+  ('animal', 'Rentier', 'n'),
+  ('animal', 'Schaf', 'n'),
+  ('animal', 'Zebra', 'n'),
+  ('animal', 'Faultier', 'n'),
+  ('animal', 'Frettchen', 'n'),
+  ('animal', 'Krokodil', 'n'),
+  ('animal', 'Küken', 'n'),
+  ('animal', 'Murmeltier', 'n'),
+  ('animal', 'Nashorn', 'n'),
+  ('animal', 'Okapi', 'n'),
+  ('animal', 'Pony', 'n'),
+  ('animal', 'Wiesel', 'n'),
+  ('animal', 'Chamäleon', 'n'),
+  ('animal', 'Erdmännchen', 'n'),
+  ('animal', 'Gürteltier', 'n'),
+  ('animal', 'Seepferdchen', 'n'),
+  ('animal', 'Walross', 'n'),
+  ('animal', 'Zicklein', 'n');
 
 -- Fehlversuche bei der Anmeldung, je Konto und je Adresse gezaehlt.
 CREATE TABLE IF NOT EXISTS login_attempts (
@@ -291,6 +531,20 @@ CREATE TABLE IF NOT EXISTS answer_receipts (
   UNIQUE KEY uq_receipt (user_id, event_id),
   KEY idx_receipt_alter (created_at),
   CONSTRAINT fk_receipt_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Ein Datensatz je Kind und Tag, an dem geuebt wurde - die Grundlage der
+-- Serie. Gezaehlt wird beides: neu gekonnte Vokabeln (die eigentliche Regel)
+-- und richtige Antworten (damit eine Serie nicht stirbt, bloss weil gerade
+-- nichts Neues freigegeben ist). Der Tag kommt vom Geraet, nicht von NOW():
+-- Wer offline uebt, soll den Tag bekommen, an dem er geuebt hat.
+CREATE TABLE IF NOT EXISTS learn_days (
+  user_id INT UNSIGNED  NOT NULL,
+  `day`   DATE          NOT NULL,
+  learned SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  correct SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, `day`),
+  CONSTRAINT fk_ld_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS settings (

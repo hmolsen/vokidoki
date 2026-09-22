@@ -8,8 +8,9 @@ require_once __DIR__ . '/languages.php';
  * Kurse: Klasse plus Sprache, etwa "Englisch 5B".
  *
  * Ein Kurs hält zusammen, wer mit welchem Material arbeitet. Die
- * Lerneinheiten hängen daran, nicht an einem einzelnen Konto - das ist der
- * Unterschied zwischen einer Familien- und einer Schul-App.
+ * Lerneinheiten hängen daran, nicht an einem einzelnen Konto: Eine Klasse
+ * übt denselben Vokabelsatz, und jedes Kind hat trotzdem seinen eigenen
+ * Lernstand.
  *
  * Seiteneffektfrei: kein Sitzungsaufbau, keine Ausgabe. Diese Datei wird von
  * den API-Endpunkten ebenso gebraucht wie später vom Lehrkraft-Bereich.
@@ -485,8 +486,8 @@ function courses_for_teacher(int $userId, int $schoolId): array
  *
  * Bevorzugt die Lehrkraft: Sie hat den Kurs zu verantworten, und wenn eine
  * Anfrage Geld kostet, gehört sie in ihre Abrechnung und nicht in die eines
- * Kindes. Gibt es keine, tut es irgendein Mitglied - dann ist es ein
- * Familienkurs mit genau einem.
+ * Kindes. Gibt es keine, tut es irgendein Mitglied - etwa in einem Kurs,
+ * den eine Lehrkraft angelegt und dann verlassen hat.
  */
 function course_billing_user(?int $courseId): ?array
 {
@@ -597,15 +598,15 @@ function course_units_list(int $courseId): array
  * sieht, und was zuletzt entstanden ist, ist meistens auch das, was zuletzt
  * drankommt.
  *
- * Ein Kurs ohne Kennung (der Altbestand aus der Familienzeit) bekommt
- * ebenfalls eine laufende Nummer - sonst stünden dort alle auf null und
- * sortierten sich nach Zufall.
+ * Der Kurs ist Pflicht. Hier stand einmal ein zweiter Zweig fuer
+ * Lerneinheiten ohne Kurs - Altbestand aus der Zeit, als eine Lerneinheit
+ * einem Kind gehoerte. Den gibt es nicht mehr, und eine Abfrage auf
+ * "course_id IS NULL" faende heute nur noch Zeilen, die gar nicht
+ * entstehen koennen.
  */
-function unit_next_position(?int $courseId): int
+function unit_next_position(int $courseId): int
 {
-    $max = $courseId === null
-        ? qv('SELECT MAX(position) FROM units WHERE course_id IS NULL')
-        : qv('SELECT MAX(position) FROM units WHERE course_id = ?', [$courseId]);
+    $max = qv('SELECT MAX(position) FROM units WHERE course_id = ?', [$courseId]);
 
     return ((int) ($max ?? 0)) + 1;
 }

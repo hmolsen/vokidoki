@@ -1,6 +1,7 @@
 import { VT, render, esc, on, go, topbar, wireBack, progressBar, flagHtml,
-         showError, pupilHint } from '../core.js';
+         showError, lernansicht } from '../core.js';
 import { sprache, einheitenDerSprache, einheitStatistik } from '../vorrat.js';
+import { hantel } from './frei.js';
 
 /**
  * Startseite einer Sprache: einlesen und üben auf einer Ebene.
@@ -21,9 +22,9 @@ import { sprache, einheitenDerSprache, einheitStatistik } from '../vorrat.js';
  * Eingelesen wird aus ihrem Bereich heraus - "+ Lerneinheit" auf der
  * Kurskarte und "Vokabeln einlesen" im Kurs fuehren in dieselbe Ansicht.
  *
- * Fuer ein Kind mit Einlese-Recht bleibt es: In einer Familie ist genau das
- * der Weg, und es gibt dort niemanden, der Kurse verwaltet. Dieselbe Regel
- * wie darfAnlegen() in der Kachelliste.
+ * Fuer ein Kind mit Einlese-Recht bleibt es: Wem die Lehrkraft das Einlesen
+ * erlaubt hat, der geht genau hier entlang - einen Lehrkraft-Bereich hat es
+ * nicht. Dieselbe Regel wie darfAnlegen() in der Kachelliste.
  */
 function selbstEinlesen() {
     return VT.user.canImport && !VT.user.isTeacher;
@@ -48,7 +49,7 @@ export async function languageView(languageId) {
      */
     const language = {
         id: roh.id, name: roh.name, label: roh.name,
-        flag: roh.flag_emoji, courseId: roh.course_id ?? null,
+        flag: roh.flag_emoji,
     };
     const units = einheitenDerSprache(languageId).map((u) => einheitStatistik(u.i));
 
@@ -82,13 +83,11 @@ export async function languageView(languageId) {
     `).join('');
 
     render(`
+        ${lernansicht()}
         ${topbar(language.label || language.name,
                  { backTo: '/', lead: flagHtml(language.flag, 'flag lead') })}
         <div id="msg"></div>
-        ${pupilHint('Das ist die Ansicht deines Kurses, wie ein Kind sie hat.',
-                    language.courseId
-                        ? `/teacher/course.php?id=${language.courseId}`
-                        : '/teacher/')}
+
 
         ${units.length > 0 ? `
             <div class="card">
@@ -119,6 +118,20 @@ export async function languageView(languageId) {
                     : 'Hier ist noch nichts freigegeben.<br>Deine Lehrkraft macht die erste Lektion auf.'}
             </div>
         ` : `
+            <!--
+                Freies Ueben ueber mehrere Lerneinheiten. Es steht ueber der
+                Liste, weil es die ganze Liste betrifft - und darunter waere
+                es bei zwanzig Lerneinheiten nicht mehr zu finden.
+            -->
+            <button class="row" data-go="/frei/waehlen/${language.id}">
+                <span class="lead">${hantel('hantel lead')}</span>
+                <span class="body">
+                    <span class="title">Freies Üben</span>
+                    <span class="tiny muted">Mehrere Lerneinheiten zusammen wiederholen</span>
+                </span>
+                <span class="chev">&#8250;</span>
+            </button>
+
             <h2 class="section">Lerneinheiten</h2>
             ${rows}
         `}

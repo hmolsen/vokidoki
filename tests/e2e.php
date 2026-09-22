@@ -163,8 +163,11 @@ function makeUser(string $username, string $display, string $color = '#e0559a'):
 function makeLanguage(int $userId, string $name, ?string $code = null): int
 {
     $schoolId = qv('SELECT school_id FROM users WHERE id = ?', [$userId]);
+    // Das Kuerzel wie in der Anwendung herleiten, wenn keines vorgegeben ist -
+    // course_create() und api/languages.php machen es genauso. Ein Helfer, der
+    // hier abweicht, prueft eine Lage, die es nicht gibt.
     q('INSERT INTO languages (school_id, name, flag_emoji, code) VALUES (?, ?, ?, ?)',
-      [$schoolId, $name, '', $code]);
+      [$schoolId, $name, '', $code ?? language_code('', $name)]);
     $langId = (int) db()->lastInsertId();
 
     $user = q1('SELECT * FROM users WHERE id = ?', [$userId]);
@@ -323,7 +326,7 @@ ok('Falsches Passwort wird abgelehnt', $status === 401, "Status $status");
 
 [$data, $status] = apiCall('auth', 'login', ['username' => $username, 'password' => 'geheim123']);
 ok('Anmeldung erfolgreich', $status === 200 && ($data['ok'] ?? false), $data['error'] ?? '');
-ok('App-Name ist Besitzform', ($data['user']['appName'] ?? '') === 'Testkinds Vokabeln',
+ok('App-Name ist Besitzform', ($data['user']['appName'] ?? '') === 'Testkinds Vokidoki',
    $data['user']['appName'] ?? '(fehlt)');
 
 $redirect = (string) ($data['redirect'] ?? '');
@@ -343,12 +346,12 @@ ok('Token-Start leitet weiter (Token verlässt die URL)', $res['status'] === 302
 $res = http($base . '/');
 ok('Shell enthält personalisierten Manifest-Link', str_contains($res['body'], 'manifest.php?t='));
 ok('iOS-Titel ist der Kindername',
-   str_contains($res['body'], 'apple-mobile-web-app-title" content="Testkinds Vokabeln"'));
+   str_contains($res['body'], 'apple-mobile-web-app-title" content="Testkinds Vokidoki"'));
 ok('apple-touch-icon gesetzt', str_contains($res['body'], 'icon.php?u=' . $userId));
 
 $res      = http($base . '/manifest.php?t=' . urlencode($token));
 $manifest = json_decode($res['body'], true);
-ok('Manifest-Name', ($manifest['name'] ?? '') === 'Testkinds Vokabeln', $manifest['name'] ?? '(fehlt)');
+ok('Manifest-Name', ($manifest['name'] ?? '') === 'Testkinds Vokidoki', $manifest['name'] ?? '(fehlt)');
 ok('Manifest start_url trägt den Token', str_contains((string) ($manifest['start_url'] ?? ''), 't=' . $token));
 ok('Manifest display=standalone', ($manifest['display'] ?? '') === 'standalone');
 
@@ -357,7 +360,7 @@ ok('Icon ist ein PNG', str_starts_with($res['body'], "\x89PNG"), 'Antwort war ke
 
 $res = http($base . '/manifest.php?t=kein-gueltiger-token');
 ok('Ungültiger Token liefert generisches Manifest',
-   (json_decode($res['body'], true)['name'] ?? '') === 'Vokabeln');
+   (json_decode($res['body'], true)['name'] ?? '') === 'Vokidoki');
 
 // ------------------------------------------------------------------ Sprache
 
@@ -789,42 +792,60 @@ ok('Und beim ersten Fehlschlag wird abgebrochen',
    'sonst arbeitete sich der Lauf durch Folgefehler');
 
 /*
- * Einen offenen Stand herstellen und ueber die Oberflaeche ausfuehren.
+ * Die Liste der Schemaaenderungen ist leer - und das ist der richtige Zustand.
  *
- * Genommen wird dafuer die Saat der Passwortwoerter: Sie steht auf jeder
- * Installation aus, sobald man ihren Merker entfernt, und ein zweiter Lauf
- * schadet nicht (INSERT IGNORE). Die family-Aenderungen taugen dafuer nicht
- * mehr - die melden sich nur noch, wenn wirklich Altbestand da ist, und auf
- * einer sauberen Installation waere dieser Abschnitt sonst grundlos rot.
+ * schema.sql legt das fertige Schema an; eine frische Installation hat nichts
+ * nachzutragen. Hier standen fuenfundvierzig Aenderungen, und jede einzelne
+ * war der Weg von einem aelteren Stand auf den heutigen - bis hin zu zehn
+ * family.*-Schritten, die den Bestand der alten Familien-App ueberfuehrten.
+ * Es gibt keine aeltere Datenbank mehr, die ueberfuehrt werden muesste.
+ *
+ * Der Weg selbst bleibt: Die naechste Aenderung kommt in dieselbe Liste.
  */
-q("DELETE FROM settings WHERE k = 'schema_applied_password_words.seed'");
-settings_reset_cache();
-$offen       = schema_pending();
-$offenVorher = count($offen);
-ok('Es stehen Aenderungen aus', $offenVorher > 0, (string) $offenVorher);
+ok('Es steht nichts aus', schema_pending() === [], implode(', ', schema_pending()));
+ok('Weil die Liste leer ist', schema_migrations() === [],
+   count(schema_migrations()) . ' Eintraege');
+ok('Und kein Rettungsweg fuer Altbestand mehr darin steht',
+   !function_exists('schema_has_legacy_data')
+   && preg_match("/'family\.[a-z_]+' => \[/", $schemaQuelle) !== 1,
+   'die alte Familien-App wird nicht mehr ueberfuehrt - der Kommentar, '
+   . 'der das erklaert, darf bleiben');
+
+// Der Mechanismus muss trotzdem stehen - die naechste Aenderung braucht ihn.
+foreach (['schema_migrations', 'schema_pending', 'ensure_schema',
+          'schema_was_applied', 'table_exists', 'column_exists',
+          'index_exists'] as $fn) {
+    ok("Der Weg fuer die naechste Aenderung steht: $fn()", function_exists($fn));
+}
+ok('ensure_schema() laeuft auch ohne Aenderungen sauber durch',
+   ensure_schema() === []);
 
 $seite = http($base . '/admin/selfcheck.php')['body'];
-ok('Der Selbsttest zeigt sie an',
-   str_contains($seite, 'ausstehende Schemaänderung'));
-ok('Und bietet einen Knopf an', str_contains($seite, 'name="run_migrations"'));
-
-// Gegen die Liste selbst statt gegen einen festen Namen: Welche Migration
-// gerade aussteht, haengt davon ab, wie weit diese Datenbank schon ist.
-$fehlend = array_values(array_filter($offen,
-    static fn (string $n): bool => !str_contains($seite, $n)));
-ok('Er nennt sie beim Namen', $fehlend === [], implode(', ', $fehlend));
-
-$res = adminPost('selfcheck.php', ['run_migrations' => '1']);
-ok('Der Knopf fuehrt sie aus',
-   str_contains($res['body'], 'Änderung(en) ausgeführt'), 'keine Rueckmeldung');
-
-settings_reset_cache();
-ok('Danach steht nichts mehr aus', schema_pending() === [],
-   implode(', ', schema_pending()));
-
-$seite = http($base . '/admin/selfcheck.php')['body'];
-ok('Und die Karte ist verschwunden',
+ok('Der Selbsttest meldet nichts Offenes',
    !str_contains($seite, 'ausstehende Schemaänderung'));
+ok('Und laedt trotzdem', str_contains($seite, 'Prüfung'));
+
+/*
+ * Die Woerter fuer die Anfangspasswoerter kommen jetzt aus schema.sql.
+ *
+ * Sie wurden einmal von einer Schemaaenderung gesaet. Faellt das weg, ohne
+ * dass schema.sql sie mitbringt, bleiben die Listen leer - und
+ * password_generate() liefert dann bewusst gar kein Passwort. Eine
+ * Neuinstallation haette also Konten ohne Anfangspasswort.
+ */
+$schemaSql = (string) file_get_contents(__DIR__ . '/../schema.sql');
+ok('schema.sql bringt die Passwortwoerter mit',
+   str_contains($schemaSql, 'INSERT IGNORE INTO password_words'));
+ok('Und zwar beide Sorten',
+   substr_count($schemaSql, "('adjective',") >= 20
+   && substr_count($schemaSql, "('animal',") >= 20,
+   substr_count($schemaSql, "('adjective',") . ' Adjektive, '
+   . substr_count($schemaSql, "('animal',") . ' Tiere');
+ok('In dieser Installation sind sie da',
+   (int) qv('SELECT COUNT(*) FROM password_words') >= 40,
+   (string) qv('SELECT COUNT(*) FROM password_words'));
+require_once __DIR__ . '/../lib/passwords.php';
+ok('Und es entsteht ein Anfangspasswort', password_generate() !== null);
 
 section('Schule, Klasse, Kurs');
 
@@ -848,105 +869,26 @@ foreach ([['users', 'school_id'], ['users', 'role'], ['users', 'can_import'],
 }
 
 /*
- * Der Rest dieses Abschnitts stellt den Bestand VOR dem Umbau nach - und
- * dafuer braucht es languages.user_id. Die Spalte faellt in Etappe 9; auf
- * einer Datenbank, die schon dort ist, laesst sich die Ausgangslage nicht
- * mehr herstellen, und die family-Migrationen sind zu Recht stillgelegt.
+ * Hier stand die Nachstellung des Bestandes VOR dem Umbau auf Kurse: ein
+ * Kind ohne Schule, eine Sprache ohne Kurs, eine Lerneinheit mit
+ * units.user_id - und danach die Ueberfuehrung durch die family.*-Schritte.
  *
- * Uebersprungen statt geloescht: Gegen eine Installation, die noch nicht
- * migriert ist, sind genau diese Pruefungen die wichtigsten der ganzen
- * Suite - und die Suite laesst sich gegen die echte Installation fahren.
+ * Beides gibt es nicht mehr. Die Spalten user_id sind aus dem Schema
+ * verschwunden, die Ueberfuehrung aus der Aenderungsliste. Geprueft wird
+ * jetzt das Gegenteil: dass von der alten Gestalt nichts uebrig ist.
  */
-$altbestandMoeglich = column_exists('languages', 'user_id');
-
-if (!$altbestandMoeglich) {
-    ok('Die Ueberfuehrung des Altbestands ist abgeschlossen',
-       !column_exists('units', 'user_id'),
-       'languages.user_id ist weg, units.user_id aber noch da');
-
-    $offenFamily = array_filter(schema_pending(),
-        static fn (string $n): bool => str_starts_with($n, 'family.'));
-    ok('Und ihre Migrationen melden sich nicht mehr',
-       $offenFamily === [], implode(', ', $offenFamily));
+foreach ([['units', 'user_id'], ['languages', 'user_id']] as [$t, $c]) {
+    ok("Die alte Besitzspalte $t.$c ist weg", !column_exists($t, $c),
+       'der Besitzer einer Lerneinheit war das Modell VOR den Kursen');
 }
-
-if ($altbestandMoeglich):
-
-// Ein Kind, wie es vor dem Umbau ausgesehen haette.
-$altName = 'testalt_' . bin2hex(random_bytes(3));
-q('INSERT INTO users (username, display_name, password_hash, color, school_id, can_import)
-   VALUES (?, ?, ?, ?, NULL, 0)',
-  [$altName, 'Altkind', password_hash('geheim123', PASSWORD_DEFAULT), '#4f7cff']);
-$altUser = (int) db()->lastInsertId();
-
-q('INSERT INTO languages (user_id, name, flag_emoji, code) VALUES (?, ?, ?, ?)',
-  [$altUser, 'Altisch', '', 'de']);
-$altLang = (int) db()->lastInsertId();
-
-q('INSERT INTO units (user_id, language_id, title) VALUES (?, ?, ?)',
-  [$altUser, $altLang, 'Alte Einheit']);
-$altUnit = (int) db()->lastInsertId();
-
-ok('Ein Bestand ohne Schule und Kurs steht bereit',
-   qv('SELECT school_id FROM users WHERE id = ?', [$altUser]) === null
-   && qv('SELECT course_id FROM units WHERE id = ?', [$altUnit]) === null);
-
-$kurseVorher = (int) qv('SELECT COUNT(*) FROM courses');
-
-// Die Merker loeschen, damit die Ueberfuehrung erneut laeuft.
-q("DELETE FROM settings WHERE k LIKE 'schema_applied_family.%'");
-settings_reset_cache();
-ensure_schema();
-
-ok('Das Kind bekommt eine Schule',
-   (int) qv('SELECT school_id FROM users WHERE id = ?', [$altUser]) > 0);
-ok('Und landet in einer Klasse',
-   (int) qv('SELECT COUNT(*) FROM class_members WHERE user_id = ?', [$altUser]) === 1);
-ok('Seine Rechte bleiben, wie sie waren',
-   (int) qv('SELECT can_import FROM users WHERE id = ?', [$altUser]) === 1,
-   'der Bestand darf weiter einlesen');
-
-$kurs = q1('SELECT * FROM courses WHERE language_id = ?', [$altLang]);
-ok('Zur Sprache entsteht ein Kurs', $kurs !== null);
-ok('Der Kurs heisst nach Sprache und Kind',
-   ($kurs['name'] ?? '') === 'Altisch Altkind', $kurs['name'] ?? '-');
-ok('Das Kind ist Mitglied darin',
-   (int) qv('SELECT COUNT(*) FROM course_members WHERE course_id = ? AND user_id = ?',
-            [(int) $kurs['id'], $altUser]) === 1);
-ok('Und zwar als SchuelerIn',
-   qv('SELECT member_role FROM course_members WHERE course_id = ? AND user_id = ?',
-      [(int) $kurs['id'], $altUser]) === 'student');
-
-ok('Die Lerneinheit haengt am Kurs',
-   (int) qv('SELECT course_id FROM units WHERE id = ?', [$altUnit]) === (int) $kurs['id']);
-ok('Und gilt als vollstaendig freigegeben',
-   (int) qv('SELECT released_position FROM units WHERE id = ?', [$altUnit]) > 0,
-   'sonst saehe das Kind seine bisherigen Vokabeln nicht mehr');
-
-// Zweimal laufen darf nichts verdoppeln - sonst entstuenden bei jedem
-// Admin-Aufruf neue Kurse.
-$kurseNachher = (int) qv('SELECT COUNT(*) FROM courses');
-q("DELETE FROM settings WHERE k LIKE 'schema_applied_family.%'");
-settings_reset_cache();
-ensure_schema();
-ok('Ein zweiter Durchlauf legt nichts doppelt an',
-   (int) qv('SELECT COUNT(*) FROM courses') === $kurseNachher,
-   $kurseNachher . ' vorher, ' . qv('SELECT COUNT(*) FROM courses') . ' nachher');
-// Die Ueberfuehrung legt zu JEDER Sprache ohne Kurs einen an - im Testlauf
-// entstehen unterwegs mehrere. Die tragende Aussage ist deshalb nicht die
-// Anzahl, sondern die Zuordnung: genau ein Kurs je Sprache, keiner uebrig.
-$ohneKurs = (int) qv('SELECT COUNT(*) FROM languages l
-                       WHERE l.school_id IS NOT NULL
-                         AND NOT EXISTS (SELECT 1 FROM courses co WHERE co.language_id = l.id)');
-ok('Jede Sprache hat danach einen Kurs', $ohneKurs === 0, $ohneKurs . ' ohne');
-
-$doppelt = (int) qv('SELECT COUNT(*) FROM (
-                        SELECT language_id FROM courses
-                         GROUP BY language_id HAVING COUNT(*) > 1
-                     ) d');
-ok('Und keine Sprache zwei', $doppelt === 0, $doppelt . ' doppelt');
-
-endif;
+ok('Jede Sprache gehoert zu einem Kurs',
+   (int) qv('SELECT COUNT(*) FROM languages l
+              WHERE NOT EXISTS (SELECT 1 FROM courses co
+                                 WHERE co.language_id = l.id)') === 0,
+   'eine Sprache ohne Kurs war das Kennzeichen des Altbestands');
+ok('Und jede Lerneinheit zu einem Kurs',
+   (int) qv('SELECT COUNT(*) FROM units WHERE course_id IS NULL') === 0,
+   'ohne Kurs saehe sie niemand - auch die Lehrkraft nicht');
 
 /*
  * Der Zugriff haengt jetzt an der Kurszugehoerigkeit statt an units.user_id.
@@ -992,7 +934,7 @@ $schemaSql = (string) file_get_contents(__DIR__ . '/../schema.sql');
 
 $fehlend = [];
 foreach (['schools', 'classes', 'class_members', 'courses', 'course_members',
-          'users', 'languages', 'units', 'vocab', 'sentences', 'sentence_flags',
+          'users', 'languages', 'units', 'vocab', 'sentences', 'vocab_flags',
           'progress', 'ai_requests', 'settings', 'device_tokens',
           'login_attempts', 'login_handoffs', 'password_words'] as $t) {
     if (!str_contains($schemaSql, 'CREATE TABLE IF NOT EXISTS ' . $t . ' (')) {
@@ -1009,11 +951,6 @@ foreach ([['school_id', 'users'], ['role', 'users'], ['can_import', 'users'],
 ok('Und den neuen Schluessel auf progress',
    str_contains($schemaSql, 'uq_progress_user (user_id, vocab_id, mode)')
    && !str_contains($schemaSql, 'uq_progress (vocab_id, mode)'));
-
-if ($altbestandMoeglich) {
-    q('DELETE FROM languages WHERE id = ?', [$altLang]);
-    q('DELETE FROM users WHERE id = ?', [$altUser]);
-}
 
 section('Lernstand gehört dem Kind');
 
@@ -1125,49 +1062,35 @@ ok('Erneutes Löschen meldet sich sauber',
 
 section('Sprachkürzel');
 
-require_once __DIR__ . '/../lib/schema.php';
+require_once __DIR__ . '/../lib/languages.php';
 
-// Das Kürzel steuert im Lückentext den Tastaturhinweis und die Reihe der
-// Sonderzeichen. Die Spalte kam erst spaeter dazu und wurde nur beim Anlegen
-// gefuellt - wer seine Sprachen vorher angelegt hatte, sah davon nichts.
-// Genau dieser Zustand wird hier nachgestellt.
-$vorher = qa('SELECT id, code FROM languages');
+/*
+ * Das Kürzel steuert im Lückentext den Tastaturhinweis und die Reihe der
+ * Sonderzeichen. Gesetzt wird es beim Anlegen, von language_code().
+ *
+ * Hier stand einmal die Pruefung eines Nachtrags: Die Spalte kam spaeter
+ * dazu, und wer seine Sprachen vorher angelegt hatte, stand ohne da. Den
+ * Nachtrag gibt es nicht mehr - es gibt keine Sprachen von vorher. Geprueft
+ * wird jetzt die Zuordnung selbst, und die ist dieselbe geblieben.
+ */
+ok('Französisch bekommt sein Kürzel - trotz Umlaut und großem Anfangsbuchstaben',
+   language_code('', 'Französisch') === 'fr');
+ok('Und die ausgeschriebene Schreibweise "daenisch" ebenso',
+   language_code('', 'daenisch') === 'da');
+ok('Eine frei benannte Sprache bleibt ohne',
+   language_code('', 'Klingonisch') === null);
 
-// Ueber makeLanguage(), damit auch der Kurs entsteht. Ohne ihn faende der
-// Admin die Sprache nicht mehr: Er fragt seit dem Wegfall von
-// languages.user_id ueber die Kursmitgliedschaft.
+// Und beim Anlegen kommt es auch wirklich in die Zeile.
 $frId = makeLanguage($userId, 'Französisch');
 $daId = makeLanguage($userId, 'daenisch');
 $klId = makeLanguage($userId, 'Klingonisch');
 
-q('UPDATE languages SET code = NULL');
-
-// Den Zustand vor dem Nachtrag herstellen - sonst gilt er als erledigt.
-q("DELETE FROM settings WHERE k = 'schema_applied_languages.code.backfill'");
-settings_reset_cache();
-
-ok('Die Schemapflege erkennt, dass Kürzel fehlen',
-   in_array('languages.code.backfill', schema_pending(), true),
-   implode(', ', schema_pending()));
-
-// Nachgetragen wird seit neuestem nur auf Knopfdruck. Hier geht es um die
-// Logik des Nachtragens, nicht um den Weg dorthin - der hat einen eigenen
-// Abschnitt -, deshalb direkt.
-settings_reset_cache();
-ensure_schema();
-
-ok('Französisch bekommt sein Kürzel - trotz Umlaut und großem Anfangsbuchstaben',
+ok('Eine neu angelegte Sprache traegt ihr Kürzel',
    qv('SELECT code FROM languages WHERE id = ?', [$frId]) === 'fr');
-ok('Und die ausgeschriebene Schreibweise "daenisch" ebenso',
+ok('Auch die ausgeschriebene Schreibweise',
    qv('SELECT code FROM languages WHERE id = ?', [$daId]) === 'da');
-ok('Eine frei benannte Sprache bleibt ohne',
-   qv('SELECT code FROM languages WHERE id = ?', [$klId]) === null);
-
-// Sonst bliebe die Schemapflege wegen des Klingonischen fuer immer offen und
-// wuerde bei jedem Admin-Aufruf dasselbe UPDATE fahren.
-ok('Danach ist nichts mehr offen',
-   !in_array('languages.code.backfill', schema_pending(), true),
-   implode(', ', schema_pending()));
+ok('Und die frei benannte bleibt leer',
+   in_array(qv('SELECT code FROM languages WHERE id = ?', [$klId]), [null, ''], true));
 
 section('Sprache im Admin pflegen');
 
@@ -1583,90 +1506,132 @@ ok('Und rechnet mit den Schritten beider Uebungsarten',
 ok('Sie benennt auch, woraus sich das zusammensetzt',
    str_contains($js, 'Auswählen') && str_contains($js, 'Lückentext'));
 
-section('Aufgabe melden');
+section('Vokabel melden');
 
-// Vielleicht lag nicht das Kind daneben, sondern der Satz. Dann soll es das
-// sagen koennen, ohne dass Papa davon erfaehrt, indem er hunderte Saetze
-// durchsieht.
-$flagSatz = (int) qv('SELECT s.id FROM sentences s
-                       JOIN vocab v ON v.id = s.vocab_id
-                      WHERE v.unit_id = ? LIMIT 1', [$unitId]);
-ok('Ein Satz zum Melden ist da', $flagSatz > 0);
+require_once __DIR__ . '/../lib/meldungen.php';
 
-[$res, $code] = apiCall('cloze', 'flag',
-    ['sentence_id' => $flagSatz, 'text' => 'mein Versuch']);
-ok('Die Meldung wird angenommen', $code === 200 && ($res['ok'] ?? false) === true,
-   json_encode($res));
+/*
+ * Vielleicht lag nicht das Kind daneben, sondern die Vokabel oder der Satz.
+ * Dann soll es das sagen koennen - aus jeder Uebung, und im selben Strom
+ * wie die Antworten: Geuebt wird auch ohne Netz, und eine Meldung aus dem
+ * Zug soll ankommen, sobald wieder eines da ist.
+ */
+$mSatz = q1('SELECT s.id, s.vocab_id FROM sentences s
+               JOIN vocab v ON v.id = s.vocab_id
+              WHERE v.unit_id = ? LIMIT 1', [$unitId]);
+ok('Ein Satz zum Melden ist da', $mSatz !== null);
+$mVokabel = (int) ($mSatz['vocab_id'] ?? 0);
+$mSatzId  = (int) ($mSatz['id'] ?? 0);
+$mMarke   = bin2hex(random_bytes(6));
+$mEreignis = static fn (string $n, int $v, int $s, string $t): array =>
+    ['e' => $mMarke . '-' . $n, 'k' => 'melden', 'v' => $v, 's' => $s, 't' => $t];
 
-$eintrag = q1('SELECT * FROM sentence_flags WHERE sentence_id = ?', [$flagSatz]);
-ok('Und landet in der Datenbank', $eintrag !== null);
+[$res, $code] = apiCall('bundle', 'push', ['ereignisse' => [
+    $mEreignis('1', $mVokabel, $mSatzId, 'mein Versuch'),
+    $mEreignis('2', $mVokabel, 0, ''),
+]]);
+ok('Beide Meldungen werden angenommen',
+   $code === 200 && ($res['genommen'] ?? 0) === 2, (string) json_encode($res));
+
+$eintrag = q1('SELECT * FROM vocab_flags WHERE vocab_id = ? AND sentence_id = ?',
+              [$mVokabel, $mSatzId]);
+ok('Die aus dem Lueckentext landet mit ihrem Satz', $eintrag !== null);
 ok('Mit dem Kind, das gemeldet hat', (int) ($eintrag['user_id'] ?? 0) === $userId);
 ok('Und mit dem, was es getippt hatte',
-   ($eintrag['typed'] ?? '') === 'mein Versuch', json_encode($eintrag));
+   ($eintrag['typed'] ?? '') === 'mein Versuch', (string) json_encode($eintrag));
+ok('Die aus dem Auswaehlen meint das Wortpaar - ohne Satz',
+   (int) qv('SELECT COUNT(*) FROM vocab_flags WHERE vocab_id = ? AND sentence_id = 0',
+            [$mVokabel]) === 1);
 
 // Zweimal melden darf den Zaehler nicht hochtreiben - sonst ergaebe ein
-// veraergertes Kind zehn Meldungen fuer denselben Satz.
-apiCall('cloze', 'flag', ['sentence_id' => $flagSatz, 'text' => 'zweiter Versuch']);
+// veraergertes Kind zehn Meldungen fuer denselben Satz. Eine neue Kennung,
+// weil es ein neuer Druck ist und kein wiederholter Stapel.
+apiCall('bundle', 'push', ['ereignisse' => [
+    $mEreignis('3', $mVokabel, $mSatzId, 'zweiter Versuch'),
+]]);
 ok('Zweimal melden zaehlt nur einmal',
-   (int) qv('SELECT COUNT(*) FROM sentence_flags WHERE sentence_id = ?', [$flagSatz]) === 1);
+   (int) qv('SELECT COUNT(*) FROM vocab_flags WHERE vocab_id = ? AND sentence_id = ?',
+            [$mVokabel, $mSatzId]) === 1);
 ok('Der letzte Versuch wird aber vermerkt',
-   qv('SELECT typed FROM sentence_flags WHERE sentence_id = ?', [$flagSatz]) === 'zweiter Versuch');
+   qv('SELECT typed FROM vocab_flags WHERE vocab_id = ? AND sentence_id = ?',
+      [$mVokabel, $mSatzId]) === 'zweiter Versuch');
 
-// Ein fremder Satz geht niemanden etwas an. "Fremd" heisst jetzt: aus einem
-// Kurs, in dem dieses Kind nicht ist.
-$fremderSatz = (int) qv('SELECT s.id FROM sentences s
-                          JOIN vocab v ON v.id = s.vocab_id
-                          JOIN units t ON t.id = v.unit_id
-                         WHERE NOT EXISTS (SELECT 1 FROM course_members m
-                                            WHERE m.course_id = t.course_id
-                                              AND m.user_id = ?)
-                         LIMIT 1', [$userId]);
-if ($fremderSatz > 0) {
-    [$res, $code] = apiCall('cloze', 'flag', ['sentence_id' => $fremderSatz, 'text' => 'x']);
-    ok('Ein fremder Satz laesst sich nicht melden', $code === 404,
-       "Status $code");
+$mStand = meldung_laden($mVokabel, null);
+ok('Zusammen ist das EINE gemeldete Vokabel von einem Kind',
+   $mStand !== null && $mStand['kinder'] === 1
+   && count($mStand['wahl']) === 1 && count($mStand['saetze']) === 1,
+   (string) json_encode($mStand));
+
+// Ein Satz einer anderen Vokabel laesst sich nicht unterschieben - sonst
+// kaeme mit einer erlaubten Vokabel jeder Satz auf die Liste.
+$mAndererSatz = (int) qv('SELECT id FROM sentences WHERE vocab_id <> ? LIMIT 1', [$mVokabel]);
+[$res] = apiCall('bundle', 'push', ['ereignisse' => [
+    $mEreignis('4', $mVokabel, $mAndererSatz, 'x'),
+]]);
+ok('Ein fremder Satz an einer erlaubten Vokabel wird abgewiesen',
+   ($res['fremd'] ?? 0) === 1
+   && (int) qv('SELECT COUNT(*) FROM vocab_flags WHERE sentence_id = ?', [$mAndererSatz]) === 0,
+   (string) json_encode($res));
+
+// Und eine Vokabel aus einem Kurs, in dem dieses Kind nicht ist, erst recht.
+$mFremdeVokabel = (int) qv('SELECT v.id FROM vocab v
+                              JOIN units t ON t.id = v.unit_id
+                             WHERE NOT EXISTS (SELECT 1 FROM course_members m
+                                                WHERE m.course_id = t.course_id
+                                                  AND m.user_id = ?)
+                             LIMIT 1', [$userId]);
+if ($mFremdeVokabel > 0) {
+    [$res] = apiCall('bundle', 'push', ['ereignisse' => [
+        $mEreignis('5', $mFremdeVokabel, 0, ''),
+    ]]);
+    ok('Eine fremde Vokabel laesst sich nicht melden', ($res['fremd'] ?? 0) === 1,
+       (string) json_encode($res));
     ok('Und es entsteht kein Eintrag',
-       (int) qv('SELECT COUNT(*) FROM sentence_flags WHERE sentence_id = ?', [$fremderSatz]) === 0);
+       (int) qv('SELECT COUNT(*) FROM vocab_flags WHERE vocab_id = ?', [$mFremdeVokabel]) === 0);
 } else {
-    ok('Ein fremder Satz laesst sich nicht melden', true, 'kein fremder Satz vorhanden');
-    ok('Und es entsteht kein Eintrag', true, 'kein fremder Satz vorhanden');
+    ok('Eine fremde Vokabel laesst sich nicht melden', true, 'keine fremde Vokabel vorhanden');
+    ok('Und es entsteht kein Eintrag', true, 'keine fremde Vokabel vorhanden');
 }
 
-section('Gemeldete Saetze im Admin');
+// Der Weg vom Knopf in den Strom - in jeder der drei Uebungen.
+$mJs = (string) file_get_contents(__DIR__ . '/../melden.js');
+ok('Der Knopf fragt nach, bevor er meldet',
+   str_contains($mJs, "'Diese Vokabel deiner Lehrkraft melden?'")
+   && preg_match('/if \(!\(await nachfragen\(\)\)\) return;\s*vokabelMelden\(/', $mJs) === 1);
+ok('Und zwar in der Seite, nicht mit einem Kaestchen des Browsers',
+   // Ein Aufruf hat ein Argument - das "confirm()" im Kommentar nicht.
+   preg_match('/confirm\(\s*[^)\s]/', $mJs) !== 1 && str_contains($mJs, 'showModal()'));
+ok('Und meldet ueber die Warteschlange, nicht mit eigenem Abruf',
+   !str_contains($mJs, 'api(')
+   && str_contains((string) file_get_contents(__DIR__ . '/../vorrat.js'), "k: 'melden'"));
+foreach (['quiz', 'cloze', 'frei'] as $mAnsicht) {
+    $mQuelle = (string) file_get_contents(__DIR__ . "/../views/$mAnsicht.js");
+    ok("Die Uebung $mAnsicht hat den Knopf",
+       str_contains($mQuelle, 'meldeKnopf(') && str_contains($mQuelle, 'meldenVerdrahten('));
+}
+ok('Den alten Weg ueber die Lueckentext-API gibt es nicht mehr',
+   !str_contains((string) file_get_contents(__DIR__ . '/../api/cloze.php'), "case 'flag'"));
 
-$seite = http($base . '/admin/sentences.php')['body'];
-ok('Der Admin weist auf Meldungen hin', str_contains($seite, 'gemeldete'));
-ok('Mit einem Weg, nur diese zu zeigen', str_contains($seite, 'flagged=1'));
-ok('Die gemeldete Zeile hebt sich ab', str_contains($seite, 'class="flagged"'));
+section('Meldungen im Admin');
+
+$seite = http($base . '/admin/meldungen.php')['body'];
+$mWort = (string) qv('SELECT term_foreign FROM vocab WHERE id = ?', [$mVokabel]);
+ok('Der Admin zeigt die gemeldete Vokabel', str_contains($seite, h($mWort)), $mWort);
 ok('Und nennt, wer was getippt hat',
    str_contains($seite, 'Testkind') && str_contains($seite, 'zweiter Versuch'));
+ok('Mit dem Satz zum Aendern und dem Wortpaar dazu',
+   str_contains($seite, 'name="s[' . $mSatzId . '][f]"') && str_contains($seite, 'name="f"'));
+ok('Die Leiste traegt die Zahl in Rot', str_contains($seite, 'class="zaehler"'));
+ok('Die Lueckensaetze haben keine eigene Meldeverwaltung mehr',
+   !str_contains(http($base . '/admin/sentences.php')['body'], 'clear_flags'));
 
-// Gemeldete Saetze stehen oben - sonst muesste man sie suchen.
-$posGemeldet = strpos($seite, 'class="flagged"');
-ok('Gemeldetes steht vor dem Rest',
-   $posGemeldet !== false, 'keine gemeldete Zeile gefunden');
-
-$nur = http($base . '/admin/sentences.php?flagged=1')['body'];
-/*
- * Die Zeilen tragen jetzt ihren Suchtext mit - fuer den Sofortfilter, der
- * beim Tippen filtert, statt die Seite neu zu laden. Gezaehlt wird deshalb
- * ueber data-suchtext und nicht mehr ueber den rohen Zeilenanfang.
- */
-ok('Der Filter zeigt nur Gemeldetes',
-   substr_count($nur, 'class="flagged"') === 1
-   && substr_count($nur, '<tr data-suchtext=') === 1,
-   substr_count($nur, 'class="flagged"') . ' gemeldet, '
-   . substr_count($nur, '<tr data-suchtext=') . ' Zeilen');
-
-// Eine Meldung kann auch unbegruendet sein.
-$res = adminPost('sentences.php', ['clear_flags' => $flagSatz]);
-ok('Die Meldung laesst sich zuruecknehmen',
-   (int) qv('SELECT COUNT(*) FROM sentence_flags WHERE sentence_id = ?', [$flagSatz]) === 0);
-ok('Und es wird gemeldet, dass es geschah',
-   str_contains($res['body'], 'zurückgenommen'));
-
-$seite = http($base . '/admin/sentences.php')['body'];
-ok('Danach ist der Hinweis verschwunden', !str_contains($seite, 'gemeldete'));
+$res = adminPost('meldungen.php', ['meldung' => $mVokabel, 'stimmt' => 1]);
+ok('"Stimmt so" erledigt alle Meldungen der Vokabel',
+   (int) qv('SELECT COUNT(*) FROM vocab_flags WHERE vocab_id = ?', [$mVokabel]) === 0);
+ok('Und laesst die Vokabel, wie sie war',
+   qv('SELECT term_foreign FROM vocab WHERE id = ?', [$mVokabel]) === $mWort);
+ok('Und die naechste rueckt nach, statt dass diese stehen bleibt',
+   !str_contains($res['body'], 'name="meldung" value="' . $mVokabel . '"'));
 
 section('Seitenblätterung');
 
@@ -2031,6 +1996,22 @@ ok('Und jede Ansicht, nicht nur eine Auswahl',
    count(array_filter(glob(__DIR__ . '/../views/*.js') ?: [],
        static fn (string $p): bool => !str_contains($liste, '"views/' . basename($p) . '"'))) === 0);
 
+/*
+ * vorrat.js und menue.js gehoerten lange nicht dazu.
+ *
+ * Damit bewegte sich der Versionsstempel nicht, wenn sich der Vorrat
+ * aenderte - eine auf dem Homescreen liegende App erfuhr von der Aenderung
+ * also gar nichts und uebte wochenlang mit der alten Fassung weiter. Die
+ * Liste entsteht jetzt aus glob() statt aus vier Namen von Hand.
+ */
+foreach (['vorrat.js', 'menue.js'] as $datei) {
+    ok("Auch $datei steht in der Liste", str_contains($liste, '"' . $datei . '"'),
+       'sonst merkt eine installierte App nichts von einer Aenderung daran');
+}
+ok('Und keine Datei steht doppelt darin',
+   count(app_assets()) === count(array_unique(app_assets())));
+
+
 $appjs = (string) file_get_contents(__DIR__ . '/../app.js');
 ok('Die App fragt in Abständen nach', str_contains($appjs, "api('meta', 'version')"));
 ok('Vor allem, wenn sie in den Vordergrund kommt',
@@ -2111,14 +2092,18 @@ preg_match('/import\s*\{([^}]*)\}\s*from\s*[\'"]\.\/core\.js[\'"]/s',
            (string) file_get_contents(__DIR__ . '/../app.js'), $m);
 $ausCore = array_filter(array_map('trim', explode(',', $m[1] ?? '')));
 /*
- * Zwei mehr als frueher: navQuelle und navAbmelden. Sie sind der Grund,
- * warum core.js die Menues bauen kann, ohne den Vorrat zu kennen - vorrat.js
- * holt sich von dort VT und api(), ein Import in die andere Richtung waere
- * ein Ring. app.js reicht die beiden Faeden herein, und nur deshalb bleibt
- * die Richtung eindeutig.
+ * Drei mehr als frueher: navQuelle, navAbmelden und serieQuelle. Sie sind
+ * der Grund, warum core.js die Menues und das Abzeichen bauen kann, ohne den
+ * Vorrat zu kennen - vorrat.js holt sich von dort VT und api(), ein Import
+ * in die andere Richtung waere ein Ring. app.js reicht die Faeden herein,
+ * und nur deshalb bleibt die Richtung eindeutig.
+ *
+ * Die Zahl ist ein Budget, kein Naturgesetz: Sie darf steigen, wenn ein
+ * weiterer Faden dieselbe Richtung eindeutig haelt - aber nicht, weil es
+ * gerade bequem war, noch einen Baustein aus core.js zu holen.
  */
 ok('app.js haelt sich bei core.js zurueck',
-   count($ausCore) <= 8, implode(', ', $ausCore));
+   count($ausCore) <= 9, implode(', ', $ausCore));
 
 $sw = file_get_contents(__DIR__ . '/../sw.js');
 
@@ -2460,8 +2445,9 @@ ok('Und ist alles auf, sind es alle',
 
 /*
  * Der Wortschatz-Vorspann fuer den Prompt: andere Einheiten desselben
- * KURSES, nicht derselben Sprache. In einer Familie ist das dasselbe, in
- * einer Schule wanderte sonst der Wortschatz fremder Klassen in die Anfrage.
+ * KURSES, nicht derselben Sprache. Bei einem einzelnen Kurs ist das
+ * dasselbe, an einer Schule mit mehreren wanderte sonst der Wortschatz
+ * fremder Klassen in die Anfrage.
  */
 $fremdLang = makeLanguage($userId, 'Fremdgabisch');
 $fremdUnit = makeUnit($userId, $fremdLang, 'Fremde Einheit');
@@ -2679,8 +2665,16 @@ ok('Vor beiden steht eine Fahne', substr_count($kopf, 'kopfflagge') === 2,
    substr_count($kopf, 'kopfflagge') . ' statt 2');
 ok('Und die deutsche ist die deutsche', str_contains($kopf, '1f1e9-1f1ea.svg'),
    'die deutsche Seite heisst immer Deutsch');
-ok('Die laufende Nummer ist weg', !str_contains($kopf, '#'));
-ok('Und die Satzzahl auch', !str_contains($kopf, 'Sätze'));
+/*
+ * Die beiden Fragen gelten der Spaltenzeile, nicht dem ganzen <thead>: Dort
+ * steht seit neuestem auch "Nichts freigeben", und dessen Schloss ist eine
+ * Zeichenentitaet - mit einem # darin.
+ */
+preg_match('/<tr>\s*<th.*?<\/tr>/s', $kopf, $kzm);
+$kopfzeile = $kzm[0] ?? '';
+ok('Die Spaltenzeile liess sich herausloesen', $kopfzeile !== '');
+ok('Die laufende Nummer ist weg', !str_contains($kopfzeile, '#'));
+ok('Und die Satzzahl auch', !str_contains($kopfzeile, 'Sätze'));
 
 preg_match('/<tr class="(?:released|locked)" data-pos="1">.*?<\/tr>/s', $res['body'], $zm);
 $zeile = $zm[0] ?? '';
@@ -3116,17 +3110,47 @@ ok('Dazwischen steht der eigene Name',
 ok('Und "zurueck zum Kurs" als Fliesstext ist weg',
    !str_contains($res['body'], 'zurück zum Kurs'));
 
-ok('Die beiden Freigabe-Knoepfe stehen in einer Reihe',
-   str_contains($res['body'], '<div class="buttonrow">'));
-ok('Und sind von gleicher Bauart',
-   substr_count($res['body'], 'class="btn small') >= 2,
-   'einer als iconaction danger sieht aus wie ein Link');
-ok('"Nichts freigeben" heisst jetzt so',
-   str_contains($res['body'], 'Nichts freigeben'));
+/*
+ * Die beiden Mengen-Knoepfe haengen an den Enden der Tabelle.
+ *
+ * Sie standen einmal als Reihe darueber. Dort sagten sie nichts darueber,
+ * wohin sie greifen; an den Enden sind sie die beiden Endstellungen des
+ * Balkens, den man dazwischen von Hand zieht - oben zu, unten auf.
+ */
+ok('"Nichts freigeben" ist die erste Zeile der Tabelle',
+   preg_match('#<table[^>]*id="freigabe".*?<thead>\s*<tr class="mengen">.*?'
+              . 'Nichts freigeben#s', $res['body']) === 1,
+   'die Tabelle faengt mit dem Knopf an');
+ok('Und steht ueber der Kopfzeile mit den Sprachen',
+   preg_match('#Nichts freigeben.*?</tr>.*?<th[^>]*>.*?Deutsch#s', $res['body']) === 1);
+
+ok('"Alles freigeben" steht im Fuss der Tabelle',
+   preg_match('#<tfoot>\s*<tr class="mengen">.*?Alles freigeben.*?</tfoot>#s',
+              $res['body']) === 1);
+ok('Und damit unterhalb der Anlegezeile',
+   preg_match('#id="handzeile".*?<tfoot>.*?Alles freigeben#s', $res['body']) === 1,
+   'wer gerade von Hand angefuegt hat, will sie mitfreigeben');
+
+ok('Beide spannen die ganze Tabellenbreite',
+   substr_count($res['body'], '<tr class="mengen">') === 2
+   && substr_count($res['body'], '<td colspan="3">') >= 2);
+ok('Beide haengen am Formular unter der Tabelle',
+   substr_count($res['body'], 'class="mengenknopf') === 2
+   && substr_count($res['body'], 'form="releaseform"') >= 2,
+   'ein <form> kann nicht um Tabellenzeilen herumstehen');
 ok('Beide bleiben stehen, auch wenn einer gerade nichts bewirkt',
    substr_count($res['body'], 'name="release"') >= 2
    && str_contains($res['body'], 'disabled title='),
-   'sonst springt die Reihe bei jedem Freigeben um');
+   'sonst spraenge die Tabelle bei jedem Freigeben um eine Zeile');
+
+$cssMengen = (string) file_get_contents(__DIR__ . '/../admin/admin.css');
+ok('Die Knoepfe tragen die Farbe, die sie bewirken',
+   preg_match('/\.mengenknopf\.zu\s*\{[^}]*--surface-2/s', $cssMengen) === 1
+   && preg_match('/\.mengenknopf\.auf\s*\{[^}]*--good-bg/s', $cssMengen) === 1,
+   'oben das Grau der gesperrten Zeilen, unten das Gruen der freigegebenen');
+ok('Und die Zelle darum traegt kein Polster',
+   preg_match('/table\.data\.release tr\.mengen td \{ padding: 0/s', $cssMengen) === 1,
+   'sonst steht der Knopf am Telefon eingerueckt statt buendig');
 
 /*
  * Die Meldung gehoert unter den Titel und nicht zwischen Titel und
@@ -3185,7 +3209,7 @@ ok('Eine Lerneinheit einer anderen Schule laesst sich nicht freigeben',
 // ---- Nur ein Satzlauf, auch wenn eine ganze Klasse gleichzeitig draufsieht.
 
 /*
- * Bei einer Familie feuert das nie: Ein Kind stoesst die Satzerzeugung an,
+ * Bei einem einzelnen Kind feuert das nie: Es stoesst die Satzerzeugung an,
  * fertig. Bei einer Klasse sitzen 28 Kinder in derselben Minute davor, alle
  * sehen "noch keine Saetze" - und ohne Riegel starten alle denselben Lauf.
  * Achtundzwanzig bezahlte Anfragen fuer ein Ergebnis.
@@ -3271,41 +3295,18 @@ ok('Die Schulen stehen im Admin-Menue',
    str_contains($schulQuelle, "'schools.php'   => 'Schulen'"));
 
 /*
- * "Familie" ist ein Rettungsweg, kein Bestandteil des Modells.
+ * Eine Schule entsteht nur, wo jemand sie anlegt.
  *
- * Frueher legte die Schemapflege sie immer an - auch auf einer frischen
- * Installation, wo sie nichts zu retten hatte und nur ein Posten war, den
- * jemand wieder wegraeumen muss. Sie entsteht nur noch, wo wirklich Bestand
- * aus der Zeit vor den Kursen liegt, und das Kennzeichen dafuer ist eine
- * Sprache ohne Kurs.
+ * Hier stand einmal die Pruefung einer Schule namens "Familie": Die
+ * Schemapflege legte sie an, um den Bestand der alten Familien-App zu
+ * retten. Beides ist weg - es gibt keinen Bestand zu retten, und eine still
+ * erzeugte Schule waere nur ein Posten, den jemand wieder wegraeumen muss.
  */
-require_once __DIR__ . '/../lib/schema.php';
-
-$schemaQuelle2 = (string) file_get_contents(__DIR__ . '/../lib/schema.php');
-ok('Die Ueberfuehrung haengt an echtem Altbestand',
-   preg_match("/'family\.school' => \[.*?schema_has_legacy_data\(\)/s", $schemaQuelle2) === 1,
-   'family.school laeuft unbedingt');
-
-$familyGates = preg_match_all("/'family\.(?!school')[a-z_]+' => \[/", $schemaQuelle2);
-// Ohne das vorangestellte "!" - das steht in der Bedingung von family.school
-// selbst und meint das Gegenteil.
-$familyKette = preg_match_all("/(?<!!)schema_was_applied\('family\.school'\)/", $schemaQuelle2);
-ok('Und die uebrigen Schritte haengen an ihr',
-   $familyGates > 0 && $familyKette === $familyGates,
-   $familyKette . ' von ' . $familyGates . ' abgesichert');
-
-// Auf einer Datenbank ohne verwaiste Sprachen darf nichts davon anspringen.
-$verwaist = (int) qv('SELECT COUNT(*) FROM languages l
-                       WHERE NOT EXISTS (SELECT 1 FROM courses co WHERE co.language_id = l.id)');
-if ($verwaist === 0) {
-    ok('Ohne Altbestand meldet sich die Ueberfuehrung gar nicht',
-       !schema_has_legacy_data());
-} else {
-    // Die Entwicklungsdatenbank traegt Reste frueherer Laeufe. Dann wird
-    // wenigstens die Aussage selbst geprueft, statt sie zu ueberspringen.
-    ok('Der Altbestand wird an verwaisten Sprachen erkannt',
-       schema_has_legacy_data(), $verwaist . ' verwaiste Sprachen');
-}
+$schulenQuelle = (string) file_get_contents(__DIR__ . '/../admin/schools.php');
+ok('Keine Schule entsteht von selbst',
+   !str_contains($schulenQuelle, "'Familie'")
+   && (int) qv("SELECT COUNT(*) FROM schools WHERE name = 'Familie'") === 0,
+   'angelegt wird im Admin, und nur dort');
 
 $seite = http($base . '/admin/schools.php')['body'];
 ok('Die Seite laedt', str_contains($seite, 'Schule anlegen'));
@@ -4071,6 +4072,120 @@ ok('Der Lehrkraft-Bereich migriert nicht selbst',
 ok('Merkt aber, wenn das Schema aussteht',
    str_contains($boot, 'schema_pending()'));
 
+section('Meldungen für die Lehrkraft');
+
+/*
+ * Die Meldung gehoert zu der, deren Unterlagen es sind - nicht nur zum
+ * Admin, der die Klasse nicht kennt. Ein eigener Kurs, damit die Zahlen
+ * hier nur von dem abhaengen, was dieser Abschnitt selbst anlegt.
+ */
+$lmLang = makeLanguage($userId, 'Meldisch' . bin2hex(random_bytes(2)));
+$lmUnit = makeUnit($userId, $lmLang, 'Meldeeinheit');
+$lmKurs = (int) course_for_language($lmLang)['id'];
+course_add_member($lmKurs, $lehrerId, COURSE_ROLE_TEACHER);
+
+$lmIds = [];
+foreach (['alpha', 'bravo'] as $i => $w) {
+    q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, ?)',
+      [$lmUnit, $w, 'de-' . $w, $i]);
+    $lmIds[$w] = (int) db()->lastInsertId();
+    q('INSERT INTO sentences (vocab_id, native_text, foreign_text, answer) VALUES (?, ?, ?, ?)',
+      [$lmIds[$w], 'Satz zu ' . $w . '.', 'Here is {} now.', $w]);
+}
+$lmSatz = static fn (string $w): int =>
+    (int) qv('SELECT id FROM sentences WHERE vocab_id = ?', [$lmIds[$w]]);
+
+/*
+ * "alpha" von zwei Kindern, einmal beim Auswaehlen und einmal im
+ * Lueckentext; "bravo" von einem, im Lueckentext. Gemeldet ueber
+ * meldung_aufnehmen() - der Weg vom Geraet dorthin ist oben geprueft.
+ */
+meldung_aufnehmen($userId, $lmIds['alpha'], 0, '');
+meldung_aufnehmen($otherId, $lmIds['alpha'], $lmSatz('alpha'), 'alfa');
+meldung_aufnehmen($userId, $lmIds['bravo'], $lmSatz('bravo'), 'brafo');
+
+$res = teacherGet('index.php');
+ok('Am Zahnrad steht rot, wie viele Vokabeln gemeldet sind',
+   preg_match('/<summary class="burger"[^>]*>.*?<span class="zaehler"[^>]*>2<\/span>/s',
+              $res['body']) === 1);
+ok('Gezaehlt werden Vokabeln, nicht Meldungen',
+   str_contains($res['body'], '2 gemeldete Vokabeln'));
+ok('Im Menue fuehrt ein Eintrag zu ihnen',
+   str_contains($res['body'], 'class="mitem meldungen"')
+   && str_contains($res['body'], 'meldungen.php'));
+
+$res = teacherGet('meldungen.php');
+ok('Die meistgemeldete Vokabel steht vorn',
+   str_contains($res['body'], 'name="meldung" value="' . $lmIds['alpha'] . '"')
+   && !str_contains($res['body'], 'name="meldung" value="' . $lmIds['bravo'] . '"'));
+ok('Mit der Zahl der Kinder', str_contains($res['body'], '2 Kinder haben'));
+ok('Das Wortpaar zum Aendern, weil beim Auswaehlen gemeldet wurde',
+   str_contains($res['body'], 'name="f" value="alpha"'));
+ok('Und der Satz zum Aendern, samt dem Getippten',
+   str_contains($res['body'], 'name="s[' . $lmSatz('alpha') . '][f]"')
+   && str_contains($res['body'], 'tippte &bdquo;alfa&ldquo;'));
+
+preg_match('/name="csrf" value="([a-f0-9]+)"/', $res['body'], $lmM);
+$lmCsrf = $lmM[1] ?? '';
+
+// Aendern: Wortpaar und Satz in einem Zug, und danach ist die Meldung weg.
+$res = teacherRequest($base . '/teacher/meldungen.php', [
+    'csrf' => $lmCsrf, 'meldung' => $lmIds['alpha'], 'sichern' => 1,
+    'f' => 'alpha!', 'n' => 'de-alpha neu',
+    's' => [$lmSatz('alpha') => ['n' => 'Neuer Satz.', 'f' => 'Here {} is.', 'a' => 'alpha']],
+]);
+$lmV = q1('SELECT term_foreign, term_native FROM vocab WHERE id = ?', [$lmIds['alpha']]);
+ok('"Ändern" speichert das Wortpaar',
+   ($lmV['term_native'] ?? '') === 'de-alpha neu', (string) json_encode($lmV));
+ok('Und den Satz',
+   qv('SELECT foreign_text FROM sentences WHERE id = ?', [$lmSatz('alpha')]) === 'Here {} is.');
+ok('Und erledigt die Meldung',
+   (int) qv('SELECT COUNT(*) FROM vocab_flags WHERE vocab_id = ?', [$lmIds['alpha']]) === 0);
+ok('Danach steht die naechste da',
+   str_contains($res['body'], 'name="meldung" value="' . $lmIds['bravo'] . '"'));
+ok('Und das Zahnrad zaehlt eine weniger',
+   preg_match('/<span class="zaehler"[^>]*>1<\/span>/', $res['body']) === 1);
+
+// Ein Satz ohne Luecke faellt durch - und dann bleibt alles, wie es war.
+$res = teacherRequest($base . '/teacher/meldungen.php', [
+    'csrf' => $lmCsrf, 'meldung' => $lmIds['bravo'], 'sichern' => 1,
+    's' => [$lmSatz('bravo') => ['n' => 'Satz.', 'f' => 'Keine Luecke.', 'a' => 'bravo']],
+]);
+ok('Ein kaputter Satz wird nicht gespeichert',
+   qv('SELECT foreign_text FROM sentences WHERE id = ?', [$lmSatz('bravo')]) === 'Here is {} now.');
+ok('Die Meldung bleibt dann offen',
+   (int) qv('SELECT COUNT(*) FROM vocab_flags WHERE vocab_id = ?', [$lmIds['bravo']]) === 1);
+ok('Und es steht da, was fehlte', str_contains($res['body'], 'genau eine Lücke'));
+
+// Ein Feld fuer einen Satz, der nicht gemeldet ist, wird nicht gelesen.
+$lmFremd = (int) qv('SELECT id FROM sentences WHERE vocab_id <> ? AND vocab_id <> ? LIMIT 1',
+                    [$lmIds['alpha'], $lmIds['bravo']]);
+$lmVorher = (string) qv('SELECT foreign_text FROM sentences WHERE id = ?', [$lmFremd]);
+teacherRequest($base . '/teacher/meldungen.php', [
+    'csrf' => $lmCsrf, 'meldung' => $lmIds['bravo'], 'sichern' => 1,
+    's' => [$lmSatz('bravo') => ['n' => 'Satz zu bravo.', 'f' => 'Here is {} now.', 'a' => 'bravo'],
+            $lmFremd         => ['n' => 'Gekapert.', 'f' => 'Ge {} kapert.', 'a' => 'x']],
+]);
+ok('Ein untergeschobener fremder Satz bleibt unberuehrt',
+   qv('SELECT foreign_text FROM sentences WHERE id = ?', [$lmFremd]) === $lmVorher);
+
+$res = teacherGet('meldungen.php');
+ok('Ist alles erledigt, sagt die Seite das', str_contains($res['body'], 'Keine offenen Meldungen'));
+ok('Und das Zahnrad ist wieder ohne Zahl', !str_contains($res['body'], 'class="zaehler"'));
+
+// Eine Lehrkraft sieht nur die Meldungen ihrer eigenen Kurse.
+meldung_aufnehmen($userId, $lmIds['bravo'], 0, '');
+ok('Wer nicht Lehrkraft des Kurses ist, sieht die Meldung nicht',
+   meldung_laden($lmIds['bravo'], $otherId) === null
+   && meldung_laden($lmIds['bravo'], $lehrerId) !== null);
+$res = teacherRequest($base . '/teacher/meldungen.php', [
+    'csrf' => $lmCsrf, 'meldung' => $lmIds['bravo'], 'stimmt' => 1,
+]);
+ok('"Stimmt so" erledigt sie auch hier',
+   (int) qv('SELECT COUNT(*) FROM vocab_flags WHERE vocab_id = ?', [$lmIds['bravo']]) === 0);
+
+q('DELETE FROM languages WHERE id = ?', [$lmLang]);
+
 section('Was die Oberflaeche anbietet');
 
 require_once __DIR__ . '/../lib/worldlanguages.php';
@@ -4110,8 +4225,15 @@ ok('Und das Anlegen einer Sprache ebenso',
    str_contains($listeQuelle, 'darfAnlegen()')
    && preg_match('/canImport && !VT\.user\.isTeacher/', $listeQuelle) === 1,
    'die Bedingung fehlt');
-ok('Die Lehrkraft findet die Verwaltung aus der App heraus',
-   str_contains($listeQuelle, 'VT.user.isTeacher') && str_contains($listeQuelle, '/teacher/'));
+/*
+ * Die Zeile "Verwaltung" ueber den Kacheln ist weg. Der Schalter im Zahnrad
+ * kann dasselbe und mehr: Er fuehrt auf die Entsprechung DIESER Seite und
+ * steht auf jeder Seite an derselben Stelle. Eine zweite Tuer daneben nahm
+ * den Platz ueber genau dem weg, weswegen man hergekommen ist.
+ */
+ok('Ueber den Kacheln steht keine zweite Tuer in die Verwaltung',
+   !str_contains($listeQuelle, 'Klassen, Kurse, Zugangsdaten und Freigaben'),
+   'der Weg dorthin steht im Zahnrad');
 
 // Was die App ueberhaupt erfaehrt.
 [$d, $s] = apiCall('auth', 'me');
@@ -4154,8 +4276,8 @@ q('DELETE FROM users WHERE id = ?', [$ohneRecht]);
  * echtes Loch, und es sass an der Naht, die genau dafuer gebaut wurde.
  *
  * Die Regel lautet jetzt: Wer Inhalte anlegen darf, darf sie auch aendern.
- * Das ist dieselbe Befugnis und heisst CAP_IMPORT - in einer Schule hat sie
- * die Lehrkraft, in einer Familie das Kind, das fuer sich selbst einliest.
+ * Das ist dieselbe Befugnis und heisst CAP_IMPORT - normalerweise hat sie
+ * die Lehrkraft; ein Kind bekommt sie nur, wenn es selbst einlesen soll.
  */
 $schuelerKonto = makeUser('e2e_darfnicht', 'Darf Nicht');
 q('UPDATE users SET can_import = 0 WHERE id = ?', [$schuelerKonto]);
@@ -4275,10 +4397,10 @@ ok('Auch ohne Umlaute geschrieben',
 section('Mein Konto');
 
 /*
- * Name, Farbe und vor allem das Passwort konnte bisher nur der Betreiber
- * aendern. Fuer eine Familie ging das - Papa sass daneben. In einer Schule
- * nicht: Ein Kind, das sein Anfangspasswort behalten muss, weil niemand es
- * aendern kann, hat ein Passwort, das auf einem Zettel steht.
+ * Name, Farbe und vor allem das Passwort aendert das Kind selbst, nicht nur
+ * der Betreiber. Ein Kind, das sein Anfangspasswort behalten muss, weil
+ * niemand es aendern kann, hat ein Passwort, das auf einem Zettel steht -
+ * und Zettel gehen in einer Klasse herum.
  */
 $kontoKind = makeUser('e2e_konto', 'Kontokind');
 q('UPDATE users SET initial_password = ? WHERE id = ?', ['müder Gepard', $kontoKind]);
@@ -4308,7 +4430,7 @@ ok('Und stehen in der Datenbank',
    $frisch['display_name'] === 'Kontokind Neu' && $frisch['color'] === '#123456',
    json_encode($frisch));
 ok('Die Antwort traegt den neuen App-Namen',
-   ($d['user']['appName'] ?? '') === 'Kontokind Neus Vokabeln',
+   ($d['user']['appName'] ?? '') === 'Kontokind Neus Vokidoki',
    (string) ($d['user']['appName'] ?? ''));
 
 // Unsinn als Farbe darf nicht durchrutschen.
@@ -4482,8 +4604,8 @@ ok('Die Klasse steht auf den Kacheln',
    'sonst weiss man auf Schritt 2 nicht mehr, fuer wen');
 
 /*
- * Die fuenf Schulsprachen als Kacheln - so wie in der Familien-App. Jede
- * ist ein Absendeknopf, der seinen Namen traegt; abgeschickt wird nur der
+ * Die fuenf Schulsprachen als Kacheln. Jede ist ein Absendeknopf, der
+ * ihren Namen traegt; abgeschickt wird nur der
  * gedrueckte. Das kann HTML von sich aus.
  */
 ok('Die fuenf Schulsprachen stehen als Kacheln da',
@@ -4554,7 +4676,7 @@ ok('Und an der Schule der Lehrkraft',
    (int) ($neuerKurs['school_id'] ?? 0)
    === (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]));
 ok('Danach steht man auf der Kursseite',
-   str_contains($res['body'], 'So sieht es die Klasse')
+   str_contains($res['body'], 'class="ansichtwahl"')
    && str_contains($res['body'], 'Lerneinheiten'),
    'der Assistent endet dort, wo man hinwollte');
 
@@ -5874,13 +5996,17 @@ ok('Zwei Vokabeln koennen sich keine Position teilen', !$dublette,
 ok('Der Selbsttest kennt die Frage',
    str_contains((string) file_get_contents(__DIR__ . '/../admin/selfcheck.php'),
                 'Reihenfolge der Vokabeln'));
-ok('Die Schemaaenderung steht in der richtigen Reihenfolge',
-   array_search('vocab.position.compact', array_keys(schema_migrations()), true)
-   < array_search('vocab.position.unique', array_keys(schema_migrations()), true),
-   'erst geradeziehen, dann festnageln');
-ok('Und schema.sql kennt den Schluessel auch',
+/*
+ * Hier stand die Reihenfolge zweier Schemaaenderungen: erst die Positionen
+ * geradeziehen, dann den Schluessel darauf festnageln. Beide sind weg -
+ * schema.sql bringt den Schluessel von Anfang an mit, und es gibt keine
+ * Datenbank mehr, deren Positionen Luecken haetten.
+ */
+ok('schema.sql kennt den Schluessel von Anfang an',
    str_contains((string) file_get_contents(__DIR__ . '/../schema.sql'), 'uq_vocab_pos'),
-   'sonst laufen frische Installation und Migration auseinander');
+   'ohne ihn koennten sich zwei Vokabeln eine Position teilen');
+ok('Und er steht auch wirklich auf der Tabelle',
+   index_exists('vocab', 'uq_vocab_pos'));
 
 // ---- punctuation_fix greift auch von Hand.
 
@@ -6531,71 +6657,144 @@ ok('Ein Kurs fuer den Feinschliff', $fsKursId > 0);
 $res = teacherGet('course.php?id=' . $fsKursId);
 ok('Die Ueberschrift hat eine eigene Zeile',
    preg_match('/<div class="titelzeile">\s*<h1>/', $res['body']) === 1);
-ok('Und darin einen Weg in die Schueleransicht',
-   preg_match('/<div class="titelzeile">.*?href="[^"]*#\/lang\/' . $fsSprache . '"/s', $res['body']) === 1,
-   'nicht als Randnotiz weiter unten');
-
-$fsUnit = makeUnit($lehrerId, $fsSprache, 'Feinschliff-Unit');
-$res = teacherGet('unit.php?id=' . $fsUnit);
-ok('Die Lerneinheit ebenso',
-   preg_match('/<div class="titelzeile">.*?href="[^"]*#\/unit\/' . $fsUnit . '"/s', $res['body']) === 1);
 
 /*
- * Und sie oeffnet im selben Fenster.
+ * Neben der Ueberschrift steht kein Knopf mehr.
  *
- * Der Knopf stand auf target="_blank" - damals war das der einzige Weg
- * zurueck: Tab zu. Seit die Ansicht selbst einen Knopf zurueck traegt, der
- * auf genau diese Seite zeigt, ist der zweite Tab keine Hilfe mehr.
+ * "So sieht es die Klasse" stand auf zwei von sieben Seiten und fuehrte nur
+ * in eine Richtung; zurueck ging es ueber einen Hinweis in der App, den es
+ * auch nicht ueberall gab. Zwei halbe Wege fuer eine Bewegung. Jetzt ist es
+ * ein Schalter mit zwei Stellungen im Zahnrad - an derselben Stelle auf
+ * jeder Seite, in beide Richtungen, und er zeigt nebenbei, wo man steht.
  */
-foreach ([['course.php?id=' . $fsKursId, 'Kurs'],
-          ['unit.php?id=' . $fsUnit,     'Lerneinheit']] as [$wo, $wie]) {
+$fsUnit = makeUnit($lehrerId, $fsSprache, 'Feinschliff-Unit');
+foreach ([['course.php?id=' . $fsKursId, 'Kurs',        '#/lang/' . $fsSprache],
+          ['unit.php?id=' . $fsUnit,     'Lerneinheit', '#/unit/' . $fsUnit],
+          ['classes.php',                'Klassen',     null]] as [$wo, $wie, $ziel]) {
     $sicht = teacherGet($wo);
-    ok("Die Schueleransicht oeffnet im selben Fenster ($wie)",
-       preg_match('/<a class="btn small secondary" href="[^"]*#\/(?:lang|unit)\/\d+" '
-                  . 'title="Die Ansicht, die deine Klasse sieht"/', $sicht['body']) === 1,
-       'kein target="_blank" mehr - der Weg zurueck steht in der Ansicht selbst');
+
+    ok("Kein Knopf neben der Ueberschrift mehr ($wie)",
+       !str_contains($sicht['body'], 'So sieht es die Klasse'));
+    ok("Der Schalter steht im Zahnrad ($wie)",
+       preg_match('/<p class="mkopf klein">Ansicht<\/p>\s*<div class="ansichtwahl"/',
+                  $sicht['body']) === 1);
+    ok("Und zwar unter \"Passwort aendern\" und ueber den Farben ($wie)",
+       preg_match('/Passwort ändern.*?class="ansichtwahl".*?class="themawahl"/s',
+                  $sicht['body']) === 1);
+    ok("\"Verwaltung\" ist hier die Stellung, in der man steht ($wie)",
+       preg_match('/<span class="ansichtknopf on" aria-current="page">/', $sicht['body']) === 1,
+       'und darum kein Verweis: ein Knopf dorthin, wo man ist, ist keiner');
+
+    if ($ziel === null) {
+        // Klassenlisten gibt es in der Schueleransicht nicht - von dort
+        // fuehrt der Wechsel auf die Startseite, nicht ins Leere.
+        ok('Ohne Entsprechung fuehrt der Wechsel auf die Startseite',
+           preg_match('/<a class="ansichtknopf" href="([^"]*)"/', $sicht['body'], $zm) === 1
+           && !str_contains($zm[1], '#'), $zm[1] ?? '(keiner)');
+    } else {
+        ok("Der Wechsel fuehrt auf die Entsprechung DIESER Seite ($wie)",
+           preg_match('/<a class="ansichtknopf" href="([^"]*)"/', $sicht['body'], $zm) === 1
+           && str_ends_with($zm[1], $ziel),
+           ($zm[1] ?? '(keiner)') . ' statt ... ' . $ziel);
+    }
+}
+
+/*
+ * Eine Kennung aus der Adresse, die dieser Lehrkraft nicht gehoert, fuehrt
+ * nicht auf einen fremden Kurs: Gesucht wird in IHRER Kursliste.
+ */
+$fremdKurs = (int) qv('SELECT co.id FROM courses co
+                        WHERE NOT EXISTS (SELECT 1 FROM course_members m
+                                           WHERE m.course_id = co.id AND m.user_id = ?)
+                        ORDER BY co.id LIMIT 1', [$lehrerId]);
+if ($fremdKurs > 0) {
+    $fremd = teacherGet('course.php?id=' . $fremdKurs);
+    ok('Ein fremder Kurs fuehrt nicht in dessen Schueleransicht',
+       preg_match('/<a class="ansichtknopf" href="([^"]*)"/', $fremd['body'], $fm) !== 1
+       || !str_contains($fm[1], '#/lang/'),
+       $fm[1] ?? '(keiner)');
 }
 
 $kern = http($base . '/core.js');
-ok('Die Schueleransicht erklaert sich der Lehrkraft',
-   str_contains($kern['body'], 'export function pupilHint'));
+ok('Die Lernansicht sagt, was sie ist',
+   str_contains($kern['body'], 'export function lernansicht'));
 ok('Und nur ihr',
    str_contains($kern['body'], 'VT.user?.isTeacher'),
    'ein Kind muss nicht erklaert bekommen, dass es seine eigene App sieht');
 
-$spr = http($base . '/views/language.js');
-ok('Die Sprachseite zeigt ihn', str_contains($spr['body'], 'pupilHint('));
-$lern = http($base . '/views/unit.js');
-ok('Die Lerneinheit auch', str_contains($lern['body'], 'pupilHint('));
+/*
+ * Und zwar ganz oben, vor der Leiste - auf allen drei Seiten, die eine
+ * Entsprechung in der Verwaltung haben. Im Quiz und im Lueckentext steht er
+ * nicht: Die binden sich an die sichtbare Hoehe (.app.fitted ist fixiert und
+ * genau so hoch wie das Fenster), und ein Streifen darueber schoebe die
+ * Eingabezeile aus dem Bild.
+ */
+foreach ([['views/languages.js', 'Meine Kurse'],
+          ['views/language.js',  'Der Kurs'],
+          ['views/unit.js',      'Die Lerneinheit']] as [$datei, $wie]) {
+    $q = http($base . '/' . $datei)['body'];
+    ok("$wie zeigt den Streifen", str_contains($q, 'lernansicht()'));
+    ok("Und zwar vor der Leiste ($wie)",
+       preg_match('/\$\{lernansicht\(\)\}\s*\$\{topbar\(/', $q) === 1,
+       'ganz oben heisst ganz oben');
+}
+foreach (['views/quiz.js', 'views/cloze.js'] as $datei) {
+    ok("Beim Ueben steht er nicht ($datei)",
+       !str_contains(http($base . '/' . $datei)['body'], 'lernansicht('),
+       '.app.fitted ist genau so hoch wie das Fenster');
+}
+ok('Der Weg zurueck steht nicht mehr im Hinweis',
+   !str_contains($kern['body'], "teacherBack('Zurück zur Verwaltung'"),
+   'er steht im Zahnrad, auf jeder Seite dieselbe Stelle');
 
 /*
- * Und aus der Schueleransicht heraus fuehrt ein Weg zurueck.
- *
- * Der Hinweis sagte, wo man ist, aber nicht, wie man wieder herauskommt:
- * Die installierte App hat keine Adresszeile, und ihr Zurueck fuehrt tiefer
- * hinein statt heraus. Wer nur zum Ausprobieren da war, sass fest.
+ * Auch die App kennt die Entsprechung ihrer Seiten - dieselben drei, nur
+ * andersherum. Ueben und Lueckentext gehoeren zu ihrer Lerneinheit.
  */
-ok('Der Hinweis traegt einen Weg zurueck',
-   str_contains($kern['body'], 'Zurück zur Verwaltung'));
-ok('Und zwar als echte Seitennavigation',
-   preg_match('/href="\$\{VT\.base\}\$\{esc\(pfad\)\}"/', $kern['body']) === 1,
-   'der Lehrkraft-Bereich wird vom Server gebaut und ist kein Teil der PWA');
-ok('Der Weg zurueck steht an einer Stelle',
-   str_contains($kern['body'], 'export function teacherBack')
-   && str_contains($kern['body'], "teacherBack('Zurück zur Verwaltung', zurueck)"),
-   'der Hinweis und das Einlesen brauchen denselben Knopf');
-ok('Und auch er nur fuer eine Lehrkraft',
-   preg_match('/function teacherBack\([^)]*\)\s*\{\s*if \(!VT\.user\?\.isTeacher\) return .{2};/s',
-              $kern['body']) === 1,
-   'fuer ein Kind gibt es keine Verwaltung');
+ok('Die App findet die Entsprechung in der Verwaltung',
+   str_contains($kern['body'], 'function verwaltungZiel()'));
+foreach ([
+    ['/teacher/unit.php?id=${einheit[1]}',        'die Lerneinheit'],
+    ['/teacher/course.php?id=${k.course_id}',     'den Kurs'],
+    ['`${VT.base}/teacher/`',                     'die Startseite als Rueckfall'],
+] as [$stueck, $was]) {
+    ok("Sie zeigt auf $was", str_contains($kern['body'], $stueck), $stueck);
+}
+ok('Ueben und Lueckentext zaehlen zu ihrer Lerneinheit',
+   str_contains($kern['body'], '(?:unit|quiz|cloze)'),
+   'es ist dieselbe Lerneinheit, nur in Betrieb');
 
-ok('Die Lerneinheit zeigt auf genau diese Lerneinheit',
-   str_contains($lern['body'], '/teacher/unit.php?id=${unitId}'),
-   'nicht auf die Startseite - man war ja irgendwo');
-ok('Der Kurs zeigt auf genau diesen Kurs',
-   str_contains($spr['body'], '/teacher/course.php?id=${language.courseId}'));
-ok('Und ohne Kurs bleibt die Startseite der Rueckfall',
-   str_contains($spr['body'], "'/teacher/'"));
+/*
+ * Der Eintrag "Zur Verwaltung" im linken Menue ist weg: Der Schalter kann
+ * dasselbe und mehr. Zwei Wege fuer eine Bewegung sind einer zu viel - und
+ * der schlechtere stand im falschen Menue.
+ */
+ok('Und das linke Menue fuehrt nicht mehr daneben hinaus',
+   !str_contains($kern['body'], '<span>Zur Verwaltung</span>'),
+   'der Eintrag ist weg - der Kommentar, der das erklaert, darf bleiben');
+
+/*
+ * Beide Fassungen des Schalters - PHP und JavaScript - muessen dasselbe
+ * sagen. Dieselbe Sicherung wie bei der Farbwahl darunter.
+ */
+preg_match('/<p class="mkopf klein">Ansicht<\/p>\s*<div class="ansichtwahl".*?<\/div>/s',
+           teacherGet('index.php')['body'], $am);
+$phpAnsicht = $am[0] ?? '';
+$jsAnsicht  = (string) file_get_contents(__DIR__ . '/../menue.js');
+ok('Die Verwaltung liefert den Schalter aus', $phpAnsicht !== '');
+foreach (['Verwaltung', 'Lernansicht', 'ansichtwahl', 'ansichtknopf'] as $wort) {
+    ok('Beide Fassungen kennen "' . $wort . '"',
+       str_contains($phpAnsicht, $wort) && str_contains($jsAnsicht, $wort));
+}
+ok('Und in beiden ist genau eine Stellung die aktive',
+   substr_count($phpAnsicht, 'ansichtknopf on') === 1
+   && substr_count($jsAnsicht, 'ansichtknopf on') === 1);
+ok('In der Verwaltung ist es "Verwaltung"',
+   preg_match('/ansichtknopf on.*?Verwaltung/s', $phpAnsicht) === 1);
+ok('Und in der App die Lernansicht',
+   preg_match('/ansichtknopf on.*?Lernansicht/s', $jsAnsicht) === 1);
+ok('Das Wort "Schueleransicht" steht nirgends mehr im Schalter',
+   !str_contains($phpAnsicht, 'Schüleransicht') && !str_contains($jsAnsicht, 'Schüleransicht'));
 
 /*
  * Die Kennung des Kurses kommt aus der API - und nur fuer eine Lehrkraft.
@@ -6633,12 +6832,25 @@ ok('Den Namen des Kurses sieht es dagegen weiterhin',
 @unlink($fsKindJar);
 q('DELETE FROM users WHERE id = ?', [$fsKind]);
 
+/*
+ * Aus dem Hinweiskasten ist ein Streifen geworden.
+ *
+ * Vier Zeilen Erklaerung ueber den Kursen waren richtig, solange sie die
+ * einzige Auskunft waren. Inzwischen steht im Zahnrad ein Schalter, der
+ * dasselbe sagt und den Weg zurueck kennt - uebrig bleibt die Antwort auf
+ * "wo bin ich hier", in einem Wort.
+ */
 $stilF = (string) file_get_contents(__DIR__ . '/../style.css');
-ok('Satz und Knopf stehen nebeneinander',
-   preg_match('/\.notice\.pupilview\s*\{[^}]*display:\s*flex/s', $stilF) === 1);
-ok('Und am Telefon nimmt der Knopf die ganze Breite',
-   preg_match('/\.notice\.pupilview \.btn\s*\{[^}]*flex:\s*1 1 100%/s', $stilF) === 1,
-   'ein halbzeiliger Knopf am rechten Rand trifft sich mit dem Daumen schlecht');
+ok('Den Hinweiskasten gibt es nicht mehr',
+   !str_contains($stilF, 'notice.pupilview')
+   && !str_contains($kern['body'], 'pupilHint'));
+ok('Stattdessen ein Streifen',
+   str_contains($kern['body'], 'class="lernansicht">Lernansicht'));
+ok('Er zieht sich bis an die Kanten',
+   preg_match('/\.lernansicht\s*\{[^}]*margin:[^}]*safe-area-inset-right/s', $stilF) === 1,
+   'ein eingerueckter Streifen sieht aus wie ein Kasten, der nicht passt');
+ok('Und ist klein',
+   preg_match('/\.lernansicht\s*\{[^}]*font-size:\s*\.7\d*rem/s', $stilF) === 1);
 
 // ---- Die beiden Wege zum Einlesen stehen nebeneinander.
 
@@ -6665,9 +6877,9 @@ q('DELETE FROM classes WHERE id = ?', [$fsKlasseId]);
 
 /*
  * Der gemeldete Fall: zwei Kacheln "Englisch" nebeneinander. Die Kachel
- * traegt dann den Namen des Kurses - aber nur dann. In einer Familie heisst
- * der Kurs "Englisch Lilli M.", und der eigene Name auf der eigenen Kachel
- * ist keine Auskunft.
+ * traegt dann den Namen des Kurses - aber nur dann. Legt ein Kind selbst
+ * eine Sprache an, heisst sein Kurs "Englisch Lilli M.", und der eigene Name
+ * auf der eigenen Kachel ist keine Auskunft.
  */
 $dsSchule = (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]);
 $dsA = class_create($dsSchule, 'DsA' . bin2hex(random_bytes(2)));
@@ -7900,10 +8112,27 @@ foreach ($sperre['packages'] ?? [] as $paket) {
 }
 ok('Jedes mitgelieferte Paket steht in den Lizenzen', $fehlend === [],
    implode(', ', $fehlend));
-ok('Und die Schrift und die Fahnen auch',
+ok('Und die Schriften und die Fahnen auch',
    str_contains($lizenzen, 'Roboto') && str_contains($lizenzen, 'Twemoji')
    && str_contains($lizenzen, 'CC-BY 4.0') && str_contains($lizenzen, 'Apache'),
    'beide verlangen die Nennung der Herkunft');
+
+/*
+ * Seit die Oberflaeche eigene Schriften mitliefert, gehoeren sie dazu - die
+ * OFL verlangt, dass ihr Text bei jeder Weitergabe mitkommt, auch bei einer
+ * ueber das Netz. Frueher stand hier, es werde gar keine Schrift
+ * mitgeliefert; genau solche Saetze veralten still.
+ */
+ok('Auch die beiden Schriften der Oberflaeche stehen darin',
+   str_contains($lizenzen, 'Fredoka') && str_contains($lizenzen, 'Nunito')
+   && str_contains($lizenzen, 'SIL Open Font License'),
+   'die OFL verlangt die Weitergabe ihres Textes');
+ok('Und ihre Lizenztexte liegen wirklich bei',
+   is_file(__DIR__ . '/../assets/fonts/OFL-Fredoka.txt')
+   && is_file(__DIR__ . '/../assets/fonts/OFL-Nunito.txt'));
+ok('Die Zusage, dass keine Schrift von fremden Servern kommt, steht noch da',
+   str_contains($lizenzen, 'nicht von Google'),
+   'sie ist der Grund, warum die Dateien hier liegen');
 
 section('Die Reihenfolge der Lerneinheiten');
 
@@ -8259,8 +8488,471 @@ ok('Und werden nach jedem Zeichnen verdrahtet',
    'sonst waere es achtzehnmal dieselbe Zeile, und die neunzehnte fehlte');
 
 ok('Ohne Anmeldung steht dort nichts',
-   substr_count($kern, "if (!VT.user) return '';") === 2,
-   'auf der Anmeldeseite gibt es weder Kurse noch ein Konto');
+   substr_count($kern, "if (!VT.user) return '';") === 3,
+   'auf der Anmeldeseite gibt es weder Kurse noch ein Konto noch eine Serie');
+
+section('Schriften und Wortzeichen');
+
+$stil = (string) file_get_contents(__DIR__ . '/../style.css');
+
+/*
+ * Die Schriften liegen hier und werden nicht von Google geholt.
+ *
+ * Ein eingebundenes Stilblatt von fonts.googleapis.com schickte die Adresse
+ * jedes Kindes bei jedem kalten Start dorthin - in einer Schule nicht zu
+ * rechtfertigen. Und ohne Netz gaebe es dann gar keine Schrift, obwohl diese
+ * App ausdruecklich weiterlaufen soll.
+ */
+ok('Keine Schrift von einem fremden Server',
+   preg_match('#(?:@import|url\()[^;)]*fonts\.(?:googleapis|gstatic)\.com#i', $stil) !== 1
+   && !str_contains((string) file_get_contents(__DIR__ . '/../index.php'), 'fonts.googleapis.com'),
+   'die Adresse jedes Kindes ginge sonst an Google');
+
+foreach (['fredoka', 'nunito'] as $schrift) {
+    $r = http($base . '/assets/fonts/' . $schrift . '.woff2');
+    ok("Die Schrift $schrift wird ausgeliefert", $r['status'] === 200, (string) $r['status']);
+    ok("Und $schrift liegt als woff2 vor",
+       str_starts_with($r['body'], 'wOF2'), substr($r['body'], 0, 4));
+    ok("Der Lizenztext zu $schrift liegt bei",
+       is_file(__DIR__ . '/../assets/fonts/OFL-' . ucfirst($schrift) . '.txt'));
+}
+
+ok('Beide Familien sind als @font-face erklaert',
+   substr_count($stil, '@font-face') >= 2
+   && str_contains($stil, "assets/fonts/fredoka.woff2")
+   && str_contains($stil, "assets/fonts/nunito.woff2"));
+ok('Und sie blockieren das erste Bild nicht',
+   substr_count($stil, 'font-display: swap') >= 2,
+   'ohne swap schaut ein Kind auf eine leere Seite');
+
+// Fredoka fuer Ueberschriften und Knoepfe, Nunito fuer alles zum Lesen.
+ok('Ueberschriften stehen in Fredoka',
+   preg_match('/h1,\s*h2,\s*h3\s*\{[^}]*--schrift-kopf/s', $stil) === 1);
+ok('Knoepfe ebenso',
+   preg_match('/\.btn\s*\{.*?--schrift-kopf.*?\}/s', $stil) === 1);
+
+/*
+ * Und die Vokabeln ausdruecklich NICHT. Eine runde Anzeigeschrift ueber
+ * franzoesischen Wortformen macht das Vergleichen schwerer, nicht leichter -
+ * und genau darum geht es beim Ueben.
+ */
+ok('Die Antwortknoepfe bleiben bei der Leseschrift',
+   preg_match('/\.option\s*\{[^}]*\}/s', $stil, $om) === 1
+   && !str_contains($om[0], '--schrift-kopf'),
+   'dort steht eine Vokabel, kein Knopftext');
+
+// Das Wortzeichen.
+$logo = http($base . '/assets/vokidoki.svg');
+ok('Das Wortzeichen wird ausgeliefert', $logo['status'] === 200, (string) $logo['status']);
+ok('Es traegt seinen Namen fuer Vorleseprogramme',
+   str_contains($logo['body'], 'aria-label="Vokidoki"'));
+ok('Das V ist Voki selbst, in seinem Gruen',
+   str_contains($logo['body'], '#AFD535'));
+/*
+ * "okidoki" steht als Pfad in der Datei und nicht als <text>: Ein <text> in
+ * einem ueber <img> eingebundenen SVG faende die Schrift der Seite nicht und
+ * faellt auf irgendeine Systemschrift zurueck - ausgerechnet beim Namen der App.
+ */
+ok('Und "okidoki" steht als Pfad darin, nicht als Text',
+   !str_contains($logo['body'], '<text'),
+   'ein <text> im <img> faende die Schrift nicht');
+
+$loginJs = (string) file_get_contents(__DIR__ . '/../views/login.js');
+ok('Die Anmeldeseite zeigt das Wortzeichen',
+   str_contains($loginJs, 'assets/vokidoki.svg') && str_contains($loginJs, 'class="logo"'));
+
+section('Freies Üben');
+
+$freiQ = http($base . '/views/frei.js')['body'];
+$appQ  = http($base . '/app.js')['body'];
+
+/*
+ * Zwei Wege hinein: von einer Lerneinheit direkt, vom Kurs ueber die
+ * Auswahl. Die gewaehlten Einheiten stehen in der Adresse und nicht in
+ * einer Variablen - so ueberlebt eine Runde das Neuladen.
+ */
+ok('Es gibt einen Weg von der Lerneinheit',
+   str_contains(http($base . '/views/unit.js')['body'], 'data-frei='));
+ok('Und einen vom Kurs ueber die Auswahl',
+   str_contains(http($base . '/views/language.js')['body'], '/frei/waehlen/'));
+ok('Beide Adressen sind verdrahtet',
+   str_contains($appQ, 'frei\/waehlen') && str_contains($appQ, 'freiView'));
+ok('Die Auswahl stellt die Frage',
+   str_contains($freiQ, 'Welche Lerneinheiten sollen geübt werden?'));
+ok('Mit einem Haken je Lerneinheit', str_contains($freiQ, 'class="wahlbox"'));
+
+/*
+ * DAS WICHTIGSTE: Freies Ueben ruehrt den Lernstand nicht an.
+ *
+ * Geuebt wird alles, auch was laengst sitzt, und ein Fehler beim lockeren
+ * Wiederholen soll keine Serie einreissen, die ueber Wochen entstanden ist.
+ * Deshalb geht es nicht durch record_answer(), sondern durch einen eigenen,
+ * schlanken Weg, der nur den Tag verbucht.
+ */
+ok('Es geht nicht durch antwortMerken()',
+   !str_contains($freiQ, 'antwortMerken('),
+   'das waere der Weg, der den Lernstand fortschreibt');
+ok('Sondern durch freiMerken()', str_contains($freiQ, 'freiMerken('));
+
+$vorratQ = http($base . '/vorrat.js')['body'];
+ok('Und das schickt ein eigenes Ereignis',
+   preg_match("/k: 'frei'/", $vorratQ) === 1);
+ok('Ohne Lernstand, aber mit Vokabel',
+   preg_match("/k: 'frei', v: Number\(vocabId\)/", $vorratQ) === 1,
+   'an der Vokabel prueft der Server, ob das Konto antworten darf');
+
+$bundleQ = (string) file_get_contents(__DIR__ . '/../api/bundle.php');
+ok('Der Server kennt das Ereignis', str_contains($bundleQ, "\$art === 'frei'"));
+ok('Und verbucht nur den Tag',
+   preg_match('/art === .frei.*?streak_verbuchen\([^;]*false\)/s', $bundleQ) === 1,
+   'kein record_answer() - der Lernstand bleibt, wie er ist');
+ok('Die Vokabel wird trotzdem geprueft',
+   preg_match('/art === .frei.*?isset\(.{0,12}erlaubt/s', $bundleQ) === 1);
+ok('Und eine Quittung gibt es auch',
+   preg_match('/art === .frei.*?bundle_quittung/s', $bundleQ) === 1,
+   'sonst zaehlte ein zweimal geschickter Stapel doppelt');
+
+/*
+ * Die Runde hat kein Ende - deshalb zieht sie auch nicht nur offene
+ * Vokabeln. Ein Filter auf "noch nicht gekonnt" liesse sie leerlaufen.
+ */
+ok('Gezogen wird aus allem, auch aus Gekonntem',
+   !str_contains(substr($vorratQ, strpos($vorratQ, 'export function frageFrei'), 2000), '.k !== 1'),
+   'sonst waere die Runde nach zwanzig Antworten zu Ende');
+
+// Die Serie der Runde: laufend, Balken, Rekord.
+foreach ([['z-folge',  'die laufende Serie'],
+          ['z-balken', 'den Balken dazwischen'],
+          ['z-beste',  'den Rekord der Runde']] as [$id, $was]) {
+    ok("Die Leiste zeigt $was", str_contains($freiQ, 'id="' . $id . '"'));
+}
+ok('Eine Tuer hinaus gibt es nicht mehr - der Zurueck-Pfeil tut dasselbe',
+   !str_contains($freiQ, 'id="raus"'));
+ok('Der Lueckentext ist derselbe Bildschirm wie in der Lueckentext-Uebung',
+   str_contains($freiQ, "import { lueckeZeigen } from './cloze.js';")
+   && !str_contains($freiQ, 'class="cloze-input"'));
+
+// Die Meilensteine.
+ok('Gelobt wird alle 25 Richtigen', str_contains($freiQ, 'LOB_RICHTIGE = 25'));
+ok('Und alle 5 in Folge', str_contains($freiQ, 'LOB_FOLGE = 5'));
+ok('Darunter steht, wofuer',
+   str_contains($freiQ, 'Richtige!') && str_contains($freiQ, 'in Folge'));
+ok('Faellt beides zusammen, gewinnt das seltenere',
+   preg_match('/LOB_RICHTIGE === 0\) \{.*?return;/s', $freiQ) === 1,
+   'wer bei der 25. auch fuenf in Folge hat, soll die 25 lesen');
+
+ok('Jede richtige Antwort klingt', str_contains($freiQ, 'babing()'));
+ok('Und die Zahlen springen mit einer Bewegung',
+   str_contains($freiQ, 'zahlAktualisieren('));
+
+// Der Zeitgeber darf nicht ueber eine andere Ansicht zeichnen.
+ok('Nach dem Verlassen schaltet nichts mehr weiter',
+   str_contains($freiQ, "location.hash.startsWith('#/frei/')"),
+   'der Zurueck-Pfeil wechselt die Adresse, ohne die Ansicht zu fragen');
+
+// Die Hantel: als SVG, weil es dafuer kein Emoji gibt.
+ok('Das Symbol ist eine Hantel', str_contains($freiQ, 'export function hantel'));
+preg_match('/function hantel\(.*?\n}/s', $freiQ, $hm);
+ok('Und zwar gezeichnet, nicht als Emoji',
+   str_contains($hm[0] ?? '', '<svg')
+   && preg_match('/[\x{1F300}-\x{1FAFF}]/u', $hm[0] ?? '') !== 1,
+   'im Markup steht kein Emoji - im Kommentar darueber darf eines stehen');
+
+section('Belohnung: Punkt, Konfetti, Feuerwerk');
+
+$quizQ  = http($base . '/views/quiz.js')['body'];
+$luecke = http($base . '/views/cloze.js')['body'];
+// Eigene Namen: weiter oben heisst $kern mal eine Zeichenkette und mal die
+// ganze Antwort - hier soll nichts davon abhaengen.
+$kernQ = (string) file_get_contents(__DIR__ . '/../core.js');
+$stilQ = (string) file_get_contents(__DIR__ . '/../style.css');
+
+/*
+ * Die drei Punkte standen auf dem Stand VOR der Antwort und rueckten erst
+ * mit der naechsten Frage nach. Wer zweimal richtig lag, sah zwei Punkte -
+ * und beim dritten Mal, dem Augenblick, auf den es ankommt, immer noch zwei.
+ */
+foreach (['Üben' => $quizQ, 'Lückentext' => $luecke] as $wo => $q) {
+    ok("Der Punkt springt sofort an ($wo)",
+       str_contains($q, 'punkteAktualisieren(document, result.streak)'));
+    ok("Und faellt bei einer falschen Antwort zurueck ($wo)",
+       str_contains($q, 'punkteAktualisieren(document, 0)'));
+    ok("Konfetti, wenn die Vokabel sitzt ($wo)",
+       str_contains($q, 'if (result.newly_learned) konfetti();'),
+       'beim dritten Mal hintereinander, nicht bei jedem "gekonnt"');
+    /*
+     * Und zwar NACH dem Zeichnen: render() macht ein laufendes Feuerwerk
+     * aus, damit es bei jedem Wechsel der Ansicht von selbst aufhoert.
+     * Stuende der Aufruf davor, loeschte die eigene Seite ihn sofort wieder.
+     */
+    ok("Feuerwerk, wenn die Lerneinheit steht ($wo)",
+       preg_match('/function showFinished\(.*?feuerwerk\(\);/s', $q) === 1);
+    ok("Und zwar erst nach dem Zeichnen ($wo)",
+       preg_match('/function showFinished\(.*?render\(.*?feuerwerk\(\);/s', $q) === 1,
+       'sonst loescht render() es sofort wieder');
+}
+
+/*
+ * Und die Zeit bis zur naechsten Frage bleibt, wie sie war. Eine Feier, die
+ * den Ablauf verlangsamt, ist keine Belohnung mehr, sondern eine Bremse.
+ */
+ok('Im Quiz bleibt es bei 700 ms', str_contains($quizQ, 'NEXT_DELAY_CORRECT = 700'));
+ok('Im Lueckentext bei 900 ms', str_contains($luecke, 'NEXT_DELAY_CORRECT = 900'));
+
+/*
+ * Konfetti und Feuerwerk haengen an <body>, nicht in der Ansicht: Die
+ * naechste Frage wird schon 700 ms spaeter gezeichnet, und render() ersetzt
+ * den ganzen Inhalt von #app. In der Ansicht waeren sie mitten im Flug weg.
+ */
+ok('Die Feier haengt an <body>',
+   preg_match('/function buehne\([^)]*\)\s*\{.*?document\.body\.appendChild/s', $kernQ) === 1);
+ok('Und laesst jeden Druck durch',
+   preg_match('/\.feier\s*\{[^}]*pointer-events:\s*none/s', $stilQ) === 1,
+   'sonst faenge sie den Druck auf die naechste Antwort ab');
+ok('Sie raeumt sich selbst wieder weg',
+   str_contains($kernQ, 'function abraeumen'));
+
+// Das Lob: mehrere, damit dasselbe Wort nicht beim fuenften Mal steht.
+preg_match('/const LOB = \[(.*?)\];/s', $kernQ, $lm);
+preg_match_all("/'([^']+)'/", $lm[1] ?? '', $worte);
+ok('Es gibt mehrere Lobworte', count($worte[1] ?? []) >= 8,
+   count($worte[1] ?? []) . ' Stueck');
+ok('Und alle sind kurz und mit Ausrufezeichen',
+   ($worte[1] ?? []) !== [] && array_filter($worte[1],
+       static fn (string $w): bool => !str_ends_with($w, '!') || mb_strlen($w) > 18) === [],
+   implode(' / ', $worte[1] ?? []));
+ok('Zweimal dasselbe hintereinander wird vermieden',
+   str_contains($kernQ, 'letztesLob'));
+
+// Die Punkt-Animation waechst ueber transform, nicht ueber die Groesse.
+ok('Der Punkt waechst und faellt zurueck',
+   preg_match('/@keyframes punktAuf\s*\{[^}]*transform:\s*scale/s', $stilQ) === 1);
+ok('Und zwar ueber transform - sonst zappelt die Reihe',
+   preg_match('/@keyframes punktAuf\s*\{(?:(?!\}\s*\n).)*?(width|height):/s', $stilQ) !== 1);
+
+section('Der Kalender im Konto');
+
+$konto = http($base . '/views/profile.js')['body'];
+ok('Der Kalender steht in Wochen', str_contains($konto, 'monatsgitter'));
+ok('Sieben Spalten',
+   preg_match('/\.monatsgitter\s*\{[^}]*grid-template-columns:\s*repeat\(7,/s', $stilQ) === 1);
+/*
+ * Montag ist die erste Spalte. getUTCDay() zaehlt ab Sonntag, deshalb der
+ * Versatz - ein Kalender, der am Sonntag anfaengt, liest sich hier falsch.
+ */
+ok('Montag ist die erste Spalte',
+   str_contains($konto, '.getUTCDay() + 6) % 7'));
+ok('Gerechnet wird in UTC',
+   str_contains($konto, 'Date.UTC('),
+   'sonst verliert der Kalender im Oktober einen Tag');
+ok('Es gibt Knoepfe fuer vor und zurueck',
+   str_contains($konto, 'monat-zurueck') && str_contains($konto, 'monat-vor'));
+ok('In den Kaesten steht die Zahl der richtigen Antworten',
+   str_contains($konto, 'Math.min(c, 999)'));
+
+require_once __DIR__ . '/../lib/streak.php';
+ok('Zwoelf Monate zurueck', STREAK_KALENDER_MONATE === 12);
+$stand = streak_stand($userId);
+foreach (['seit', 'heute', 'monate', 'tage'] as $feld) {
+    ok("Der Stand nennt $feld", array_key_exists($feld, $stand));
+}
+ok('Und "seit" ist das Anlegedatum des Kontos',
+   $stand['seit'] === (string) qv('SELECT DATE(created_at) FROM users WHERE id = ?', [$userId]),
+   $stand['seit']);
+
+/*
+ * Die Huelle bekommt den Kalender NICHT mit. Sie wird nie zwischengespeichert
+ * und bei jedem Seitenaufruf neu gebaut; ein Jahr Kalender darin waere bei
+ * jedem Klick wieder dabei. Das Buendel holt ihn - es liegt im Geraet.
+ */
+ok('Die Huelle laedt den Kalender nicht mit',
+   str_contains((string) file_get_contents(__DIR__ . '/../index.php'),
+                'streak_stand((int) $user[\'id\'], false)'));
+ok('Das Buendel dagegen schon',
+   str_contains((string) file_get_contents(__DIR__ . '/../api/bundle.php'),
+                'streak_stand($uid)'));
+ok('Ohne Kalender ist der Stand klein',
+   count(streak_stand($userId, false)['tage']) === 0);
+
+// Was aelter ist als die Historie, wird weggeraeumt.
+ok('Alte Tage werden weggeraeumt', function_exists('streak_aufraeumen'));
+ok('Und zwar selten, nebenbei',
+   preg_match('/function streak_aufraeumen\(\)[^}]*random_int/s',
+              (string) file_get_contents(__DIR__ . '/../lib/streak.php')) === 1,
+   'dieses Projekt hat keinen Cron');
+
+section('Der Ton klingt wie ein Gloeckchen');
+
+/*
+ * Hier stand einmal ein Dreieckton mit einer Huellkurve von 0,28 Sekunden -
+ * ein Piepser, abgeschnitten, bevor er klingen konnte. Zwei Dinge machen
+ * daraus eine Glocke, und beide lassen sich hier festhalten.
+ */
+preg_match('/const GLOCKE = \[(.*?)\];/s', $kern, $gm);
+ok('Ein Anschlag besteht aus mehreren Teiltoenen', ($gm[1] ?? '') !== '');
+
+preg_match_all('/\[\s*([\d.]+),/', $gm[1] ?? '', $vm);
+$verhaeltnisse = array_map('floatval', $vm[1] ?? []);
+ok('Und zwar aus mindestens dreien', count($verhaeltnisse) >= 3,
+   count($verhaeltnisse) . ' Teiltoene');
+
+/*
+ * Das Entscheidende: Die Verhaeltnisse sind NICHT ganzzahlig. Waeren sie es,
+ * klaenge es nach Orgelpfeife - eine Glocke lebt davon, dass ihre Teiltoene
+ * neben der Obertonreihe liegen.
+ */
+$ganzzahlig = array_values(array_filter(
+    array_slice($verhaeltnisse, 1),
+    static fn (float $v): bool => abs($v - round($v)) < 0.05,
+));
+ok('Die Teiltoene liegen neben der Obertonreihe', $ganzzahlig === [],
+   implode(', ', $ganzzahlig) . ' ist ganzzahlig - das klingt nach Orgelpfeife');
+
+preg_match('/const NACHHALL = ([\d.]+);/', $kern, $nm);
+ok('Und der Grundton klingt ueber eine Sekunde nach',
+   (float) ($nm[1] ?? 0) >= 1.0, ($nm[1] ?? '0') . ' Sekunden');
+
+/*
+ * Der Schluss geht linear auf die Null. Ein exponentieller Verlauf erreicht
+ * sie nie, und ein Oszillator, der bei einem Restwert abgeschaltet wird,
+ * knackt - genau das war am alten Ton zu hoeren.
+ */
+ok('Der Ausklang endet wirklich bei null',
+   str_contains($kern, 'linearRampToValueAtTime(0,'),
+   'sonst wird der Ton bei einem Restwert abgeschnitten und knackt');
+ok('Und der Oszillator laeuft bis dahin weiter',
+   preg_match('/stop\(aus \+ 0\.04\)/', $kern) === 1);
+
+// Eine gemeinsame Summe, damit sich schnelle Antworten nicht aufaddieren.
+ok('Alle Anschlaege laufen ueber einen gemeinsamen Regler',
+   str_contains($kern, 'summe = hoerer.createGain()')
+   && str_contains($kern, 'connect(summe)'),
+   'sonst uebersteuert es, wenn zwei Toene uebereinanderliegen');
+
+section('Farbe hat nur, wer heute gelernt hat');
+
+/*
+ * Drei von vier Lagen sind grau - auch die, in der Voki noch froh ist.
+ * Die Farbe ist die Belohnung, nicht die Grundeinstellung.
+ */
+ok('Auch der frohe Voki ist grau, solange der Tag offen ist',
+   preg_match('/\.seriebtn\.lage-offen \.serievoki,\s*'
+              . '\.seriebtn\.lage-gefahr \.serievoki,\s*'
+              . '\.seriebtn\.lage-aus \.serievoki\s*\{[^}]*grayscale\(1\)/s', $stil) === 1,
+   'nur lage-heute bekommt Farbe');
+ok('Und bei "offen" bleibt es der frohe Voki',
+   str_contains($kern, "s.lage === 'heute' || s.lage === 'offen'"),
+   'verloren ist noch nichts - es fehlt nur die Farbe');
+
+section('Die Serie haelt still, solange ihr Schema fehlt');
+
+/*
+ * Das Fenster zwischen FTP-Upload und Schemaaenderung ist hier kein Unfall,
+ * sondern gewollt: Der Code geht sofort live, die Aenderung laeuft erst auf
+ * Knopfdruck im Selbsttest. In dieser Zeit gibt es learn_days noch nicht -
+ * und eine angemeldete Seite darf deswegen nicht umfallen.
+ */
+require_once __DIR__ . '/../lib/streak.php';
+require_once __DIR__ . '/../lib/progress.php';
+require_once __DIR__ . '/../lib/schema.php';
+
+// Irgendeine Vokabel dieses Kontos - welche, ist gleichgueltig.
+$serieVokabel = (int) qv(
+    'SELECT v.id FROM vocab v
+       JOIN units u ON u.id = v.unit_id
+      WHERE u.language_id = ? ORDER BY v.id LIMIT 1',
+    [$languageId],
+);
+
+q('DROP TABLE IF EXISTS learn_days');
+
+$serieOhne = null;
+$fehlerOhne = null;
+try {
+    $serieOhne = streak_stand($userId);
+} catch (Throwable $e) {
+    $fehlerOhne = $e->getMessage();
+}
+ok('Ohne Tabelle liefert die Serie einen leeren Stand statt eines Fehlers',
+   $fehlerOhne === null && ($serieOhne['kette'] ?? null) === 0, (string) $fehlerOhne);
+
+$verbucht = null;
+try {
+    streak_verbuchen($userId, streak_heute(), true, true);
+} catch (Throwable $e) {
+    $verbucht = $e->getMessage();
+}
+ok('Und das Verbuchen laeuft lautlos durch', $verbucht === null, (string) $verbucht);
+
+// Das Entscheidende: Ueben geht weiter, auch ohne die Tabelle.
+$weiter = null;
+try {
+    record_answer($userId, $serieVokabel, MODE_CHOICE, true);
+} catch (Throwable $e) {
+    $weiter = $e->getMessage();
+}
+ok('Vor allem aber kann ein Kind weiter ueben',
+   $weiter === null, 'ein Abzeichen darf das Ueben nie aufhalten: ' . (string) $weiter);
+
+// Und die Huelle selbst - dort steht streak_stand() im Seitenkopf.
+$res = http($base . '/');
+ok('Die Huelle wird weiterhin ausgeliefert', $res['status'] === 200, (string) $res['status']);
+
+/*
+ * Zurueck in den richtigen Zustand - aus schema.sql.
+ *
+ * Frueher stand hier ensure_schema(): Die Tabelle kam aus der
+ * Aenderungsliste. Die ist leer, und genau deshalb ist dieser Weg der
+ * richtige - er prueft nebenbei, dass schema.sql die Tabelle mitbringt.
+ * Ohne das haette eine frische Installation gar keine Serie.
+ */
+$schemaSqlText = (string) file_get_contents(__DIR__ . '/../schema.sql');
+preg_match('/CREATE TABLE IF NOT EXISTS learn_days \(.*?;/s', $schemaSqlText, $ldm);
+ok('schema.sql bringt learn_days mit', ($ldm[0] ?? '') !== '');
+db()->exec($ldm[0]);
+
+ok('Und danach steht sie wieder',
+   (int) qv("SELECT COUNT(*) FROM information_schema.TABLES
+              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'learn_days'") === 1);
+ok('Es steht weiterhin nichts aus', schema_pending() === []);
+
+section('Die Serie in der Leiste');
+
+/*
+ * Das Abzeichen steht links vom Zahnrad, und zwar in topbar() - also auf
+ * jeder Seite, die eine Leiste hat. Stuende es in den Ansichten, fehlte es
+ * in der naechsten.
+ */
+ok('Das Abzeichen steht direkt links vom Zahnrad',
+   preg_match('/\$\{serieHtml\(\)\}\s*\$\{navRechtsHtml\(\)\}/', $kern) === 1,
+   'sonst steht es irgendwo in der Leiste');
+ok('Und es ist ein Knopf, kein blosses Bild',
+   str_contains($kern, 'class="seriebtn') && str_contains($kern, 'seriekarte'),
+   'die Regel dahinter muss sich antippen lassen');
+ok('Die Karte erklaert beide Wege zu einem Tag',
+   str_contains($kern, 'Eine neue Vokabel lernen')
+   && str_contains($kern, 'Oder alte wiederholen'),
+   'gerade die zweite Tuer erklaert sich nicht von selbst');
+ok('Und was nach einer Pause passiert',
+   str_contains($kern, 'Einen Tag darfst du auslassen'));
+
+$stil = (string) file_get_contents(__DIR__ . '/../style.css');
+ok('Froh und traurig unterscheiden sich auch ohne Farbe',
+   str_contains($stil, 'grayscale(1)'),
+   'ein Kind, das Gruen und Grau schlecht trennt, sieht sonst nichts');
+ok('Die Zahl ist nur gruen, wenn heute gelernt wurde',
+   str_contains($stil, '.seriebtn.lage-heute .seriezahl'));
+
+// Die beiden Bilder muessen da sein - ohne sie stuende in der Leiste ein
+// kaputtes Bild auf jeder Seite.
+foreach (['voki-mini.svg', 'voki-sad-mini.svg'] as $bild) {
+    $r = http($base . '/assets/' . $bild);
+    ok("Das Maskottchen $bild wird ausgeliefert", $r['status'] === 200, (string) $r['status']);
+    ok("Und $bild hat keinen deckenden Hintergrund",
+       !preg_match('/fill="white" d="M0 0L\d+ 0/', $r['body']),
+       'ein weisses Quadrat in der dunklen Leiste');
+}
+
 
 /*
  * Das Verhalten steht einmal da. Zwei Abschriften waeren bald zwei
