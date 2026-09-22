@@ -252,6 +252,8 @@ export async function pruefe(f, aus, wurzel) {
         const serie = () => fr.js(`(() => {
             const b = document.getElementById('z-balken');
             return {
+                richtig: document.getElementById('z-richtig')?.textContent ?? '',
+                quote: document.getElementById('z-quote')?.textContent ?? '',
                 folge: document.getElementById('z-folge')?.textContent ?? '',
                 beste: document.getElementById('z-beste')?.textContent ?? '',
                 breite: b?.firstElementChild.style.width ?? '',
@@ -269,6 +271,8 @@ export async function pruefe(f, aus, wurzel) {
            JSON.stringify(leiste));
         ok('Eine Tür hinaus gibt es nicht mehr - dafür ist der Zurück-Pfeil da',
            !leiste.tuer);
+        ok('Aussen: der Voki mit 0 Richtigen und 0 % Treffer',
+           leiste.richtig === '0' && leiste.quote === '0%', JSON.stringify(leiste));
 
         /* Richtig antworten - die Lösung steht im Vorrat, genau dafür ist er da. */
         const antworten = (richtig) => fr.js(`(async () => {
@@ -333,6 +337,8 @@ export async function pruefe(f, aus, wurzel) {
         const nachFalsch = await serie();
         ok('Nach einer falschen fällt die linke Zahl auf null, die rechte bleibt',
            nachFalsch.folge === '0' && nachFalsch.beste === '5', JSON.stringify(nachFalsch));
+        ok('Die Richtigen bleiben bei 5, die Treffer fallen auf 83 %',
+           nachFalsch.richtig === '5' && nachFalsch.quote === '83%', JSON.stringify(nachFalsch));
         ok('Und der Balken steht leer, nicht mehr grün',
            nachFalsch.breite === '0%' && !nachFalsch.gruen, JSON.stringify(nachFalsch));
 
@@ -373,8 +379,22 @@ export async function pruefe(f, aus, wurzel) {
         // Hinaus geht es über den Zurück-Pfeil.
         await fr.js(`document.querySelector('[data-back]').click()`);
         await schlafe(1200);
-        ok('Der Zurück-Pfeil führt in den Kurs',
+        ok('Von der Auswahl aus führt der Zurück-Pfeil in den Kurs',
            (await fr.js(`location.hash`)).startsWith('#/lang/'));
+
+        // Von einer Lerneinheit aus dagegen zurück in die Lerneinheit.
+        await fr.hash('/unit/' + f.unit, 1800);
+        await fr.js(`document.querySelector('[data-frei]').click()`);
+        await schlafe(1200);
+        ok('Von der Lerneinheit aus hat die Runde eine eigene Adresse',
+           (await fr.js('location.hash')) === '#/unit/' + f.unit + '/frei',
+           await fr.js('location.hash'));
+        ok('Und sie läuft', await fr.js(`!!document.getElementById('z-folge')`));
+        await fr.js(`document.querySelector('[data-back]').click()`);
+        await schlafe(1200);
+        ok('Der Zurück-Pfeil führt dann in die Lerneinheit',
+           (await fr.js('location.hash')) === '#/unit/' + f.unit,
+           await fr.js('location.hash'));
     } finally {
         await fr.schliessen();
     }

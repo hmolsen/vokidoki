@@ -276,7 +276,7 @@ und besteht darauf, dass `schema_pending()` leer ist.
 
 Die App heisst **Vokidoki**. Das V des Namens ist Voki selbst; dahinter steht
 „okidoki" in fettem Fredoka, im Grün des Maskottchens. Das Wortzeichen liegt
-als `assets/vokidoki.svg` und steht auf der Anmeldeseite.
+als `assets/vokidoki_logo.svg` und steht auf der Anmeldeseite.
 
 „okidoki" steht darin als **Pfad, nicht als `<text>`**. Ein `<text>` in einem
 über `<img>` eingebundenen SVG findet die Schriften der Seite nicht und fällt
@@ -321,14 +321,17 @@ längst sitzt. Wiederholen, nicht abarbeiten.
 
 Zwei Wege hinein:
 
-* **Von einer Lerneinheit** (`#/frei/12`) — alles, was dort freigegeben ist.
+* **Von einer Lerneinheit** (`#/unit/12/frei`) — alles, was dort freigegeben
+  ist. Der Zurück-Pfeil führt dann in die Lerneinheit.
 * **Vom Kurs** (`#/frei/waehlen/5`) — erst die Frage „Welche Lerneinheiten
   sollen geübt werden?" mit einem Haken je Einheit, dann die Runde über alle
-  angekreuzten (`#/frei/12-13-15`).
+  angekreuzten (`#/frei/12-13-15`). Der Zurück-Pfeil führt in den Kurs.
 
 Die Auswahl steht in der Adresse und nicht in einer Variablen: So übersteht
 eine Runde das Neuladen, und der Zurück-Pfeil des Browsers führt dorthin, wo
-man war.
+man war. Deshalb steht dort auch, woher man kam — beide Wege hiessen einmal
+`#/frei/12`, und der Pfeil oben links führte auch von der Lerneinheit aus in
+den Kurs.
 
 Gewürfelt wird zweierlei — welche Vokabel und welche Aufgabenart. Drei von
 fünf Aufgaben werden Lückentext, wenn es zu der Vokabel einen Satz gibt: Er
@@ -361,13 +364,15 @@ ist geübt.
 
 ### Die Serie der Runde
 
-Über jeder Aufgabe steht eine Leiste: links, wie viele gerade hintereinander
-richtig sind, rechts das Beste dieser Runde, dazwischen ein Balken.
+Über jeder Aufgabe steht eine Leiste: in der Mitte, wie viele gerade
+hintereinander richtig sind, und das Beste dieser Runde, dazwischen ein
+Balken. Aussen, etwas leiser, die Zahlen der ganzen Runde: links der Voki mit
+allen richtigen Antworten, rechts die Trefferquote.
 
 * Am Anfang stehen beide auf **0**, der Balken voll und **grün**.
 * Solange die laufende Serie das Beste *ist*, zählen beide Zahlen gemeinsam
   hoch, und der Balken bleibt voll und grün.
-* Nach einem Fehler fällt die linke Zahl auf 0, die rechte bleibt stehen.
+* Nach einem Fehler fällt die laufende Serie auf 0, der Rekord bleibt stehen.
   Der Balken zeigt jetzt den Weg zurück: bei 2 von 5 ist er zu zwei Fünfteln
   gefüllt, in der Akzentfarbe. Holt die Serie den Rekord ein, wird er wieder
   grün, und beide zählen gemeinsam weiter.
@@ -400,8 +405,11 @@ anderes als das Gerät. Zwei Scheiben, eine Stange, `currentColor`.
 nächste Aufgabe bringt, prüft vorher die Adresse:
 
 ```js
-if (runde === null || !location.hash.startsWith('#/frei/')) return;
+if (runde === null || location.hash !== runde.adresse) return;
 ```
+
+Verglichen wird die ganze Adresse vom Start der Runde, nicht ein Anfang wie
+`#/frei/` — von der Lerneinheit aus heisst sie `#/unit/12/frei`.
 
 Der Zurück-Pfeil und das Menü wechseln die Adresse, ohne dass diese Ansicht
 davon erfährt. Ohne die Prüfung liefe der
@@ -1169,7 +1177,7 @@ lib/                 db, auth, settings, ai, keyvault, cost, json, config,
                      progress (Lernregel), streak (die Serie),
                      sentences (Lückensätze)
 assets/fonts/        Fredoka und Nunito, selbst ausgeliefert
-assets/vokidoki.svg  das Wortzeichen; das V ist Voki, "okidoki" sind Pfade
+assets/vokidoki_logo.svg  das Wortzeichen; das V ist Voki, "okidoki" sind Pfade
 schema.sql           Datenbankschema
 ```
 

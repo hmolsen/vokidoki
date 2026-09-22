@@ -71,16 +71,20 @@ const ROUTES = [
     // sollen trotzdem irgendwo landen.
     [/^\/lang\/(\d+)\/units$/,    (id) => go(`/lang/${id}`, true)],
     [/^\/unit\/(\d+)$/,           unitView],
+    // Freies Üben, von einer Lerneinheit aus gestartet - siehe unten.
+    [/^\/unit\/(\d+)\/frei$/,     (id) => freiView(id, `/unit/${id}`)],
     [/^\/quiz\/(\d+)$/,           quizView],
     [/^\/cloze\/(\d+)$/,          clozeView],
     /*
      * Freies Ueben. Zwei Wege hinein: von einer Lerneinheit direkt
-     * (#/frei/12) und vom Kurs ueber die Auswahl, die dann mehrere
-     * Kennungen mitbringt (#/frei/12-13-15).
+     * (#/unit/12/frei, oben) und vom Kurs ueber die Auswahl, die dann eine
+     * oder mehrere Kennungen mitbringt (#/frei/12-13-15).
      *
      * Die Auswahl steht in der Adresse und nicht in einer Variablen: So
      * ueberlebt eine Runde das Neuladen, und der Zurueck-Pfeil des Browsers
-     * fuehrt dorthin, wo man war.
+     * fuehrt dorthin, wo man war. Aus demselben Grund steht auch darin,
+     * woher man kam: Beide Wege hiessen einmal #/frei/12, und der Pfeil
+     * oben links fuehrte deshalb auch von der Lerneinheit aus in den Kurs.
      */
     [/^\/frei\/waehlen\/(\d+)$/,  freiWahlView],
     [/^\/frei\/([\d-]+)$/,        freiView],

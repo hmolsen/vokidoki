@@ -14,8 +14,8 @@ export async function loginView() {
                 noch gar nicht da ist. Ausgerechnet der Name der App duerfte
                 dort nicht in einer fremden Schrift aufblitzen.
             -->
-            <img class="logo" src="${esc(VT.base)}/assets/vokidoki.svg"
-                 alt="Vokidoki" width="415" height="121">
+            <img class="logo" src="${esc(VT.base)}/assets/vokidoki_logo.svg"
+                 alt="Vokidoki" width="768" height="256">
             <p class="sub">Melde dich mit deinem Namen an.</p>
         </div>
 

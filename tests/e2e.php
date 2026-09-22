@@ -8542,12 +8542,12 @@ ok('Die Antwortknoepfe bleiben bei der Leseschrift',
    'dort steht eine Vokabel, kein Knopftext');
 
 // Das Wortzeichen.
-$logo = http($base . '/assets/vokidoki.svg');
+$logo = http($base . '/assets/vokidoki_logo.svg');
 ok('Das Wortzeichen wird ausgeliefert', $logo['status'] === 200, (string) $logo['status']);
-ok('Es traegt seinen Namen fuer Vorleseprogramme',
-   str_contains($logo['body'], 'aria-label="Vokidoki"'));
 ok('Das V ist Voki selbst, in seinem Gruen',
-   str_contains($logo['body'], '#AFD535'));
+   stripos($logo['body'], '#AFD535') !== false);
+ok('Es holt nichts von aussen nach - kein Bild, keine Schrift',
+   !str_contains($logo['body'], '<image') && !str_contains($logo['body'], 'font-family'));
 /*
  * "okidoki" steht als Pfad in der Datei und nicht als <text>: Ein <text> in
  * einem ueber <img> eingebundenen SVG faende die Schrift der Seite nicht und
@@ -8559,7 +8559,10 @@ ok('Und "okidoki" steht als Pfad darin, nicht als Text',
 
 $loginJs = (string) file_get_contents(__DIR__ . '/../views/login.js');
 ok('Die Anmeldeseite zeigt das Wortzeichen',
-   str_contains($loginJs, 'assets/vokidoki.svg') && str_contains($loginJs, 'class="logo"'));
+   str_contains($loginJs, 'assets/vokidoki_logo.svg') && str_contains($loginJs, 'class="logo"'));
+// Die Datei selbst traegt keinen Namen - fuer Vorleseprogramme steht er am <img>.
+ok('Mit seinem Namen fuer Vorleseprogramme',
+   preg_match('/vokidoki_logo\.svg"\s*alt="Vokidoki"/', $loginJs) === 1);
 
 section('Freies Üben');
 
@@ -8621,11 +8624,24 @@ ok('Gezogen wird aus allem, auch aus Gekonntem',
    'sonst waere die Runde nach zwanzig Antworten zu Ende');
 
 // Die Serie der Runde: laufend, Balken, Rekord.
-foreach ([['z-folge',  'die laufende Serie'],
-          ['z-balken', 'den Balken dazwischen'],
-          ['z-beste',  'den Rekord der Runde']] as [$id, $was]) {
+foreach ([['z-richtig', 'links die richtigen Antworten'],
+          ['z-folge',   'die laufende Serie'],
+          ['z-balken',  'den Balken dazwischen'],
+          ['z-beste',   'den Rekord der Runde'],
+          ['z-quote',   'rechts die Trefferquote']] as [$id, $was]) {
     ok("Die Leiste zeigt $was", str_contains($freiQ, 'id="' . $id . '"'));
 }
+ok('Der Voki steht vor den Richtigen', str_contains($freiQ, 'voki-mini.svg'));
+ok('In dieser Reihenfolge',
+   preg_match('/z-richtig.*z-folge.*z-balken.*z-beste.*z-quote/s', $freiQ) === 1);
+
+// Von der Lerneinheit aus fuehrt der Pfeil zurueck zur Lerneinheit.
+$appQ  = (string) file_get_contents(__DIR__ . '/../app.js');
+$unitQ = (string) file_get_contents(__DIR__ . '/../views/unit.js');
+ok('Die Lerneinheit startet ihre eigene Adresse',
+   str_contains($unitQ, 'go(`/unit/${frei.dataset.frei}/frei`)'));
+ok('Und die nimmt die Lerneinheit als Ziel des Zurueck-Pfeils mit',
+   str_contains($appQ, '(id) => freiView(id, `/unit/${id}`)'));
 ok('Eine Tuer hinaus gibt es nicht mehr - der Zurueck-Pfeil tut dasselbe',
    !str_contains($freiQ, 'id="raus"'));
 ok('Der Lueckentext ist derselbe Bildschirm wie in der Lueckentext-Uebung',
@@ -8647,7 +8663,7 @@ ok('Und die Zahlen springen mit einer Bewegung',
 
 // Der Zeitgeber darf nicht ueber eine andere Ansicht zeichnen.
 ok('Nach dem Verlassen schaltet nichts mehr weiter',
-   str_contains($freiQ, "location.hash.startsWith('#/frei/')"),
+   str_contains($freiQ, 'location.hash !== runde.adresse'),
    'der Zurueck-Pfeil wechselt die Adresse, ohne die Ansicht zu fragen');
 
 // Die Hantel: als SVG, weil es dafuer kein Emoji gibt.

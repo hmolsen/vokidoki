@@ -183,7 +183,7 @@ function wireExercises(unitId, modes) {
         // Freies Ueben hat keinen Lernstand, der zurueckzusetzen waere - es
         // geht ohne Umweg los.
         const frei = event.target.closest('[data-frei]');
-        if (frei) { go(`/frei/${frei.dataset.frei}`); return; }
+        if (frei) { go(`/unit/${frei.dataset.frei}/frei`); return; }
 
         const row = event.target.closest('[data-mode]');
         if (!row || row.disabled) return;

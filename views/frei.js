@@ -1,6 +1,6 @@
 import {
     render, esc, $, $$, go, wireBack, showError, babing, konfetti, lobWort,
-    zahlAktualisieren,
+    zahlAktualisieren, VT,
 } from '../core.js';
 import {
     frageFrei, freiMerken, freiUmfang, einheit, sprache,
@@ -160,10 +160,17 @@ function kopf(titel, zurueck) {
         </div>`;
 }
 
-export async function freiView(roh) {
+/**
+ * Eine Runde.
+ *
+ * `zurueck` bringt die Lerneinheit mit, wenn die Runde dort gestartet
+ * wurde. Ohne führt der Pfeil in den Kurs - dort liegt die Auswahl, über
+ * die man sonst hierher kommt.
+ */
+export async function freiView(roh, zurueck = null) {
     const unitIds = String(roh).split('-').map(Number).filter((n) => n > 0);
     const erste   = einheit(unitIds[0]);
-    const zurueck = erste === null ? '/' : `/lang/${erste.l}`;
+    zurueck ??= erste === null ? '/' : `/lang/${erste.l}`;
 
     if (freiUmfang(unitIds).vokabeln === 0) {
         render(`${kopf('Freies Üben', zurueck)}<div id="msg"></div>`);
@@ -173,29 +180,35 @@ export async function freiView(roh) {
         return;
     }
 
-    runde = { richtig: 0, falsch: 0, folge: 0, beste: 0, unitIds, zurueck };
+    runde = { richtig: 0, falsch: 0, folge: 0, beste: 0, unitIds, zurueck,
+              adresse: location.hash };
     naechste();
 }
 
 /**
  * Die Serie dieser Runde - sie steht in jeder Aufgabe an derselben Stelle.
  *
- * Links, wie viele gerade hintereinander richtig sind, rechts das Beste
+ * Vorn, wie viele gerade hintereinander richtig sind, dahinter das Beste
  * dieser Runde, dazwischen der Weg vom einen zum anderen. Solange die
  * laufende Serie das Beste IST, zählen beide Zahlen gemeinsam hoch und der
  * Balken steht voll und grün - auch am Anfang, bei null und null. Nach
- * einem Fehler fällt die linke Zahl auf null, die rechte bleibt, und der
+ * einem Fehler fällt die vordere Zahl auf null, die hintere bleibt, und der
  * Balken zeigt, wie weit es bis zum Einholen noch ist.
  *
- * Hier stand vorher eine Leiste mit drei Zahlen und einer Tür hinaus. Die
- * Tür tat dasselbe wie der Zurück-Pfeil daneben, und von den drei Zahlen
- * sagte nur die Serie etwas, das man beim Üben verfolgt.
+ * Aussen stehen die beiden Zahlen der ganzen Runde: links der Voki mit
+ * allen richtigen Antworten, rechts die Trefferquote. Eine Tür hinaus gibt
+ * es nicht mehr - sie tat dasselbe wie der Zurück-Pfeil daneben.
  */
 function zaehlerLeiste() {
     const { anteil, rekord } = serienStand();
 
     return `
         <div class="freikopf">
+            <span class="freizahl aussen" title="Richtige Antworten in dieser Runde">
+                <b><img class="freivoki" src="${esc(VT.base)}/assets/voki-mini.svg"
+                        alt="" width="18" height="18"><span id="z-richtig">${runde.richtig}</span></b>
+                <span class="freiname">Richtige</span>
+            </span>
             <span class="freizahl" title="Richtig hintereinander">
                 <b id="z-folge">${runde.folge}</b>
                 <span class="freiname">in Folge</span>
@@ -207,7 +220,17 @@ function zaehlerLeiste() {
                 <b id="z-beste">${runde.beste}</b>
                 <span class="freiname">Rekord</span>
             </span>
+            <span class="freizahl aussen" title="Trefferquote in dieser Runde">
+                <b id="z-quote">${quote()}%</b>
+                <span class="freiname">Treffer</span>
+            </span>
         </div>`;
+}
+
+/** Anteil der richtigen Antworten in Prozent - 0, solange keine gegeben ist. */
+function quote() {
+    const gesamt = runde.richtig + runde.falsch;
+    return gesamt === 0 ? 0 : Math.round((runde.richtig / gesamt) * 100);
 }
 
 /** Wie voll der Balken steht, und ob er grün ist. */
@@ -223,8 +246,10 @@ function serienStand() {
 function zaehlerNachziehen() {
     const { anteil, rekord } = serienStand();
 
+    zahlAktualisieren($('#z-richtig'), runde.richtig);
     zahlAktualisieren($('#z-folge'), runde.folge);
     zahlAktualisieren($('#z-beste'), runde.beste);
+    zahlAktualisieren($('#z-quote'), `${quote()}%`);
 
     const balken = $('#z-balken');
     if (!balken) return;
@@ -268,14 +293,16 @@ function zaehlen(vocabId, richtig) {
 
 /*
  * Nur weiterschalten, wenn die Runde noch laeuft UND die Adresse noch
- * hierher zeigt.
+ * dieselbe ist wie beim Start.
  *
  * Der Zurueck-Pfeil und das Menue wechseln die Adresse, ohne dass diese
  * Ansicht davon erfaehrt. Der Zeitgeber liefe trotzdem ab und zeichnete die
  * naechste Aufgabe ueber die Seite, auf der man gerade gelandet ist.
+ * Verglichen wird die ganze Adresse und nicht ein Anfang wie "#/frei/":
+ * Von einer Lerneinheit aus heisst sie #/unit/12/frei.
  */
 function weiterWennNochHier() {
-    if (runde === null || !location.hash.startsWith('#/frei/')) return;
+    if (runde === null || location.hash !== runde.adresse) return;
     naechste();
 }
 

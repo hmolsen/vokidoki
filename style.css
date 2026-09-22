@@ -2044,9 +2044,9 @@ body.rechtsseite { background: var(--bg); }
 .freikopf {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     margin: 0 0 14px;
-    padding: 8px 14px;
+    padding: 8px 12px;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--surface);
@@ -2056,7 +2056,7 @@ body.rechtsseite { background: var(--bg); }
     flex-direction: column;
     align-items: center;
     flex: none;
-    min-width: 3.2em;
+    min-width: 2.6em;
     line-height: 1.1;
 }
 .freizahl b {
@@ -2069,6 +2069,33 @@ body.rechtsseite { background: var(--bg); }
     display: inline-block;
 }
 .freiname { font-size: .72rem; color: var(--text-soft); white-space: nowrap; }
+/*
+ * Die Zahlen der ganzen Runde stehen aussen und etwas leiser als die Serie
+ * dazwischen - sie gehören zur Runde, nicht zum Balken.
+ */
+.freizahl.aussen b { font-size: 1.05rem; color: var(--text-soft); }
+.freizahl.aussen b { display: inline-flex; align-items: center; gap: 3px; }
+.freivoki { width: 18px; height: 18px; flex: none; display: block; }
+.freizahl.aussen:first-child { padding-right: 10px; border-right: 1px solid var(--border); }
+.freizahl.aussen:last-child  { padding-left: 10px;  border-left: 1px solid var(--border); }
+
+/*
+ * Am schmalen Telefon wird es eng: fünf Dinge in einer Zeile, und bei
+ * "128 Richtige" und "100%" blieb vom Balken ein Punkt. Also rücken die
+ * Zahlen zusammen, statt dass der Balken verschwindet - er ist das, worauf
+ * man beim Üben schaut.
+ */
+@media (max-width: 380px) {
+    .freikopf { gap: 6px; padding: 7px 8px; }
+    .freizahl { min-width: 0; }
+    .freizahl b { font-size: 1.1rem; }
+    .freizahl.aussen b { font-size: .92rem; }
+    .freiname { font-size: .66rem; }
+    .freivoki { width: 15px; height: 15px; }
+    .freizahl.aussen:first-child { padding-right: 6px; }
+    .freizahl.aussen:last-child  { padding-left: 6px; }
+}
+.freikopf .freibalken { min-width: 36px; }
 /* Der Balken nimmt, was zwischen den Zahlen frei ist. */
 .freikopf .freibalken { flex: 1; min-width: 0; margin-top: 0; height: 10px; border-radius: 5px; }
 
@@ -2078,7 +2105,10 @@ body.rechtsseite { background: var(--bg); }
 body.keyboard-open .screen-top .freikopf { padding: 4px 12px; margin-bottom: 6px; }
 
 /* Dieselbe Bewegung wie beim Punkt in den anderen Übungen. */
-.freizahl b.frisch { animation: zahlAuf .5s cubic-bezier(.2, .9, .3, 1.5); }
+/* Der Zaehler neben dem Voki ist ein <span> im <b> - der Voki selbst soll
+   nicht mitspringen. */
+#z-richtig { display: inline-block; }
+.freizahl b.frisch, #z-richtig.frisch { animation: zahlAuf .5s cubic-bezier(.2, .9, .3, 1.5); }
 @keyframes zahlAuf {
     0%   { transform: scale(1);    color: var(--text); }
     35%  { transform: scale(1.45); color: var(--good); }
@@ -2124,7 +2154,7 @@ body.keyboard-open .screen-top .freikopf { padding: 4px 12px; margin-bottom: 6px
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .freizahl b.frisch { animation: none; }
+    .freizahl b.frisch, #z-richtig.frisch { animation: none; }
     .feiergrund { animation: grundRuhig 1.5s ease forwards; }
     @keyframes grundRuhig { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
 }
