@@ -28,6 +28,7 @@ require_once $root . '/lib/roster.php';
 require_once $root . '/lib/courses.php';
 require_once $root . '/lib/vocab.php';
 require_once $root . '/lib/worldlanguages.php';
+require_once $root . '/lib/einwilligung.php';
 
 const DEMO_SCHULE   = 'VORFUEHRUNG Gymnasium am See';
 const DEMO_PASSWORT = 'vorfuehrung';
@@ -246,6 +247,11 @@ $mats = (int) qv("SELECT id FROM users WHERE school_id = ? AND display_name LIKE
 $satz = (int) qv('SELECT s.id FROM sentences s WHERE s.vocab_id = ?', [$v2[6]]);
 q('INSERT INTO vocab_flags (vocab_id, sentence_id, user_id, typed) VALUES (?, ?, ?, ?)',
   [$v2[6], $satz, $mats, 'habite']);
+
+// Die Hinweise der ersten Anmeldung gelten fuer alle Konten hier als bestaetigt -
+// sonst stuende jede Pruefung zuerst vor dieser Seite.
+q('UPDATE users SET consent_version = ?, consent_at = NOW() WHERE school_id = ?',
+  [EINWILLIGUNG_FASSUNG, $schuleId]);
 
 echo json_encode([
     'lehrer'   => 'vorfuehrung.berger',

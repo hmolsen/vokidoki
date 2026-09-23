@@ -18,6 +18,14 @@ CREATE TABLE IF NOT EXISTS users (
   -- Die laengste Serie, die dieses Kind je hatte. Eine gerissene Serie
   -- faengt bei null an - was einmal geschafft war, soll aber bleiben.
   streak_best   SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  -- Die Hinweise bei der ersten Anmeldung (lib/einwilligung.php): in welcher
+  -- Fassung und wann bestaetigt. NULL = noch nicht - dann geht es nirgends
+  -- weiter als bis zu dieser Seite.
+  consent_version SMALLINT UNSIGNED NULL,
+  consent_at    DATETIME     NULL,
+  -- Die eigene Vorlage einer Lehrkraft fuer die Zettel an die Kinder.
+  -- NULL = die Vorlage des Betreibers (settings.letter_template).
+  letter_template TEXT       NULL,
   active        TINYINT(1)   NOT NULL DEFAULT 1,
   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_users_username (username),

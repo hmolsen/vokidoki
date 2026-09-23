@@ -267,13 +267,18 @@ flash_render();
     <button class="btn small" name="save_prices" value="1">Speichern</button>
 </form>
 
-<h2>Anschreiben für die Kinder</h2>
+<h2>Anschreiben für die Kinder (Voreinstellung)</h2>
 <form method="post" class="card">
     <?= csrf_field() ?>
+    <p class="tiny muted" style="margin-top:0">
+        Diese Fassung gilt für jede Lehrkraft, die keine eigene hat. Jede
+        Lehrkraft kann sie unter <em>Mein Konto</em> für ihre eigenen Zettel
+        anpassen - und dort jederzeit wieder auf diese zurückstellen.
+    </p>
     <label for="letter">Text des Zettels</label>
     <textarea id="letter" name="letter_template" rows="18"
               style="width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.9rem"
-    ><?= h(letter_template()) ?></textarea>
+    ><?= h(letter_standard()) ?></textarea>
     <p class="tiny muted">
         Reiner Text, kein HTML - so kann eine Formulierung nichts kaputtmachen.
         Diese Platzhalter werden ersetzt:

@@ -70,13 +70,28 @@ function current_user(): ?array
     return $user;
 }
 
-/** Beendet den Request mit 401, wenn niemand eingeloggt ist. */
+/**
+ * Beendet den Request mit 401, wenn niemand eingeloggt ist - und mit 403,
+ * solange das Konto die Hinweise der ersten Anmeldung nicht bestätigt hat.
+ *
+ * Die zweite Schranke steht hier und nicht in der App: Die App zeigt die
+ * Seite zum Bestätigen, aber wer die API direkt anspricht, soll ohne
+ * Bestätigung genauso wenig an Vokabeln und Lernstand kommen. Die beiden
+ * Aufrufe, die davor gehen müssen - "me" und das Bestätigen selbst - stehen
+ * in api/auth.php und fragen current_user() statt dieser Funktion.
+ */
 function require_user(): array
 {
     $u = current_user();
     if ($u === null) {
         require_once __DIR__ . '/json.php';
         json_fail('Nicht angemeldet.', 401, ['auth' => false]);
+    }
+
+    require_once __DIR__ . '/einwilligung.php';
+    if (einwilligung_noetig($u)) {
+        require_once __DIR__ . '/json.php';
+        json_fail('Bitte bestätige zuerst die Hinweise.', 403, ['einwilligung' => true]);
     }
     return $u;
 }
@@ -151,4 +166,31 @@ function possessive(string $name): string
 function app_name_for(array $user): string
 {
     return possessive($user['display_name']) . ' Vokidoki';
+}
+
+/**
+ * Das Konto, wie die App es als VT.user bekommt.
+ *
+ * An drei Stellen gebraucht - api/auth.php bei "me" und bei der Anmeldung,
+ * index.php in der Hülle -, und dreimal stand dieselbe Liste da. Mit den
+ * Hinweisen bei der ersten Anmeldung kam ein Feld dazu, und drei Abschriften
+ * hätten es früher oder später an einer Stelle vergessen.
+ */
+function app_user_data(array $user): array
+{
+    require_once __DIR__ . '/access.php';
+    require_once __DIR__ . '/einwilligung.php';
+
+    return [
+        'id'        => (int) $user['id'],
+        'name'      => $user['display_name'],
+        'color'     => $user['color'],
+        'appName'   => app_name_for($user),
+        // Was das Konto darf - damit die Oberflaeche nichts anbietet, was
+        // die API hinterher ablehnt.
+        'canImport' => user_can($user, CAP_IMPORT),
+        'isTeacher' => user_is_teacher($user),
+        // null, oder die Punkte, die vor dem ersten Üben zu bestätigen sind.
+        'einwilligung' => einwilligung_fuer_app($user),
+    ];
 }

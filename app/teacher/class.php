@@ -100,6 +100,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_student']
         teacher_redirect($zurück);
     }
 
+    teacher_druckbar_merken([(int) $konto['id']]);
+
     if (will_json()) {
         json_antwort(['ok' => true, 'kind' => [
             'id'       => (int) $konto['id'],
@@ -135,6 +137,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_students'
             static fn (array $u): int => (int) $u['id'],
             $bericht['created'],
         );
+        teacher_druckbar_merken($_SESSION['teacher_fresh']);
 
         teacher_flash(sprintf(
             '%d %s angelegt%s.',
@@ -199,9 +202,36 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['reset_passwor
         teacher_flash('Das Passwort liess sich nicht neu setzen.', 'bad');
     } else {
         $_SESSION['teacher_fresh'] = [$kindId];
-        teacher_flash(sprintf('%s hat ein neues Passwort.', $gehörtDazu['display_name']));
+        teacher_druckbar_merken([$kindId]);
+        teacher_flash(sprintf('%s hat ein neues Passwort - jetzt den Zettel drucken.',
+                              $gehörtDazu['display_name']));
     }
 
+    teacher_redirect($zurück);
+}
+
+/*
+ * Allen Kindern der Klasse ein neues Passwort - der Weg zu Zetteln für die
+ * ganze Klasse, wenn die ersten verloren sind.
+ *
+ * Nur so, und nicht mit einem Nachdruck der alten: Ein Nachdruck müsste für
+ * jedes Kind, das sein Passwort schon geändert hat, etwas anderes drucken -
+ * und die Lehrkraft sähe daran, wer die App benutzt. Die Rückfrage vorher
+ * sagt, was es kostet: Jedes Kind muss danach das neue Passwort nehmen.
+ */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['reset_all'])) {
+    teacher_csrf_check();
+
+    $ids = array_map(static fn (array $m): int => (int) $m['id'], array_values(array_filter(
+        class_members_list($classId),
+        static fn (array $m): bool => $m['role'] !== 'teacher',
+    )));
+    $neu = array_values(array_filter($ids, static fn (int $id): bool =>
+        student_reset_password($id) !== null));
+
+    $_SESSION['teacher_fresh'] = $neu;
+    teacher_druckbar_merken($neu);
+    teacher_flash(sprintf('%d neue Passwörter vergeben - jetzt die Zettel drucken.', count($neu)));
     teacher_redirect($zurück);
 }
 
@@ -213,6 +243,9 @@ $kurse     = courses_for_class($classId);
 $gesperrt  = login_locked_usernames(array_column($kinder, 'username'));
 $frisch    = array_flip((array) ($_SESSION['teacher_fresh'] ?? []));
 unset($_SESSION['teacher_fresh']);
+$druckbar  = teacher_druckbar();
+$zuDrucken = count(array_filter($kinder, static fn (array $k): bool =>
+    isset($druckbar[(int) $k['id']])));
 
 teacher_head('Klasse ' . $klasse['name'], $user,
     $ausKurs === null ? '' : sprintf(
@@ -335,10 +368,18 @@ teacher_flash_render();
             </td>
             <td data-label="Benutzername"><code class="token"><?= h($k['username']) ?></code></td>
             <td data-label="Anfangspasswort">
-                <?php if (($k['initial_password'] ?? null) !== null && $k['initial_password'] !== ''): ?>
+                <?php
+                /*
+                 * Nur direkt nach dem Vergeben - siehe teacher_druckbar().
+                 * Für alle anderen steht dasselbe da, ob das Kind sein
+                 * Passwort geändert hat oder nicht.
+                 */
+                ?>
+                <?php if (isset($druckbar[(int) $k['id']])
+                          && ($k['initial_password'] ?? '') !== ''): ?>
                     <code class="token"><?= h($k['initial_password']) ?></code>
                 <?php else: ?>
-                    <span class="tiny muted">selbst geändert</span>
+                    <span class="tiny muted" title="Zu sehen nur direkt nach dem Vergeben">&bull;&bull;&bull;&bull;&bull;&bull;</span>
                 <?php endif; ?>
             </td>
             <td class="actions">
@@ -365,16 +406,18 @@ teacher_flash_render();
                      */
                     ?>
                     <button class="iconaction quiet" name="reset_password"
-                            value="<?= (int) $k['id'] ?>" title="Neues Anfangspasswort"
-                            data-confirm="Neues Anfangspasswort für <?= h($k['display_name']) ?>? Das alte gilt dann nicht mehr.">
-                        <span aria-hidden="true">&#128273;</span> Passwort
+                            value="<?= (int) $k['id'] ?>" title="Neues Anfangspasswort und Zettel"
+                            data-confirm="Neues Passwort für <?= h($k['display_name']) ?>? Das bisherige gilt dann nicht mehr - auch ein selbst gewähltes.">
+                        <span aria-hidden="true">&#128273;</span> Neues Passwort
                     </button>
                 </form>
+                <?php if (isset($druckbar[(int) $k['id']])): ?>
                 <a class="iconaction quiet" title="Zettel für dieses Kind drucken"
                    href="<?= h(teacher_url('print.php') . '?class=' . $classId . '&user=' . (int) $k['id']) ?>"
                    target="_blank" rel="noopener">
                     <span aria-hidden="true">&#128424;</span> Zettel
                 </a>
+                <?php endif; ?>
             </td>
         </tr>
     <?php endforeach; ?>
@@ -438,13 +481,24 @@ teacher_flash_render();
  */
 ?>
 <p class="buttonrow" id="klassenzettel">
-    <a class="btn small secondary<?= $kinder === [] ? ' aus' : '' ?>"
+    <a class="btn small secondary<?= $zuDrucken === 0 ? ' aus' : '' ?>"
        id="zettelAlle"
        href="<?= h(teacher_url('print.php') . '?class=' . $classId) ?>"
        target="_blank" rel="noopener"
-       <?= $kinder === [] ? 'aria-disabled="true" tabindex="-1" title="Erst ein Kind anlegen"' : '' ?>>
-        <span aria-hidden="true">&#128424;</span> Zettel für die ganze Klasse
+       <?= $zuDrucken === 0 ? 'aria-disabled="true" tabindex="-1" title="Erst Konten anlegen oder Passwörter vergeben"' : '' ?>>
+        <span aria-hidden="true">&#128424;</span> Zettel für die neuen Passwörter
     </a>
+    <?php if ($kinder !== []): ?>
+    <?php // display: contents - sonst stuende der Knopf unter statt neben dem anderen. ?>
+    <form method="post" class="compact" style="display:contents">
+        <?= teacher_csrf_field() ?>
+        <input type="hidden" name="class_id" value="<?= $classId ?>"><?= $kursFeld ?>
+        <button class="btn small secondary" name="reset_all" value="1"
+                data-confirm="Allen <?= count($kinder) ?> Kindern ein neues Passwort geben? Die bisherigen gelten dann nicht mehr - auch selbst gewählte. Jedes Kind braucht danach seinen neuen Zettel.">
+            <span aria-hidden="true">&#128273;</span> Allen neue Passwörter geben
+        </button>
+    </form>
+    <?php endif; ?>
 </p>
 
 <p class="tiny muted">
@@ -452,9 +506,11 @@ teacher_flash_render();
     Brinkmann" eintippen oder eine ganze Klassenliste einfügen &ndash;
     gespeichert wird daraus nur „Fritz B.". Den Nachnamen wirft die Anwendung
     beim Einlesen weg; er steht in keiner Tabelle und auf keinem Zettel.
-    Das Anfangspasswort steht im Klartext, damit sich der Zettel
-    nachdrucken lässt; sobald ein Kind es selbst ändert, verschwindet es aus
-    der Spalte.
+    <strong>Passwörter und Zettel gibt es nur direkt nach dem Vergeben.</strong>
+    Danach steht bei jedem Kind dasselbe &ndash; du siehst nicht, wer sich
+    schon angemeldet oder sein Passwort geändert hat, und das haben die
+    Kinder so auch bestätigt. Ist ein Zettel verloren, gib dem Kind ein neues
+    Passwort; dann druckst du einen neuen.
 </p>
 
 <?php

@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_boot.php';
+require_once __DIR__ . '/../lib/einwilligung.php';
 
 require_api_request();
 
@@ -10,16 +11,31 @@ switch (action()) {
         $u = current_user();
         json_out([
             'ok'   => true,
-            'user' => $u === null ? null : [
-                'id'        => (int) $u['id'],
-                'name'      => $u['display_name'],
-                'color'     => $u['color'],
-                'appName'   => app_name_for($u),
-                'canImport' => user_can($u, CAP_IMPORT),
-                'isTeacher' => user_is_teacher($u),
-            ],
+            'user' => $u === null ? null : app_user_data($u),
         ]);
         // no break - json_out beendet den Request
+
+    case 'einwilligung':
+        /*
+         * Die Hinweise der ersten Anmeldung bestätigen.
+         *
+         * current_user() und nicht require_user(): Genau diesen Aufruf
+         * lässt require_user() ohne Bestätigung nicht durch.
+         */
+        require_post();
+        $u = current_user();
+        if ($u === null) {
+            json_fail('Nicht angemeldet.', 401, ['auth' => false]);
+        }
+        $b      = json_body();
+        $haken  = array_values(array_filter((array) ($b['angehakt'] ?? []), 'is_string'));
+        $fehler = einwilligung_speichern($u, $haken);
+        if ($fehler !== null) {
+            json_fail($fehler, 422);
+        }
+        // Frisch gelesen: current_user() hält die Zeile von vor dem Speichern.
+        $frisch = q1('SELECT * FROM users WHERE id = ?', [(int) $u['id']]);
+        json_out(['ok' => true, 'user' => app_user_data($frisch)]);
 
     case 'login':
         require_post();
@@ -81,14 +97,7 @@ switch (action()) {
         json_out([
             'ok'       => true,
             'redirect' => $ziel,
-            'user'     => [
-                'id'        => (int) $user['id'],
-                'name'      => $user['display_name'],
-                'color'     => $user['color'],
-                'appName'   => app_name_for($user),
-                'canImport' => user_can($user, CAP_IMPORT),
-                'isTeacher' => user_is_teacher($user),
-            ],
+            'user'     => app_user_data($user),
         ]);
 
     case 'logout':

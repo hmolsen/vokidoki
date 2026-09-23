@@ -637,7 +637,7 @@ function initStudentAdd() {
         // in den Text hineingeschrieben.
         const pw = tr.querySelector('[name="reset_password"]');
         if (pw) pw.dataset.confirm =
-            `Neues Anfangspasswort für ${kind.name}? Das alte gilt dann nicht mehr.`;
+            `Neues Passwort für ${kind.name}? Das bisherige gilt dann nicht mehr - auch ein selbst gewähltes.`;
 
         tabelle.insertBefore(tr, zeile);
         zettelFreigeben();
@@ -674,8 +674,8 @@ function initStudentAdd() {
             <form method="post" class="compact">
                 ${feld('csrf', csrf)}${feld('class_id', klasse)}
                 <button class="iconaction quiet" name="reset_password"
-                        value="${kind.id}" title="Neues Anfangspasswort">
-                    <span aria-hidden="true">&#128273;</span> Passwort
+                        value="${kind.id}" title="Neues Anfangspasswort und Zettel">
+                    <span aria-hidden="true">&#128273;</span> Neues Passwort
                 </button>
             </form>
             <a class="iconaction quiet" title="Zettel für dieses Kind drucken"

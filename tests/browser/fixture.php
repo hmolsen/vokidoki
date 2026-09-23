@@ -24,6 +24,7 @@ require_once $root . '/lib/access.php';
 require_once $root . '/lib/roster.php';
 require_once $root . '/lib/courses.php';
 require_once $root . '/lib/worldlanguages.php';
+require_once $root . '/lib/einwilligung.php';
 
 const BT_SCHULE   = 'BROWSERTEST-Schule';
 const BT_LEHRER   = 'browsertest_lehr';
@@ -148,6 +149,11 @@ foreach ($woerter as $i => $w) {
     q('INSERT INTO vocab (unit_id, position, term_foreign, term_native)
        VALUES (?, ?, ?, ?)', [$unitId, $i, $w, 'de-' . $w]);
 }
+
+// Die Hinweise der ersten Anmeldung gelten fuer alle Konten hier als bestaetigt -
+// sonst stuende jede Pruefung zuerst vor dieser Seite.
+q('UPDATE users SET consent_version = ?, consent_at = NOW() WHERE school_id = ?',
+  [EINWILLIGUNG_FASSUNG, $schuleId]);
 
 echo json_encode([
     // Unter /app wie auf dem Server - siehe tests/router.php.

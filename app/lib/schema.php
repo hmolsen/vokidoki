@@ -37,10 +37,15 @@ function schema_was_applied(string $name): bool
  * Liste der Änderungen: Name => [Prüfung, SQL].
  * Die Prüfung liefert true, wenn die Änderung noch fehlt.
  *
- * SIE IST LEER, UND DAS IST DER RICHTIGE ZUSTAND. `schema.sql` legt das
- * fertige Schema an; eine frische Installation hat nichts nachzutragen.
+ * `schema.sql` legt das fertige Schema an; eine frische Installation hat
+ * nichts nachzutragen - die Prüfungen unten finden alles schon vor.
  *
- * Hier standen fünfundvierzig Änderungen, und jede einzelne war der Weg von
+ * Die Liste war einmal leer, mit Absicht (siehe unten). Seit vokidoki.de
+ * läuft, gibt es aber wieder eine Datenbank mit echten Konten, die man nicht
+ * neu einspielen kann - also stehen hier wieder Änderungen, bewusst und
+ * einzeln. Jede fügt nur hinzu.
+ *
+ * Hier standen früher fünfundvierzig Änderungen, und jede einzelne war der Weg von
  * einem älteren Stand auf den heutigen: der Umbau vom Besitzer-Modell
  * ("diese Lerneinheit gehört diesem Kind") auf Kurse, das Nachziehen der
  * Schul- und Klassenspalten, das zweistufige Fallenlassen von
@@ -63,7 +68,20 @@ function schema_was_applied(string $name): bool
  */
 function schema_migrations(): array
 {
-    return [];
+    return [
+        // Die Hinweise bei der ersten Anmeldung - siehe lib/einwilligung.php.
+        'users.consent' => [
+            static fn (): bool => !column_exists('users', 'consent_version'),
+            'ALTER TABLE users
+               ADD COLUMN consent_version SMALLINT UNSIGNED NULL AFTER streak_best,
+               ADD COLUMN consent_at DATETIME NULL AFTER consent_version',
+        ],
+        // Die eigene Vorlage einer Lehrkraft für die Zettel - siehe lib/letter.php.
+        'users.letter_template' => [
+            static fn (): bool => !column_exists('users', 'letter_template'),
+            'ALTER TABLE users ADD COLUMN letter_template TEXT NULL AFTER consent_at',
+        ],
+    ];
 }
 
 function table_exists(string $table): bool

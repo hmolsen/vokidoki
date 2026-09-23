@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/colors.php';
 require_once __DIR__ . '/../lib/profile.php';
+require_once __DIR__ . '/../lib/letter.php';
 
 /*
  * Das eigene Konto - im Lehrkraft-Bereich.
@@ -58,6 +59,32 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['change_passwo
 
     teacher_flash('Passwort geändert. Merk es dir gut!');
     teacher_redirect('konto.php');
+}
+
+/*
+ * Die eigene Vorlage für die Zettel an die Kinder.
+ *
+ * Ohne eigene gilt die des Betreibers. Zurückstellen geht nur mit
+ * Rückfrage: Eine lange umformulierte Vorlage ist mit einem Klick weg.
+ */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['save_letter'])) {
+    teacher_csrf_check();
+
+    $fehlend = letter_save_own($uid, (string) ($_POST['letter_template'] ?? ''));
+    teacher_flash($fehlend === []
+        ? 'Vorlage gesichert. Deine nächsten Zettel sehen so aus.'
+        : 'Vorlage gesichert - ohne ' . implode(' und ', $fehlend)
+          . '. Das ist erlaubt, aber bitte einmal Probe drucken.',
+        $fehlend === [] ? 'good' : 'warn');
+    teacher_redirect('konto.php#vorlage');
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['reset_letter'])) {
+    teacher_csrf_check();
+
+    letter_save_own($uid, '');
+    teacher_flash('Vorlage zurückgestellt - es gilt wieder die Voreinstellung.');
+    teacher_redirect('konto.php#vorlage');
 }
 
 teacher_head('Mein Konto', $user);
@@ -124,6 +151,36 @@ teacher_flash_render();
         Betreiber ein neues geben &ndash; anders als bei den Kindern, denen
         du selbst eines geben kannst.
     </p>
+</form>
+
+<h2 id="vorlage">Vorlage für die Zettel</h2>
+
+<form method="post" class="card kontoform">
+    <?= teacher_csrf_field() ?>
+    <p class="tiny muted" style="margin-top:0">
+        <?= letter_is_own($user)
+            ? '<strong>Du nutzt eine eigene Vorlage.</strong> Sie gilt für alle Zettel, die du druckst.'
+            : 'Du nutzt die Voreinstellung. Änderst du sie hier, gilt deine Fassung nur für deine Zettel.' ?>
+    </p>
+    <label for="letter">Text des Zettels</label>
+    <textarea id="letter" name="letter_template" rows="22"
+              style="width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.9rem"
+    ><?= h(letter_template($user)) ?></textarea>
+    <p class="tiny muted">
+        Reiner Text. Diese Platzhalter werden auf jedem Zettel ersetzt:
+        <?php foreach (letter_placeholders() as $p => $was): ?>
+            <br><code class="token">{<?= h($p) ?>}</code> &ndash; <?= h($was) ?>
+        <?php endforeach; ?>
+    </p>
+    <div class="buttonrow">
+        <button class="btn" name="save_letter" value="1">Vorlage sichern</button>
+        <?php if (letter_is_own($user)): ?>
+        <button class="btn secondary" name="reset_letter" value="1" formnovalidate
+                data-confirm="Deine eigene Vorlage verwerfen und wieder die Voreinstellung nutzen? Dein Text ist danach weg.">
+            Auf Voreinstellung zurücksetzen
+        </button>
+        <?php endif; ?>
+    </div>
 </form>
 
 <p class="tiny muted">

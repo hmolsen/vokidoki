@@ -204,6 +204,41 @@ function teacher_flush_and_continue(): void
 }
 
 /**
+ * Für welche Kinder diese Lehrkraft gerade ein Passwort vergeben hat.
+ *
+ * Nur für diese gibt es das Anfangspasswort zu sehen und einen Zettel zu
+ * drucken - für ein paar Stunden, dann ist der Moment vorbei.
+ *
+ * Vorher stand das Anfangspasswort dauerhaft in der Klassenliste, und wo
+ * ein Kind es geändert hatte, stand "selbst geändert". Damit sah die
+ * Lehrkraft, wer sich schon angemeldet hat - also wer die App benutzt. Die
+ * Kinder bestätigen aber, dass sie genau das nicht sieht
+ * (lib/einwilligung.php). Jetzt sieht die Liste für jedes Kind gleich aus,
+ * egal was es getan hat; ein verlorener Zettel wird zu einem neuen Passwort
+ * samt neuem Zettel, für jedes Kind auf demselben Weg.
+ */
+const DRUCKBAR_SEKUNDEN = 3 * 60 * 60;
+
+/** @param int[] $ids */
+function teacher_druckbar_merken(array $ids): void
+{
+    $jetzt = time();
+    foreach ($ids as $id) {
+        $_SESSION['teacher_druckbar'][(int) $id] = $jetzt;
+    }
+}
+
+/** @return array<int, true> die Kinder, deren Passwort gerade vergeben ist */
+function teacher_druckbar(): array
+{
+    $grenze = time() - DRUCKBAR_SEKUNDEN;
+    $liste  = array_filter((array) ($_SESSION['teacher_druckbar'] ?? []),
+                           static fn ($t): bool => (int) $t >= $grenze);
+    $_SESSION['teacher_druckbar'] = $liste;
+    return array_map(static fn (): bool => true, $liste);
+}
+
+/**
  * Sorgt für eine angemeldete Lehrkraft - oder zeigt die Anmeldung.
  *
  * Die Sitzung ist dieselbe wie in der App. Das ist Absicht: Zum Einlesen der
@@ -253,6 +288,17 @@ function teacher_require(): array
         error_log('[vokabeltrainer] Lehrkraft-Bereich wartet auf Schema: '
                   . implode(', ', $offen));
         teacher_blocked_page();
+    }
+
+    /*
+     * Erst die Hinweise der ersten Anmeldung, dann alles andere. Dieselbe
+     * Regel wie in der App (lib/einwilligung.php); nur die Seite dafür ist
+     * eine eigene, weil der Lehrkraft-Bereich ohne JavaScript auskommt.
+     */
+    require_once __DIR__ . '/../lib/einwilligung.php';
+    if (einwilligung_noetig($user)
+        && basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')) !== 'einwilligung.php') {
+        teacher_redirect('einwilligung.php');
     }
 
     return $user;

@@ -60,10 +60,14 @@ KI-Aufrufe bereit; `daten/config.php` zeigt lokal bereits auf sie (Port 8124/812
 - Eine Regel steht an genau einer Stelle. Wo sie zwangsläufig zweimal steht
   (Server *und* Gerät, weil ohne Netz geübt wird), hält eine gemeinsame
   Fallsammlung unter `tests/faelle/` beide Fassungen zusammen.
-- Schemaänderungen gehen nur nach `app/schema.sql`. Migrationen gibt es nicht
-  mehr: `schema_migrations()` ist leer, seit feststeht, dass dies eine
-  Neuinstallation ist. Wer sie wieder braucht, baut sie bewusst zurück -
-  nicht nebenbei.
+- Schemaänderungen gehen an zwei Stellen: nach `app/schema.sql` für frische
+  Installationen und als Eintrag in `schema_migrations()` (`app/lib/schema.php`)
+  für die laufende Datenbank auf vokidoki.de - die lässt sich nicht mehr neu
+  einspielen. Ausgeführt wird im Selbsttest auf Knopfdruck. Jede Änderung
+  fügt nur hinzu.
+- Der Satz, den Kinder bei der ersten Anmeldung bestätigen - die Lehrkraft
+  sieht nicht, ob und wie sie üben -, muss stimmen (`app/lib/einwilligung.php`).
+  Nichts im Lehrkraft-Bereich darf zeigen, welches Kind die App benutzt.
 - Neue Dateien der Oberfläche landen automatisch in `app_assets()`
   (`app/lib/version.php`) - sie globbt `*.js` und `views/*.js`. Ohne das merkt eine
   auf dem Homescreen installierte App von einer Änderung nichts.

@@ -14,6 +14,7 @@ import { quizView } from './views/quiz.js';
 import { clozeView } from './views/cloze.js';
 import { profileView } from './views/profile.js';
 import { freiView, freiWahlView } from './views/frei.js';
+import { einwilligungView } from './views/einwilligung.js';
 import {
     vorratAuffrischen, vorratLaden, vorratAlter, vorratVergessen,
     sprachen, einheit, serieHeute,
@@ -63,6 +64,8 @@ function aktiverKurs() {
 
 const ROUTES = [
     [/^\/login$/,                 loginView,     { anonymous: true }],
+    // Die Hinweise der ersten Anmeldung - siehe route() und lib/einwilligung.php.
+    [/^\/einwilligung$/,          einwilligungView],
     [/^\/$/,                      languagesView],
     [/^\/lang\/(\d+)$/,           languageView],
     [/^\/lang\/(\d+)\/import$/,   importView],
@@ -113,6 +116,16 @@ async function route() {
         }
         if (opts.anonymous && VT.user) {
             go('/', true);
+            return;
+        }
+
+        /*
+         * Ohne die Hinweise der ersten Anmeldung geht es nirgends hin. Die
+         * API lehnt ohnehin alles ab (require_user()); hier wird daraus
+         * statt einer Fehlermeldung die Seite, auf der man bestätigt.
+         */
+        if (VT.user?.einwilligung && path !== '/einwilligung') {
+            go('/einwilligung', true);
             return;
         }
 
@@ -210,7 +223,9 @@ if (!VT.user && currentPath() !== '/login') {
 const VORRAT_FRISCH = 5 * 60;
 
 async function vorratBereit() {
-    if (!VT.user) return;
+    // Vor der Bestätigung gibt die API keine Vokabeln heraus - geholt wird
+    // der Vorrat dann von views/einwilligung.js, gleich nach dem Bestätigen.
+    if (!VT.user || VT.user.einwilligung) return;
 
     if (vorratLaden() === null) {
         await vorratAuffrischen();

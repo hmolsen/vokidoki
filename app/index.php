@@ -131,16 +131,8 @@ header('Cache-Control: no-store, must-revalidate');
 <script>
 window.VT = {
     base: <?= json_encode(base_path(), JSON_UNESCAPED_SLASHES) ?>,
-    user: <?= $user === null ? 'null' : json_encode([
-        'id'        => (int) $user['id'],
-        'name'      => $user['display_name'],
-        'color'     => $user['color'],
-        'appName'   => $appName,
-        // Was das Konto darf - damit die Oberflaeche nichts anbietet, was
-        // die API hinterher ablehnt.
-        'canImport' => user_can($user, CAP_IMPORT),
-        'isTeacher' => user_is_teacher($user),
-    ], JSON_UNESCAPED_UNICODE) ?>,
+    // Dieselben Felder wie bei api/auth.php - siehe app_user_data().
+    user: <?= $user === null ? 'null' : json_encode(app_user_data($user), JSON_UNESCAPED_UNICODE) ?>,
     /*
      * Die Serie gleich mit der Huelle, nicht erst mit dem Buendel.
      *

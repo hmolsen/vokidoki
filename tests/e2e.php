@@ -124,9 +124,28 @@ function waitForSentences(int $unitId, int $sekunden = 30): string
 }
 
 /** API-Aufruf mit dem Header, den die App als CSRF-Schutz verlangt. */
+/*
+ * Wer sich in den Pruefungen anmeldet, hat die Hinweise der ersten Anmeldung
+ * schon bestaetigt - sonst stuende jede Pruefung zuerst vor dieser Seite.
+ * Die Pruefungen der Hinweise selbst schalten das ab ($GLOBALS['ohneZustimmung']).
+ */
+function vorAnmeldung(string $username): void
+{
+    if (!empty($GLOBALS['ohneZustimmung']) || $username === '') {
+        return;
+    }
+    $id = (int) (qv('SELECT id FROM users WHERE username = ?', [strtolower($username)]) ?? 0);
+    if ($id > 0) {
+        zugestimmt($id);
+    }
+}
+
 function apiCall(string $file, string $action, ?array $body = null, array $query = []): array
 {
     global $base;
+    if ($file === 'auth' && $action === 'login') {
+        vorAnmeldung((string) ($body['username'] ?? ''));
+    }
     $url = $base . "/api/$file.php?" . http_build_query(['action' => $action] + $query);
     $res = http($url, $body, ['X-Vokabeltrainer: 1', 'Content-Type: application/json']);
     return [json_decode($res['body'], true), $res['status']];
@@ -157,7 +176,19 @@ function makeUser(string $username, string $display, string $color = '#e0559a'):
 
     $id = (int) db()->lastInsertId();
     user_assign_to_school($id);
+    // Die Hinweise der ersten Anmeldung gelten als bestätigt - die Prüfungen
+    // dazu legen sich eigene Konten an (Abschnitt "Hinweise bei der ersten
+    // Anmeldung").
+    zugestimmt($id);
     return $id;
+}
+
+/** Ein Konto, das die Hinweise der ersten Anmeldung schon bestätigt hat. */
+function zugestimmt(int $userId): void
+{
+    require_once __DIR__ . '/../app/lib/einwilligung.php';
+    q('UPDATE users SET consent_version = ?, consent_at = NOW() WHERE id = ?',
+      [EINWILLIGUNG_FASSUNG, $userId]);
 }
 
 /**
@@ -922,19 +953,27 @@ ok('Und beim ersten Fehlschlag wird abgebrochen',
    'sonst arbeitete sich der Lauf durch Folgefehler');
 
 /*
- * Die Liste der Schemaaenderungen ist leer - und das ist der richtige Zustand.
+ * Nichts steht aus - auch nicht, seit die Liste wieder Eintraege hat.
  *
- * schema.sql legt das fertige Schema an; eine frische Installation hat nichts
- * nachzutragen. Hier standen fuenfundvierzig Aenderungen, und jede einzelne
- * war der Weg von einem aelteren Stand auf den heutigen - bis hin zu zehn
- * family.*-Schritten, die den Bestand der alten Familien-App ueberfuehrten.
- * Es gibt keine aeltere Datenbank mehr, die ueberfuehrt werden muesste.
- *
- * Der Weg selbst bleibt: Die naechste Aenderung kommt in dieselbe Liste.
+ * Sie war einmal leer: schema.sql legte das fertige Schema an, und es gab
+ * keine aeltere Datenbank. Seit vokidoki.de laeuft, gibt es eine, und neue
+ * Spalten kommen dort ueber diese Liste an. Die Regel dafuer: Jede Aenderung
+ * steht auch in schema.sql - sonst haette eine frische Installation etwas,
+ * das die laufende nicht hat, oder umgekehrt. Deshalb muss eine aus
+ * schema.sql gebaute Datenbank hier nichts nachzutragen haben.
  */
 ok('Es steht nichts aus', schema_pending() === [], implode(', ', schema_pending()));
-ok('Weil die Liste leer ist', schema_migrations() === [],
-   count(schema_migrations()) . ' Eintraege');
+$schemaSqlSpalten = (string) file_get_contents(__DIR__ . '/../app/schema.sql');
+$fehlenInSql = [];
+foreach (schema_migrations() as $name => [$pruefung, $sql]) {
+    preg_match_all('/ADD COLUMN (\w+)/i', $sql, $spalten);
+    foreach ($spalten[1] as $spalte) {
+        if (preg_match('/^\s+' . preg_quote($spalte, '/') . '\s/m', $schemaSqlSpalten) !== 1) {
+            $fehlenInSql[] = $name . ': ' . $spalte;
+        }
+    }
+}
+ok('Jede Aenderung steht auch in schema.sql', $fehlenInSql === [], implode(', ', $fehlenInSql));
 ok('Und kein Rettungsweg fuer Altbestand mehr darin steht',
    !function_exists('schema_has_legacy_data')
    && preg_match("/'family\.[a-z_]+' => \[/", $schemaQuelle) !== 1,
@@ -1785,8 +1824,18 @@ section('Meldungen im Admin');
 $seite = http($base . '/admin/meldungen.php')['body'];
 $mWort = (string) qv('SELECT term_foreign FROM vocab WHERE id = ?', [$mVokabel]);
 ok('Der Admin zeigt die gemeldete Vokabel', str_contains($seite, h($mWort)), $mWort);
-ok('Und nennt, wer was getippt hat',
-   str_contains($seite, 'Testkind') && str_contains($seite, 'zweiter Versuch'));
+/*
+ * Was getippt wurde - aber nicht, von wem. Die Kinder bestaetigen bei der
+ * ersten Anmeldung, dass ihre Lehrkraft nicht sieht, ob sie ueben; ein Name
+ * in der Meldung verriete genau das (lib/einwilligung.php). Im Kursnamen
+ * steht "Testkind" trotzdem - deshalb die Liste darunter, nicht die Seite.
+ */
+preg_match('~<ul class="wer[^"]*">(.*?)</ul>~s', $seite, $mWer);
+ok('Und zeigt, was getippt wurde', str_contains($mWer[1] ?? '', 'zweiter Versuch'),
+   $mWer[1] ?? 'keine Liste');
+ok('Aber nicht, wer es war', $mWer !== [] && !str_contains($mWer[1], 'Testkind')
+   && !str_contains((string) file_get_contents(__DIR__ . '/../app/lib/meldungen.php'), 'u.display_name'),
+   'sonst saehe die Lehrkraft, welches Kind die App benutzt');
 ok('Mit dem Satz zum Aendern und dem Wortpaar dazu',
    str_contains($seite, 'name="s[' . $mSatzId . '][f]"') && str_contains($seite, 'name="f"'));
 ok('Die Leiste traegt die Zahl in Rot', str_contains($seite, 'class="zaehler"'));
@@ -2744,6 +2793,7 @@ function freiPost(string $url, ?array $post, array $header = [],
 
 $seite = freiPost($base . '/teacher/', null);
 preg_match('/name="csrf" value="([a-f0-9]+)"/', $seite['body'], $fm);
+vorAnmeldung($freiLehrer);
 freiPost($base . '/teacher/index.php', [
     'teacher_login' => '1',
     'username'      => $freiLehrer,
@@ -3645,6 +3695,7 @@ $absBody = (function () use ($base, $absJar, $lehrName, $fremdKurs): string {
     curl_close($ch);
     preg_match('/name="csrf" value="([a-f0-9]+)"/', $seite, $m);
 
+    vorAnmeldung($lehrName);
     foreach ([['teacher_login' => '1', 'username' => $lehrName,
                'password' => 'start12345', 'csrf' => $m[1] ?? ''], null] as $post) {
         $ch = curl_init($base . ($post === null
@@ -4091,6 +4142,7 @@ $bremsJar = tempnam(sys_get_temp_dir(), 'vtbrems');
 function bremsLogin(string $user, string $pass): array
 {
     global $base, $bremsJar;
+    vorAnmeldung($user);
     $ch = curl_init($base . '/api/auth.php?action=login');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -4172,6 +4224,9 @@ function teacherGet(string $pfad): array
 function teacherRequest(string $url, ?array $post): array
 {
     global $lehrerJar;
+    if (isset($post['teacher_login'])) {
+        vorAnmeldung((string) ($post['username'] ?? ''));
+    }
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -4355,7 +4410,7 @@ ok('Das Wortpaar zum Aendern, weil beim Auswaehlen gemeldet wurde',
    str_contains($res['body'], 'name="f" value="alpha"'));
 ok('Und der Satz zum Aendern, samt dem Getippten',
    str_contains($res['body'], 'name="s[' . $lmSatz('alpha') . '][f]"')
-   && str_contains($res['body'], 'tippte &bdquo;alfa&ldquo;'));
+   && str_contains($res['body'], 'Getippt: &bdquo;alfa&ldquo;'));
 
 preg_match('/name="csrf" value="([a-f0-9]+)"/', $res['body'], $lmM);
 $lmCsrf = $lmM[1] ?? '';
@@ -6502,6 +6557,7 @@ $einzelSeite = (function () use ($base, $einzelJar, $einzelName, $einzelKurs): s
     };
     $seite = $hole($base . '/teacher/', null);
     preg_match('/name="csrf" value="([a-f0-9]+)"/', $seite, $m);
+    vorAnmeldung($einzelName);
     $hole($base . '/teacher/index.php', [
         'teacher_login' => '1', 'username' => $einzelName,
         'password' => 'lehrerin123', 'csrf' => $m[1] ?? '',
@@ -6827,8 +6883,9 @@ ok('Sie zeigt Name, Farbe und Passwort',
 ok('Und den eigenen Benutzernamen, der sich nicht aendern laesst',
    str_contains($res['body'], '<code>' . h($lehrerName) . '</code>'),
    $lehrerName);
-ok('Ohne JavaScript bedienbar: zwei gewoehnliche Formulare',
-   substr_count($res['body'], '<form method="post" class="card kontoform">') === 2);
+// Name und Farbe, Passwort, und die eigene Vorlage fuer die Zettel.
+ok('Ohne JavaScript bedienbar: drei gewoehnliche Formulare',
+   substr_count($res['body'], '<form method="post" class="card kontoform">') === 3);
 
 $altName = (string) qv('SELECT display_name FROM users WHERE id = ?', [$lehrerId]);
 $res = teacherRequest($base . '/teacher/konto.php', [
@@ -9464,6 +9521,226 @@ ok('In app/ liegt kein storage/ mehr', !is_dir(__DIR__ . '/../app/storage'));
 $gesperrt = http($wurzelUrl . 'daten/config.php');
 ok('daten/ ist von aussen nicht abrufbar', $gesperrt['status'] === 403 || $gesperrt['status'] === 404,
    "Status {$gesperrt['status']}");
+
+section('Hinweise bei der ersten Anmeldung');
+
+require_once __DIR__ . '/../app/lib/einwilligung.php';
+require_once __DIR__ . '/../app/lib/letter.php';
+
+/*
+ * Bevor ein Konto die App benutzt, bestätigt es einmal die Hinweise - ein
+ * Kind vier Sätze, eine Lehrkraft einen. Die Schranke steht in der API
+ * (require_user()) und im Lehrkraft-Bereich (teacher_require()), nicht nur
+ * in der Oberfläche.
+ *
+ * Die übrige Suite meldet ihre Konten mit bestätigten Hinweisen an
+ * (vorAnmeldung()); hier nicht.
+ */
+$GLOBALS['ohneZustimmung'] = true;
+
+$ewSchule = $testSchule;
+$ewKind   = 'e2e_einw_kind';
+q('DELETE FROM users WHERE username IN (?, ?)', [$ewKind, 'e2e_einw_lehr']);
+q("INSERT INTO users (school_id, username, display_name, role, password_hash, color)
+   VALUES (?, ?, 'Einwilli K.', 'student', ?, '#4f7cff')",
+  [$ewSchule, $ewKind, password_hash('geheim123', PASSWORD_DEFAULT)]);
+$ewKindId = (int) db()->lastInsertId();
+
+$ewJar = tempnam(sys_get_temp_dir(), 'vtew');
+$ewErgebnis = apiAls($ewJar, static function () use ($ewKind): array {
+    [$login]      = apiCall('auth', 'login', ['username' => $ewKind, 'password' => 'geheim123']);
+    [$gesperrt, $gesperrtStatus] = apiCall('languages', 'list');
+    [$halb, $halbStatus]         = apiCall('auth', 'einwilligung', ['angehakt' => ['gelesen']]);
+    [$ganz, $ganzStatus]         = apiCall('auth', 'einwilligung', ['angehakt' =>
+        ['gelesen', 'freiwillig', 'lehrkraft', 'eltern']]);
+    [, $danachStatus]            = apiCall('languages', 'list');
+    return compact('login', 'gesperrt', 'gesperrtStatus', 'halb', 'halbStatus',
+                   'ganz', 'ganzStatus', 'danachStatus');
+});
+
+$ewPunkte = $ewErgebnis['login']['user']['einwilligung']['punkte'] ?? [];
+ok('Ein Kind bekommt bei der ersten Anmeldung vier Punkte zum Anhaken',
+   array_column($ewPunkte, 'schluessel') === ['gelesen', 'freiwillig', 'lehrkraft', 'eltern'],
+   json_encode(array_column($ewPunkte, 'schluessel')));
+$ewText = implode(' ', array_column($ewPunkte, 'html'));
+ok('Darin: Datenschutzerklärung und Impressum, verlinkt',
+   str_contains($ewText, 'rechtliches.php?d=datenschutz') && str_contains($ewText, 'rechtliches.php?d=impressum'));
+ok('Dass die Nutzung freiwillig ist', str_contains($ewText, 'freiwillig'));
+ok('Dass die Lehrkraft nicht sieht, ob und wie es übt',
+   str_contains($ewText, 'Lehrkraft') && str_contains($ewText, 'nicht sieht'));
+ok('Und unter 16 das Einverständnis der Eltern',
+   str_contains($ewText, '16 Jahre') && str_contains($ewText, 'Eltern'));
+
+ok('Vorher gibt die API nichts heraus',
+   $ewErgebnis['gesperrtStatus'] === 403 && ($ewErgebnis['gesperrt']['einwilligung'] ?? false) === true,
+   'Status ' . $ewErgebnis['gesperrtStatus']);
+ok('Ein halb angehaktes Formular wird abgelehnt', $ewErgebnis['halbStatus'] === 422,
+   'Status ' . $ewErgebnis['halbStatus']);
+ok('Ganz angehakt wird es angenommen',
+   $ewErgebnis['ganzStatus'] === 200
+   && array_key_exists('einwilligung', $ewErgebnis['ganz']['user'] ?? [])
+   && $ewErgebnis['ganz']['user']['einwilligung'] === null,
+   json_encode($ewErgebnis['ganz']));
+$ewZeile = q1('SELECT consent_version, consent_at FROM users WHERE id = ?', [$ewKindId]);
+ok('Gespeichert mit Fassung und Zeitpunkt',
+   (int) $ewZeile['consent_version'] === EINWILLIGUNG_FASSUNG && $ewZeile['consent_at'] !== null);
+ok('Danach geht es', $ewErgebnis['danachStatus'] === 200, 'Status ' . $ewErgebnis['danachStatus']);
+
+/*
+ * Eine neue Fassung fragt noch einmal - dafür ist die Nummer da.
+ */
+q('UPDATE users SET consent_version = ? WHERE id = ?', [EINWILLIGUNG_FASSUNG - 1, $ewKindId]);
+ok('Eine ältere Fassung gilt nicht mehr',
+   einwilligung_noetig(q1('SELECT * FROM users WHERE id = ?', [$ewKindId])));
+
+// Die App kennt die Seite dafür und schickt dorthin.
+$ewApp = (string) file_get_contents(__DIR__ . '/../app/app.js');
+ok('Die App schickt ohne Bestätigung auf die Seite dafür',
+   str_contains($ewApp, "/^\\/einwilligung\$/") && str_contains($ewApp, "VT.user?.einwilligung"));
+
+// ---- Die Lehrkraft.
+
+q("INSERT INTO users (school_id, username, display_name, role, password_hash, color, can_import)
+   VALUES (?, 'e2e_einw_lehr', 'Frau Einwilli', 'teacher', ?, '#4f7cff', 1)",
+  [$ewSchule, password_hash('lehrerin123', PASSWORD_DEFAULT)]);
+$ewLehrId = (int) db()->lastInsertId();
+ok('Eine Lehrkraft bestätigt einen Punkt',
+   array_column(einwilligung_punkte(q1('SELECT * FROM users WHERE id = ?', [$ewLehrId])), 'schluessel')
+   === ['gelesen']);
+
+$ewLehrJar = tempnam(sys_get_temp_dir(), 'vtewl');
+/** Ein Aufruf im Lehrkraft-Bereich mit eigener Sitzung: [Inhalt, Adresse am Ende]. */
+$ewHole = static function (string $url, ?array $post = null) use ($ewLehrJar): array {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_TIMEOUT => 30,
+        CURLOPT_COOKIEJAR => $ewLehrJar, CURLOPT_COOKIEFILE => $ewLehrJar,
+    ]);
+    if ($post !== null) {
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post));
+    }
+    $body = (string) curl_exec($ch);
+    $wo   = (string) curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+    curl_close($ch);
+    return [$body, $wo];
+};
+$ewCsrf = static fn (string $seite): string =>
+    preg_match('/name="csrf" value="([a-f0-9]+)"/', $seite, $m) === 1 ? $m[1] : '';
+
+[$s] = $ewHole($base . '/teacher/');
+[$s, $wo] = $ewHole($base . '/teacher/index.php', ['teacher_login' => '1',
+    'username' => 'e2e_einw_lehr', 'password' => 'lehrerin123', 'csrf' => $ewCsrf($s)]);
+ok('Nach der Anmeldung steht die Lehrkraft vor den Hinweisen',
+   str_ends_with($wo, '/teacher/einwilligung.php') && str_contains($s, 'Willkommen bei Vokidoki'), $wo);
+[$s2, $wo2] = $ewHole($base . '/teacher/class.php?id=1');
+ok('Und jede andere Seite schickt dorthin zurück', str_ends_with($wo2, '/teacher/einwilligung.php'), $wo2);
+[$s3, $wo3] = $ewHole($base . '/teacher/einwilligung.php',
+    ['einwilligen' => '1', 'angehakt' => ['gelesen'], 'csrf' => $ewCsrf($s)]);
+ok('Bestätigt führt es auf die eigenen Kurse', str_ends_with($wo3, '/teacher/index.php')
+   && str_contains($s3, 'Meine Kurse'), $wo3);
+
+$GLOBALS['ohneZustimmung'] = false;
+
+section('Die Lehrkraft sieht nicht, wer die App benutzt');
+
+/*
+ * Der Satz, den die Kinder oben bestätigen, muss stimmen. Die Klassenliste
+ * zeigte das Anfangspasswort dauerhaft - und "selbst geändert", sobald ein
+ * Kind es geändert hatte. Jetzt gibt es Passwort und Zettel nur direkt nach
+ * dem Vergeben, und für jedes Kind sonst dasselbe.
+ */
+$ewKlasse = class_create($ewSchule, 'Einw' . bin2hex(random_bytes(2)));
+$ewKlasseId = (int) $ewKlasse['id'];
+students_bulk_create($ewSchule, $ewKlasseId, "Anna Alt\nBerta Bunt");
+$ewAnna  = q1("SELECT * FROM users WHERE school_id = ? AND display_name = 'Anna A.'", [$ewSchule]);
+$ewBerta = q1("SELECT * FROM users WHERE school_id = ? AND display_name = 'Berta B.'", [$ewSchule]);
+// Berta hat ihr Passwort schon geändert - das darf nirgends zu sehen sein.
+q('UPDATE users SET initial_password = NULL WHERE id = ?', [(int) $ewBerta['id']]);
+
+[$kl] = $ewHole($base . '/teacher/class.php?id=' . $ewKlasseId);
+ok('In der Klassenliste steht kein Anfangspasswort',
+   !str_contains($kl, (string) $ewAnna['initial_password']) && str_contains($kl, 'Anna A.'));
+ok('Und nirgends "selbst geändert"', !str_contains($kl, 'selbst geändert'));
+preg_match_all('~<td data-label="Anfangspasswort">(.*?)</td>~s', $kl, $zellen);
+$zellen = array_map(static fn (string $z): string => trim(preg_replace('~<\?php.*?\?>|\s+~s', ' ', $z)),
+                    $zellen[1]);
+ok('Beide Kinder sehen in der Liste gleich aus', count($zellen) === 2 && $zellen[0] === $zellen[1],
+   json_encode($zellen, JSON_UNESCAPED_UNICODE));
+[$dr] = $ewHole($base . '/teacher/print.php?class=' . $ewKlasseId);
+ok('Und ohne vergebenes Passwort gibt es keinen Zettel',
+   !str_contains($dr, 'class="blatt"') && str_contains($dr, 'nichts zu drucken'));
+
+// Ein neues Passwort für Berta: jetzt Passwort und Zettel - nur für sie.
+$ewHole($base . '/teacher/class.php?id=' . $ewKlasseId,
+        ['reset_password' => (int) $ewBerta['id'], 'class_id' => $ewKlasseId, 'csrf' => $ewCsrf($kl)]);
+$ewBertaNeu = (string) qv('SELECT initial_password FROM users WHERE id = ?', [(int) $ewBerta['id']]);
+[$kl2] = $ewHole($base . '/teacher/class.php?id=' . $ewKlasseId);
+ok('Nach dem neuen Passwort steht es da', $ewBertaNeu !== '' && str_contains($kl2, $ewBertaNeu));
+[$dr2] = $ewHole($base . '/teacher/print.php?class=' . $ewKlasseId);
+ok('Und genau ihr Zettel lässt sich drucken',
+   substr_count($dr2, 'class="blatt"') === 1 && str_contains($dr2, $ewBertaNeu)
+   && str_contains($dr2, 'Berta B.') && !str_contains($dr2, 'Anna A.'));
+
+// Allen neue Passwörter - mit Rückfrage, dann Zettel für alle.
+ok('"Allen neue Passwörter geben" fragt vorher nach',
+   preg_match('~name="reset_all"[^>]*data-confirm="[^"]*gelten dann nicht mehr~s', $kl2) === 1);
+$ewHole($base . '/teacher/class.php?id=' . $ewKlasseId,
+        ['reset_all' => '1', 'class_id' => $ewKlasseId, 'csrf' => $ewCsrf($kl2)]);
+[$dr3] = $ewHole($base . '/teacher/print.php?class=' . $ewKlasseId);
+ok('Danach gibt es Zettel für die ganze Klasse', substr_count($dr3, 'class="blatt"') === 2);
+
+section('Die Zettel: Vorlage je Lehrkraft');
+
+/*
+ * Der Zettel nimmt die Vorlage der Lehrkraft, die druckt - sonst die des
+ * Betreibers. Voreingestellt steht darin ein Abschnitt für die Eltern.
+ */
+ok('Die Voreinstellung spricht die Eltern an',
+   str_contains(letter_default(), 'Information für die Erziehungsberechtigten')
+   && str_contains(letter_default(), 'freiwillig')
+   && str_contains(letter_default(), '{datenschutz}'));
+ok('Und der Zettel trägt die Adresse der Datenschutzerklärung',
+   str_contains($dr3, 'rechtliches.php?d=datenschutz') && str_contains($dr3, 'Information für die Erziehungsberechtigten'));
+ok('Im Stil der App: mit Voki und dem Wortzeichen',
+   str_contains($dr3, 'voki-icon.svg') && str_contains($dr3, 'vokidoki_logo.svg')
+   && str_contains($dr3, 'fredoka.woff2'));
+ok('Die Überschrift für die Eltern wird als solche gesetzt',
+   str_contains($dr3, '<h2>Information für die Erziehungsberechtigten</h2>'));
+
+[$konto] = $ewHole($base . '/teacher/konto.php');
+ok('Unter "Mein Konto" steht die Vorlage zum Anpassen',
+   str_contains($konto, 'name="letter_template"') && str_contains($konto, 'Du nutzt die Voreinstellung'));
+ok('Ohne eigene Vorlage gibt es nichts zurückzusetzen', !str_contains($konto, 'name="reset_letter"'));
+
+$ewHole($base . '/teacher/konto.php', ['save_letter' => '1', 'csrf' => $ewCsrf($konto),
+    'letter_template' => "Moin {name}!\n\nEIGENE VORLAGE mit {benutzername} und {passwort}."]);
+ok('Die eigene Vorlage wird gespeichert',
+   str_contains((string) qv('SELECT letter_template FROM users WHERE id = ?', [$ewLehrId]), 'EIGENE VORLAGE'));
+[$dr4] = $ewHole($base . '/teacher/print.php?class=' . $ewKlasseId);
+ok('Und steht auf den Zetteln dieser Lehrkraft', str_contains($dr4, 'EIGENE VORLAGE'));
+ok('Aber nicht auf denen anderer',
+   !str_contains(letter_template(q1('SELECT * FROM users WHERE id = ?', [$lehrerId])), 'EIGENE VORLAGE'));
+
+[$konto2] = $ewHole($base . '/teacher/konto.php');
+ok('Zurücksetzen fragt vorher nach',
+   preg_match('~name="reset_letter"[^>]*data-confirm="[^"]*Dein Text ist danach weg~s', $konto2) === 1);
+$ewHole($base . '/teacher/konto.php', ['reset_letter' => '1', 'csrf' => $ewCsrf($konto2)]);
+ok('Und stellt die Voreinstellung wieder her',
+   qv('SELECT letter_template FROM users WHERE id = ?', [$ewLehrId]) === null);
+
+// Wortgleich mit der Voreinstellung ist keine eigene - sonst hinge die
+// Lehrkraft an einer Abschrift fest.
+letter_save_own($ewLehrId, letter_standard());
+ok('Die Voreinstellung wortgleich zu speichern macht keine eigene daraus',
+   qv('SELECT letter_template FROM users WHERE id = ?', [$ewLehrId]) === null);
+
+// Aufräumen.
+q('DELETE FROM users WHERE id IN (?, ?, ?, ?)',
+  [$ewKindId, $ewLehrId, (int) $ewAnna['id'], (int) $ewBerta['id']]);
+q('DELETE FROM classes WHERE id = ?', [$ewKlasseId]);
+@unlink($ewJar);
+@unlink($ewLehrJar);
 
 section('Abmelden und Token-Widerruf');
 

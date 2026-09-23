@@ -162,18 +162,26 @@ function meldung_laden(int $vocabId, ?int $lehrerId): ?array
     $wahl   = [];
     $saetze = [];
     $kinder = [];
+    /*
+     * Ohne Namen. Hier stand, wer gemeldet hat ("Mats B. tippte ...") - und
+     * damit, dass Mats die App benutzt und wo er gerade übt. Das darf eine
+     * Lehrkraft nicht erfahren: Die Kinder bestätigen bei der ersten
+     * Anmeldung, dass sie nicht sieht, ob und wie sie üben
+     * (lib/einwilligung.php). Für die Korrektur zählt ohnehin nur, WAS
+     * getippt wurde. Gezählt werden die Kinder weiterhin - eine Zahl
+     * verrät niemanden.
+     */
     foreach (qa(
-        'SELECT f.sentence_id, f.typed, f.user_id, u.display_name,
+        'SELECT f.sentence_id, f.typed, f.user_id,
                 s.native_text, s.foreign_text, s.answer
            FROM vocab_flags f
-           JOIN users u ON u.id = f.user_id
            LEFT JOIN sentences s ON s.id = f.sentence_id
           WHERE f.vocab_id = ? AND (f.sentence_id = 0 OR s.id IS NOT NULL)
           ORDER BY f.created_at',
         [$vocabId],
     ) as $f) {
         $kinder[(int) $f['user_id']] = true;
-        $wer = ['name' => (string) $f['display_name'], 'typed' => (string) ($f['typed'] ?? '')];
+        $wer = ['typed' => (string) ($f['typed'] ?? '')];
 
         $sid = (int) $f['sentence_id'];
         if ($sid === 0) {
@@ -282,13 +290,17 @@ function meldung_bearbeiten(?int $lehrerId, array $post): array
  */
 function meldung_html(array $m, int $offen, string $csrfFeld): string
 {
+    // Wie oft, und was getippt wurde - aber nicht, von wem (siehe meldung_laden()).
     $wer = static function (array $liste, bool $mitGetipptem): string {
+        if (!$mitGetipptem) {
+            return sprintf('<p class="wer tiny muted">%s gemeldet</p>',
+                count($liste) === 1 ? 'Einmal' : count($liste) . '-mal');
+        }
         $zeilen = '';
         foreach ($liste as $w) {
-            $zeilen .= '<li>' . h($w['name'])
-                . ($mitGetipptem && $w['typed'] !== ''
-                    ? ' tippte &bdquo;' . h($w['typed']) . '&ldquo;' : '')
-                . '</li>';
+            $zeilen .= '<li>' . ($w['typed'] !== ''
+                    ? 'Getippt: &bdquo;' . h($w['typed']) . '&ldquo;'
+                    : 'Ohne Eingabe gemeldet') . '</li>';
         }
         return '<ul class="wer tiny muted">' . $zeilen . '</ul>';
     };

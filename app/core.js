@@ -75,6 +75,16 @@ export async function api(file, action, opts = {}) {
             VT.user = null;
             go('/login');
         }
+        /*
+         * Die Hinweise sind (wieder) zu bestätigen - etwa weil sich ihre
+         * Fassung geändert hat, während die App offen lag. Neu laden: Die
+         * Hülle bringt die Punkte zum Anhaken mit, und route() schickt dann
+         * auf die Seite dafür.
+         */
+        if (res.status === 403 && data.einwilligung && !VT.user?.einwilligung) {
+            window.location.hash = '#/einwilligung';
+            window.location.reload();
+        }
         throw new ApiError(data.error || 'Etwas ist schiefgelaufen.', res.status);
     }
     return data;
