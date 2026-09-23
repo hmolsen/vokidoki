@@ -10,7 +10,7 @@ Wieselgang 7
 ## Kontakt
 
 Telefon: +49 162 7160342
-E-Mail: mail@sosec.de
+E-Mail: support@vokidoki.de
 
 ## Umsatzsteuer-ID
 

@@ -10,73 +10,122 @@ Jedes Kind hat einen eigenen Account und ein eigenes Symbol auf dem iOS-Home-Bil
 
 ---
 
+
 ## Einrichtung
+
+### 1. Was wohin gehört
+
+Das Repository ist in drei Ordner geteilt, und jeder hat auf dem Server
+seinen festen Platz im Webroot von vokidoki.de:
+
+| im Repository | auf dem Server | wann hochladen |
+|---|---|---|
+| `website/` | Webroot (`index.html`, `bilder/`, `.htaccess`) | wenn sich die Startseite ändert |
+| `app/` | `app/` | **bei jedem Update** — alles darin darf überschrieben werden |
+| `daten-vorlage/` | `daten/` | **einmal**, bei der Einrichtung — danach nie wieder |
+
+`app/` enthält nur, was die Anwendung zum Laufen braucht, und nichts, was
+ein Update überleben muss. Zugangsdaten, Sitzungen, Fehlerprotokoll und die
+erzeugten App-Symbole liegen in `daten/` (`config.php`, `storage/`). Ein
+Update heisst damit: **`app/` hochladen und überschreiben lassen.**
+
+Nicht hochgeladen werden `tests/`, `composer.phar`, `.git/`, die
+Markdown-Dateien in der Wurzel des Repositorys - und `app/vendor/`: Die
+Abhängigkeiten entstehen auf dem Server (siehe unten).
+
+Liegt der Webroot so, dass der Hoster einen Ordner **oberhalb** davon
+zulässt, gehört `daten/` besser dorthin, als `vokidoki-daten/` neben dem
+Webroot. Die App sucht in dieser Reihenfolge und nimmt den ersten Ordner mit
+einer `config.php` (`daten_dir()` in `app/lib/config.php`):
+
+1. `../vokidoki-daten/` — eine Ebene über dem Webroot; der Webserver kommt
+   gar nicht heran
+2. `daten/` — im Webroot neben `app/`, gesperrt durch die `.htaccess` darin
+   und die im Webroot
+
+**Die Abhängigkeiten entstehen auf dem Server.** `composer.json` und
+`composer.lock` liegen in `app/` und werden mit hochgeladen; danach per SSH:
+
+```bash
+cd /pfad/zum/webroot/app
+composer install --no-dev --optimize-autoloader
+```
+
+Das legt `app/vendor/` an. Nötig ist es beim ersten Mal und immer dann, wenn
+sich `composer.lock` geändert hat - ein gewöhnliches Update von `app/`
+überschreibt `vendor/` nicht, es bleibt stehen. Lokal dasselbe mit
+`php composer.phar -d app install`.
 
 > Das Anthropic-SDK spricht über PSR-18 und braucht dafür eine HTTP-Client-
 > Implementierung. Sie steht als `guzzlehttp/guzzle` ausdrücklich in der
 > `composer.json` — sonst installiert `composer install` zwar fehlerfrei, aber
 > die erste Foto-Analyse scheitert mit „No PSR-18 clients found".
 
-### 1. Dateien auf den Server
+**Per FTP:** den *Inhalt* von `website/` in den Webroot, `app/` als `app/`
+(ohne `app/vendor/`, falls es lokal eines gibt). Beim ersten Mal zusätzlich
+`daten-vorlage/` als `daten/` (samt der versteckten `.htaccess`-Dateien —
+manche FTP-Programme blenden sie aus). Danach per SSH `composer install` wie
+oben. Überschreiben reicht; nur eine Datei, die es im Repository nicht mehr
+gibt, bleibt auf dem Server liegen, bis man sie dort löscht.
+
+Nach dem ersten Hochladen nachsehen, ob **`app/lib/`** angekommen ist. Manche
+FTP-Programme überspringen einen Ordner namens `lib`, und ohne ihn antwortet
+jede PHP-Seite mit einem leeren „500 Internal Server Error" - noch bevor die
+App eine Fehlermeldung ausgeben kann. Statische Dateien wie `style.css` gehen
+dabei, was den Fehler zunächst woanders suchen lässt.
+
+**Per SSH:**
 
 ```bash
-VT_SSH=benutzer@server.de VT_PATH=/var/www/vokabeln ./deploy.sh
+VT_SSH=benutzer@server.de VT_PATH=/pfad/zum/webroot ./deploy.sh
 ```
 
-Das Skript überträgt alles außer `config.php`, `vendor/` und den generierten
-Icons und führt anschließend `composer install` auf dem Server aus.
-
-**Alternativ per FTP.** Den Projektordner hochladen, aber **ohne** diese Einträge:
-
-| nicht hochladen | Grund |
-|---|---|
-| `.git/` | groß und unnötig; enthält die gesamte Historie |
-| `vendor/` | entsteht auf dem Server per `composer install` (tausende Dateien, über FTP zäh) |
-| `composer.phar` | wird auf dem Server nicht gebraucht |
-| `config.php` | Zugangsdaten gehören nur auf den Server |
-| `storage/icons/*.png` | werden bei Bedarf neu erzeugt |
-
-Danach einmal per SSH:
-
-```bash
-cd /pfad/zum/ordner
-composer install --no-dev --optimize-autoloader
-```
-
-`vendor/` lässt sich zwar auch lokal erzeugen und mitschicken, dauert über FTP
-aber deutlich länger als der eine Befehl.
+Das Skript gleicht `app/` ab (auch Gelöschtes verschwindet, `vendor/`
+bleibt stehen), kopiert die Startseite, legt `daten/` nur an, wenn es noch
+keinen Datenordner gibt, und führt danach `composer install` auf dem Server
+aus.
 
 ### 2. Konfiguration
 
+Im Datenordner auf dem Server:
+
 ```bash
 cp config.example.php config.php
-chmod 600 config.php
+chmod 640 config.php
+mkdir -p storage/sessions
+chmod 775 storage storage/icons storage/sessions
 ```
 
+**Nicht `chmod 600`.** Bei ALL-INKL gehören die Dateien dem SSH-Benutzer
+(`ssh-w…`), PHP läuft aber als der Konto-Benutzer (`w…`), der nur die Gruppe
+teilt. Mit 600 kann PHP `config.php` nicht lesen, und jede Seite endet in
+einem leeren 500er. 640 lässt die Gruppe lesen und sonst niemanden; von aussen
+sperrt ohnehin die `.htaccess` des Datenordners. Aus demselben Grund braucht
+`storage/` Schreibrecht für die Gruppe - dort legt PHP Sitzungen,
+Fehlerprotokoll und App-Symbole ab. Der Selbsttest meldet, wenn das fehlt.
+
 In `config.php` eintragen: MySQL-Zugang, das **Keyvault-Token** und ein
-Start-Passwort für den Admin-Bereich. Liegt die App in einem Unterverzeichnis,
-zusätzlich `base_path` setzen (z. B. `'/vokabeln'`).
+Start-Passwort für den Admin-Bereich. `base_path` steht auf `'/app'` — so
+liegt die App auf vokidoki.de, die Startseite davor im Webroot.
 
 Der Anthropic-Key steht **nicht** in dieser Datei — siehe nächster Abschnitt.
-
-Erlaubt der Hoster ein Verzeichnis oberhalb des Webroots, kann die Datei auch
-dort als `vokabeltrainer-config.php` liegen — sie wird automatisch gefunden.
 
 ### 3. Datenbank
 
 ```bash
-mysql -u BENUTZER -p DATENBANK < schema.sql
+mysql -u BENUTZER -p DATENBANK < app/schema.sql
 ```
 
 ### 4. Prüfen und Accounts anlegen
 
-`https://deine-domain/admin/` aufrufen, mit dem Start-Passwort anmelden
+`https://vokidoki.de/app/admin/` aufrufen, mit dem Start-Passwort anmelden
 (es wird beim ersten Login als Hash gespeichert, danach ist der Wert in
 `config.php` wirkungslos). Dann:
 
-1. **Selbsttest** öffnen — dort muss alles grün sein. Die Liste der
-   Schemaänderungen ist leer: `schema.sql` legt das fertige Schema an, eine
-   frische Installation hat nichts nachzutragen.
+1. **Selbsttest** öffnen — dort muss alles grün sein. Er misst auch, dass
+   `daten/config.php` und das Fehlerprotokoll von aussen nicht abrufbar sind.
+   Die Liste der Schemaänderungen ist leer: `schema.sql` legt das fertige
+   Schema an, eine frische Installation hat nichts nachzutragen.
 2. Unter **Schulen** die erste Schule anlegen. Ohne sie kann ein Konto weder
    eine Sprache anlegen noch eine Lerneinheit sehen — beides hängt am Kurs
    und ein Kurs an der Schule. Es entsteht keine Schule von selbst.
@@ -189,24 +238,28 @@ eine neue Fassung dort ankommt, greifen drei Dinge ineinander:
 
 ## Absicherung
 
-Die mitgelieferte `.htaccess` sperrt `config.php`, `schema.sql`, `lib/`, `storage/`,
-`vendor/`, `tests/` und ein versehentlich mit hochgeladenes `.git/`.
-Die Testskripte weisen Web-Aufrufe zusätzlich selbst mit 404 ab (`PHP_SAPI`-Prüfung),
-falls `.htaccess` nicht greift. Der **Selbsttest misst das aktiv nach**, indem er diese Pfade über die
-eigene Adresse aufruft — meldet er dort ein Problem, wertet dein Server keine
+Drei `.htaccess`-Dateien sperren, was nicht ausgeliefert werden darf: die in
+`app/` sperrt `lib/`, `vendor/` und `schema.sql`, die in `daten/` den ganzen
+Datenordner, und die im Webroot (aus `website/`) noch einmal `daten/` sowie
+ein versehentlich mit hochgeladenes `.git/` oder `tests/`. Die Testskripte
+weisen Web-Aufrufe zusätzlich selbst mit 404 ab (`PHP_SAPI`-Prüfung). Der
+**Selbsttest misst das aktiv nach**, indem er diese Pfade über die eigene
+Adresse aufruft — meldet er dort ein Problem, wertet dein Server keine
 `.htaccess` aus (nginx, oder `AllowOverride None`).
 
-In dem Fall entweder `config.php` als `vokabeltrainer-config.php` eine Ebene
-**oberhalb** des Webroots ablegen (wird automatisch gefunden), oder für nginx:
+In dem Fall den Datenordner als `vokidoki-daten/` eine Ebene **oberhalb** des
+Webroots ablegen (wird automatisch gefunden), oder für nginx:
 
 ```nginx
-location ~ ^/(lib|storage|vendor)/           { deny all; }
-location ~ ^/(config\.php|schema\.sql|composer\.(json|lock)|deploy\.sh)$ { deny all; }
+location ~ ^/(daten|vokidoki-daten)/          { deny all; }
+location ~ ^/app/(lib|vendor)/                { deny all; }
+location ~ ^/app/(schema\.sql|composer\.(json|lock))$ { deny all; }
 ```
 
-Sitzungsdateien liegen in `storage/sessions` statt im Standardpfad des Servers —
-der existiert bei geteiltem Hosting nicht immer, und ohne ihn scheitert die
-Anmeldung. Unerwartete Fehler landen mit einer Kennung in `storage/error.log`;
+Sitzungsdateien liegen in `daten/storage/sessions` statt im Standardpfad des
+Servers — der existiert bei geteiltem Hosting nicht immer, und ohne ihn
+scheitert die Anmeldung. Unerwartete Fehler landen mit einer Kennung in
+`daten/storage/error.log`;
 nach außen gibt es eine verständliche Meldung statt einer leeren 500er-Seite.
 
 Weitere eingebaute Schutzmaßnahmen: der Anthropic-Key nur im Keyvault,
@@ -284,7 +337,7 @@ auf irgendeine Systemschrift zurück — ausgerechnet beim Namen der App, und
 ausgerechnet in dem Augenblick vor dem ersten Bild, in dem die Schrift noch
 gar nicht geladen ist. Als Pfad sieht es überall gleich aus.
 
-Wer das Zeichen neu bauen will: Es entsteht aus `assets/voki-mini.svg` und
+Wer das Zeichen neu bauen will: Es entsteht aus `app/assets/voki-mini.svg` und
 Fredoka 700, auf Versalhöhe gesetzt und um ein Dreissigstel grösser als die
 Buchstaben — ein rundes Maskottchen wirkt neben fetten Buchstaben sonst
 kleiner, als es ist.
@@ -298,10 +351,10 @@ verschwände er auf manchen Farben ganz. Derselbe Voki ist das Favicon, dort
 ohne farbige Fläche.
 
 `icon.php` zeichnet mit GD, und GD liest kein SVG. Deshalb liegt Voki
-zweimal bereit, beide gebaut aus `assets/voki-mini.svg`:
+zweimal bereit, beide gebaut aus `app/assets/voki-mini.svg`:
 
-- `assets/voki-icon.svg` — mit Rand; Favicon und Vorschau im Profil
-- `assets/voki-icon.png` — dasselbe, 1024 px, durchsichtig; für `icon.php`
+- `app/assets/voki-icon.svg` — mit Rand; Favicon und Vorschau im Profil
+- `app/assets/voki-icon.png` — dasselbe, 1024 px, durchsichtig; für `icon.php`
 
 Ändert sich Voki, beide neu bauen und mit einchecken:
 
@@ -1181,9 +1234,44 @@ bereits protokollierte Anfragen behalten ihren damals berechneten Betrag.
 
 ---
 
+## Die Startseite
+
+`website/index.html` ist die Seite, die unter https://vokidoki.de/ steht: eine
+einzelne, statische HTML-Seite, die die App vorstellt – in zwei Fassungen, „Für
+Schülerinnen und Schüler" und „Für Lehrkräfte", zwischen denen ein Umschalter
+wechselt (`#schueler`, `#lehrkraefte` in der Adresse). Ohne JavaScript stehen
+beide untereinander. „Anmelden" führt nach `app/`, unten stehen Impressum,
+Datenschutz und Lizenzen aus `app/rechtliches.php`.
+
+Schriften, Logo und Voki kommen aus `app/assets/`, also vom eigenen Server —
+aus demselben Grund wie in der App. Die Startseite braucht deshalb die App
+daneben; getrennt hochladen lassen sich beide trotzdem.
+
+Die Bildschirmfotos in `website/bilder/` sind echte Fotos der App, keine
+Zeichnungen. Nach einer sichtbaren Änderung an der App neu machen und mit
+einchecken:
+
+```bash
+node tests/browser/website-bilder.mjs
+```
+
+Das Skript braucht den laufenden Entwicklungsserver, legt sich dafür eine
+Vorführklasse an (`tests/browser/demo.php`: das Gymnasium am See, Klasse 6b,
+Französisch und Englisch, Lina mit einer Serie von zwölf Tagen) und räumt sie
+danach wieder weg. Adresse und QR-Code auf Zettel und Dialog werden dabei auf
+`https://vokidoki.de/app/` gestellt — wer den Code vom Bildschirm
+abfotografiert, soll bei Vokidoki landen, nicht auf einem fremden Rechner.
+
+---
+
 ## Aufbau
 
 ```
+website/             die Startseite von vokidoki.de (index.html, bilder/)
+daten-vorlage/       der Datenordner zum ersten Hochladen: config.example.php, storage/
+tests/               die Prüfungen, der Router für den Entwicklungsserver, Werkzeuge
+app/                 die Anwendung - alles darunter wird bei jedem Update überschrieben:
+
 index.php            App-Shell; rendert Manifest-Link und iOS-Meta pro Kind
 manifest.php         dynamisches Manifest (Name, start_url mit Token)
 icon.php             PNG-Icon: Voki auf der Farbe des Kontos (GD), gecacht; auch Favicon
@@ -1203,6 +1291,8 @@ assets/fonts/        Fredoka und Nunito, selbst ausgeliefert
 assets/vokidoki_logo.svg  das Wortzeichen; das V ist Voki, "okidoki" sind Pfade
 assets/voki-icon.*   Voki mit weissem Rand fürs App-Symbol (siehe oben)
 schema.sql           Datenbankschema
+composer.json/.lock  die Abhängigkeiten; composer install läuft hier, auf dem Server
+vendor/              dorthin legt composer install sie (nicht versioniert)
 ```
 
 ### Kategorien
@@ -1363,16 +1453,23 @@ zu überschreiben.
 ## Entwicklung
 
 ```bash
-php -S localhost:8000        # Projektwurzel ist zugleich Webroot
+php -S 127.0.0.1:8123 -t . tests/router.php
 ```
 
-In `config.php` `'dev' => true` setzen, um PHP-Fehler im Browser zu sehen.
+Der Router stellt den Webroot von vokidoki.de nach: `/` ist die Startseite
+aus `website/`, `/app/` die Anwendung, `/daten/` ist gesperrt. So läuft auch
+lokal alles unter `/app` - ein Pfad, der das Unterverzeichnis vergisst, fällt
+hier auf und nicht erst nach dem Upload.
+
+Die lokale Konfiguration liegt wie auf dem Server in `daten/config.php`
+(nicht versioniert; Vorlage in `daten-vorlage/`), mit `'base_path' => '/app'`.
+Dort `'dev' => true` setzen, um PHP-Fehler im Browser zu sehen.
 Auf `localhost` wird der Service Worker registriert, ohne HTTPS zu verlangen.
 
 ### Tests
 
 ```bash
-php tests/e2e.php http://localhost:8000 DEIN-ADMIN-PASSWORT
+php tests/e2e.php http://127.0.0.1:8123/app DEIN-ADMIN-PASSWORT
 ```
 
 1200 Prüfungen über die gesamte Kette: Admin-Login und -Seiten, Schulen,
@@ -1387,7 +1484,7 @@ gebaut, nichts zu hinterlassen, und der Abschnitt zur Bilderkennung überspringt
 sich dabei selbst:
 
 ```bash
-php tests/e2e.php https://deine-domain/vokabeltrainer DEIN-ADMIN-PASSWORT
+php tests/e2e.php https://vokidoki.de/app DEIN-ADMIN-PASSWORT
 ```
 
 Das ist zugleich die einfachste Art, den Code einmal unter der PHP-Version des
@@ -1424,7 +1521,7 @@ Key aus dem Keyvault im `x-api-key`-Header landet, dass die Bildblöcke mit
 JSON-Schema und die Aufwandsstufe trägt — und danach, dass Antwort, Token und
 Kosten richtig ausgewertet und protokolliert werden, Fehlversuche eingeschlossen.
 
-Vorausgesetzt wird in der lokalen `config.php`:
+Vorausgesetzt wird in der lokalen `daten/config.php`:
 
 ```php
 'keyvault_url'       => 'http://127.0.0.1:8124/',

@@ -1,0 +1,30 @@
+# Vokidoki - der Webroot von vokidoki.de
+#
+# Hier liegen die Startseite (index.html, bilder/), daneben app/ mit der
+# Anwendung und - falls der Hoster keinen Ordner oberhalb des Webroots
+# zulaesst - daten/ mit config.php und storage/. daten/ traegt eine eigene
+# Sperre; diese hier ist die zweite, falls deren .htaccess beim Hochladen
+# verlorengeht.
+
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^(daten|vokidoki-daten)(/|$) - [F,L]
+  # Falls das Repository versehentlich mit hochgeladen wurde.
+  RewriteRule ^(\.git|tests|daten-vorlage)(/|$) - [F,L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  # Die Bilder der Startseite aendern sich nur mit einer neuen Fassung der
+  # App; eine Woche aufheben ist genug und laesst Aktualisierungen durch.
+  <FilesMatch "\.webp$">
+    Header set Cache-Control "public, max-age=604800"
+  </FilesMatch>
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "same-origin"
+</IfModule>

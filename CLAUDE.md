@@ -11,12 +11,12 @@ Die Datenbank ist ein lokal installiertes **MariaDB**:
 "C:/Program Files/MariaDB 12.3/bin/mariadbd.exe" --port=3399 --console
 ```
 
-Der Port muss 3399 sein - so steht es in `config.php`. Die mitgelieferte
+Der Port muss 3399 sein - so steht es in `daten/config.php`. Die mitgelieferte
 `data/my.ini` von MariaDB sagt 3306, deshalb der ausdrückliche `--port`.
 MariaDB läuft hier nicht als Dienst, der Daemon wird von Hand gestartet.
 
 Die Datenbank heisst `vokabeltrainer`. Fehlt sie, einmal anlegen und
-`schema.sql` einspielen:
+`app/schema.sql` einspielen:
 
 ```
 CREATE DATABASE vokabeltrainer CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -29,8 +29,8 @@ und einen laufenden Server, die Browser-Suite zusätzlich Chrome (ist da, unter
 `C:/Program Files/Google/Chrome/Application/chrome.exe`).
 
 ```
-php -S 127.0.0.1:8123 -t .            # der Server, den die Suiten anfragen
-php tests/e2e.php http://127.0.0.1:8123
+php -S 127.0.0.1:8123 -t . tests/router.php   # der Server, den die Suiten anfragen
+php tests/e2e.php http://127.0.0.1:8123/app
 php tests/sentences.php
 php tests/ai.php
 php tests/keyvault.php
@@ -38,7 +38,18 @@ node tests/browser/lauf.mjs --fixture
 ```
 
 `tests/fake-keyvault.php` und `tests/fake-anthropic.php` stehen für die
-KI-Aufrufe bereit; `config.php` zeigt lokal bereits auf sie (Port 8124/8125).
+KI-Aufrufe bereit; `daten/config.php` zeigt lokal bereits auf sie (Port 8124/8125).
+
+## Aufbau
+
+- `app/` ist die Anwendung und wird bei jedem Update als Ganzes
+  überschrieben. Darin darf nichts liegen, was ein Update überleben muss.
+- `daten/` (lokal, nicht versioniert; Vorlage `daten-vorlage/`) hält
+  `config.php` und `storage/`. Die App findet den Ordner über `daten_dir()`
+  in `app/lib/config.php`; Laufzeitdateien gehen über `storage_path()`.
+- `website/` ist die Startseite von vokidoki.de, `index.html` im Webroot.
+- `tests/router.php` stellt diesen Webroot für den eingebauten Server nach:
+  die App unter `/app`, wie auf dem Server.
 
 ## Wie hier geschrieben wird
 
@@ -49,10 +60,10 @@ KI-Aufrufe bereit; `config.php` zeigt lokal bereits auf sie (Port 8124/8125).
 - Eine Regel steht an genau einer Stelle. Wo sie zwangsläufig zweimal steht
   (Server *und* Gerät, weil ohne Netz geübt wird), hält eine gemeinsame
   Fallsammlung unter `tests/faelle/` beide Fassungen zusammen.
-- Schemaänderungen gehen nur nach `schema.sql`. Migrationen gibt es nicht
+- Schemaänderungen gehen nur nach `app/schema.sql`. Migrationen gibt es nicht
   mehr: `schema_migrations()` ist leer, seit feststeht, dass dies eine
   Neuinstallation ist. Wer sie wieder braucht, baut sie bewusst zurück -
   nicht nebenbei.
 - Neue Dateien der Oberfläche landen automatisch in `app_assets()`
-  (`lib/version.php`) - sie globbt `*.js` und `views/*.js`. Ohne das merkt eine
+  (`app/lib/version.php`) - sie globbt `*.js` und `views/*.js`. Ohne das merkt eine
   auf dem Homescreen installierte App von einer Änderung nichts.

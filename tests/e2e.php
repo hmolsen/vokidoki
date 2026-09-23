@@ -4,7 +4,11 @@ declare(strict_types=1);
 /**
  * End-to-End-Test gegen eine laufende Instanz.
  *
- *   php tests/e2e.php http://localhost:8123
+ *   php tests/e2e.php http://127.0.0.1:8123/app
+ *
+ * Die Adresse der App, mit /app - so wie tests/router.php den Webroot
+ * nachstellt. Ohne Angabe gilt 127.0.0.1:8123 plus base_path aus der
+ * Konfiguration.
  *
  * Der Test legt einen eigenen Testaccount an, spielt Login, Sprache, Import
  * (ohne KI-Aufruf), Quiz und Aufräumen durch und prüft dabei die Lernregel
@@ -23,11 +27,11 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 
-require_once __DIR__ . '/../lib/db.php';
-require_once __DIR__ . '/../lib/settings.php';
-require_once __DIR__ . '/../lib/wordtypes.php';
+require_once __DIR__ . '/../app/lib/db.php';
+require_once __DIR__ . '/../app/lib/settings.php';
+require_once __DIR__ . '/../app/lib/wordtypes.php';
 
-$base     = rtrim($argv[1] ?? 'http://localhost:8123', '/');
+$base     = rtrim($argv[1] ?? 'http://127.0.0.1:8123' . base_path(), '/');
 // Zweites Argument: Admin-Passwort. Fehlt es, wird der Admin-Teil übersprungen -
 // so lässt sich der Test auch gegen eine Installation fahren, deren Passwort
 // bereits geändert wurde.
@@ -134,9 +138,9 @@ echo "End-to-End-Test gegen $base\n";
 
 section('Testaccount vorbereiten');
 
-require_once __DIR__ . '/../lib/courses.php';
-require_once __DIR__ . '/../lib/access.php';
-require_once __DIR__ . '/../lib/vocab.php';
+require_once __DIR__ . '/../app/lib/courses.php';
+require_once __DIR__ . '/../app/lib/access.php';
+require_once __DIR__ . '/../app/lib/vocab.php';
 
 /*
  * Ein Konto entsteht nie fuer sich allein - es gehoert zu einer Schule, und
@@ -443,11 +447,11 @@ foreach (['/' => 'App', '/admin/' => 'Admin', '/teacher/' => 'Lehrkraft-Bereich'
        && str_contains($kopf, 'icon.php?f=1'));
 }
 ok('Auch die Seite ohne Netz',
-   str_contains((string) file_get_contents(__DIR__ . '/../offline.html'), 'voki-icon.svg'));
+   str_contains((string) file_get_contents(__DIR__ . '/../app/offline.html'), 'voki-icon.svg'));
 
 // Eine neue Zeichnung muss ankommen, auch wenn storage/icons/ voll ist.
 ok('Der Zwischenspeicher der Symbole kennt die Vorlage',
-   str_contains((string) file_get_contents(__DIR__ . '/../icon.php'), 'filemtime($vorlage)'));
+   str_contains((string) file_get_contents(__DIR__ . '/../app/icon.php'), 'filemtime($vorlage)'));
 
 $res = http($base . '/manifest.php?t=kein-gueltiger-token');
 ok('Ungültiger Token liefert generisches Manifest',
@@ -724,7 +728,7 @@ section('Zugriffsregeln an einer Stelle');
  * genau das, was sonst passiert: dass jemand "nur schnell" wieder eine eigene
  * Besitzabfrage in einen Endpunkt schreibt.
  */
-$accessDatei = __DIR__ . '/../lib/access.php';
+$accessDatei = __DIR__ . '/../app/lib/access.php';
 ok('Es gibt eine eigene Datei fuer die Zugriffsregeln', is_file($accessDatei));
 
 $access = (string) file_get_contents($accessDatei);
@@ -762,7 +766,7 @@ ok('Sehen und Aendern sind getrennte Fragen',
 // Kein Endpunkt darf die Regel umgehen. Gesucht wird nach eigenen
 // Besitzabfragen - "user_id = ?" in einem SELECT ausserhalb der Huellen.
 $umgeher = [];
-foreach (glob(__DIR__ . '/../api/*.php') ?: [] as $datei) {
+foreach (glob(__DIR__ . '/../app/api/*.php') ?: [] as $datei) {
     if (basename($datei) === '_boot.php') {
         continue;
     }
@@ -778,10 +782,10 @@ ok('Kein Endpunkt prueft den Besitz noch selbst',
    $umgeher === [], implode(', ', $umgeher));
 
 ok('Die alten Funktionen sind verschwunden',
-   !str_contains((string) file_get_contents(__DIR__ . '/../api/_boot.php'), 'function own_unit'));
+   !str_contains((string) file_get_contents(__DIR__ . '/../app/api/_boot.php'), 'function own_unit'));
 
 // Das Einlesen haengt an einer Faehigkeit, nicht mehr allein am Besitz.
-$importQuelle = (string) file_get_contents(__DIR__ . '/../api/import.php');
+$importQuelle = (string) file_get_contents(__DIR__ . '/../app/api/import.php');
 ok('Einlesen verlangt eine ausdrueckliche Berechtigung',
    substr_count($importQuelle, 'require_cap($user, CAP_IMPORT)') === 2,
    substr_count($importQuelle, 'require_cap($user, CAP_IMPORT)') . ' von 2 Aktionen');
@@ -904,15 +908,15 @@ section('Schemaaenderungen nur auf Knopfdruck');
  * wusste, ob und wann eine Aenderung gelaufen war. Jetzt ist es eine
  * Entscheidung mit Knopf, Rueckmeldung und Abbruch beim ersten Fehler.
  */
-require_once __DIR__ . '/../lib/schema.php';
+require_once __DIR__ . '/../app/lib/schema.php';
 
-$adminBoot = (string) file_get_contents(__DIR__ . '/../admin/_boot.php');
+$adminBoot = (string) file_get_contents(__DIR__ . '/../app/admin/_boot.php');
 ok('Der Admin-Bereich migriert nicht mehr von selbst',
    preg_match('/^ensure_schema\(\);/m', $adminBoot) !== 1);
 ok('Weist aber auf offene Aenderungen hin',
    str_contains($adminBoot, 'schema_pending()'));
 
-$schemaQuelle = (string) file_get_contents(__DIR__ . '/../lib/schema.php');
+$schemaQuelle = (string) file_get_contents(__DIR__ . '/../app/lib/schema.php');
 ok('Und beim ersten Fehlschlag wird abgebrochen',
    preg_match('/catch \(Throwable \$e\) \{.*?break;/s', $schemaQuelle) === 1,
    'sonst arbeitete sich der Lauf durch Folgefehler');
@@ -959,7 +963,7 @@ ok('Und laedt trotzdem', str_contains($seite, 'Prüfung'));
  * password_generate() liefert dann bewusst gar kein Passwort. Eine
  * Neuinstallation haette also Konten ohne Anfangspasswort.
  */
-$schemaSql = (string) file_get_contents(__DIR__ . '/../schema.sql');
+$schemaSql = (string) file_get_contents(__DIR__ . '/../app/schema.sql');
 ok('schema.sql bringt die Passwortwoerter mit',
    str_contains($schemaSql, 'INSERT IGNORE INTO password_words'));
 ok('Und zwar beide Sorten',
@@ -970,7 +974,7 @@ ok('Und zwar beide Sorten',
 ok('In dieser Installation sind sie da',
    (int) qv('SELECT COUNT(*) FROM password_words') >= 40,
    (string) qv('SELECT COUNT(*) FROM password_words'));
-require_once __DIR__ . '/../lib/passwords.php';
+require_once __DIR__ . '/../app/lib/passwords.php';
 ok('Und es entsteht ein Anfangspasswort', password_generate() !== null);
 
 section('Schule, Klasse, Kurs');
@@ -983,7 +987,7 @@ section('Schule, Klasse, Kurs');
  * vor dem Umbau ausgesehen haette - ohne Schule, ohne Kurs. Dann laeuft die
  * Schemapflege erneut und muss alles einsortieren.
  */
-require_once __DIR__ . '/../lib/schema.php';
+require_once __DIR__ . '/../app/lib/schema.php';
 
 foreach (['schools', 'classes', 'class_members', 'courses', 'course_members'] as $t) {
     ok("Tabelle $t ist da", table_exists($t));
@@ -1021,7 +1025,7 @@ ok('Und jede Lerneinheit zu einem Kurs',
  * Dass die uebrigen Pruefungen dieser Suite davon unberuehrt bleiben, ist der
  * eigentliche Beweis: Die Ueberfuehrung des Bestandes war vollstaendig.
  */
-$accessQuelle = (string) file_get_contents(__DIR__ . '/../lib/access.php');
+$accessQuelle = (string) file_get_contents(__DIR__ . '/../app/lib/access.php');
 ok('Die Zugriffsregeln fragen die Kurszugehoerigkeit',
    substr_count($accessQuelle, 'course_members') >= 4,
    substr_count($accessQuelle, 'course_members') . ' Abfragen');
@@ -1056,7 +1060,7 @@ apiCall('languages', 'delete', ['id' => $probeLang]);
  * tatsaechlich vergessen wird: eine Tabelle oder Spalte, die es per Migration
  * gibt, in schema.sql aber nicht.
  */
-$schemaSql = (string) file_get_contents(__DIR__ . '/../schema.sql');
+$schemaSql = (string) file_get_contents(__DIR__ . '/../app/schema.sql');
 
 $fehlend = [];
 foreach (['schools', 'classes', 'class_members', 'courses', 'course_members',
@@ -1094,7 +1098,7 @@ section('Lernstand gehört dem Kind');
  * weil own_unit() zwei Kinder an derselben Vokabel heute noch gar nicht
  * zulaesst. Sie beschreiben den Zielzustand.
  */
-require_once __DIR__ . '/../lib/progress.php';
+require_once __DIR__ . '/../app/lib/progress.php';
 
 $zweitId = makeUser('testzweit_' . bin2hex(random_bytes(3)), 'Zweitkind', '#4f7cff');
 ok('Ein zweites Kind ist angelegt', $zweitId > 0 && $zweitId !== $userId);
@@ -1206,7 +1210,7 @@ ok('Erneutes Löschen meldet sich sauber',
 
 section('Sprachkürzel');
 
-require_once __DIR__ . '/../lib/languages.php';
+require_once __DIR__ . '/../app/lib/languages.php';
 
 /*
  * Das Kürzel steuert im Lückentext den Tastaturhinweis und die Reihe der
@@ -1662,7 +1666,7 @@ foreach ($liste['units'] as $u) {
 q('DELETE FROM progress WHERE vocab_id IN (SELECT id FROM vocab WHERE unit_id = ?)',
   [$unitId]);
 
-$js = (string) file_get_contents(__DIR__ . '/../views/language.js');
+$js = (string) file_get_contents(__DIR__ . '/../app/views/language.js');
 ok('Die Uebersicht zeigt die Prozentzahl gross',
    str_contains($js, 'bigpercent') && str_contains($js, '${prozent}'));
 ok('Und rechnet mit den Schritten beider Uebungsarten',
@@ -1672,7 +1676,7 @@ ok('Sie benennt auch, woraus sich das zusammensetzt',
 
 section('Vokabel melden');
 
-require_once __DIR__ . '/../lib/meldungen.php';
+require_once __DIR__ . '/../app/lib/meldungen.php';
 
 /*
  * Vielleicht lag nicht das Kind daneben, sondern die Vokabel oder der Satz.
@@ -1758,7 +1762,7 @@ if ($mFremdeVokabel > 0) {
 }
 
 // Der Weg vom Knopf in den Strom - in jeder der drei Uebungen.
-$mJs = (string) file_get_contents(__DIR__ . '/../melden.js');
+$mJs = (string) file_get_contents(__DIR__ . '/../app/melden.js');
 ok('Der Knopf fragt nach, bevor er meldet',
    str_contains($mJs, "'Diese Vokabel deiner Lehrkraft melden?'")
    && preg_match('/if \(!\(await nachfragen\(\)\)\) return;\s*vokabelMelden\(/', $mJs) === 1);
@@ -1767,14 +1771,14 @@ ok('Und zwar in der Seite, nicht mit einem Kaestchen des Browsers',
    preg_match('/confirm\(\s*[^)\s]/', $mJs) !== 1 && str_contains($mJs, 'showModal()'));
 ok('Und meldet ueber die Warteschlange, nicht mit eigenem Abruf',
    !str_contains($mJs, 'api(')
-   && str_contains((string) file_get_contents(__DIR__ . '/../vorrat.js'), "k: 'melden'"));
+   && str_contains((string) file_get_contents(__DIR__ . '/../app/vorrat.js'), "k: 'melden'"));
 foreach (['quiz', 'cloze', 'frei'] as $mAnsicht) {
-    $mQuelle = (string) file_get_contents(__DIR__ . "/../views/$mAnsicht.js");
+    $mQuelle = (string) file_get_contents(__DIR__ . "/../app/views/$mAnsicht.js");
     ok("Die Uebung $mAnsicht hat den Knopf",
        str_contains($mQuelle, 'meldeKnopf(') && str_contains($mQuelle, 'meldenVerdrahten('));
 }
 ok('Den alten Weg ueber die Lueckentext-API gibt es nicht mehr',
-   !str_contains((string) file_get_contents(__DIR__ . '/../api/cloze.php'), "case 'flag'"));
+   !str_contains((string) file_get_contents(__DIR__ . '/../app/api/cloze.php'), "case 'flag'"));
 
 section('Meldungen im Admin');
 
@@ -1799,7 +1803,7 @@ ok('Und die naechste rueckt nach, statt dass diese stehen bleibt',
 
 section('Seitenblätterung');
 
-require_once __DIR__ . '/../lib/pager.php';
+require_once __DIR__ . '/../app/lib/pager.php';
 
 // Die Rechnung zuerst - welche Zahlen stehen in der Leiste?
 $folge = static fn (int $c, int $t): string => implode(' ', array_map(
@@ -1932,7 +1936,7 @@ ok('Die Stände beider Übungsarten werden getrennt geführt',
 // aus. Sitzen beide in verschieden breiten Zellen, springt die Spalte von
 // Zeile zu Zeile. Geprueft wird deshalb die Rechnung selbst, nicht nur, dass
 // die Regeln dastehen.
-$css = (string) file_get_contents(__DIR__ . '/../style.css');
+$css = (string) file_get_contents(__DIR__ . '/../app/style.css');
 
 $zahl = static function (string $muster) use ($css): int {
     return preg_match($muster, $css, $m) === 1 ? (int) $m[1] : 0;
@@ -2078,7 +2082,7 @@ ok('Die Rueckfrage beim Loeschen verspricht nicht mehr "alle Vokabeln"',
 
 section('Farbwahl im Admin');
 
-require_once __DIR__ . '/../lib/colors.php';
+require_once __DIR__ . '/../app/lib/colors.php';
 
 ok('Die Palette hat 49 Farben - sieben mal sieben', count(color_palette()) === 49,
    (string) count(color_palette()));
@@ -2135,7 +2139,7 @@ section('Aktualisieren statt Abmelden in der App');
 
 // In der installierten App gibt es keine Adresszeile - ohne diesen Weg kaeme
 // eine neue Fassung dort nie an.
-$js = file_get_contents(__DIR__ . '/../core.js');
+$js = file_get_contents(__DIR__ . '/../app/core.js');
 ok('core.js bringt hardRefresh mit', str_contains($js, 'export async function hardRefresh'));
 ok('Es meldet den Service Worker ab', str_contains($js, 'r.unregister()'));
 ok('Und leert den Zwischenspeicher', str_contains($js, 'caches.delete'));
@@ -2145,7 +2149,7 @@ ok('Und leert den Zwischenspeicher', str_contains($js, 'caches.delete'));
  * Ecke. Es stand dort nur auf der Startseite - wer mitten im Ueben eine
  * neue Fassung holen wollte, musste erst zurueck.
  */
-$view = file_get_contents(__DIR__ . '/../core.js');
+$view = file_get_contents(__DIR__ . '/../app/core.js');
 ok('In der App steht dort Aktualisieren statt Abmelden',
    str_contains($view, 'VT.standalone') && str_contains($view, 'data-nav-refresh'));
 ok('Im Browser bleibt das Abmelden', str_contains($view, 'data-nav-logout'));
@@ -2157,12 +2161,12 @@ preg_match('/app\.js\?v=(\d+)/', $res['body'], $m);
 $stempel = (int) ($m[1] ?? 0);
 ok('Die Huelle traegt einen Versionsstempel', $stempel > 1000000000, (string) $stempel);
 ok('Er stammt vom Aenderungsdatum der Dateien',
-   $stempel >= (int) filemtime(__DIR__ . '/../app.js'), (string) $stempel);
+   $stempel >= (int) filemtime(__DIR__ . '/../app/app.js'), (string) $stempel);
 
 // Eine gepflegte Liste war unvollstaendig: Wer eine dort fehlende Ansicht
 // aenderte, erreichte eine auf dem Homescreen liegende App gar nicht.
 $aeltester = null;
-foreach (glob(__DIR__ . '/../views/*.js') ?: [] as $datei) {
+foreach (glob(__DIR__ . '/../app/views/*.js') ?: [] as $datei) {
     if ($stempel < (int) filemtime($datei)) {
         $aeltester = basename($datei);
     }
@@ -2181,7 +2185,7 @@ section('Aktualisierung erkennen und anbieten');
 ok('Der Server nennt seine Fassung', $code === 200 && ($meta['version'] ?? '') !== '',
    json_encode($meta));
 
-require_once __DIR__ . '/../lib/version.php';
+require_once __DIR__ . '/../app/lib/version.php';
 ok('Und zwar dieselbe, die auch die Hülle ausliefert',
    ($meta['version'] ?? '') === app_version(), (string) ($meta['version'] ?? ''));
 
@@ -2190,7 +2194,7 @@ ok('Und zwar dieselbe, die auch die Hülle ausliefert',
 // Test ist angemeldet, deshalb wird das an der Quelle geprueft.
 ok('Die Auskunft verlangt keine Anmeldung',
    preg_match('/^\s*(\$\w+\s*=\s*)?require_user\(/m',
-              (string) file_get_contents(__DIR__ . '/../api/meta.php')) !== 1);
+              (string) file_get_contents(__DIR__ . '/../app/api/meta.php')) !== 1);
 
 $mitHeader = http($base . '/api/meta.php?action=version', null, ['X-Vokabeltrainer: 1']);
 ok('Und antwortet auf einen schlichten GET',
@@ -2211,7 +2215,7 @@ foreach (['app.js', 'core.js', 'style.css', 'views/cloze.js'] as $datei) {
     ok("Darunter $datei", str_contains($liste, '"' . $datei . '"'));
 }
 ok('Und jede Ansicht, nicht nur eine Auswahl',
-   count(array_filter(glob(__DIR__ . '/../views/*.js') ?: [],
+   count(array_filter(glob(__DIR__ . '/../app/views/*.js') ?: [],
        static fn (string $p): bool => !str_contains($liste, '"views/' . basename($p) . '"'))) === 0);
 
 /*
@@ -2230,14 +2234,14 @@ ok('Und keine Datei steht doppelt darin',
    count(app_assets()) === count(array_unique(app_assets())));
 
 
-$appjs = (string) file_get_contents(__DIR__ . '/../app.js');
+$appjs = (string) file_get_contents(__DIR__ . '/../app/app.js');
 ok('Die App fragt in Abständen nach', str_contains($appjs, "api('meta', 'version')"));
 ok('Vor allem, wenn sie in den Vordergrund kommt',
    str_contains($appjs, 'visibilitychange'));
 ok('Und bietet das Band von oben an',
    str_contains($appjs, 'update-bar') && str_contains($appjs, 'hardRefresh()'));
 
-$corejs = (string) file_get_contents(__DIR__ . '/../core.js');
+$corejs = (string) file_get_contents(__DIR__ . '/../app/core.js');
 ok('Aktualisieren holt jede Datei ausdrücklich neu',
    str_contains($corejs, "cache: 'reload'") && str_contains($corejs, 'VT.assets'),
    'kein gezieltes Neuladen');
@@ -2259,8 +2263,8 @@ section('Zusammenhalt der Module');
  * eine Ansicht. Hier wird gegengeprueft, was sich statisch pruefen laesst.
  */
 $module = array_merge(
-    [__DIR__ . '/../app.js', __DIR__ . '/../core.js'],
-    glob(__DIR__ . '/../views/*.js') ?: [],
+    [__DIR__ . '/../app/app.js', __DIR__ . '/../app/core.js'],
+    glob(__DIR__ . '/../app/views/*.js') ?: [],
 );
 
 /** Namen, die eine Datei nach aussen gibt. */
@@ -2307,7 +2311,7 @@ ok('Jeder importierte Name wird auch exportiert',
 // app.js kommt als einzige Datei verlaesslich frisch an. Je weniger sie aus
 // core.js zieht, desto kleiner der Schaden, wenn die beiden auseinanderlaufen.
 preg_match('/import\s*\{([^}]*)\}\s*from\s*[\'"]\.\/core\.js[\'"]/s',
-           (string) file_get_contents(__DIR__ . '/../app.js'), $m);
+           (string) file_get_contents(__DIR__ . '/../app/app.js'), $m);
 $ausCore = array_filter(array_map('trim', explode(',', $m[1] ?? '')));
 /*
  * Drei mehr als frueher: navQuelle, navAbmelden und serieQuelle. Sie sind
@@ -2323,7 +2327,7 @@ $ausCore = array_filter(array_map('trim', explode(',', $m[1] ?? '')));
 ok('app.js haelt sich bei core.js zurueck',
    count($ausCore) <= 9, implode(', ', $ausCore));
 
-$sw = file_get_contents(__DIR__ . '/../sw.js');
+$sw = file_get_contents(__DIR__ . '/../app/sw.js');
 
 // Der eigentliche Fehler: Code kam aus dem Zwischenspeicher, waehrend die
 // dazugehoerige app.js schon neu war.
@@ -2335,7 +2339,7 @@ ok('Und traegt einen neuen Cache-Namen, damit der alte Bestand wegfaellt',
    preg_match("~const CACHE = 'vokabeltrainer-v(\d+)'~", $sw, $cm) === 1
    && (int) $cm[1] >= 4, $cm[1] ?? 'keiner');
 
-$ht = (string) file_get_contents(__DIR__ . '/../.htaccess');
+$ht = (string) file_get_contents(__DIR__ . '/../app/.htaccess');
 ok('Und der Server laesst js/css gegenpruefen',
    preg_match('~FilesMatch "\\\\\.\(js\|css\)\$"~', $ht) === 1
    && str_contains($ht, 'no-cache'), 'keine Cache-Control-Regel');
@@ -2347,7 +2351,7 @@ ok('Der Service Worker haelt nur die Offline-Seite im Voraus vor',
 
 section('Anfangspasswörter');
 
-require_once __DIR__ . '/../lib/passwords.php';
+require_once __DIR__ . '/../app/lib/passwords.php';
 
 $adjektive = password_words(PW_ADJECTIVE);
 $tiere     = password_words(PW_ANIMAL);
@@ -2474,7 +2478,7 @@ section('Gestufte Freigabe');
  * falsche Antworten ausplaudert.
  */
 
-require_once __DIR__ . '/../lib/access.php';
+require_once __DIR__ . '/../app/lib/access.php';
 
 /** Einen API-Aufruf mit einem anderen Cookie-Topf machen. */
 function apiAls(string $topf, callable $was): mixed
@@ -2632,7 +2636,7 @@ q('DELETE FROM units WHERE id = ?', [$leereUnit]);
 
 // ---- Was ueberhaupt Saetze bekommt, haengt an der Freigabe.
 
-require_once __DIR__ . '/../lib/sentences.php';
+require_once __DIR__ . '/../app/lib/sentences.php';
 
 /*
  * Saetze entstehen fuer das, was freigegeben ist - und nur dafuer.
@@ -2840,7 +2844,7 @@ ok('Am Fensterrand rollt die Seite mit',
    str_contains($skriptB['body'], 'window.scrollBy'),
    'sonst endet das Ziehen am unteren Bildrand');
 
-$cssB = (string) file_get_contents(__DIR__ . '/../admin/admin.css');
+$cssB = (string) file_get_contents(__DIR__ . '/../app/admin/admin.css');
 ok('Die Huelle ist der Bezugspunkt fuer den Balken',
    preg_match('/\.releasewrap\s*\{[^}]*position:\s*relative/s', $cssB) === 1);
 ok('Der Balken liegt darin absolut',
@@ -3021,7 +3025,7 @@ ok('Zugeklappt, bis jemand sie will',
  */
 ok('Darunter steht "Vokabeln zur Lerneinheit hinzufuegen"',
    str_contains($res['body'], '<h2>Vokabeln zur Lerneinheit hinzufügen</h2>'));
-$teacherJs = (string) file_get_contents(__DIR__ . '/../teacher/teacher.js');
+$teacherJs = (string) file_get_contents(__DIR__ . '/../app/teacher/teacher.js');
 
 ok('Mit vier Karten - drei Wege, der letzte in zwei Fassungen',
    substr_count($res['body'], 'class="card erweiternkarte"') === 4,
@@ -3095,8 +3099,8 @@ ok('Und die Ablage sagt, dass die Maschine sich verlesen kann',
    preg_match('/Was dabei herauskommt, kann Fehler enthalten/', $res['body']) === 1);
 
 ok('Die Bildverkleinerung steht nur noch einmal im Quelltext',
-   file_exists(__DIR__ . '/../views/bilder.js')
-   && str_contains((string) file_get_contents(__DIR__ . '/../views/import.js'),
+   file_exists(__DIR__ . '/../app/views/bilder.js')
+   && str_contains((string) file_get_contents(__DIR__ . '/../app/views/import.js'),
                    "from './bilder.js'")
    && str_contains($teacherJs, 'stapel.dataset.bilder'),
    'zwei Abschriften waeren bald zwei verschiedene Bildgroessen');
@@ -3200,7 +3204,7 @@ ok('Das Feld heisst nach der Sprache, nicht "Fremdsprache"',
  * Antworten.
  */
 ok('Das Anlegen antwortet auch mit einer Zeile statt einer Seite',
-   str_contains((string) file_get_contents(__DIR__ . '/../teacher/_boot.php'),
+   str_contains((string) file_get_contents(__DIR__ . '/../app/teacher/_boot.php'),
                 'function unit_will_json'));
 $jsonAntwort = freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
     'add_vocab' => '1', 'unit_id' => $freiUnit,
@@ -3300,7 +3304,7 @@ ok('Und markiert sie als frisch',
  * es die Freigabe: Eingelesen ist noch nicht aufgemacht, und in der
  * Schueleransicht saehe sie eine leere Liste.
  */
-$einleseQuelle = (string) file_get_contents(__DIR__ . '/../views/import.js');
+$einleseQuelle = (string) file_get_contents(__DIR__ . '/../app/views/import.js');
 ok('Nach dem Einlesen landet eine Lehrkraft in der Freigabe',
    preg_match('/if \(VT\.user\?\.isTeacher\) \{.{0,200}?teacher\/unit\.php\?id=/s',
               $einleseQuelle) === 1,
@@ -3361,7 +3365,7 @@ ok('Beide bleiben stehen, auch wenn einer gerade nichts bewirkt',
    && str_contains($res['body'], 'disabled title='),
    'sonst spraenge die Tabelle bei jedem Freigeben um eine Zeile');
 
-$cssMengen = (string) file_get_contents(__DIR__ . '/../admin/admin.css');
+$cssMengen = (string) file_get_contents(__DIR__ . '/../app/admin/admin.css');
 ok('Die Knoepfe tragen die Farbe, die sie bewirken',
    preg_match('/\.mengenknopf\.zu\s*\{[^}]*--surface-2/s', $cssMengen) === 1
    && preg_match('/\.mengenknopf\.auf\s*\{[^}]*--good-bg/s', $cssMengen) === 1,
@@ -3396,7 +3400,7 @@ freiPost($base . '/teacher/unit.php?id=' . $freiUnit, [
  * und admin.css laedt die App gar nicht. Eine Fassung fuer beide - zwei
  * waeren bald zwei verschiedene Menues.
  */
-$cssK = (string) file_get_contents(__DIR__ . '/../style.css');
+$cssK = (string) file_get_contents(__DIR__ . '/../app/style.css');
 ok('Die Schublade schiebt sich herein',
    preg_match('/\.menue > \.schublade\s*\{[^}]*animation:\s*schubladeLinks/s', $cssK) === 1,
    'als Animation, nicht als Uebergang - <details> blendet seinen Inhalt aus');
@@ -3468,7 +3472,7 @@ ok('Von achtundzwanzig Anlaeufen kommt genau einer durch',
  * einzigen UPDATE mit Bedingung stecken und darf nicht aus einem gelesenen
  * Wert in PHP folgen. Das ist der ganze Unterschied.
  */
-$quelle = (string) file_get_contents(__DIR__ . '/../lib/sentences.php');
+$quelle = (string) file_get_contents(__DIR__ . '/../app/lib/sentences.php');
 preg_match('/function sentence_claim\(.*?\n\}/s', $quelle, $qm);
 $rumpf = $qm[0] ?? '';
 
@@ -3518,7 +3522,7 @@ section('Schulen im Admin');
  * Schulen.
  */
 
-$schulQuelle = (string) file_get_contents(__DIR__ . '/../admin/_boot.php');
+$schulQuelle = (string) file_get_contents(__DIR__ . '/../app/admin/_boot.php');
 ok('Die Schulen stehen im Admin-Menue',
    str_contains($schulQuelle, "'schools.php'   => 'Schulen'"));
 
@@ -3530,7 +3534,7 @@ ok('Die Schulen stehen im Admin-Menue',
  * retten. Beides ist weg - es gibt keinen Bestand zu retten, und eine still
  * erzeugte Schule waere nur ein Posten, den jemand wieder wegraeumen muss.
  */
-$schulenQuelle = (string) file_get_contents(__DIR__ . '/../admin/schools.php');
+$schulenQuelle = (string) file_get_contents(__DIR__ . '/../app/admin/schools.php');
 ok('Keine Schule entsteht von selbst',
    !str_contains($schulenQuelle, "'Familie'")
    && (int) qv("SELECT COUNT(*) FROM schools WHERE name = 'Familie'") === 0,
@@ -3738,7 +3742,7 @@ ok('Die Sprache zu loeschen raeumt dann aber wirklich auf',
 
 section('Kosten je Schule');
 
-require_once __DIR__ . '/../lib/cost.php';
+require_once __DIR__ . '/../app/lib/cost.php';
 
 /*
  * Der teuerste bekannte Preis statt null.
@@ -3833,7 +3837,7 @@ q('DELETE FROM users WHERE id = ?', [$kostenUser]);
 
 section('QR-Code');
 
-require_once __DIR__ . '/../lib/qr.php';
+require_once __DIR__ . '/../app/lib/qr.php';
 
 /**
  * Liest einen fertigen Code wieder aus - bewusst als eigene Umsetzung und
@@ -4053,7 +4057,7 @@ ok('Und ohne fremde Zeichen im Beschriftungstext',
 
 section('Anmeldebremse');
 
-require_once __DIR__ . '/../lib/throttle.php';
+require_once __DIR__ . '/../app/lib/throttle.php';
 
 // Erst die Kurve für sich - sie lässt sich prüfen, ohne Fehlversuche
 // erzeugen zu müssen.
@@ -4294,7 +4298,7 @@ q('DELETE FROM schools WHERE id = ?', [$fremdeSchule]);
  * Lehrkraefte koennten sonst gleichzeitig dasselbe ALTER anstossen. Er merkt
  * aber, wenn etwas aussteht, und arbeitet dann nicht weiter.
  */
-$boot = (string) file_get_contents(__DIR__ . '/../teacher/_boot.php');
+$boot = (string) file_get_contents(__DIR__ . '/../app/teacher/_boot.php');
 ok('Der Lehrkraft-Bereich migriert nicht selbst',
    !preg_match('/^\s*ensure_schema\(\);/m', $boot));
 ok('Merkt aber, wenn das Schema aussteht',
@@ -4416,7 +4420,7 @@ q('DELETE FROM languages WHERE id = ?', [$lmLang]);
 
 section('Was die Oberflaeche anbietet');
 
-require_once __DIR__ . '/../lib/worldlanguages.php';
+require_once __DIR__ . '/../app/lib/worldlanguages.php';
 
 /*
  * Ein Kind ohne Einlese-Recht bekam "Vokabeln einlesen" weiterhin angeboten
@@ -4424,8 +4428,8 @@ require_once __DIR__ . '/../lib/worldlanguages.php';
  * Schaltflaeche, die nur dazu da ist, eine Absage zu holen, ist keine
  * Schaltflaeche.
  */
-$uiQuelle    = (string) file_get_contents(__DIR__ . '/../views/language.js');
-$listeQuelle = (string) file_get_contents(__DIR__ . '/../views/languages.js');
+$uiQuelle    = (string) file_get_contents(__DIR__ . '/../app/views/language.js');
+$listeQuelle = (string) file_get_contents(__DIR__ . '/../app/views/languages.js');
 
 ok('Einlesen erscheint nur mit Berechtigung',
    preg_match('/selbstEinlesen\(\) \?\s*`\s*<button class="row" data-go="\/lang\/\$\{language\.id\}\/import"/s',
@@ -4570,7 +4574,7 @@ q('DELETE FROM users WHERE id = ?', [$schuelerKonto]);
  * Und die Gegenprobe an der Quelle: Beide Ladefunktionen fragen wirklich
  * nach der Befugnis, statt sich auf die Aufrufer zu verlassen.
  */
-$zugriffQuelle = (string) file_get_contents(__DIR__ . '/../lib/access.php');
+$zugriffQuelle = (string) file_get_contents(__DIR__ . '/../app/lib/access.php');
 ok('Beide Aenderungswege pruefen die Befugnis',
    substr_count($zugriffQuelle, 'if (!user_can($user, CAP_IMPORT)) {') === 2,
    substr_count($zugriffQuelle, 'if (!user_can($user, CAP_IMPORT)) {') . ' von 2');
@@ -4578,8 +4582,8 @@ ok('Beide Aenderungswege pruefen die Befugnis',
 /*
  * Und die Oberflaeche bietet nichts an, was die API ablehnt.
  */
-$unitUi  = (string) file_get_contents(__DIR__ . '/../views/unit.js');
-$clozeUi = (string) file_get_contents(__DIR__ . '/../views/cloze.js');
+$unitUi  = (string) file_get_contents(__DIR__ . '/../app/views/unit.js');
+$clozeUi = (string) file_get_contents(__DIR__ . '/../app/views/cloze.js');
 
 ok('Loeschen und Umbenennen erscheinen nur mit Befugnis',
    substr_count($unitUi, 'selbstVerwalten()') >= 2,
@@ -4711,7 +4715,7 @@ ok('Und das Anfangspasswort ist aus der Datenbank verschwunden',
  * Laden. Er fordert zu etwas auf, das gerade erledigt wurde; bliebe er
  * stehen, fragte man sich, ob es geklappt hat.
  */
-$profilQuelle = (string) file_get_contents(__DIR__ . '/../views/profile.js');
+$profilQuelle = (string) file_get_contents(__DIR__ . '/../app/views/profile.js');
 ok('Der Hinweis auf das Anfangspasswort ist ansprechbar',
    str_contains($profilQuelle, 'id="initialhint"'));
 ok('Und wird nach dem Aendern sofort entfernt',
@@ -4736,15 +4740,15 @@ q('DELETE FROM users WHERE id = ?', [$kontoKind]);
 
 // ---- Der Weg dorthin in der Oberflaeche.
 
-$listeQuelle2 = (string) file_get_contents(__DIR__ . '/../views/languages.js');
+$listeQuelle2 = (string) file_get_contents(__DIR__ . '/../app/views/languages.js');
 ok('Die App fuehrt zum eigenen Konto',
-   str_contains((string) file_get_contents(__DIR__ . '/../core.js'), 'href="#/konto"'),
+   str_contains((string) file_get_contents(__DIR__ . '/../app/core.js'), 'href="#/konto"'),
    'im Einstellungsmenue, von jeder Ansicht aus - nicht nur von der Startseite');
 ok('Und die Verwaltung steht ueber den Sprachen',
    strpos($listeQuelle2, '${teacherLink()}') < strpos($listeQuelle2, '<div class="grid">'),
    'der Link steht noch darunter');
 
-$routen = (string) file_get_contents(__DIR__ . '/../app.js');
+$routen = (string) file_get_contents(__DIR__ . '/../app/app.js');
 ok('Die Route dorthin gibt es', str_contains($routen, 'profileView'));
 
 section('Kurs anlegen');
@@ -4756,8 +4760,8 @@ section('Kurs anlegen');
  * Eine Lehrkraft hatte gar keinen Weg, einen anzulegen.
  */
 
-require_once __DIR__ . '/../lib/roster.php';
-require_once __DIR__ . '/../lib/worldlanguages.php';
+require_once __DIR__ . '/../app/lib/roster.php';
+require_once __DIR__ . '/../app/lib/worldlanguages.php';
 
 $res = teacherGet('classes.php');
 preg_match('/name="csrf" value="([a-f0-9]+)"/', $res['body'], $km);
@@ -4879,7 +4883,7 @@ ok('Es kennt beide Schreibweisen ohne Umlaute',
  * Panel an keinem Vorfahren mehr; dafuer muss seine Lage von Hand gesetzt
  * werden.
  */
-$pickerCss = (string) file_get_contents(__DIR__ . '/../admin/admin.css');
+$pickerCss = (string) file_get_contents(__DIR__ . '/../app/admin/admin.css');
 ok('Die aufgeklappte Liste haengt nicht in der Tabelle',
    preg_match('/\.pickpanel\s*\{[^}]*position:\s*fixed/s', $pickerCss) === 1,
    'mit position: absolute schneidet die Tabelle sie ab');
@@ -5327,7 +5331,7 @@ q('DELETE FROM classes WHERE id = ?', [$kursKlasseId]);
 
 section('Klasse anlegen und füllen');
 
-require_once __DIR__ . '/../lib/roster.php';
+require_once __DIR__ . '/../app/lib/roster.php';
 
 // Erst das Einlesen der Namen für sich - ohne Datenbank, ohne Konten.
 $geparst = roster_parse_names(
@@ -5409,7 +5413,7 @@ ok('Die Tabelle zeigt auch, wie viele Kurse an der Klasse haengen',
  * sie sagten dasselbe ein zweites Mal, und der Reiter "Kurse" fuehrte auf
  * eine Liste, die es nicht mehr gibt.
  */
-$navQuelle = (string) file_get_contents(__DIR__ . '/../teacher/_boot.php');
+$navQuelle = (string) file_get_contents(__DIR__ . '/../app/teacher/_boot.php');
 ok('Es gibt keine festen Reiter mehr',
    !str_contains($navQuelle, "'index.php'   => 'Kurse'"));
 ok('Die Leiste traegt die beiden Menues',
@@ -5708,7 +5712,7 @@ ok('Nach der Freigabe schon', $clozeTotal === 2, $clozeTotal . ' von 2');
  * Die Oberflaeche muss den laufenden Zustand zeigen koennen: Spinner statt
  * Symbol, Zeile nicht anklickbar, und erst danach wieder klickbar.
  */
-$unitQuelle = (string) file_get_contents(__DIR__ . '/../views/unit.js');
+$unitQuelle = (string) file_get_contents(__DIR__ . '/../app/views/unit.js');
 ok('Waehrend der Erzeugung dreht sich ein Spinner',
    str_contains($unitQuelle, "info.status === 'running'")
    && str_contains($unitQuelle, 'spinner inline'));
@@ -5791,12 +5795,24 @@ ok('Ein Kind aus einer anderen Klasse bleibt unberührt',
 
 section('Zettel mit den Zugangsdaten');
 
-require_once __DIR__ . '/../lib/letter.php';
+require_once __DIR__ . '/../app/lib/letter.php';
 
 ok('Die Vorlage nennt Name, Benutzername und Passwort',
    str_contains(letter_default(), '{name}')
    && str_contains(letter_default(), '{benutzername}')
    && str_contains(letter_default(), '{passwort}'));
+/*
+ * Der Zettel beschreibt das Passwort so, wie es aussieht. Seit die
+ * Anfangspasswörter einen Bindestrich tragen, stand darauf weiter "mit dem
+ * Leerzeichen in der Mitte" - und ein Kind, das dem Zettel glaubt, kommt
+ * nicht hinein.
+ */
+$probe = password_generate();
+ok('Der Zettel nennt das Trennzeichen, das im Passwort steht',
+   $probe !== null && str_contains($probe, '-')
+   && str_contains(letter_default(), 'Bindestrich')
+   && !str_contains(letter_default(), 'Leerzeichen'),
+   (string) $probe);
 
 $gefuellt = letter_render(letter_template(), [
     'name'         => 'Lilli M.',
@@ -5826,7 +5842,7 @@ ok('Ein unbekannter Platzhalter bleibt stehen',
  * die Adresszeile tippt, landet nirgends. Aufgefallen ist es nur, weil ich
  * den erzeugten Code einmal wirklich ausgelesen habe.
  */
-require_once __DIR__ . '/../lib/qr.php';
+require_once __DIR__ . '/../app/lib/qr.php';
 
 ok('Die oeffentliche Adresse traegt Schema und Host',
    preg_match('~^https?://[^/]+~', public_url('/')) === 1, public_url('/'));
@@ -6228,7 +6244,7 @@ ok('Zwei Vokabeln koennen sich keine Position teilen', !$dublette,
 // ---- Und dass das ueberhaupt auffaellt.
 
 ok('Der Selbsttest kennt die Frage',
-   str_contains((string) file_get_contents(__DIR__ . '/../admin/selfcheck.php'),
+   str_contains((string) file_get_contents(__DIR__ . '/../app/admin/selfcheck.php'),
                 'Reihenfolge der Vokabeln'));
 /*
  * Hier stand die Reihenfolge zweier Schemaaenderungen: erst die Positionen
@@ -6237,7 +6253,7 @@ ok('Der Selbsttest kennt die Frage',
  * Datenbank mehr, deren Positionen Luecken haetten.
  */
 ok('schema.sql kennt den Schluessel von Anfang an',
-   str_contains((string) file_get_contents(__DIR__ . '/../schema.sql'), 'uq_vocab_pos'),
+   str_contains((string) file_get_contents(__DIR__ . '/../app/schema.sql'), 'uq_vocab_pos'),
    'ohne ihn koennten sich zwei Vokabeln eine Position teilen');
 ok('Und er steht auch wirklich auf der Tabelle',
    index_exists('vocab', 'uq_vocab_pos'));
@@ -6750,7 +6766,7 @@ q('DELETE FROM users WHERE id = ?', [$fremder]);
 
 // ---- Tabellen am Telefon.
 
-$cssU = (string) file_get_contents(__DIR__ . '/../admin/admin.css');
+$cssU = (string) file_get_contents(__DIR__ . '/../app/admin/admin.css');
 ok('Es gibt einen Umbruchpunkt fuer kleine Bildschirme',
    preg_match('/@media \(max-width: 720px\)/', $cssU) === 1);
 ok('Darunter wird aus jeder Zeile eine Karte',
@@ -6865,9 +6881,9 @@ ok('Zwei verschiedene Eingaben ebenso wenig',
  * waere die Mindestlaenge hier sechs und dort irgendwann acht.
  */
 ok('Beide Wege benutzen dieselben Regeln',
-   str_contains((string) file_get_contents(__DIR__ . '/../teacher/konto.php'),
+   str_contains((string) file_get_contents(__DIR__ . '/../app/teacher/konto.php'),
                 'profile_change_password(')
-   && str_contains((string) file_get_contents(__DIR__ . '/../api/profile.php'),
+   && str_contains((string) file_get_contents(__DIR__ . '/../app/api/profile.php'),
                    'profile_change_password('),
    'zwei Fassungen derselben Sache waeren bald zwei verschiedene');
 
@@ -7014,7 +7030,7 @@ ok('Und das linke Menue fuehrt nicht mehr daneben hinaus',
 preg_match('/<p class="mkopf klein">Ansicht<\/p>\s*<div class="ansichtwahl".*?<\/div>/s',
            teacherGet('index.php')['body'], $am);
 $phpAnsicht = $am[0] ?? '';
-$jsAnsicht  = (string) file_get_contents(__DIR__ . '/../menue.js');
+$jsAnsicht  = (string) file_get_contents(__DIR__ . '/../app/menue.js');
 ok('Die Verwaltung liefert den Schalter aus', $phpAnsicht !== '');
 foreach (['Verwaltung', 'Lernansicht', 'ansichtwahl', 'ansichtknopf'] as $wort) {
     ok('Beide Fassungen kennen "' . $wort . '"',
@@ -7074,7 +7090,7 @@ q('DELETE FROM users WHERE id = ?', [$fsKind]);
  * dasselbe sagt und den Weg zurueck kennt - uebrig bleibt die Antwort auf
  * "wo bin ich hier", in einem Wort.
  */
-$stilF = (string) file_get_contents(__DIR__ . '/../style.css');
+$stilF = (string) file_get_contents(__DIR__ . '/../app/style.css');
 ok('Den Hinweiskasten gibt es nicht mehr',
    !str_contains($stilF, 'notice.pupilview')
    && !str_contains($kern['body'], 'pupilHint'));
@@ -7091,14 +7107,14 @@ ok('Und ist klein',
 $res = teacherGet('course.php?id=' . $fsKursId);
 ok('Die Anlegezeile stellt beide Wege nebeneinander',
    preg_match('/class="coursetitle addbuttons"/', $res['body']) === 1);
-$cssF = (string) file_get_contents(__DIR__ . '/../admin/admin.css');
+$cssF = (string) file_get_contents(__DIR__ . '/../app/admin/admin.css');
 ok('Und die Reihe ist waagerecht',
    preg_match('/\.coursetitle\.addbuttons\s*\{[^}]*display:\s*flex/s', $cssF) === 1,
    'untereinander lesen sie sich wie Schritt eins und Schritt zwei');
 
 // ---- Das Farbfeld nimmt feste Groessen statt der halben Seite.
 
-$cssS = (string) file_get_contents(__DIR__ . '/../style.css');
+$cssS = (string) file_get_contents(__DIR__ . '/../app/style.css');
 /*
  * In der App hat das Farbfeld dieselben Kaestchen wie der Monatskalender
  * darueber. Dass es dabei mit der Karte waechst, ist in Ordnung: Es liegt
@@ -7120,7 +7136,7 @@ ok('Die Kaestchen sind quadratisch und gerundet wie die Tage',
    preg_match('/\.swatches \.swatch-pick span\s*\{[^}]*aspect-ratio:\s*1;[^}]*border-radius:\s*7px/s', $cssS) === 1
    && preg_match('/\.monatstag\s*\{[^}]*border-radius:\s*7px/s', $cssS) === 1);
 
-$profilQ = (string) file_get_contents(__DIR__ . '/../views/profile.js');
+$profilQ = (string) file_get_contents(__DIR__ . '/../app/views/profile.js');
 ok('Das Feld liegt zugeklappt hinter einem Knopf mit der Farbe',
    str_contains($profilQ, '<details class="farbwahl"')
    && !str_contains($profilQ, '<details class="farbwahl" open')
@@ -7136,7 +7152,7 @@ ok('Darueber steht das App-Symbol wie auf dem Home-Bildschirm',
  * Hier wurde einmal auch die Schrift des Anfangsbuchstabens verglichen.
  * Den Buchstaben gibt es nicht mehr, und mit ihm ging Roboto.
  */
-$iconQ = (string) file_get_contents(__DIR__ . '/../icon.php');
+$iconQ = (string) file_get_contents(__DIR__ . '/../app/icon.php');
 ok('Vorschau und icon.php dunkeln gleich ab',
    str_contains($iconQ, '$c * 0.68') && str_contains($profilQ, 'SYMBOL_DUNKEL = 0.68'));
 ok('Und zeigen Voki gleich gross',
@@ -7533,7 +7549,7 @@ section('Eine Form, ein Wort');
  * nie nebeneinander. Eine Pruefung schon.
  */
 
-$lehrerDateien = glob(__DIR__ . '/../teacher/*.php') ?: [];
+$lehrerDateien = glob(__DIR__ . '/../app/teacher/*.php') ?: [];
 $lehrerQuelle  = '';
 foreach ($lehrerDateien as $datei) {
     $lehrerQuelle .= (string) file_get_contents($datei);
@@ -7558,13 +7574,13 @@ ok('Es gibt nur einen data-confirm-Hoerer',
    substr_count($lehrerQuelle, "closest('[data-confirm]')") === 0,
    'er gehoert nach teacher.js, nicht in jede Seite');
 ok('Und der steht im Skript',
-   str_contains((string) file_get_contents(__DIR__ . '/../teacher/teacher.js'),
+   str_contains((string) file_get_contents(__DIR__ . '/../app/teacher/teacher.js'),
                 "closest('[data-confirm]')"));
 
 // ---- Keine Klasse ohne Regel.
 
-$cssQuelle = (string) file_get_contents(__DIR__ . '/../admin/admin.css')
-           . (string) file_get_contents(__DIR__ . '/../style.css');
+$cssQuelle = (string) file_get_contents(__DIR__ . '/../app/admin/admin.css')
+           . (string) file_get_contents(__DIR__ . '/../app/style.css');
 ok('Die tote Klasse compactform ist weg',
    !str_contains($lehrerQuelle, 'compactform'),
    'sie hatte nirgends eine Regel');
@@ -7755,7 +7771,7 @@ section('Sprung ans Telefon');
  * daraus wieder Text. Was in diesem Text steht, wird dann wirklich
  * aufgerufen - mit einem leeren Cookie-Glas, so wie ein Telefon daherkommt.
  */
-require_once __DIR__ . '/../lib/handoff.php';
+require_once __DIR__ . '/../app/lib/handoff.php';
 
 /** Das SVG aus lib/qr.php zurueck in eine Matrix lesen. */
 function qrAusSvg(string $svg): ?array
@@ -8280,7 +8296,7 @@ q('DELETE FROM users WHERE id = ?', [$sfLehrerId]);
 
 section('Impressum, Datenschutz, Lizenzen');
 
-require_once __DIR__ . '/../lib/markdown.php';
+require_once __DIR__ . '/../app/lib/markdown.php';
 
 /*
  * Gewoehnliche Seiten vom Server, kein Teil der App: Sie muessen erreichbar
@@ -8288,7 +8304,7 @@ require_once __DIR__ . '/../lib/markdown.php';
  * wissen, wer dahintersteht und was mit seinen Daten geschieht.
  */
 foreach (legal_documents() as $k => $d) {
-    ok('Es gibt ' . $d['titel'], is_file(__DIR__ . '/../' . $d['datei']),
+    ok('Es gibt ' . $d['titel'], is_file(__DIR__ . '/../app/' . $d['datei']),
        $d['datei'] . ' fehlt');
 
     $res = http($base . '/rechtliches.php?d=' . $k);
@@ -8353,17 +8369,17 @@ $anmeldung = http($base . '/teacher/')['body'];
 ok('Die Anmeldung der Lehrkraft zeigt sie',
    substr_count($anmeldung, 'rechtliches.php') === 3, $anmeldung ? '' : 'leer');
 
-$kern = (string) file_get_contents(__DIR__ . '/../core.js');
+$kern = (string) file_get_contents(__DIR__ . '/../app/core.js');
 ok('Die App hat sie im Einstellungsmenue',
    str_contains($kern, 'rechtsItems()') && str_contains($kern, 'rechtliches.php'));
 ok('Und als Zeile ganz unten',
    str_contains($kern, 'export function rechtsZeile'));
 ok('Die Anmeldung der App zeigt sie ebenfalls',
-   str_contains((string) file_get_contents(__DIR__ . '/../views/login.js'),
+   str_contains((string) file_get_contents(__DIR__ . '/../app/views/login.js'),
                 'rechtsZeile()'),
    'wer sich anmelden soll, darf vorher wissen, wer dahintersteht');
 ok('Und die Startseite der App auch',
-   str_contains((string) file_get_contents(__DIR__ . '/../views/languages.js'),
+   str_contains((string) file_get_contents(__DIR__ . '/../app/views/languages.js'),
                 'rechtsZeile()'));
 
 q('DELETE FROM login_attempts');
@@ -8376,8 +8392,8 @@ ok('Und jede Seite des Lehrkraft-Bereichs traegt die Zeile',
  * Die Lizenzen nennen, was wirklich mitgeliefert wird. Eine Liste, die ein
  * Paket vergisst, ist schlimmer als keine: Sie sieht nach Sorgfalt aus.
  */
-$lizenzen = (string) file_get_contents(__DIR__ . '/../LIZENZEN.md');
-$sperre   = json_decode((string) file_get_contents(__DIR__ . '/../composer.lock'), true);
+$lizenzen = (string) file_get_contents(__DIR__ . '/../app/LIZENZEN.md');
+$sperre   = json_decode((string) file_get_contents(__DIR__ . '/../app/composer.lock'), true);
 $fehlend  = [];
 foreach ($sperre['packages'] ?? [] as $paket) {
     if (!str_contains($lizenzen, (string) $paket['name'])) {
@@ -8393,7 +8409,7 @@ ok('Und die Schriften und die Fahnen auch',
 // Und umgekehrt: Was nicht mehr mitkommt, steht auch nicht mehr darin.
 // Roboto ging mit dem Anfangsbuchstaben auf dem App-Symbol.
 ok('Keine Lizenz fuer eine Schrift, die nicht mehr beiliegt',
-   str_contains($lizenzen, 'Roboto') === is_file(__DIR__ . '/../assets/Roboto-Bold.ttf'));
+   str_contains($lizenzen, 'Roboto') === is_file(__DIR__ . '/../app/assets/Roboto-Bold.ttf'));
 
 /*
  * Seit die Oberflaeche eigene Schriften mitliefert, gehoeren sie dazu - die
@@ -8406,8 +8422,8 @@ ok('Auch die beiden Schriften der Oberflaeche stehen darin',
    && str_contains($lizenzen, 'SIL Open Font License'),
    'die OFL verlangt die Weitergabe ihres Textes');
 ok('Und ihre Lizenztexte liegen wirklich bei',
-   is_file(__DIR__ . '/../assets/fonts/OFL-Fredoka.txt')
-   && is_file(__DIR__ . '/../assets/fonts/OFL-Nunito.txt'));
+   is_file(__DIR__ . '/../app/assets/fonts/OFL-Fredoka.txt')
+   && is_file(__DIR__ . '/../app/assets/fonts/OFL-Nunito.txt'));
 ok('Die Zusage, dass keine Schrift von fremden Servern kommt, steht noch da',
    str_contains($lizenzen, 'nicht von Google'),
    'sie ist der Grund, warum die Dateien hier liegen');
@@ -8607,11 +8623,11 @@ $vocabSeite = http($base . '/admin/vocab.php')['body'];
 ok('Auch die Vokabeln haben jetzt eine Suche',
    str_contains($vocabSeite, 'data-filter-ziel="vokabelliste"')
    || str_contains(
-        (string) file_get_contents(__DIR__ . '/../admin/vocab.php'),
+        (string) file_get_contents(__DIR__ . '/../app/admin/vocab.php'),
         'data-filter-ziel="vokabelliste"'),
    'bei zweihundert Vokabeln hiess "die eine finden" scrollen und lesen');
 
-$bootJs = (string) file_get_contents(__DIR__ . '/../admin/_boot.php');
+$bootJs = (string) file_get_contents(__DIR__ . '/../app/admin/_boot.php');
 ok('Der Filter versteckt Zeilen, statt sie zu loeschen',
    str_contains($bootJs, 'zeile.hidden = !passt'),
    'wer das Suchwort wieder leert, soll alles wiederbekommen');
@@ -8630,7 +8646,7 @@ section('Keine Rede von Geld');
 foreach (['teacher/course.php', 'teacher/unit.php', 'teacher/index.php',
           'teacher/classes.php', 'teacher/class.php', 'teacher/konto.php',
           'teacher/teacher.js', 'core.js'] as $datei) {
-    $quelle = (string) file_get_contents(__DIR__ . '/../' . $datei);
+    $quelle = (string) file_get_contents(__DIR__ . '/../app/' . $datei);
     // Nur sichtbarer Text, keine Kommentare - die duerfen erklaeren, warum.
     $ohneKommentar = preg_replace('#/\*.*?\*/|^\s*//.*$#ms', '', $quelle) ?? $quelle;
     ok($datei . ' spricht nicht von Kosten',
@@ -8639,20 +8655,20 @@ foreach (['teacher/course.php', 'teacher/unit.php', 'teacher/index.php',
 }
 
 ok('Auch die Absage der Bilderkennung nennt keine Zahlen',
-   !str_contains((string) file_get_contents(__DIR__ . '/../lib/cost.php'),
+   !str_contains((string) file_get_contents(__DIR__ . '/../app/lib/cost.php'),
                  'Monatsbudget f\u00fcr die Bilderkennung ist'),
    'sie sagt, dass es gerade nicht geht - nicht, warum es Geld kostet');
 
 section('Hell, dunkel, automatisch');
 
-require_once __DIR__ . '/../lib/thema.php';
+require_once __DIR__ . '/../app/lib/thema.php';
 
 /*
  * Die Wahl ist eine Einstellung des Geraets, kein Datensatz auf dem Server:
  * Wer die App auf dem Tablet dunkel mag und am Rechner hell, soll das haben
  * koennen, ohne dass eines das andere umstellt.
  */
-$cssT = (string) file_get_contents(__DIR__ . '/../style.css');
+$cssT = (string) file_get_contents(__DIR__ . '/../app/style.css');
 
 ok('Ohne Wahl entscheidet das Geraet',
    preg_match('/@media \(prefers-color-scheme: dark\)/', $cssT) === 1);
@@ -8693,7 +8709,7 @@ foreach (['/' => 'die App', '/teacher/' => 'der Lehrkraft-Bereich'] as $pfad => 
  * Risiko; hier steht der Riegel.
  */
 $phpWahl = thema_wahl_html();
-$jsWahl  = (string) file_get_contents(__DIR__ . '/../menue.js');
+$jsWahl  = (string) file_get_contents(__DIR__ . '/../app/menue.js');
 
 foreach (['hell', 'dunkel', 'auto'] as $wahl) {
     ok('Beide Fassungen kennen "' . $wahl . '"',
@@ -8742,7 +8758,7 @@ section('Die Menues in der Kinderansicht');
  * einem Zahnrad, das es nur auf der Startseite gab. Wer mitten im Ueben die
  * Farben umstellen wollte, musste erst herausfinden, wo das geht.
  */
-$kern = (string) file_get_contents(__DIR__ . '/../core.js');
+$kern = (string) file_get_contents(__DIR__ . '/../app/core.js');
 
 ok('Die Leiste traegt beide Schubladen',
    str_contains($kern, 'id="menuLinks"') && str_contains($kern, 'id="menuRechts"'));
@@ -8771,7 +8787,7 @@ ok('Ohne Anmeldung steht dort nichts',
 
 section('Schriften und Wortzeichen');
 
-$stil = (string) file_get_contents(__DIR__ . '/../style.css');
+$stil = (string) file_get_contents(__DIR__ . '/../app/style.css');
 
 /*
  * Die Schriften liegen hier und werden nicht von Google geholt.
@@ -8783,7 +8799,7 @@ $stil = (string) file_get_contents(__DIR__ . '/../style.css');
  */
 ok('Keine Schrift von einem fremden Server',
    preg_match('#(?:@import|url\()[^;)]*fonts\.(?:googleapis|gstatic)\.com#i', $stil) !== 1
-   && !str_contains((string) file_get_contents(__DIR__ . '/../index.php'), 'fonts.googleapis.com'),
+   && !str_contains((string) file_get_contents(__DIR__ . '/../app/index.php'), 'fonts.googleapis.com'),
    'die Adresse jedes Kindes ginge sonst an Google');
 
 foreach (['fredoka', 'nunito'] as $schrift) {
@@ -8792,7 +8808,7 @@ foreach (['fredoka', 'nunito'] as $schrift) {
     ok("Und $schrift liegt als woff2 vor",
        str_starts_with($r['body'], 'wOF2'), substr($r['body'], 0, 4));
     ok("Der Lizenztext zu $schrift liegt bei",
-       is_file(__DIR__ . '/../assets/fonts/OFL-' . ucfirst($schrift) . '.txt'));
+       is_file(__DIR__ . '/../app/assets/fonts/OFL-' . ucfirst($schrift) . '.txt'));
 }
 
 ok('Beide Familien sind als @font-face erklaert',
@@ -8835,7 +8851,7 @@ ok('Und "okidoki" steht als Pfad darin, nicht als Text',
    !str_contains($logo['body'], '<text'),
    'ein <text> im <img> faende die Schrift nicht');
 
-$loginJs = (string) file_get_contents(__DIR__ . '/../views/login.js');
+$loginJs = (string) file_get_contents(__DIR__ . '/../app/views/login.js');
 ok('Die Anmeldeseite zeigt das Wortzeichen',
    str_contains($loginJs, 'assets/vokidoki_logo.svg') && str_contains($loginJs, 'class="logo"'));
 // Die Datei selbst traegt keinen Namen - fuer Vorleseprogramme steht er am <img>.
@@ -8882,7 +8898,7 @@ ok('Ohne Lernstand, aber mit Vokabel',
    preg_match("/k: 'frei', v: Number\(vocabId\)/", $vorratQ) === 1,
    'an der Vokabel prueft der Server, ob das Konto antworten darf');
 
-$bundleQ = (string) file_get_contents(__DIR__ . '/../api/bundle.php');
+$bundleQ = (string) file_get_contents(__DIR__ . '/../app/api/bundle.php');
 ok('Der Server kennt das Ereignis', str_contains($bundleQ, "\$art === 'frei'"));
 ok('Und verbucht nur den Tag',
    preg_match('/art === .frei.*?streak_verbuchen\([^;]*false\)/s', $bundleQ) === 1,
@@ -8914,8 +8930,8 @@ ok('In dieser Reihenfolge',
    preg_match('/z-richtig.*z-folge.*z-balken.*z-beste.*z-quote/s', $freiQ) === 1);
 
 // Von der Lerneinheit aus fuehrt der Pfeil zurueck zur Lerneinheit.
-$appQ  = (string) file_get_contents(__DIR__ . '/../app.js');
-$unitQ = (string) file_get_contents(__DIR__ . '/../views/unit.js');
+$appQ  = (string) file_get_contents(__DIR__ . '/../app/app.js');
+$unitQ = (string) file_get_contents(__DIR__ . '/../app/views/unit.js');
 ok('Die Lerneinheit startet ihre eigene Adresse',
    str_contains($unitQ, 'go(`/unit/${frei.dataset.frei}/frei`)'));
 ok('Und die nimmt die Lerneinheit als Ziel des Zurueck-Pfeils mit',
@@ -8958,8 +8974,8 @@ $quizQ  = http($base . '/views/quiz.js')['body'];
 $luecke = http($base . '/views/cloze.js')['body'];
 // Eigene Namen: weiter oben heisst $kern mal eine Zeichenkette und mal die
 // ganze Antwort - hier soll nichts davon abhaengen.
-$kernQ = (string) file_get_contents(__DIR__ . '/../core.js');
-$stilQ = (string) file_get_contents(__DIR__ . '/../style.css');
+$kernQ = (string) file_get_contents(__DIR__ . '/../app/core.js');
+$stilQ = (string) file_get_contents(__DIR__ . '/../app/style.css');
 
 /*
  * Die drei Punkte standen auf dem Stand VOR der Antwort und rueckten erst
@@ -9044,7 +9060,7 @@ ok('Es gibt Knoepfe fuer vor und zurueck',
 ok('In den Kaesten steht die Zahl der richtigen Antworten',
    str_contains($konto, 'Math.min(c, 999)'));
 
-require_once __DIR__ . '/../lib/streak.php';
+require_once __DIR__ . '/../app/lib/streak.php';
 ok('Zwoelf Monate zurueck', STREAK_KALENDER_MONATE === 12);
 $stand = streak_stand($userId);
 foreach (['seit', 'heute', 'monate', 'tage'] as $feld) {
@@ -9060,10 +9076,10 @@ ok('Und "seit" ist das Anlegedatum des Kontos',
  * jedem Klick wieder dabei. Das Buendel holt ihn - es liegt im Geraet.
  */
 ok('Die Huelle laedt den Kalender nicht mit',
-   str_contains((string) file_get_contents(__DIR__ . '/../index.php'),
+   str_contains((string) file_get_contents(__DIR__ . '/../app/index.php'),
                 'streak_stand((int) $user[\'id\'], false)'));
 ok('Das Buendel dagegen schon',
-   str_contains((string) file_get_contents(__DIR__ . '/../api/bundle.php'),
+   str_contains((string) file_get_contents(__DIR__ . '/../app/api/bundle.php'),
                 'streak_stand($uid)'));
 ok('Ohne Kalender ist der Stand klein',
    count(streak_stand($userId, false)['tage']) === 0);
@@ -9072,7 +9088,7 @@ ok('Ohne Kalender ist der Stand klein',
 ok('Alte Tage werden weggeraeumt', function_exists('streak_aufraeumen'));
 ok('Und zwar selten, nebenbei',
    preg_match('/function streak_aufraeumen\(\)[^}]*random_int/s',
-              (string) file_get_contents(__DIR__ . '/../lib/streak.php')) === 1,
+              (string) file_get_contents(__DIR__ . '/../app/lib/streak.php')) === 1,
    'dieses Projekt hat keinen Cron');
 
 section('Der Ton klingt wie ein Gloeckchen');
@@ -9146,9 +9162,9 @@ section('Die Serie haelt still, solange ihr Schema fehlt');
  * Knopfdruck im Selbsttest. In dieser Zeit gibt es learn_days noch nicht -
  * und eine angemeldete Seite darf deswegen nicht umfallen.
  */
-require_once __DIR__ . '/../lib/streak.php';
-require_once __DIR__ . '/../lib/progress.php';
-require_once __DIR__ . '/../lib/schema.php';
+require_once __DIR__ . '/../app/lib/streak.php';
+require_once __DIR__ . '/../app/lib/progress.php';
+require_once __DIR__ . '/../app/lib/schema.php';
 
 // Irgendeine Vokabel dieses Kontos - welche, ist gleichgueltig.
 $serieVokabel = (int) qv(
@@ -9200,7 +9216,7 @@ ok('Die Huelle wird weiterhin ausgeliefert', $res['status'] === 200, (string) $r
  * richtige - er prueft nebenbei, dass schema.sql die Tabelle mitbringt.
  * Ohne das haette eine frische Installation gar keine Serie.
  */
-$schemaSqlText = (string) file_get_contents(__DIR__ . '/../schema.sql');
+$schemaSqlText = (string) file_get_contents(__DIR__ . '/../app/schema.sql');
 preg_match('/CREATE TABLE IF NOT EXISTS learn_days \(.*?;/s', $schemaSqlText, $ldm);
 ok('schema.sql bringt learn_days mit', ($ldm[0] ?? '') !== '');
 db()->exec($ldm[0]);
@@ -9230,7 +9246,7 @@ ok('Die Karte erklaert beide Wege zu einem Tag',
 ok('Und was nach einer Pause passiert',
    str_contains($kern, 'Einen Tag darfst du auslassen'));
 
-$stil = (string) file_get_contents(__DIR__ . '/../style.css');
+$stil = (string) file_get_contents(__DIR__ . '/../app/style.css');
 ok('Froh und traurig unterscheiden sich auch ohne Farbe',
    str_contains($stil, 'grayscale(1)'),
    'ein Kind, das Gruen und Grau schlecht trennt, sieht sonst nichts');
@@ -9253,8 +9269,8 @@ foreach (['voki-mini.svg', 'voki-sad-mini.svg'] as $bild) {
  * verschiedene Menues, und ein Kind und seine Lehrkraft sollen dieselbe
  * Bewegung sehen.
  */
-$menue   = (string) file_get_contents(__DIR__ . '/../menue.js');
-$lehrJs  = (string) file_get_contents(__DIR__ . '/../teacher/teacher.js');
+$menue   = (string) file_get_contents(__DIR__ . '/../app/menue.js');
+$lehrJs  = (string) file_get_contents(__DIR__ . '/../app/teacher/teacher.js');
 ok('Das Auf- und Zuklappen steht in menue.js',
    str_contains($menue, 'export function menueAktivieren'));
 ok('Die App holt es sich von dort',
@@ -9297,14 +9313,14 @@ section('Verbindungen bleiben stehen');
  * zugleich kann. An ihm liesse sich der Unterschied gar nicht sehen.
  */
 foreach (['lib/json.php', 'teacher/_boot.php', 'api/import.php'] as $datei) {
-    $quelle = (string) file_get_contents(__DIR__ . '/../' . $datei);
+    $quelle = (string) file_get_contents(__DIR__ . '/../app/' . $datei);
     ok($datei . ' setzt kein Connection: close',
        preg_match('/header\s*\(\s*.Connection:/i', $quelle) !== 1,
        'die Laengenangabe sagt schon, wo die Antwort aufhoert');
 }
 
 ok('Die Laengenangabe steht dafuer weiterhin da',
-   str_contains((string) file_get_contents(__DIR__ . '/../lib/json.php'),
+   str_contains((string) file_get_contents(__DIR__ . '/../app/lib/json.php'),
                 'Content-Length: '),
    'ohne sie wartet der Browser doch wieder auf das Ende der Verbindung');
 
@@ -9314,7 +9330,7 @@ ok('Die Laengenangabe steht dafuer weiterhin da',
  * durch; ist wirklich kein Netz da, erfaehrt das Kind es nach einem
  * Wimpernschlag und nicht nach einer Minute.
  */
-$kern = (string) file_get_contents(__DIR__ . '/../core.js');
+$kern = (string) file_get_contents(__DIR__ . '/../app/core.js');
 ok('Ein Abruf ohne Status wird einmal wiederholt',
    preg_match('/catch \{.*?setTimeout.*?res = await senden\(\);/s', $kern) === 1,
    'ein Wettrennen um eine Verbindung faellt beim zweiten Mal nicht mehr auf');
@@ -9344,7 +9360,7 @@ section('Fahnen als Bild');
  * Geprueft wird deshalb zweierlei: dass zu jedem Sinnbild der Sprachliste
  * eine Datei da ist, und dass die Seiten sie auch einsetzen.
  */
-require_once __DIR__ . '/../lib/flags.php';
+require_once __DIR__ . '/../app/lib/flags.php';
 
 ok('Der Dateiname kommt aus den Unicode-Stellen',
    flag_file("\u{1F1EC}\u{1F1E7}") === '1f1ec-1f1e7', (string) flag_file("\u{1F1EC}\u{1F1E7}"));
@@ -9398,6 +9414,56 @@ $res = http($base . '/teacher/teacher.js');
 ok('Das Auswahlfeld fuer Sprachen ebenso',
    str_contains($res['body'], 'function fahnenBild')
    && str_contains($res['body'], 'fahnenBild(o.flag'));
+
+section('Startseite und Aufbau des Webroots');
+
+/*
+ * Auf dem Server stehen die Startseite im Webroot und die App unter app/
+ * nebeneinander; tests/router.php stellt das lokal nach. Die Startseite liegt
+ * eine Ebene über der App - ihre Adresse ist die der App ohne base_path.
+ */
+$wurzelUrl = substr($base, 0, strlen($base) - strlen(base_path())) . '/';
+$start = http($wurzelUrl);
+if ($start['status'] !== 200 || !str_contains($start['body'], 'Vokidoki')) {
+    echo "  - Startseite übersprungen (nicht unter $wurzelUrl - Server ohne tests/router.php?)\n";
+} else {
+    ok('Die Startseite steht vor der App', true);
+    ok('Mit beiden Fassungen',
+       str_contains($start['body'], 'id="schueler"') && str_contains($start['body'], 'id="lehrkraefte"')
+       && str_contains($start['body'], 'Für Schülerinnen und Schüler')
+       && str_contains($start['body'], 'Für Lehrkräfte'));
+    ok('„Anmelden“ führt in die App', str_contains($start['body'], 'href="app/">Anmelden</a>'));
+
+    // Die Links auf Impressum, Datenschutz und Lizenzen müssen wirklich ankommen.
+    foreach (['impressum' => 'Impressum', 'datenschutz' => 'Datenschutz', 'lizenzen' => 'Lizenzen'] as $d => $was) {
+        $link = 'app/rechtliches.php?d=' . $d;
+        ok("Die Startseite verlinkt $was", str_contains($start['body'], 'href="' . $link . '"'));
+        $seite = http($wurzelUrl . $link);
+        ok("… und die Seite dahinter steht", $seite['status'] === 200, "Status {$seite['status']}");
+    }
+
+    // Jedes Bild, auf das die Seite zeigt, muss es geben - ein fehlendes
+    // Bildschirmfoto fällt sonst erst dem ersten Besucher auf.
+    preg_match_all('~(?:src|href)="((?:bilder|app/assets)/[^"?#]+)"~', $start['body'], $bilder);
+    $fehlend = array_values(array_filter(array_unique($bilder[1]), static fn (string $p): bool =>
+        !is_file(__DIR__ . '/../' . (str_starts_with($p, 'app/') ? $p : 'website/' . $p))));
+    ok('Alle Bilder der Startseite liegen bei', $bilder[1] !== [] && $fehlend === [],
+       implode(', ', $fehlend) ?: count($bilder[1]) . ' Bilder');
+}
+
+/*
+ * config.php und storage/ liegen nicht mehr in der App, sondern daneben in
+ * daten/. Die App überschreibt bei jedem Update alles in app/ - stünde dort
+ * die Konfiguration, wäre sie nach dem ersten Upload weg.
+ */
+ok('Die Konfiguration liegt ausserhalb von app/',
+   !is_file(__DIR__ . '/../app/config.php') && is_file(daten_dir() . '/config.php')
+   && !str_starts_with(realpath(daten_dir()), realpath(__DIR__ . '/../app')));
+ok('Laufzeitdateien auch', str_starts_with(storage_path('sessions'), daten_dir()));
+ok('In app/ liegt kein storage/ mehr', !is_dir(__DIR__ . '/../app/storage'));
+$gesperrt = http($wurzelUrl . 'daten/config.php');
+ok('daten/ ist von aussen nicht abrufbar', $gesperrt['status'] === 403 || $gesperrt['status'] === 404,
+   "Status {$gesperrt['status']}");
 
 section('Abmelden und Token-Widerruf');
 

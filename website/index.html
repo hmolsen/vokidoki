@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vokidoki – Vokabeln lernen, die heute dran sind</title>
+<meta name="description" content="Vokidoki ist der Vokabeltrainer für die Schule: Die Lehrkraft fotografiert die Buchseite, die Klasse übt genau diese Wörter – am Handy, am Tablet, auch ohne Netz.">
+<meta name="theme-color" content="#4f7cff">
+<meta property="og:title" content="Vokidoki – der Vokabeltrainer für die Schule">
+<meta property="og:description" content="Buchseite fotografieren, freigeben, üben. Mit Auswählen, Lückentext, Serie und Voki.">
+<meta property="og:image" content="https://vokidoki.de/bilder/kind-auswaehlen.webp">
+<meta property="og:url" content="https://vokidoki.de/">
+<link rel="icon" type="image/svg+xml" href="app/assets/voki-icon.svg">
+<link rel="apple-touch-icon" href="app/icon.php?s=180">
+<!--
+  Die Startseite von vokidoki.de. Liegt im Webroot, die App daneben unter
+  app/. Schriften, Logo und Voki kommen aus app/assets - vom eigenen Server,
+  nicht von Google, aus demselben Grund wie in der App selbst.
+
+  Ohne JavaScript stehen beide Fassungen untereinander; mit schaltet der
+  Umschalter zwischen ihnen um und merkt sich die Wahl in der Adresse
+  (#schueler, #lehrkraefte), damit sich ein Link auf die Fassung für
+  Lehrkräfte weitergeben lässt.
+-->
+<style>
+@font-face {
+    font-family: 'Fredoka';
+    src: url('app/assets/fonts/fredoka.woff2') format('woff2');
+    font-weight: 300 700;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Nunito';
+    src: url('app/assets/fonts/nunito.woff2') format('woff2');
+    font-weight: 200 1000;
+    font-display: swap;
+}
+
+:root {
+    --bg:        #f6f7fb;
+    --surface:   #ffffff;
+    --surface-2: #eef0f6;
+    --ink:       #161922;
+    --soft:      #5b6270;
+    --line:      #e1e4ec;
+    --blau:      #4f7cff;
+    --blau-tief: #2f5be0;
+    --lila:      #7c5cff;
+    --gruen:     #afd535;
+    --gruen-tief:#5f7d10;
+    --gelb:      #f6d75c;
+    --schatten:  0 1px 2px rgba(20, 24, 36, .06), 0 12px 32px rgba(20, 24, 36, .10);
+    --kopf:      'Fredoka', ui-rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --text:      'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg:        #111319;
+        --surface:   #1b1e27;
+        --surface-2: #242835;
+        --ink:       #f1f3f8;
+        --soft:      #a6adbd;
+        --line:      #2e3342;
+        --blau:      #6d93ff;
+        --blau-tief: #4f7cff;
+        --gruen-tief:#b9dd4a;
+        --schatten:  0 1px 2px rgba(0, 0, 0, .3), 0 12px 32px rgba(0, 0, 0, .35);
+        color-scheme: dark;
+    }
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 18px/1.6 var(--text);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+}
+img { max-width: 100%; height: auto; display: block; }
+a { color: var(--blau); }
+h1, h2, h3 { font-family: var(--kopf); font-weight: 600; line-height: 1.15; margin: 0 0 .5em; }
+h1 { font-size: clamp(2.3rem, 5.4vw, 3.9rem); letter-spacing: -.01em; }
+h2 { font-size: clamp(1.8rem, 3.6vw, 2.6rem); }
+h3 { font-size: clamp(1.35rem, 2.4vw, 1.75rem); }
+p { margin: 0 0 1em; }
+
+.rahmen { width: min(1160px, 100% - 32px); margin-inline: auto; }
+
+/* ---------------------------------------------------------------- Kopf */
+.kopfleiste {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: saturate(160%) blur(14px);
+    -webkit-backdrop-filter: saturate(160%) blur(14px);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+    padding-top: env(safe-area-inset-top);
+}
+.kopfleiste .rahmen { display: flex; align-items: center; gap: 16px; min-height: 68px; }
+.logo { display: inline-flex; flex: none; }
+.logo img { height: 34px; width: auto; }
+.kopfleiste nav { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.kopfleiste nav a.leise {
+    color: var(--soft); text-decoration: none; font-weight: 600;
+    padding: 8px 12px; border-radius: 999px;
+}
+.kopfleiste nav a.leise:hover { color: var(--ink); background: var(--surface-2); }
+@media (max-width: 720px) { .kopfleiste nav a.leise { display: none; } }
+
+.knopf {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 48px; padding: 0 22px;
+    border-radius: 14px; border: 0;
+    font: 600 1.05rem/1 var(--kopf);
+    text-decoration: none; cursor: pointer;
+    transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.knopf:active { transform: scale(.97); }
+.knopf.voll { background: var(--blau); color: #fff; box-shadow: 0 6px 18px color-mix(in srgb, var(--blau) 35%, transparent); }
+.knopf.voll:hover { background: var(--blau-tief); }
+.knopf.hohl { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+.knopf.hohl:hover { background: var(--surface-2); }
+.knopf.klein { min-height: 42px; padding: 0 18px; font-size: 1rem; border-radius: 12px; }
+.knopf:focus-visible, .umschalter button:focus-visible, a:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--blau) 60%, transparent); outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- Bühne */
+.buehne { position: relative; padding: clamp(40px, 7vw, 88px) 0 40px; overflow: clip; }
+.buehne::before, .buehne::after {
+    content: ""; position: absolute; z-index: -1; border-radius: 50%; filter: blur(60px); opacity: .55;
+}
+.buehne::before { width: 520px; height: 520px; right: -120px; top: -80px;
+                  background: color-mix(in srgb, var(--gruen) 55%, transparent); }
+.buehne::after  { width: 460px; height: 460px; left: -160px; bottom: -160px;
+                  background: color-mix(in srgb, var(--blau) 30%, transparent); }
+.buehne .rahmen { display: grid; grid-template-columns: 1.05fr .95fr; gap: 48px; align-items: center; }
+@media (max-width: 900px) { .buehne .rahmen { grid-template-columns: 1fr; } }
+
+.marke {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 14px 6px 8px; margin-bottom: 18px;
+    border-radius: 999px; background: var(--surface); border: 1px solid var(--line);
+    font-weight: 700; font-size: .92rem; color: var(--gruen-tief);
+}
+.marke img { width: 26px; height: 26px; }
+.buehne h1 em { font-style: normal; color: var(--gruen-tief); }
+.buehne .anriss { font-size: 1.22rem; color: var(--soft); max-width: 36em; }
+.buehne .knoepfe { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
+.buehne .hinweis { margin-top: 18px; font-size: .95rem; color: var(--soft); }
+
+/* Zwei Telefone übereinander, dazu Voki. */
+.telefone { position: relative; min-height: 560px; }
+.telefone .telefon { position: absolute; width: 262px; }
+.telefone .telefon.vorn  { right: 12%; top: 34px; z-index: 2; transform: rotate(3deg); }
+.telefone .telefon.hinten { left: 4%; top: 0; transform: rotate(-5deg); opacity: .96; }
+.telefone .voki {
+    position: absolute; z-index: 3; width: 150px; right: -2%; bottom: -8px;
+    filter: drop-shadow(0 10px 18px rgba(20, 24, 36, .25));
+    animation: schweben 5s ease-in-out infinite;
+}
+@keyframes schweben { 50% { transform: translateY(-10px) rotate(-3deg); } }
+@media (prefers-reduced-motion: reduce) { .telefone .voki { animation: none; } }
+@media (max-width: 900px) {
+    .telefone { min-height: 0; display: flex; justify-content: center; gap: 0; padding: 10px 0 30px; }
+    .telefone .telefon { position: relative; width: min(46%, 240px); top: auto; left: auto; right: auto; }
+    .telefone .telefon.hinten { margin-right: -8%; margin-top: 30px; }
+    .telefone .voki { width: 104px; right: 0; bottom: 0; }
+}
+
+/* Ein Telefon: Rahmen, Insel, Bildschirm. */
+.telefon {
+    border-radius: 44px; padding: 10px;
+    background: #10131a;
+    box-shadow: 0 0 0 1px #2c3140 inset, var(--schatten), 0 30px 60px rgba(20, 24, 36, .18);
+}
+.telefon img { border-radius: 34px; width: 100%; background: #f3f4f8; }
+.telefon.kurz img { aspect-ratio: auto; }
+
+/* Ein Browserfenster für die Bilder vom Rechner. */
+.fenster {
+    border-radius: 16px; overflow: hidden;
+    background: var(--surface); border: 1px solid var(--line); box-shadow: var(--schatten);
+}
+.fenster .leiste {
+    display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px;
+    background: var(--surface-2); border-bottom: 1px solid var(--line);
+}
+.fenster .leiste i { width: 11px; height: 11px; border-radius: 50%; background: #ff5f57; }
+.fenster .leiste i:nth-child(2) { background: #febc2e; }
+.fenster .leiste i:nth-child(3) { background: #28c840; }
+.fenster .leiste span {
+    margin-left: 12px; font-size: .78rem; color: var(--soft);
+    background: var(--surface); border-radius: 6px; padding: 2px 10px;
+}
+
+/* ---------------------------------------------------------------- Umschalter */
+.wahl { position: sticky; top: calc(68px + env(safe-area-inset-top)); z-index: 15; padding: 14px 0; }
+.wahl .rahmen { display: flex; justify-content: center; }
+.umschalter {
+    display: inline-flex; gap: 4px; padding: 5px;
+    border-radius: 999px; background: var(--surface); border: 1px solid var(--line);
+    box-shadow: var(--schatten);
+}
+.umschalter button {
+    appearance: none; border: 0; cursor: pointer;
+    min-height: 46px; padding: 0 22px; border-radius: 999px;
+    background: transparent; color: var(--soft);
+    font: 600 1.02rem/1 var(--kopf);
+    transition: background .2s ease, color .2s ease;
+}
+.umschalter button[aria-selected="true"] { background: var(--ink); color: var(--bg); }
+.umschalter .kurz { display: none; }
+@media (max-width: 520px) {
+    .umschalter button { padding: 0 14px; font-size: .95rem; }
+    .umschalter .lang { display: none; }
+    .umschalter .kurz { display: inline; }
+}
+/* Ohne JavaScript gibt es nichts umzuschalten - dann stehen beide Fassungen da. */
+html:not(.js) .wahl { display: none; }
+html.js .fassung[hidden] { display: none; }
+
+/* ---------------------------------------------------------------- Fassungen */
+.fassung { padding: 30px 0 20px; }
+.fassung > .rahmen > header { text-align: center; max-width: 760px; margin: 0 auto 36px; }
+.fassung > .rahmen > header p { color: var(--soft); font-size: 1.15rem; }
+.nurohnejs { display: none; }
+html:not(.js) .nurohnejs { display: inline; }
+
+.merkmal {
+    display: grid; grid-template-columns: 1fr 1fr; gap: clamp(28px, 5vw, 72px);
+    align-items: center; padding: clamp(28px, 5vw, 56px) 0;
+}
+.merkmal + .merkmal { border-top: 1px solid var(--line); }
+.merkmal.gedreht .bild { order: 2; }
+/* flex-start: Sonst streckt sich das erste Telefon auf die Höhe des zweiten,
+   das tiefer ansetzt, und unten stünde ein leerer schwarzer Rahmen. */
+.merkmal .bild { display: flex; justify-content: center; align-items: flex-start; gap: 18px; }
+.merkmal .bild .telefon { width: min(280px, 46%); }
+/* 46 % sind für zwei Telefone nebeneinander gedacht - ein einzelnes wäre am
+   Telefon nur daumenbreit. */
+.merkmal .bild .telefon:only-child { width: min(280px, 72%); }
+.merkmal .bild .telefon + .telefon { margin-top: 48px; }
+.merkmal .bild .fenster { width: 100%; }
+.merkmal .text p { color: var(--soft); font-size: 1.08rem; }
+.merkmal .text p strong { color: var(--ink); }
+.etikett {
+    display: inline-block; margin-bottom: 10px; padding: 4px 12px; border-radius: 999px;
+    font: 700 .82rem/1.4 var(--text); letter-spacing: .04em; text-transform: uppercase;
+    background: color-mix(in srgb, var(--gruen) 26%, transparent); color: var(--gruen-tief);
+}
+.fassung.lehrkraefte .etikett {
+    background: color-mix(in srgb, var(--blau) 16%, transparent); color: var(--blau);
+}
+.punkte { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 10px; }
+.punkte li { display: flex; gap: 10px; align-items: baseline; color: var(--soft); }
+.punkte li::before {
+    content: ""; flex: none; width: 9px; height: 9px; border-radius: 50%; translate: 0 -2px;
+    background: var(--gruen);
+}
+.fassung.lehrkraefte .punkte li::before { background: var(--blau); }
+@media (max-width: 860px) {
+    .merkmal { grid-template-columns: 1fr; }
+    .merkmal.gedreht .bild { order: 0; }
+}
+
+/* Zwei Bilder, eines über dem anderen: Fenster am Rechner, Telefon davor. */
+.gestapelt { position: relative; width: 100%; padding-bottom: 40px; }
+.gestapelt .fenster { width: 88%; }
+.gestapelt .telefon { position: absolute; right: 0; bottom: 0; width: 34% !important; }
+
+/* Der Home-Bildschirm - gebaut, nicht fotografiert. */
+.homescreen {
+    width: min(320px, 100%); aspect-ratio: 9 / 16; border-radius: 44px; padding: 10px;
+    background: #10131a; box-shadow: 0 0 0 1px #2c3140 inset, var(--schatten);
+}
+.homescreen .innen {
+    height: 100%; border-radius: 34px; padding: 64px 22px 22px;
+    background: linear-gradient(160deg, #46598f 0%, #1f2746 55%, #33224a 100%);
+    display: grid; grid-template-columns: repeat(3, 1fr); align-content: start; gap: 26px 14px;
+}
+.homescreen figure { margin: 0; display: grid; justify-items: center; gap: 6px; }
+.homescreen .symbol {
+    width: 68px; aspect-ratio: 1; border-radius: 22.5%;
+    display: grid; place-items: center;
+    background: linear-gradient(to bottom, var(--c), color-mix(in srgb, var(--c) 68%, #000));
+    box-shadow: 0 3px 10px rgba(0, 0, 0, .35);
+}
+.homescreen .symbol img { width: 84%; }
+.homescreen .symbol.leer { background: rgba(255, 255, 255, .16); box-shadow: none; }
+.homescreen figcaption {
+    color: #fff; font: 600 .72rem/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    text-align: center; text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+    max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Kleine Kacheln für das, was kein eigenes Bild braucht. */
+.kacheln {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px;
+    margin: 12px 0 30px;
+}
+.kachel {
+    padding: 22px; border-radius: 20px;
+    background: var(--surface); border: 1px solid var(--line); box-shadow: var(--schatten);
+}
+.kachel .zeichen { font-size: 1.8rem; line-height: 1; margin-bottom: 12px; display: block; }
+.kachel h3 { font-size: 1.2rem; margin-bottom: 6px; }
+.kachel p { margin: 0; color: var(--soft); font-size: 1rem; }
+
+/* ---------------------------------------------------------------- Vertrauen */
+.vertrauen { padding: clamp(48px, 8vw, 96px) 0; }
+.vertrauen .band {
+    border-radius: 28px; padding: clamp(28px, 5vw, 56px);
+    background: var(--ink); color: var(--bg);
+    display: grid; grid-template-columns: .9fr 1.1fr; gap: 40px;
+}
+.vertrauen .band > div > p { color: color-mix(in srgb, var(--bg) 72%, transparent); }
+.vertrauen ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; }
+.vertrauen li { display: grid; grid-template-columns: 34px 1fr; gap: 12px; }
+.vertrauen li b { display: block; font-family: var(--kopf); font-weight: 600; font-size: 1.1rem; }
+.vertrauen li span { color: color-mix(in srgb, var(--bg) 70%, transparent); font-size: 1rem; }
+.vertrauen li .z { font-size: 1.5rem; line-height: 1.2; }
+@media (max-width: 860px) { .vertrauen .band { grid-template-columns: 1fr; } }
+
+/* ---------------------------------------------------------------- Schluss */
+.schluss { text-align: center; padding: 20px 0 clamp(56px, 8vw, 96px); }
+.schluss img.voki { width: 120px; margin: 0 auto 18px; }
+.schluss p { color: var(--soft); font-size: 1.12rem; }
+.schluss .knoepfe { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
+
+footer {
+    border-top: 1px solid var(--line);
+    padding: 28px 0 calc(28px + env(safe-area-inset-bottom));
+    font-size: .95rem; color: var(--soft);
+}
+footer .rahmen { display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: center; }
+footer nav { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-left: auto; }
+footer a { color: var(--soft); text-decoration: none; }
+footer a:hover { color: var(--ink); text-decoration: underline; }
+</style>
+<script>
+    // Vor dem ersten Zeichnen: Mit Skript gibt es den Umschalter, ohne stehen
+    // beide Fassungen da. So springt beim Laden nichts.
+    document.documentElement.classList.add('js');
+</script>
+</head>
+<body>
+
+<header class="kopfleiste">
+    <div class="rahmen">
+        <a class="logo" href="#" aria-label="Vokidoki – zum Seitenanfang">
+            <img src="app/assets/vokidoki_logo.svg" alt="Vokidoki" width="170" height="34">
+        </a>
+        <nav aria-label="Seitenbereiche">
+            <a class="leise" href="#schueler" data-fassung="schueler">Für Schüler:innen</a>
+            <a class="leise" href="#lehrkraefte" data-fassung="lehrkraefte">Für Lehrkräfte</a>
+            <a class="knopf voll klein" href="app/">Anmelden</a>
+        </nav>
+    </div>
+</header>
+
+<main>
+
+<section class="buehne" aria-labelledby="titel">
+    <div class="rahmen">
+        <div>
+            <span class="marke"><img src="app/assets/voki-icon.svg" alt="" width="26" height="26"> Der Vokabeltrainer für die Schule</span>
+            <h1 id="titel">Vokabeln lernen, die <em>heute dran</em> sind.</h1>
+            <p class="anriss">
+                Die Lehrkraft fotografiert die Buchseite, die Klasse übt genau diese
+                Wörter – am Handy, am Tablet, auch ohne Netz. Mit Auswählen,
+                Lückentext und einer Serie, die jeden Tag wächst.
+            </p>
+            <div class="knoepfe">
+                <a class="knopf voll" href="app/">Anmelden</a>
+                <a class="knopf hohl" href="#entdecken">So funktioniert’s</a>
+            </div>
+            <p class="hinweis">Läuft direkt im Browser – ohne App-Store und ohne E-Mail-Adresse.</p>
+        </div>
+        <div class="telefone" aria-hidden="true">
+            <div class="telefon hinten">
+                <img src="bilder/kind-kurs.webp" alt="" width="780" height="1688">
+            </div>
+            <div class="telefon vorn">
+                <img src="bilder/kind-auswaehlen.webp" alt="" width="780" height="1688">
+            </div>
+            <img class="voki" src="app/assets/voki-icon.svg" alt="" width="150" height="150">
+        </div>
+    </div>
+</section>
+
+<div class="wahl" id="entdecken">
+    <div class="rahmen">
+        <div class="umschalter" role="tablist" aria-label="Für wen?">
+            <button role="tab" id="tab-schueler" aria-controls="schueler" aria-selected="true"
+                    data-fassung="schueler"><span class="lang">Für Schülerinnen und Schüler</span><span class="kurz">Für Schüler:innen</span></button>
+            <button role="tab" id="tab-lehrkraefte" aria-controls="lehrkraefte" aria-selected="false"
+                    data-fassung="lehrkraefte">Für Lehrkräfte</button>
+        </div>
+    </div>
+</div>
+
+<!-- =================================================== Schülerinnen und Schüler -->
+<section class="fassung schueler" id="schueler" role="tabpanel" aria-labelledby="tab-schueler">
+    <div class="rahmen">
+        <header>
+            <h2>Üben, bis es sitzt.<span class="nurohnejs"> – für Schülerinnen und Schüler</span></h2>
+            <p>Deine Vokabeln aus dem Unterricht, zwei Arten zu üben und ein kleiner
+               grüner Haken namens Voki, der sich mit dir freut.</p>
+        </header>
+
+        <article class="merkmal">
+            <div class="bild">
+                <div class="telefon"><img src="bilder/kind-kurs.webp" loading="lazy"
+                     alt="Die Kursseite Französisch: 81 Prozent gelernt, darunter die Lerneinheiten mit Fortschrittsbalken"
+                     width="780" height="1688"></div>
+            </div>
+            <div class="text">
+                <span class="etikett">Deine Wörter</span>
+                <h3>Genau die Vokabeln aus deinem Buch</h3>
+                <p>Keine fremden Wortlisten: Du übst, was deine Lehrkraft für deine Klasse
+                   eingelesen hat – und zwar genau so weit, wie sie es freigegeben hat.
+                   Kommt eine neue Unité dazu, ist sie beim nächsten Öffnen da.</p>
+                <p>Auf einen Blick siehst du, wie weit du in jedem Kurs und jeder
+                   Lerneinheit bist.</p>
+            </div>
+        </article>
+
+        <article class="merkmal gedreht">
+            <div class="bild">
+                <div class="telefon"><img src="bilder/kind-auswaehlen.webp" loading="lazy"
+                     alt="Auswählen: Zum Wort „wohnen“ stehen vier französische Antworten, „habiter“ ist grün markiert"
+                     width="780" height="1688"></div>
+                <div class="telefon"><img src="bilder/kind-lueckentext.webp" loading="lazy"
+                     alt="Lückentext: „Nous avons un chat.“ – das eingetippte Wort „avons“ ist richtig"
+                     width="780" height="1688"></div>
+            </div>
+            <div class="text">
+                <span class="etikett">Zwei Übungen</span>
+                <h3>Erst erkennen, dann selbst schreiben</h3>
+                <p><strong>Beim Auswählen</strong> findest du das richtige Wort unter vier – mal von
+                   Deutsch in die Fremdsprache, mal andersherum.</p>
+                <p><strong>Im Lückentext</strong> schreibst du es selbst, mitten in einem echten Satz.
+                   Aus <em>avoir</em> wird dort <em>Nous avons un chat</em> – so, wie man es
+                   wirklich braucht.</p>
+                <ul class="punkte">
+                    <li>Sonderzeichen wie é, è oder ç stehen gleich über der Tastatur.</li>
+                    <li>Ein vergessener Akzent zählt trotzdem – Vokidoki zeigt dir, wie man es schreibt.</li>
+                </ul>
+            </div>
+        </article>
+
+        <article class="merkmal">
+            <div class="bild">
+                <div class="telefon"><img src="bilder/kind-einheit.webp" loading="lazy"
+                     alt="Eine Lerneinheit: Auswählen 6 von 8 gelernt, Lückentext 3 von 8, darunter jede Vokabel mit Haken oder Punkten"
+                     width="780" height="1688"></div>
+            </div>
+            <div class="text">
+                <span class="etikett">Die Lernregel</span>
+                <h3>Dreimal richtig – gekonnt</h3>
+                <p>Jede Vokabel sammelt drei Punkte. Hast du sie dreimal hintereinander richtig,
+                   kannst du sie, und sie bekommt ihren Haken. Ein Fehler, und es geht von vorn los –
+                   so bleibt hängen, was du wirklich weisst.</p>
+                <p>Für jedes Wort siehst du, wo du stehst: beim Auswählen und im Lückentext.</p>
+            </div>
+        </article>
+
+        <article class="merkmal gedreht">
+            <div class="bild">
+                <div class="telefon kurz"><img src="bilder/kind-serie.webp" loading="lazy"
+                     alt="Der Kalender „Deine Serie“: zwölf Tage am Stück geübt, die beste Serie waren 14 Tage"
+                     width="780" height="1032"></div>
+            </div>
+            <div class="text">
+                <span class="etikett">Jeden Tag ein bisschen</span>
+                <h3>Deine Serie wächst mit</h3>
+                <p>Übst du an einem Tag genug, zählt er für deine Serie. Im Kalender siehst du,
+                   wie viele Tage am Stück du dabei warst – und deine beste Serie bleibt
+                   stehen, auch wenn mal ein Tag ausfällt.</p>
+                <p>Für jede richtige Antwort gibt es einen Punkt, für jede gekonnte Vokabel
+                   Konfetti und für eine geschaffte Lerneinheit ein Feuerwerk.</p>
+            </div>
+        </article>
+
+        <article class="merkmal">
+            <div class="bild">
+                <div class="homescreen" role="img"
+                     aria-label="Ein Home-Bildschirm mit Vokidoki-Symbolen in verschiedenen Farben, eines davon heisst „Lina H.s Vokidoki“">
+                    <div class="innen">
+                        <figure><span class="symbol" style="--c:#7c5cff"><img src="app/assets/voki-icon.svg" alt=""></span><figcaption>Lina H.s Vokidoki</figcaption></figure>
+                        <figure><span class="symbol leer"></span><figcaption>Kamera</figcaption></figure>
+                        <figure><span class="symbol leer"></span><figcaption>Musik</figcaption></figure>
+                        <figure><span class="symbol leer"></span><figcaption>Karten</figcaption></figure>
+                        <figure><span class="symbol" style="--c:#1c9d5c"><img src="app/assets/voki-icon.svg" alt=""></span><figcaption>Mats B.s Vokidoki</figcaption></figure>
+                        <figure><span class="symbol leer"></span><figcaption>Uhr</figcaption></figure>
+                        <figure><span class="symbol leer"></span><figcaption>Fotos</figcaption></figure>
+                        <figure><span class="symbol leer"></span><figcaption>Notizen</figcaption></figure>
+                        <figure><span class="symbol" style="--c:#e0663a"><img src="app/assets/voki-icon.svg" alt=""></span><figcaption>Ida R.s Vokidoki</figcaption></figure>
+                    </div>
+                </div>
+            </div>
+            <div class="text">
+                <span class="etikett">Deine App</span>
+                <h3>Mit deinem Namen, in deiner Farbe</h3>
+                <p>Leg Vokidoki auf deinen Startbildschirm – dann ist es eine App wie jede
+                   andere, mit deinem Namen darunter und in der Farbe, die du dir aussuchst.
+                   Teilt ihr euch ein Tablet, bekommt jedes Kind sein eigenes Symbol.</p>
+                <p>Einmal geöffnet, klappt das Üben auch im Bus oder im Funkloch. Deine
+                   Antworten kommen nach, sobald wieder Netz da ist.</p>
+            </div>
+        </article>
+
+        <div class="kacheln">
+            <div class="kachel">
+                <span class="zeichen" aria-hidden="true">🏋️</span>
+                <h3>Freies Üben</h3>
+                <p>Alles, was freigegeben ist, so lange du magst – mit deiner Serie der Runde und deinem Rekord.</p>
+            </div>
+            <div class="kachel">
+                <span class="zeichen" aria-hidden="true">🚩</span>
+                <h3>Stimmt was nicht?</h3>
+                <p>Ein Tipp auf die Fahne, und deine Lehrkraft erfährt, welches Wort oder welcher Satz komisch ist.</p>
+            </div>
+            <div class="kachel">
+                <span class="zeichen" aria-hidden="true">🌙</span>
+                <h3>Hell oder dunkel</h3>
+                <p>Vokidoki richtet sich nach deinem Gerät – oder du wählst selbst.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- =================================================== Lehrkräfte -->
+<section class="fassung lehrkraefte" id="lehrkraefte" role="tabpanel" aria-labelledby="tab-lehrkraefte">
+    <div class="rahmen">
+        <header>
+            <h2>Weniger Vorbereitung, mehr Übung.<span class="nurohnejs"> – für Lehrkräfte</span></h2>
+            <p>Sie fotografieren die Vokabelseite und geben frei, was im Unterricht dran ist.
+               Übungen, Lückensätze und Lernstand erledigt Vokidoki.</p>
+        </header>
+
+        <article class="merkmal">
+            <div class="bild">
+                <div class="gestapelt">
+                    <div class="fenster">
+                        <div class="leiste"><i></i><i></i><i></i><span>vokidoki.de/app</span></div>
+                        <img src="bilder/lehrer-qr.webp" loading="lazy"
+                             alt="Am Rechner zeigt Vokidoki einen QR-Code: „Am Smartphone fotografieren“"
+                             width="1920" height="1230">
+                    </div>
+                    <div class="telefon"><img src="bilder/lehrer-einlesen.webp" loading="lazy"
+                         alt="Am Telefon: „Stimmt das so?“ – die erkannten Vokabeln der neuen Unité zum Prüfen"
+                         width="780" height="1688"></div>
+                </div>
+            </div>
+            <div class="text">
+                <span class="etikett">Einlesen</span>
+                <h3>Buchseite fotografieren – fertig ist die Lerneinheit</h3>
+                <p>Fotografieren Sie die Vokabelseite mit dem Smartphone. Vokidoki liest Wörter,
+                   Übersetzungen und Wortarten heraus; Sie sehen kurz drüber und speichern.</p>
+                <p>Arbeiten Sie am Rechner, genügt ein <strong>QR-Code</strong>: scannen, und das
+                   Telefon steht angemeldet im richtigen Kurs. Eine zweite Buchseite hängen Sie
+                   einfach an dieselbe Lerneinheit an.</p>
+                <ul class="punkte">
+                    <li>Auch von Hand oder aus Dateien – was eben gerade zur Hand ist.</li>
+                    <li>Lückensätze zu jeder Vokabel entstehen von selbst im Hintergrund, im Wortschatz Ihrer Klasse.</li>
+                </ul>
+            </div>
+        </article>
+
+        <article class="merkmal gedreht">
+            <div class="bild">
+                <div class="fenster">
+                    <div class="leiste"><i></i><i></i><i></i><span>vokidoki.de/app</span></div>
+                    <img src="bilder/lehrer-freigabe.webp" loading="lazy"
+                         alt="Die Freigabe einer Lerneinheit: 8 von 12 Vokabeln sind freigegeben, ein Balken trennt sie von den gesperrten"
+                         width="1920" height="1326">
+                </div>
+            </div>
+            <div class="text">
+                <span class="etikett">Freigeben</span>
+                <h3>Die Klasse übt, was heute dran ist</h3>
+                <p>Eingelesen wird eine ganze Unité auf einmal, geübt wird Stück für Stück.
+                   Ziehen Sie den Balken bis zur letzten Vokabel dieser Stunde – Ihre Klasse
+                   sieht genau das, nicht mehr.</p>
+                <p>Zurücknehmen geht jederzeit: Die Sätze bleiben, und der Lernstand der Kinder
+                   ist beim nächsten Freigeben wieder da. Tippfehler korrigieren Sie direkt in
+                   der Tabelle.</p>
+            </div>
+        </article>
+
+        <article class="merkmal">
+            <div class="bild">
+                <div class="gestapelt">
+                    <div class="fenster">
+                        <div class="leiste"><i></i><i></i><i></i><span>vokidoki.de/app</span></div>
+                        <img src="bilder/lehrer-klasse.webp" loading="lazy"
+                             alt="Die Klasse 6b mit ihren Kursen und den Kindern, jeweils mit Benutzername und Anfangspasswort"
+                             width="1920" height="1350">
+                    </div>
+                    <div class="fenster" style="position:absolute;right:0;bottom:0;width:46%">
+                        <img src="bilder/lehrer-zettel.webp" loading="lazy"
+                             alt="Ein Zettel für ein Kind: QR-Code, Adresse, Benutzername und Passwort, darunter eine kurze Anleitung"
+                             width="1350" height="1265">
+                    </div>
+                </div>
+            </div>
+            <div class="text">
+                <span class="etikett">Klasse anlegen</span>
+                <h3>Eine Klasse in einer Minute</h3>
+                <p>Klassenliste einfügen, fertig. Benutzernamen und kindgerechte Passwörter wie
+                   <em>ruhige-Schlange</em> entstehen von selbst, und für jedes Kind drucken Sie
+                   einen Zettel mit QR-Code und kurzer Anleitung.</p>
+                <p><strong>Nachnamen werden nicht gespeichert.</strong> Aus „Lina Hoffmann“ wird
+                   „Lina H.“ – E-Mail-Adressen der Kinder braucht es nicht. Vergessene Passwörter
+                   setzen Sie selbst zurück.</p>
+            </div>
+        </article>
+
+        <article class="merkmal gedreht">
+            <div class="bild">
+                <div class="fenster">
+                    <div class="leiste"><i></i><i></i><i></i><span>vokidoki.de/app</span></div>
+                    <img src="bilder/lehrer-meldung.webp" loading="lazy"
+                         alt="Eine Meldung: Ein Kind hat im Lückentext „habite“ getippt; Satz und Lösung lassen sich direkt ändern"
+                         width="1920" height="1038">
+                </div>
+            </div>
+            <div class="text">
+                <span class="etikett">Meldungen</span>
+                <h3>Die Klasse schaut mit</h3>
+                <p>Stimmt eine Übersetzung nicht oder ist ein Satz holprig, melden die Kinder es
+                   mit einem Tipp. Sie sehen, was getippt wurde, und ändern es an Ort und
+                   Stelle – oder bestätigen mit „Stimmt so“.</p>
+                <p>Eine rote Zahl am Zahnrad zeigt, ob etwas wartet.</p>
+            </div>
+        </article>
+
+        <article class="merkmal">
+            <div class="bild">
+                <div class="fenster">
+                    <div class="leiste"><i></i><i></i><i></i><span>vokidoki.de/app</span></div>
+                    <img src="bilder/lehrer-kurse.webp" loading="lazy"
+                         alt="Meine Kurse: Englisch 6b, Französisch 6b und Englisch 7a, jeweils mit Freigabestand"
+                         width="1920" height="1230">
+                </div>
+            </div>
+            <div class="text">
+                <span class="etikett">Überblick</span>
+                <h3>Alle Kurse auf einen Blick</h3>
+                <p>Jeder Kurs mit seinem Freigabestand, darunter die Handgriffe, die man ständig
+                   braucht: neue Lerneinheit, freigeben. Ein neuer Kurs entsteht in zwei
+                   Schritten – Klasse wählen, Sprache wählen.</p>
+                <p>Vertretungen kommen an die Unterlagen der Kollegin, und die Ansicht Ihrer
+                   Klasse ist nur einen Tipp entfernt.</p>
+            </div>
+        </article>
+    </div>
+</section>
+
+<!-- =================================================== Für beide -->
+<section class="vertrauen" aria-labelledby="vertrauen-titel">
+    <div class="rahmen">
+        <div class="band">
+            <div>
+                <h2 id="vertrauen-titel">Gemacht für die Schule</h2>
+                <p>Vokidoki geht mit den Daten von Kindern so sparsam um, wie es geht –
+                   nicht, weil es vorgeschrieben ist, sondern weil es anders nicht nötig ist.</p>
+            </div>
+            <ul>
+                <li><span class="z" aria-hidden="true"><img src="app/assets/flags/1f1e9-1f1ea.svg" alt="" width="26" height="26"></span>
+                    <div><b>Server in Deutschland</b><span>Gehostet bei ALL-INKL.COM, mit Vertrag zur Auftragsverarbeitung.</span></div></li>
+                <li><span class="z" aria-hidden="true">🙈</span>
+                    <div><b>Keine Nachnamen, keine E-Mail-Adressen</b><span>Von Kindern speichert Vokidoki den Vornamen, den ersten Buchstaben des Nachnamens und den Lernstand.</span></div></li>
+                <li><span class="z" aria-hidden="true">🚫</span>
+                    <div><b>Kein Tracking, keine Werbung</b><span>Keine Analysewerkzeuge, keine Werbe-Cookies, keine Schriften von fremden Servern.</span></div></li>
+                <li><span class="z" aria-hidden="true">📖</span>
+                    <div><b>Die KI sieht nur das Buch</b><span>Zum Einlesen geht das Foto der Buchseite an die KI – ohne Namen, ohne Konten.</span></div></li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<section class="schluss" aria-labelledby="schluss-titel">
+    <div class="rahmen">
+        <img class="voki" src="app/assets/voki-icon.svg" alt="" width="120" height="120">
+        <h2 id="schluss-titel">Los geht’s!</h2>
+        <p>Deine Zugangsdaten stehen auf dem Zettel von deiner Lehrkraft.</p>
+        <div class="knoepfe">
+            <a class="knopf voll" href="app/">Anmelden</a>
+            <a class="knopf hohl" href="mailto:support@vokidoki.de?subject=Vokidoki%20an%20unserer%20Schule">Vokidoki an Ihre Schule holen</a>
+        </div>
+    </div>
+</section>
+
+</main>
+
+<footer>
+    <div class="rahmen">
+        <span>Vokidoki · Hannes Molsen, Scharbeutz</span>
+        <nav aria-label="Rechtliches">
+            <a href="app/rechtliches.php?d=impressum">Impressum</a>
+            <a href="app/rechtliches.php?d=datenschutz">Datenschutz</a>
+            <a href="app/rechtliches.php?d=lizenzen">Lizenzen</a>
+        </nav>
+    </div>
+</footer>
+
+<script>
+/*
+ * Der Umschalter zwischen den beiden Fassungen.
+ *
+ * Die Wahl steht in der Adresse (#schueler, #lehrkraefte): So lässt sich die
+ * Fassung für Lehrkräfte als Link weitergeben, und der Zurück-Knopf tut,
+ * was man erwartet. Links in der Kopfleiste schalten ebenfalls um.
+ */
+(() => {
+    const fassungen = ['schueler', 'lehrkraefte'];
+    const tabs = [...document.querySelectorAll('.umschalter [role="tab"]')];
+
+    const zeigen = (name, scrollen) => {
+        if (!fassungen.includes(name)) name = 'schueler';
+        fassungen.forEach((f) => { document.getElementById(f).hidden = f !== name; });
+        tabs.forEach((t) => {
+            const an = t.dataset.fassung === name;
+            t.setAttribute('aria-selected', String(an));
+            t.tabIndex = an ? 0 : -1;
+        });
+        if (scrollen) document.getElementById('entdecken').scrollIntoView();
+    };
+
+    document.querySelectorAll('[data-fassung]').forEach((el) => {
+        el.addEventListener('click', (e) => {
+            e.preventDefault();
+            const name = el.dataset.fassung;
+            history.replaceState(null, '', '#' + name);
+            zeigen(name, el.tagName === 'A');
+        });
+    });
+
+    // Mit den Pfeiltasten zwischen den beiden Reitern, wie bei Reitern üblich.
+    document.querySelector('.umschalter').addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        const jetzt = tabs.findIndex((t) => t.getAttribute('aria-selected') === 'true');
+        const neu = tabs[(jetzt + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+        neu.click();
+        neu.focus();
+    });
+
+    const aus = location.hash.slice(1);
+    zeigen(aus, fassungen.includes(aus));
+    window.addEventListener('hashchange', () => zeigen(location.hash.slice(1), false));
+})();
+</script>
+</body>
+</html>

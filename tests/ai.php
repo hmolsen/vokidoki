@@ -25,8 +25,8 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 
-require_once __DIR__ . '/../lib/ai.php';
-require_once __DIR__ . '/../lib/access.php';
+require_once __DIR__ . '/../app/lib/ai.php';
+require_once __DIR__ . '/../app/lib/access.php';
 
 /*
  * Die Lerneinheiten dieser Suite entstehen per SQL und muessen deshalb selbst
@@ -192,7 +192,7 @@ q('DELETE FROM languages WHERE id = ?', [$wtLang]);
 
 section('Lückensätze in Blöcken');
 
-require_once __DIR__ . '/../lib/sentences.php';
+require_once __DIR__ . '/../app/lib/sentences.php';
 
 // 25 Vokabeln: mehr als SENTENCE_BATCH, also zwei Aufrufe. Genau daran ist es
 // auf dem Server gescheitert - ein einziger Aufruf über eine grosse Einheit

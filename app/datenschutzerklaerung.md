@@ -12,7 +12,7 @@ Die Datenverarbeitung in dieser App erfolgt durch den Betreiber:
 Hannes Molsen  
 Wieselgang 7  
 23683 Scharbeutz  
-E-Mail: [Deine Support-E-Mail-Adresse eintragen]
+E-Mail: support@vokidoki.de
 
 ---
 

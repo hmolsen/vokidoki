@@ -16,7 +16,7 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 
-require_once __DIR__ . '/../lib/sentences.php';
+require_once __DIR__ . '/../app/lib/sentences.php';
 
 $passed = 0;
 $failed = 0;
@@ -166,7 +166,7 @@ section('Sonderzeichen zum Antippen');
 // das Kind etwas ein, das anschließend als falsch gilt - und zwar genau dann,
 // wenn es sich Mühe mit der Schreibweise gegeben hat. Deshalb wird hier über
 // die Sprachgrenze hinweg geprüft.
-$js = (string) file_get_contents(__DIR__ . '/../views/cloze.js');
+$js = (string) file_get_contents(__DIR__ . '/../app/views/cloze.js');
 
 preg_match('/const ACCENT_KEYS = \{(.*?)\n\};/s', $js, $m);
 $block = $m[1] ?? '';
@@ -207,7 +207,7 @@ ok('Die Schreibmarke wandert hinter das eingefügte Zeichen',
 
 // Freier Umbruch liess in der zweiten Reihe einen Rest stehen, der nicht
 // unter der ersten ausgerichtet war - das sah schlicht unaufgeräumt aus.
-$css = (string) file_get_contents(__DIR__ . '/../style.css');
+$css = (string) file_get_contents(__DIR__ . '/../app/style.css');
 
 /*
  * Eine Reihe zum Wischen statt zweier fester. Die zweite Reihe kostete 52px,
@@ -268,8 +268,8 @@ section('Platz für die Tastatur im Lückentext');
 // Die Tastatur verkleinert auf dem iPhone nur den sichtbaren Ausschnitt, die
 // Seite bleibt so hoch wie zuvor. iOS scrollt dann zum Eingabefeld, und der
 // Satz wandert aus dem Bild, waehrend unten graue Flaeche stehen bleibt.
-$core = (string) file_get_contents(__DIR__ . '/../core.js');
-$appjs = (string) file_get_contents(__DIR__ . '/../app.js');
+$core = (string) file_get_contents(__DIR__ . '/../app/core.js');
+$appjs = (string) file_get_contents(__DIR__ . '/../app/app.js');
 
 // Die Beobachtung sitzt in app.js, nicht in core.js: app.js ist die einzige
 // Datei, die ihren Versionsstempel in der Adresse traegt und nach einem
@@ -319,7 +319,7 @@ ok('Der Pruefen-Knopf nimmt dann nicht mehr die ganze Breite',
    preg_match('/\.cloze-actions \.cloze-check\s*\{[^}]*flex:\s*1/s', $css) === 1);
 ok('Und der Meldeknopf ist quadratisch',
    preg_match('/\.flagbtn\s*\{[^}]*width:\s*var\(--tap\)/s', $css) === 1);
-$melden = (string) file_get_contents(__DIR__ . '/../melden.js');
+$melden = (string) file_get_contents(__DIR__ . '/../app/melden.js');
 ok('Er ist nicht mehr verborgen, bis etwas falsch war',
    str_contains($melden, 'data-melden') && !preg_match('/data-melden[^>]*hidden/s', $melden)
    && !str_contains($js, '.hidden = false'));
@@ -432,7 +432,7 @@ ok('Der Satz steht frei, ohne Karte drumherum',
 
 section('Abstände vor Satzzeichen');
 
-require_once __DIR__ . '/../lib/punctuation.php';
+require_once __DIR__ . '/../app/lib/punctuation.php';
 
 // Der Anlass: "Salut !" sah nach einem Fehler des Modells aus, ist aber
 // korrektes Französisch - vor ! ? : ; steht dort ein Leerzeichen, in den
@@ -533,7 +533,7 @@ section('Wiederverbindung zur Datenbank');
 // Der echte Fehlerfall vom Server: Während des minutenlangen KI-Aufrufs
 // schliesst MySQL die untätige Verbindung. Hier wird sie absichtlich
 // abgeschossen - genau das tut wait_timeout auch.
-require_once __DIR__ . '/../lib/db.php';
+require_once __DIR__ . '/../app/lib/db.php';
 
 $vorher = (int) qv('SELECT CONNECTION_ID()');
 ok('Verbindung steht', $vorher > 0);
@@ -579,7 +579,7 @@ section('Die Serie - gemeinsame Fallsammlung');
  * nicht, laesst ein Kind vor zwei verschiedenen Zahlen stehen - und
  * ausgerechnet vor der, auf die es stolz ist.
  */
-require_once __DIR__ . '/../lib/streak.php';
+require_once __DIR__ . '/../app/lib/streak.php';
 
 $serien = json_decode(
     (string) file_get_contents(__DIR__ . '/faelle/serien.json'), true,

@@ -24,7 +24,7 @@ function letter_placeholders(): array
     return [
         'name'         => 'Der Name des Kindes, etwa "Lilli M."',
         'benutzername' => 'Sein Benutzername, etwa "lilli.m"',
-        'passwort'     => 'Das Anfangspasswort, etwa "müder Gepard"',
+        'passwort'     => 'Das Anfangspasswort, etwa "müder-Gepard"',
         'klasse'       => 'Die Klasse, etwa "5B"',
         'schule'       => 'Der Name der Schule',
         'url'          => 'Die Adresse der App',
@@ -43,7 +43,7 @@ function letter_default(): string
 
         1. Den Code oben abfotografieren - oder {url} eintippen.
         2. Als Benutzername {benutzername} eingeben.
-        3. Als Passwort {passwort} eingeben, mit dem Leerzeichen in der Mitte.
+        3. Als Passwort {passwort} eingeben, mit dem Bindestrich in der Mitte.
 
         Danach kannst du dir ein eigenes Passwort ausdenken. Merk es dir gut -
         wenn du es vergisst, kann dir deine Lehrkraft ein neues geben.

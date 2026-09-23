@@ -23,7 +23,7 @@ function anthropic_autoload(): void
     $autoload = dirname(__DIR__) . '/vendor/autoload.php';
     if (!is_file($autoload)) {
         throw new RuntimeException(
-            'Anthropic-SDK fehlt. Auf dem Server ausführen: composer install'
+            'Anthropic-SDK fehlt. Auf dem Server in app/ ausführen: composer install --no-dev'
         );
     }
     require_once $autoload;

@@ -15,7 +15,7 @@ require_once __DIR__ . '/config.php';
 /** Vollständiger Pfad der Protokolldatei. */
 function error_log_path(): string
 {
-    return dirname(__DIR__) . '/storage/error.log';
+    return storage_path('error.log');
 }
 
 /**

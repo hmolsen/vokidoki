@@ -27,7 +27,7 @@ function session_boot(): void
     // Servers existiert bei geteiltem Hosting nicht immer - dann scheitert
     // session_start() und die Anmeldung funktioniert nicht. Außerdem liegen
     // die Sitzungen so nicht im selben Topf wie die anderer Anwendungen.
-    $dir = dirname(__DIR__) . '/storage/sessions';
+    $dir = storage_path('sessions');
     if (!is_dir($dir)) {
         @mkdir($dir, 0700, true);
     }

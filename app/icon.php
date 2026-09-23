@@ -7,7 +7,7 @@ declare(strict_types=1);
  * Zeichnet ein deckendes Quadrat in der Account-Farbe und darauf den frohen
  * Voki mit weissem Rand. Deckend und ohne eigene Rundung, weil iOS die Ecken
  * selbst maskiert - ein transparenter Hintergrund würde dort schwarz
- * erscheinen. Ergebnisse werden unter storage/icons/ gecacht.
+ * erscheinen. Ergebnisse werden unter daten/storage/icons/ gecacht.
  *
  * Hier stand einmal der Anfangsbuchstabe des Kindes, hell oder dunkel je nach
  * Farbe, mit Roboto gesetzt. Voki braucht keine Schriftfarbe: Der weisse Rand
@@ -53,7 +53,7 @@ $vorlage = __DIR__ . '/assets/voki-icon.png';
 /*
  * Die Vorlage gehört in den Schlüssel. Sonst liefert der Zwischenspeicher
  * nach einer neuen Zeichnung weiter die alte aus - bis jemand von Hand
- * storage/icons/ leert, und darauf kommt niemand.
+ * daten/storage/icons/ leert, und darauf kommt niemand.
  */
 $cacheKey = sprintf(
     'voki-%d-%d-%s-%s-%d',
@@ -62,7 +62,7 @@ $cacheKey = sprintf(
     $favicon ? '' : ltrim($color, '#'),
     is_file($vorlage) ? filemtime($vorlage) : 0,
 );
-$cacheFile = __DIR__ . '/storage/icons/' . hash('sha256', $cacheKey) . '.png';
+$cacheFile = storage_path('icons/' . hash('sha256', $cacheKey) . '.png');
 
 header('Content-Type: image/png');
 header('Cache-Control: public, max-age=604800');

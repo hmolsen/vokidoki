@@ -18,7 +18,7 @@ declare(strict_types=1);
  * mehr gibt.
  */
 
-$root = dirname(__DIR__, 2);
+$root = dirname(__DIR__, 2) . '/app';
 require_once $root . '/lib/db.php';
 require_once $root . '/lib/access.php';
 require_once $root . '/lib/roster.php';
@@ -150,7 +150,8 @@ foreach ($woerter as $i => $w) {
 }
 
 echo json_encode([
-    'basis'      => 'http://127.0.0.1:8123',
+    // Unter /app wie auf dem Server - siehe tests/router.php.
+    'basis'      => 'http://127.0.0.1:8123' . base_path(),
     'lehrer'     => BT_LEHRER,
     'passwort'   => BT_PASSWORT,
     'schule'     => $schuleId,

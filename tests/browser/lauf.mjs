@@ -41,7 +41,8 @@ import { pruefe as melden } from './melden.mjs';
 import { pruefe as weiter } from './weiter.mjs';
 
 const hier  = dirname(fileURLToPath(import.meta.url));
-const wurzel = resolve(hier, '..', '..');
+// Die Anwendung: dort liegen lib/ und assets/, von dort laufen die php-Aufrufe.
+const wurzel = resolve(hier, '..', '..', 'app');
 
 const [arg, bildOrdner] = process.argv.slice(2);
 

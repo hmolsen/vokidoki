@@ -89,7 +89,7 @@ check($checks, 'Voki fürs App-Symbol', static function (): array {
 });
 
 check($checks, 'Icon-Cache beschreibbar', static function (): array {
-    $dir = dirname(__DIR__) . '/storage/icons';
+    $dir = storage_path('icons');
     if (!is_dir($dir)) {
         @mkdir($dir, 0775, true);
     }
@@ -99,10 +99,10 @@ check($checks, 'Icon-Cache beschreibbar', static function (): array {
 // Ohne eigenes Sitzungsverzeichnis landen wir beim Standardpfad des Servers -
 // und der existiert bei geteiltem Hosting nicht immer.
 check($checks, 'Sitzungen im eigenen Verzeichnis', static function (): array {
-    $dir  = dirname(__DIR__) . '/storage/sessions';
+    $dir  = storage_path('sessions');
     $used = session_save_path();
     if (!is_dir($dir) || !is_writable($dir)) {
-        return [false, 'storage/sessions fehlt oder ist nicht beschreibbar - '
+        return [false, 'daten/storage/sessions fehlt oder ist nicht beschreibbar - '
                      . 'PHP nutzt stattdessen ' . ($used !== '' ? $used : 'den Standardpfad')];
     }
     $same = realpath($used) !== false && realpath($used) === realpath($dir);
@@ -243,7 +243,7 @@ check($checks, 'Lückentext', static function (): array {
 check($checks, 'Anthropic-SDK', static function (): array {
     $autoload = dirname(__DIR__) . '/vendor/autoload.php';
     if (!is_file($autoload)) {
-        return [false, 'vendor/ fehlt - auf dem Server "composer install" ausführen'];
+        return [false, 'vendor/ fehlt - auf dem Server in app/ "composer install --no-dev" ausführen'];
     }
     require_once $autoload;
     return [class_exists(\Anthropic\Client::class), 'anthropic-ai/sdk geladen'];
@@ -301,11 +301,17 @@ function self_base_url(): string
  */
 function probe(string $path): ?array
 {
+    return probe_url(self_base_url() . $path);
+}
+
+/** Wie probe(), aber mit vollständiger Adresse - für daten/ neben der App. */
+function probe_url(string $url): ?array
+{
     if (PHP_SAPI === 'cli-server' && (int) getenv('PHP_CLI_SERVER_WORKERS') < 2) {
         return null;
     }
 
-    $ch = curl_init(self_base_url() . $path);
+    $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => 8,
@@ -317,28 +323,45 @@ function probe(string $path): ?array
     return [$status, substr($body, 0, 400)];
 }
 
-// Die .htaccess-Sperren werden wirklich gemessen statt nur angenommen -
-// unter nginx oder bei abgeschaltetem AllowOverride greifen sie nämlich nicht.
-check($checks, 'config.php nicht abrufbar', static function (): array {
-    if (!is_file(dirname(__DIR__) . '/config.php')) {
-        return [true, 'liegt außerhalb des Webroots - ideal'];
+/*
+ * Die .htaccess-Sperren werden wirklich gemessen statt nur angenommen - unter
+ * nginx oder bei abgeschaltetem AllowOverride greifen sie nämlich nicht.
+ *
+ * config.php und storage/ liegen in daten/, nicht mehr in app/ - app/ wird bei
+ * jedem Update überschrieben. Liegt daten/ neben app/ im Webroot, muss die
+ * .htaccess dort greifen; gemessen wird deshalb die wirkliche Adresse, eine
+ * Ebene über der App. Oberhalb des Webroots gibt es nichts zu messen. Neben
+ * config.php auch das Fehlerprotokoll: Darin stehen Pfade und Meldungen, die
+ * niemanden draussen etwas angehen.
+ */
+check($checks, 'daten/ nicht abrufbar', static function (): array {
+    $app = dirname(__DIR__);
+    if (realpath(daten_dir()) !== realpath(dirname($app) . '/daten') || base_path() === '') {
+        return [true, daten_dir() . ' liegt außerhalb des Webroots - ideal'];
     }
-    $result = probe('/config.php');
-    if ($result === null) {
-        return [true, 'nicht messbar im Entwicklungsserver - auf dem echten Server prüfen'];
+    // Die Adresse des Webroots: die der App ohne das letzte Stück ("/app").
+    $wurzel = substr(self_base_url(), 0, -strlen(base_path()))
+            . rtrim(str_replace('\\', '/', dirname(base_path())), '/');
+
+    foreach (['/daten/config.php', '/daten/storage/error.log'] as $pfad) {
+        $result = probe_url($wurzel . $pfad);
+        if ($result === null) {
+            return [true, 'nicht messbar im Entwicklungsserver - auf dem echten Server prüfen'];
+        }
+        [$status] = $result;
+        if ($status === 200) {
+            return [false, "ACHTUNG: $pfad ist abrufbar - die .htaccess in daten/ greift nicht. "
+                         . 'daten/ besser oberhalb des Webroots als vokidoki-daten/ ablegen'];
+        }
     }
-    [$status, $body] = $result;
-    if ($status === 403 || $status === 404) {
-        return [true, "gesperrt (HTTP $status)"];
-    }
-    // PHP-Dateien werden ausgeführt und geben nichts aus - gefährlich wäre
-    // nur ausgelieferter Quelltext.
-    $leaks = str_contains($body, '<?php') || str_contains($body, 'keyvault_token');
-    return [!$leaks, $leaks
-        ? "ACHTUNG: Quelltext wird ausgeliefert (HTTP $status)"
-        : "HTTP $status, aber kein Quelltext sichtbar - Sperre trotzdem einrichten"];
+    return [true, 'daten/ liegt im Webroot, ist aber gesperrt'];
 });
 
+/*
+ * Hier stand "tests/ nicht ausführbar". Die Tests liegen neben app/ und
+ * werden nicht mehr hochgeladen - hochgeladen wird app/, und darin gibt es
+ * keine.
+ */
 check($checks, 'schema.sql nicht abrufbar', static function (): array {
     $result = probe('/schema.sql');
     if ($result === null) {
@@ -359,23 +382,6 @@ check($checks, 'lib/ nicht abrufbar', static function (): array {
     [$status, $body] = $result;
     $leaks = str_contains($body, '<?php');
     return [!$leaks, $leaks ? "Quelltext sichtbar (HTTP $status)" : "gesperrt (HTTP $status)"];
-});
-
-check($checks, 'tests/ nicht ausführbar', static function (): array {
-    if (!is_dir(dirname(__DIR__) . '/tests')) {
-        return [true, 'nicht auf den Server geladen - ideal'];
-    }
-    $result = probe('/tests/e2e.php');
-    if ($result === null) {
-        return [true, 'nicht messbar im Entwicklungsserver'];
-    }
-    [$status, $body] = $result;
-    // Die Testskripte lehnen Web-Aufrufe selbst mit 404 ab; zusätzlich
-    // greift die .htaccess. Alles andere wäre ein Problem.
-    $ok = in_array($status, [403, 404], true) && trim($body) === '';
-    return [$ok, $ok
-        ? "gesperrt (HTTP $status)"
-        : "ACHTUNG: liefert HTTP $status mit Inhalt - Ordner tests/ löschen"];
 });
 
 check($checks, 'Accounts angelegt', static function (): array {
@@ -434,10 +440,11 @@ $offen = schema_pending();
 
 <p class="tiny muted">
     Die Zugriffssperren werden aktiv gemessen: Der Selbsttest ruft
-    <code>config.php</code>, <code>schema.sql</code> und <code>lib/db.php</code>
-    über die eigene Adresse auf und prüft, dass kein Quelltext herauskommt.
-    Meldet dein Hoster hier ein Problem, greift <code>.htaccess</code> nicht -
-    dann config.php oberhalb des Webroots ablegen (siehe README).
+    <code>daten/config.php</code>, das Fehlerprotokoll, <code>schema.sql</code>
+    und <code>lib/db.php</code> über die eigene Adresse auf und prüft, dass
+    nichts davon herauskommt. Meldet dein Hoster hier ein Problem, greift
+    <code>.htaccess</code> nicht - dann den Ordner <code>daten/</code> als
+    <code>vokidoki-daten/</code> oberhalb des Webroots ablegen (siehe README).
 </p>
 
 <?php admin_foot(); ?>

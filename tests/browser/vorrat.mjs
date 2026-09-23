@@ -261,9 +261,11 @@ export async function pruefeKaltstart(f, aus) {
 
     const wurzel = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
     const port   = 8131;
-    const basis  = `http://127.0.0.1:${port}`;
+    // Derselbe Aufbau wie auf dem Server - siehe tests/router.php.
+    const basis  = `http://127.0.0.1:${port}` + new URL(f.basis).pathname.replace(/\/$/, '');
 
-    const server = spawn('php', ['-S', `127.0.0.1:${port}`, '-t', wurzel],
+    const server = spawn('php', ['-S', `127.0.0.1:${port}`, '-t', wurzel,
+                                 resolve(wurzel, 'tests', 'router.php')],
                          { cwd: wurzel, stdio: 'ignore' });
     let laeuft = true;
     const serverWeg = () => { if (laeuft) { laeuft = false; server.kill(); } };

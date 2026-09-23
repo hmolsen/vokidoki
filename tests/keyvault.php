@@ -20,7 +20,7 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 
-require_once __DIR__ . '/../lib/keyvault.php';
+require_once __DIR__ . '/../app/lib/keyvault.php';
 
 $passed = 0;
 $failed = 0;
@@ -92,7 +92,7 @@ ok('Keyvault-Token wird aus Logtext entfernt',
 echo "\nKein Zwischenspeichern\n";
 // Der Key darf nirgends liegenbleiben: weder in einer statischen Variable noch
 // in einer Datei. Ein rotierter Key muss beim nächsten Aufruf sofort greifen.
-$source = file_get_contents(__DIR__ . '/../lib/keyvault.php');
+$source = file_get_contents(__DIR__ . '/../app/lib/keyvault.php');
 ok('keyvault.php verwendet keine statische Variable', !str_contains($source, 'static $'));
 ok('keyvault.php schreibt nichts in Dateien oder Session',
    !preg_match('/file_put_contents|\\$_SESSION|apcu_store|setcookie/', $source));

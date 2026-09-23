@@ -1,16 +1,14 @@
-# Zugangsdaten - niemals ins Repository
-/config.php
+# Der Datenordner des lokalen Servers: config.php (Zugangsdaten) und
+# storage/ (Sitzungen, Fehlerprotokoll, Symbole). Die Vorlage dafuer liegt in
+# daten-vorlage/ und ist versioniert.
+/daten/
 
-# Abhaengigkeiten werden auf dem Server per composer install erzeugt.
-# composer.lock wird bewusst mitversioniert, damit dort dieselben Versionen landen.
-/vendor/
+# Abhaengigkeiten: composer.json liegt in app/, composer install legt sie nach
+# app/vendor/ - auf dem Server per SSH, lokal mit php composer.phar -d app
+# install. composer.lock wird bewusst mitversioniert, damit dort dieselben
+# Versionen landen.
+/app/vendor/
 /composer.phar
-
-# Zur Laufzeit erzeugt
-/storage/icons/*
-!/storage/icons/.gitkeep
-/storage/sessions/
-/storage/error.log
 
 .DS_Store
 Thumbs.db

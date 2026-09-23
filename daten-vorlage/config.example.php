@@ -1,10 +1,19 @@
 <?php
 /**
- * Vokabeltrainer - Konfiguration
+ * Vokidoki - Konfiguration
  *
- * Kopie dieser Datei als config.php anlegen und ausfüllen:
- *     cp config.example.php config.php && chmod 600 config.php
- * config.php ist per .gitignore und .htaccess geschützt und wird nie deployt.
+ * Kopie dieser Datei als config.php im selben Ordner anlegen und ausfüllen:
+ *     cp config.example.php config.php && chmod 640 config.php
+ *
+ * 640, nicht 600: Bei geteiltem Hosting läuft PHP oft als ein anderer
+ * Benutzer als der, dem die Datei gehört (bei ALL-INKL der Konto-Benutzer
+ * statt des SSH-Benutzers). Mit 600 kann PHP sie nicht lesen, und jede Seite
+ * endet in einem leeren 500er.
+ *
+ * Dieser Ordner wird einmal als daten/ neben app/ hochgeladen (oder als
+ * vokidoki-daten/ oberhalb des Webroots) und danach nie wieder: Updates
+ * überschreiben nur app/. config.php steht in .gitignore und ist durch die
+ * .htaccess dieses Ordners gesperrt.
  */
 
 return [
@@ -31,15 +40,16 @@ return [
     // Danach lässt sich das Passwort im Admin ändern; dieser Wert wird dann ignoriert.
     'admin_bootstrap_password' => 'bitte-ändern',
 
-    // Unterverzeichnis, in dem die App läuft. Leer, wenn sie direkt unter der
-    // Domain liegt; sonst z. B. '/vokabeln' (ohne Slash am Ende).
-    'base_path' => '',
+    // Unterverzeichnis, in dem die App läuft - auf vokidoki.de liegt sie
+    // unter /app, die Startseite davor im Webroot. Ohne Slash am Ende; leer,
+    // wenn die App selbst der Webroot ist.
+    'base_path' => '/app',
 
     // Die vollständige Adresse, unter der die App erreichbar ist - für den
     // QR-Code und die Adresse auf den Zetteln der Kinder. Leer lassen ist in
     // Ordnung: Dann wird sie aus der Anfrage gebaut. Eintragen, wenn die App
     // hinter einem Proxy liegt oder unter mehreren Namen erreichbar ist.
-    // Beispiel: 'https://cqrity.de/vokabeltrainer'
+    // Beispiel: 'https://vokidoki.de/app'
     'public_url' => '',
 
     // true blendet PHP-Fehler im Browser ein - nur lokal verwenden.

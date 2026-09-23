@@ -1,0 +1,18 @@
+# Vokidoki - der Datenordner
+#
+# Hier liegen config.php (Zugangsdaten) und storage/ (Sitzungen,
+# Fehlerprotokoll, App-Symbole). Nichts davon darf je ausgeliefert werden.
+#
+# Diese Sperre greift nur unter Apache mit AllowOverride. Wer es sicher
+# haben will, legt den Ordner gar nicht in den Webroot, sondern eine Ebene
+# darueber, als vokidoki-daten/ - die App findet ihn dort von selbst.
+
+Options -Indexes
+
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Order allow,deny
+  Deny from all
+</IfModule>

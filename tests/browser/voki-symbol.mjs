@@ -1,12 +1,12 @@
 /*
- * Baut das App-Symbol aus dem frohen Voki: assets/voki-icon.svg und
- * assets/voki-icon.png.
+ * Baut das App-Symbol aus dem frohen Voki: app/assets/voki-icon.svg und
+ * app/assets/voki-icon.png.
  *
  *     node tests/browser/voki-symbol.mjs
  *
  * Kein Test, sondern ein Werkzeug - es steht hier, weil es denselben
  * Chrome braucht wie die Browser-Pruefungen. Einmal laufen lassen, wenn
- * sich assets/voki-mini.svg aendert, und beide Dateien mit einchecken.
+ * sich app/assets/voki-mini.svg aendert, und beide Dateien mit einchecken.
  *
  * Warum zwei Dateien: icon.php zeichnet mit GD, und GD liest kein SVG. Es
  * bekommt deshalb ein fertiges PNG mit durchsichtigem Grund und legt es auf
@@ -28,7 +28,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { browser } from './browser.mjs';
 
-const wurzel = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const wurzel = resolve(dirname(fileURLToPath(import.meta.url)), '../../app');
 const quelle = readFileSync(resolve(wurzel, 'assets/voki-mini.svg'), 'utf8');
 
 // Randbreite in Einheiten der Vorlage (viewBox ~1500 breit). Sichtbar ist die

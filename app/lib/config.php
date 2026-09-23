@@ -1,25 +1,62 @@
 <?php
 declare(strict_types=1);
 
-/** Lädt config.php einmalig; sucht sie auch eine Ebene oberhalb des Webroots. */
+/**
+ * Der Ordner mit allem, was ein Update überleben muss: config.php und
+ * storage/ (Sitzungen, Fehlerprotokoll, Symbole).
+ *
+ * Die Anwendung liegt in app/ und wird bei jedem Update als Ganzes
+ * überschrieben. Stünde config.php darin, wäre sie nach dem ersten Upload
+ * weg - oder man müsste bei jedem Upload daran denken, sie auszulassen, und
+ * einmal vergisst man es. Deshalb liegt beides daneben:
+ *
+ *   ../../vokidoki-daten/   oberhalb des Webroots - am besten, wenn der
+ *                           Hoster das zulässt: Der Webserver kommt gar
+ *                           nicht erst heran.
+ *   ../daten/               neben app/ im Webroot - gesperrt durch die
+ *                           .htaccess darin und die im Webroot.
+ *
+ * Gesucht wird in dieser Reihenfolge; es gilt der erste Ordner, in dem eine
+ * config.php liegt.
+ */
+function daten_dir(): string
+{
+    static $dir = null;
+
+    if ($dir === null) {
+        $app = dirname(__DIR__);
+        foreach ([dirname($app, 2) . '/vokidoki-daten', dirname($app) . '/daten'] as $kandidat) {
+            if (is_file($kandidat . '/config.php')) {
+                $dir = $kandidat;
+                break;
+            }
+        }
+        if ($dir === null) {
+            http_response_code(500);
+            exit('config.php fehlt. Den Ordner daten-vorlage/ als daten/ neben app/ '
+                 . 'hochladen und darin config.example.php als config.php ausfüllen.');
+        }
+    }
+
+    return $dir;
+}
+
+/** Ein Pfad unter daten/storage/ - für alles, was zur Laufzeit entsteht. */
+function storage_path(string $pfad = ''): string
+{
+    return daten_dir() . '/storage' . ($pfad === '' ? '' : '/' . ltrim($pfad, '/'));
+}
+
+/** Lädt config.php einmalig aus daten_dir(). */
 function cfg(?string $key = null, mixed $default = null): mixed
 {
     static $config = null;
 
     if ($config === null) {
-        $candidates = [
-            dirname(__DIR__) . '/config.php',
-            dirname(__DIR__, 2) . '/vokabeltrainer-config.php',
-        ];
-        foreach ($candidates as $path) {
-            if (is_file($path)) {
-                $config = require $path;
-                break;
-            }
-        }
+        $config = require daten_dir() . '/config.php';
         if (!is_array($config)) {
             http_response_code(500);
-            exit('config.php fehlt. Bitte config.example.php kopieren und ausfüllen.');
+            exit('config.php liefert keine Konfiguration. Vorlage: config.example.php.');
         }
     }
 
