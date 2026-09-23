@@ -30,6 +30,13 @@ if ($user === null) {
         'background_color' => '#f5f6f8',
         'theme_color'      => '#4f7cff',
         'lang'             => 'de',
+        // Voki auf dem Blau der Voreinstellung - ohne Symbol legte Android
+        // hier einen grauen Buchstaben auf den Home-Bildschirm.
+        'icons'            => [
+            ['src' => url('/icon.php?s=192'), 'sizes' => '192x192', 'type' => 'image/png'],
+            ['src' => url('/icon.php?s=512'), 'sizes' => '512x512', 'type' => 'image/png'],
+            ['src' => url('/icon.php?s=512&p=1'), 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'maskable'],
+        ],
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
     exit;
 }

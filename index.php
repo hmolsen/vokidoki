@@ -12,6 +12,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/lib/auth.php';
+require_once __DIR__ . '/lib/html.php';
 require_once __DIR__ . '/lib/handoff.php';
 require_once __DIR__ . '/lib/access.php';
 require_once __DIR__ . '/lib/errors.php';
@@ -99,6 +100,7 @@ header('Cache-Control: no-store, must-revalidate');
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title><?= $e($appName) ?></title>
+<?= favicon_html() ?>
 
 <?php if ($manifestToken !== null): ?>
 <link rel="manifest" href="<?= $e(url('/manifest.php?t=' . urlencode($manifestToken))) ?>">

@@ -195,8 +195,9 @@ flash_render();
         </div>
     </div>
     <p class="tiny muted">
-        Die Sätze entstehen beim ersten Start der Übung, in einem Aufruf für die
-        ganze Lerneinheit &ndash; einzeln abgefragt wäre dasselbe rund siebenmal
+        Die Sätze entstehen im Hintergrund, gleich nachdem eine Lerneinheit
+        eingelesen ist, in einem Aufruf für die ganze Lerneinheit und auf
+        Rechnung des Kurses &ndash; einzeln abgefragt wäre dasselbe rund siebenmal
         so teuer, weil Anweisung und Wortschatz jedes Mal mitbezahlt würden.
         Drei Sätze passen zur Lernregel &bdquo;dreimal hintereinander richtig&ldquo;.
         Bei 60 Vokabeln und drei Sätzen kostet eine Lerneinheit einmalig rund
@@ -220,7 +221,7 @@ flash_render();
                    value="<?= h(setting('usd_eur', '0.92')) ?>">
         </div>
         <div>
-            <label for="per_hour">Analysen pro Kind und Stunde</label>
+            <label for="per_hour">Analysen pro Konto und Stunde</label>
             <input type="text" id="per_hour" name="per_hour" inputmode="numeric"
                    value="<?= h(setting('imports_per_hour', '20')) ?>">
         </div>

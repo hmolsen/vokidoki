@@ -126,6 +126,7 @@ function admin_login_page(?string $error): never
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="robots" content="noindex, nofollow">
         <title>Admin - Vokidoki</title>
+        <?= favicon_html() ?>
         <link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
         <link rel="stylesheet" href="<?= h(admin_url('admin.css')) ?>">
     </head>
@@ -227,6 +228,130 @@ function filter_chips(
     );
 }
 
+// ---------------------------------------------------------------- Schule, Kurs, Lerneinheit
+
+/**
+ * Wo man im Bestand steht: Schule, Kurs, Lerneinheit - aus der Anfrage,
+ * und von oben nach unten geprueft.
+ *
+ * Frueher begann die Auswahl beim Kind, und der "Kurs" trug in Wahrheit die
+ * Sprache. Beides stammte aus der Zeit, als ein Kind seine Vokabeln besass.
+ * Heute gehoeren sie einer Lerneinheit, die Einheit einem Kurs, der Kurs
+ * einer Schule - und genau so wird ausgewaehlt.
+ *
+ * Eine untere Stufe bleibt nur, wenn sie zur oberen gehoert. Sonst zeigte
+ * ein alter Link die Lerneinheit eines fremden Kurses unter dem Namen des
+ * gewaehlten - und wer dort speichert, aendert das Falsche. Fehlt dagegen
+ * eine obere Stufe, wird sie von der unteren abgeleitet: Ein Link, der nur
+ * die Lerneinheit nennt, soll auch dorthin fuehren.
+ *
+ * @return array{school:?array, course:?array, unit:?array,
+ *               ids:array{school:int, course:int, unit:int}}
+ */
+function admin_scope(): array
+{
+    $schoolId = (int) ($_REQUEST['school'] ?? 0);
+    $courseId = (int) ($_REQUEST['course'] ?? 0);
+    $unitId   = (int) ($_REQUEST['unit'] ?? 0);
+
+    if ($courseId === 0 && $unitId > 0) {
+        $courseId = (int) (qv('SELECT course_id FROM units WHERE id = ?', [$unitId]) ?? 0);
+    }
+    if ($schoolId === 0 && $courseId > 0) {
+        $schoolId = (int) (qv('SELECT school_id FROM courses WHERE id = ?', [$courseId]) ?? 0);
+    }
+
+    $school = $schoolId > 0 ? q1('SELECT * FROM schools WHERE id = ?', [$schoolId]) : null;
+    $course = $school !== null && $courseId > 0
+        ? course_in_school($courseId, (int) $school['id'])
+        : null;
+    $unit   = $course !== null && $unitId > 0
+        ? q1('SELECT * FROM units WHERE id = ? AND course_id = ?', [$unitId, (int) $course['id']])
+        : null;
+
+    return [
+        'school' => $school,
+        'course' => $course,
+        'unit'   => $unit,
+        'ids'    => [
+            'school' => (int) ($school['id'] ?? 0),
+            'course' => (int) ($course['id'] ?? 0),
+            'unit'   => (int) ($unit['id'] ?? 0),
+        ],
+    ];
+}
+
+/** Die Auswahl als Anfrageparameter - fuer Links, Weiterleitungen und versteckte Felder. */
+function admin_scope_query(array $scope, array $extra = []): array
+{
+    return array_filter(
+        $scope['ids'] + $extra,
+        static fn ($v): bool => $v !== 0 && $v !== '' && $v !== null,
+    );
+}
+
+/** Dieselbe Auswahl als versteckte Felder, damit sie ein POST uebersteht. */
+function admin_scope_fields(array $scope, array $extra = []): string
+{
+    $html = '';
+    foreach (admin_scope_query($scope, $extra) as $k => $v) {
+        $html .= sprintf('<input type="hidden" name="%s" value="%s">', h((string) $k), h((string) $v));
+    }
+    return $html;
+}
+
+/**
+ * Die drei Knopfreihen Schule, Kurs, Lerneinheit.
+ *
+ * Wer oben wechselt, verliert die Auswahl darunter - eine Lerneinheit
+ * gehoert zu genau einem Kurs, und in einem anderen gibt es sie nicht.
+ * Steht hier einmal statt auf jeder Seite, die so auswaehlt.
+ *
+ * @param $extra Uebrige Filter der Seite, die beim Wechsel erhalten bleiben
+ *               (etwa die Suche). Die Seitenzahl faellt immer weg.
+ * @param $alle  Mit "alle" je Reihe - fuer Seiten, die auch ohne Auswahl
+ *               etwas zeigen.
+ */
+function admin_scope_chips(array $scope, array $extra = [], bool $alle = false): string
+{
+    ['school' => $s, 'course' => $c, 'unit' => $u] = $scope['ids'];
+    $allLabel = $alle ? 'alle' : null;
+
+    $html = filter_chips(
+        'Schule',
+        array_map(static fn (array $r): array => [
+            'id'    => (int) $r['id'],
+            'label' => $r['name'] . ($r['active'] ? '' : ' (stillgelegt)'),
+        ], qa('SELECT id, name, active FROM schools ORDER BY active DESC, name')),
+        $s, $extra, 'school', ['course', 'unit', 'p'], $allLabel,
+    );
+
+    if ($s > 0) {
+        $html .= filter_chips(
+            'Kurs',
+            array_map(static fn (array $r): array => [
+                'id'    => (int) $r['id'],
+                'label' => $r['name'] . ($r['active'] ? '' : ' (inaktiv)'),
+                'flag'  => (string) $r['flag_emoji'],
+            ], courses_for_school($s)),
+            $c, ['school' => $s] + $extra, 'course', ['unit', 'p'], $allLabel,
+        );
+    }
+
+    if ($c > 0) {
+        $html .= filter_chips(
+            'Lerneinheit',
+            array_map(static fn (array $r): array => [
+                'id'    => (int) $r['id'],
+                'label' => $r['title'] . ' (' . (int) $r['vocab_count'] . ')',
+            ], course_units_list($c)),
+            $u, ['school' => $s, 'course' => $c] + $extra, 'unit', ['p'], $allLabel,
+        );
+    }
+
+    return $html;
+}
+
 // ---------------------------------------------------------------- Layout
 
 function admin_head(string $title, string $active): void
@@ -235,8 +360,12 @@ function admin_head(string $title, string $active): void
         'index.php'     => 'Kosten',
         'schools.php'   => 'Schulen',
         'users.php'     => 'Accounts',
-        'vocab.php'     => 'Vokabeln',
-        'sentences.php' => 'Lückensätze',
+        /*
+         * Ein Eintrag fuer Vokabeln und Saetze. Die Saetze einer Lerneinheit
+         * stehen jetzt unter ihren Vokabeln; die Liste ueber alle Kurse ist
+         * von dort aus verlinkt und markiert diesen Eintrag mit.
+         */
+        'vocab.php'     => 'Unterlagen',
         'meldungen.php' => 'Meldungen',
         'settings.php'  => 'Einstellungen',
         'selfcheck.php' => 'Selbsttest',
@@ -252,6 +381,7 @@ function admin_head(string $title, string $active): void
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="robots" content="noindex, nofollow">
         <title><?= h($title) ?> - Vokidoki Admin</title>
+        <?= favicon_html() ?>
         <link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
         <link rel="stylesheet" href="<?= h(admin_url('admin.css')) ?>">
     </head>
@@ -315,6 +445,14 @@ function admin_foot(): void
         picker.open = false;
     });
 
+    // Rueckfrage vor dem Loeschen. Der Text steht am Knopf, damit er die
+    // Zahlen nennen kann ("12 Lerneinheiten, 340 Vokabeln") statt nur
+    // "sicher?" zu fragen.
+    document.addEventListener('click', (event) => {
+        const knopf = event.target.closest('[data-confirm]');
+        if (knopf && !confirm(knopf.dataset.confirm)) event.preventDefault();
+    });
+
     // Klick daneben schliesst ein offenes Farbfeld.
     document.addEventListener('click', (event) => {
         document.querySelectorAll('.colorpick[open]').forEach((picker) => {
@@ -344,15 +482,17 @@ function admin_foot(): void
         const zaehler = document.getElementById(feld.dataset.filterZaehler || '');
         if (!tabelle) return;
 
-        const zeilen = [...tabelle.querySelectorAll('tr[data-suchtext]')];
+        // Zeilen sind meist <tr>, in der Kontenliste aber <details> - dort
+        // haette eine Tabelle das Farbfeld abgeschnitten.
+        const zeilen = [...tabelle.querySelectorAll('[data-suchtext]')];
 
         const filtern = () => {
             const wort = feld.value.trim().toLowerCase();
             let sichtbar = 0;
 
-            zeilen.forEach((tr) => {
-                const passt = wort === '' || tr.dataset.suchtext.includes(wort);
-                tr.hidden = !passt;
+            zeilen.forEach((zeile) => {
+                const passt = wort === '' || zeile.dataset.suchtext.includes(wort);
+                zeile.hidden = !passt;
                 if (passt) sichtbar++;
             });
 

@@ -59,6 +59,7 @@ $qrSvg    = qr_svg($adresse, 4, 'Adresse der App');
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Zugangsdaten <?= h($klasse['name']) ?></title>
+<?= favicon_html() ?>
 <style>
 :root { color-scheme: light; }
 * { box-sizing: border-box; }

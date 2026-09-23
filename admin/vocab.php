@@ -8,30 +8,59 @@ require_once __DIR__ . '/../lib/vocab.php';
 
 admin_require();
 
-/** Zurück zur gefilterten Ansicht, damit die Auswahl nach dem Speichern steht. */
-function back_to_filter(int $userId, int $languageId, int $unitId): never
+/*
+ * Unterlagen: Schule, Kurs, Lerneinheit - und darin Vokabeln und Saetze.
+ *
+ * Hier stand einmal "Kind, Sprache, Lerneinheit". Das stammte aus der Zeit,
+ * als ein Kind seine Vokabeln besass. Seit sie einer Lerneinheit im Kurs
+ * gehoeren, fuehrte der Weg ueber das Kind zu 28 gleichen Antworten, und die
+ * Zeile "Kurs" trug in Wahrheit die Sprache.
+ *
+ * Der Admin sieht und berichtigt hier. Freigeben, Mitglieder und Einlesen
+ * bleiben bei der Lehrkraft - sie weiss, was in ihrer Klasse dran ist.
+ */
+
+$scope    = admin_scope();
+$schoolId = $scope['ids']['school'];
+$courseId = $scope['ids']['course'];
+$unitId   = $scope['ids']['unit'];
+$course   = $scope['course'];
+$unit     = $scope['unit'];
+
+/** Zurück zur gewählten Stelle, damit die Auswahl nach dem Speichern steht. */
+function back_to_filter(array $scope): never
 {
-    $query = http_build_query(array_filter([
-        'user'     => $userId ?: null,
-        'language' => $languageId ?: null,
-        'unit'     => $unitId ?: null,
-    ]));
+    $query = http_build_query(admin_scope_query($scope));
     header('Location: ' . admin_url('vocab.php') . ($query !== '' ? '?' . $query : ''));
     exit;
 }
 
-/** Lerneinheit samt Eigentümer - im Admin ohne Beschränkung auf ein Kind. */
-function own_unit_admin(int $unitId): ?array
+/** Die Auswahl eine Stufe hoeher - nach dem Loeschen dessen, was gewaehlt war. */
+function scope_up(array $scope, string $bis): array
 {
-    return q1('SELECT * FROM units WHERE id = ?', [$unitId]);
+    $stufen = ['school', 'course', 'unit'];
+    foreach (array_slice($stufen, array_search($bis, $stufen, true)) as $k) {
+        $scope['ids'][$k] = 0;
+    }
+    return $scope;
 }
-
-$userId = (int) ($_REQUEST['user'] ?? 0);
-$langId = (int) ($_REQUEST['language'] ?? 0);
-$unitId = (int) ($_REQUEST['unit'] ?? 0);
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     csrf_check();
+
+    /*
+     * Alles, was eine Lerneinheit braucht, bekommt sie aus der geprueften
+     * Auswahl, nicht aus einem Formularfeld. Frueher ging "unit_id" aus dem
+     * Formular direkt ins UPDATE - und traf jede Einheit, die man hineinschrieb.
+     */
+    $braucheEinheit = ['save_rows', 'save_sentence_rows', 'delete_sentence',
+                       'make_sentences', 'delete_vocab', 'add_vocab'];
+    foreach ($braucheEinheit as $aktion) {
+        if (isset($_POST[$aktion]) && $unit === null) {
+            flash('Diese Lerneinheit gibt es nicht mehr.', 'bad');
+            back_to_filter(scope_up($scope, 'unit'));
+        }
+    }
 
     if (isset($_POST['save_rows'])) {
         $foreign = (array) ($_POST['f'] ?? []);
@@ -50,92 +79,93 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             }
             $changed += q(
                 'UPDATE vocab SET term_foreign = ?, term_native = ?, note = ?, word_type = ?
-                  WHERE id = ?',
+                  WHERE id = ? AND unit_id = ?',
                 [mb_substr($f, 0, 255), mb_substr($nv, 0, 255),
                  $nt === '' ? null : mb_substr($nt, 0, 255),
-                 word_type_clean($type[$id] ?? null), $id],
+                 word_type_clean($type[$id] ?? null), $id, $unitId],
             )->rowCount();
         }
 
-        if (isset($_POST['unit_title'], $_POST['unit_id'])) {
-            $title = trim((string) $_POST['unit_title']);
-            if ($title !== '') {
-                q('UPDATE units SET title = ? WHERE id = ?',
-                  [mb_substr($title, 0, 128), (int) $_POST['unit_id']]);
-            }
+        $title = trim((string) ($_POST['unit_title'] ?? ''));
+        if ($title !== '') {
+            q('UPDATE units SET title = ? WHERE id = ?', [mb_substr($title, 0, 128), $unitId]);
         }
 
         flash($changed === 0 ? 'Nichts geändert.' : $changed . ' Vokabel(n) aktualisiert.');
-        back_to_filter($userId, $langId, $unitId);
+        back_to_filter($scope);
     }
 
     if (isset($_POST['save_sentence_rows'])) {
-        $nat = (array) ($_POST['sn'] ?? []);
-        $frn = (array) ($_POST['sf'] ?? []);
-        $ans = (array) ($_POST['sa'] ?? []);
-        $n   = 0;
+        /*
+         * Ueber sentence_update(), wie auf der Satzliste und bei der
+         * Lehrkraft. Hier stand eine eigene Fassung mit sentence_clean() -
+         * nie aufgerufen, weil kein Formular sie abschickte, aber bereit,
+         * eine zweite Vorstellung davon zu haben, was ein gueltiger Satz ist.
+         */
+        $nat  = (array) ($_POST['sn'] ?? []);
+        $frn  = (array) ($_POST['sf'] ?? []);
+        $ans  = (array) ($_POST['sa'] ?? []);
+        $n    = 0;
+        $bad  = 0;
+        $code = ($course['code'] ?? '') !== '' ? (string) $course['code'] : null;
 
-        // Alle Sätze hier gehören zur ausgewählten Sprache - ihr Kürzel
-        // entscheidet über den Abstand vor Satzzeichen.
-        $langCode = $langId > 0
-            ? qv('SELECT code FROM languages WHERE id = ?', [$langId])
-            : null;
+        $eigene = [];
+        foreach (qa('SELECT s.id FROM sentences s JOIN vocab v ON v.id = s.vocab_id
+                      WHERE v.unit_id = ?', [$unitId]) as $r) {
+            $eigene[(int) $r['id']] = true;
+        }
 
         foreach ($nat as $id => $_v) {
             $id = (int) $id;
-            $row = sentence_clean([
-                'vocab_id' => 1,   // Zugehörigkeit steht schon in der Datenbank
-                'native'   => (string) ($nat[$id] ?? ''),
-                'foreign'  => (string) ($frn[$id] ?? ''),
-                'answer'   => (string) ($ans[$id] ?? ''),
-            ], [1], $langCode);
-
-            if ($row === null) {
-                continue;   // unbrauchbar - lieber nichts ändern als kaputt speichern
+            if (!isset($eigene[$id])) {
+                continue;
             }
-            $n += q(
-                'UPDATE sentences SET native_text = ?, foreign_text = ?, answer = ? WHERE id = ?',
-                [$row['native'], $row['foreign'], $row['answer'], $id],
-            )->rowCount();
+            $neue = sentence_update($id, (string) ($nat[$id] ?? ''),
+                                    (string) ($frn[$id] ?? ''),
+                                    (string) ($ans[$id] ?? ''), $code);
+            if ($neue === null) {
+                $bad++;
+                continue;
+            }
+            $n += $neue;
         }
 
-        flash($n === 0 ? 'Nichts geändert.' : $n . ' Satz/Sätze aktualisiert.');
-        back_to_filter($userId, $langId, $unitId);
+        $text = $n === 0 ? 'Nichts geändert.' : $n . ' Satz/Sätze aktualisiert.';
+        if ($bad > 0) {
+            flash($text . sprintf(' %d wurde(n) nicht gespeichert, weil die Form nicht stimmt (%s).',
+                $bad, SENTENCE_FORM_HINT), 'bad');
+        } else {
+            flash($text);
+        }
+        back_to_filter($scope);
     }
 
     if (isset($_POST['delete_sentence'])) {
-        q('DELETE FROM sentences WHERE id = ?', [(int) $_POST['delete_sentence']]);
-        flash('Satz gelöscht.');
-        back_to_filter($userId, $langId, $unitId);
+        $weg = q('DELETE s FROM sentences s JOIN vocab v ON v.id = s.vocab_id
+                   WHERE s.id = ? AND v.unit_id = ?',
+                 [(int) $_POST['delete_sentence'], $unitId])->rowCount();
+        flash($weg > 0 ? 'Satz gelöscht.' : 'Diesen Satz gibt es hier nicht.', $weg > 0 ? 'good' : 'bad');
+        back_to_filter($scope);
     }
 
     if (isset($_POST['make_sentences'])) {
-        $target = own_unit_admin((int) $_POST['make_sentences']);
-        if ($target === null) {
-            flash('Diese Lerneinheit gibt es nicht mehr.', 'bad');
-            back_to_filter($userId, $langId, $unitId);
-        }
-
         set_time_limit(300);
 
         // Auf wessen Rechnung. Siehe course_billing_user().
-        $owner = course_billing_user(
-            $target['course_id'] === null ? null : (int) $target['course_id'],
-        );
+        $owner = course_billing_user($courseId);
         if ($owner === null) {
-            flash('Diese Lerneinheit gehört zu keinem Kurs - kein Konto, das dafür geradesteht.',
-                  'bad');
-            back_to_filter($userId, $langId, $unitId);
+            flash('In diesem Kurs ist niemand - kein Konto, das für die Kosten geradesteht.', 'bad');
+            back_to_filter($scope);
         }
 
         $blocked = budget_block_reason((int) $owner['id']);
         if ($blocked !== null) {
             flash($blocked, 'bad');
-            back_to_filter($userId, $langId, $unitId);
+            back_to_filter($scope);
         }
 
         try {
-            $res = generate_sentences($target, $owner);
+            $res = generate_sentences($unit, $owner);
             $text = sprintf(
                 '%d Satz/Sätze erzeugt%s.%s',
                 $res['created'],
@@ -154,7 +184,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             error_log('[vokabeltrainer] Sätze: ' . scrub_secrets($e->getMessage()));
             flash('Die Sätze konnten nicht erzeugt werden. Details stehen im Protokoll.', 'bad');
         }
-        back_to_filter($userId, $langId, $unitId);
+        back_to_filter($scope);
     }
 
     if (isset($_POST['fix_punctuation'])) {
@@ -166,7 +196,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             ? 'Die Abstände stimmten schon überall.'
             : sprintf('Abstände zurechtgerückt: %d Vokabel(n) und %d Satz/Sätze.',
                       $n['vocab'], $n['sentences']));
-        back_to_filter($userId, $langId, $unitId);
+        back_to_filter($scope);
     }
 
     if (isset($_POST['fill_word_types'])) {
@@ -256,63 +286,61 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                     : ' Jetzt hat jede Vokabel eine.',
             ));
         }
-        back_to_filter($userId, $langId, $unitId);
+        back_to_filter($scope);
     }
 
     if (isset($_POST['save_language'])) {
-        $id   = (int) $_POST['save_language'];
+        /*
+         * Das Kuerzel gehoert zur Sprache des Kurses - jeder Kurs hat seine
+         * eigene Zeile in languages (siehe course_create()). Welche, sagt
+         * die gepruefte Auswahl, nicht der Wert des Knopfes.
+         */
+        if ($course === null) {
+            flash('Diesen Kurs gibt es nicht mehr.', 'bad');
+            back_to_filter(scope_up($scope, 'course'));
+        }
         $code = strtolower(trim((string) ($_POST['lang_code'] ?? '')));
 
         if ($code !== '' && preg_match('/^[a-z]{2,3}$/', $code) !== 1) {
             flash('Das Kürzel besteht aus zwei oder drei Buchstaben, z. B. fr.', 'bad');
         } else {
             q('UPDATE languages SET code = ? WHERE id = ?',
-              [$code === '' ? null : $code, $id]);
+              [$code === '' ? null : $code, (int) $course['language_id']]);
             flash($code === ''
                 ? 'Kürzel entfernt - Tastaturhinweis und Sonderzeichen entfallen.'
                 : sprintf('Kürzel auf "%s" gesetzt.', $code));
         }
-        back_to_filter($userId, $langId, $unitId);
+        back_to_filter($scope);
     }
 
-    if (isset($_POST['delete_language'])) {
-        $id   = (int) $_POST['delete_language'];
-        $lang = q1(
-            'SELECT l.name, l.flag_emoji,
-                    COALESCE(co.name, l.name) AS display_name
-               FROM languages l
-               LEFT JOIN courses co ON co.language_id = l.id
-              WHERE l.id = ?',
-            [$id],
-        );
-        if ($lang === null) {
-            flash('Diese Sprache gibt es nicht mehr.', 'bad');
-            back_to_filter($userId, 0, 0);
+    if (isset($_POST['delete_course'])) {
+        /*
+         * Hier stand "Diese Sprache loeschen". Das loeschte ueber den
+         * Fremdschluessel den ganzen Kurs mit - Mitglieder, Einheiten,
+         * Lernstand -, und die Rueckfrage nannte nur Vokabeln. Jetzt heisst
+         * es, was es tut, und geht denselben Weg wie bei der Lehrkraft.
+         */
+        if ($course === null) {
+            flash('Diesen Kurs gibt es nicht mehr.', 'bad');
+            back_to_filter(scope_up($scope, 'course'));
         }
 
         // Vorher zählen, damit die Meldung sagt, was tatsächlich weg ist.
-        $n = q1(
-            'SELECT COUNT(DISTINCT t.id) AS units, COUNT(v.id) AS words
-               FROM units t LEFT JOIN vocab v ON v.unit_id = t.id
-              WHERE t.language_id = ?',
-            [$id],
-        );
-
-        // Lerneinheiten, Vokabeln und Lernstand hängen per ON DELETE CASCADE
-        // daran und verschwinden mit.
-        q('DELETE FROM languages WHERE id = ?', [$id]);
+        $weg = course_delete_preview($courseId);
+        try {
+            course_delete($courseId);
+        } catch (Throwable $e) {
+            error_log('[vokabeltrainer] Kurs loeschen: ' . scrub_secrets($e->getMessage()));
+            flash('Der Kurs liess sich nicht löschen. Details stehen im Protokoll.', 'bad');
+            back_to_filter($scope);
+        }
 
         flash(sprintf(
-            '%s "%s" von %s gelöscht - mit %d Lerneinheit(en) und %d Vokabel(n).',
-            $lang['flag_emoji'] !== '' ? $lang['flag_emoji'] : 'Sprache',
-            $lang['name'],
-            $lang['display_name'],
-            (int) $n['units'],
-            (int) $n['words'],
+            'Kurs "%s" gelöscht - mit %d Lerneinheit(en), %d Vokabel(n) und dem Lernstand von %d Kind(ern).',
+            $course['name'], $weg['units'], $weg['vocab'], $weg['students'],
         ));
-
         // Die Auswahl darf nicht auf etwas zeigen, das es nicht mehr gibt.
-        back_to_filter($userId, 0, 0);
+        back_to_filter(scope_up($scope, 'course'));
     }
 
     if (isset($_POST['delete_vocab'])) {
@@ -325,15 +353,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
          * Positionen muessen danach wieder lueckenlos sein, sonst erreicht
          * "Alles freigeben" die letzte Vokabel nicht mehr.
          */
-        vocab_delete((int) $_POST['delete_vocab']);
-        flash('Vokabel gelöscht. Der Lernstand der Kinder dazu ist mit weg.');
-        back_to_filter($userId, $langId, $unitId);
+        $id = (int) $_POST['delete_vocab'];
+        if ((int) qv('SELECT unit_id FROM vocab WHERE id = ?', [$id]) === $unitId) {
+            vocab_delete($id);
+            flash('Vokabel gelöscht. Der Lernstand der Kinder dazu ist mit weg.');
+        } else {
+            flash('Diese Vokabel gibt es hier nicht.', 'bad');
+        }
+        back_to_filter($scope);
     }
 
     if (isset($_POST['add_vocab'])) {
-        $target = (int) $_POST['add_vocab'];
-        $f      = trim((string) ($_POST['new_f'] ?? ''));
-        $nv     = trim((string) ($_POST['new_n'] ?? ''));
+        $f  = trim((string) ($_POST['new_f'] ?? ''));
+        $nv = trim((string) ($_POST['new_n'] ?? ''));
         if ($f === '' || $nv === '') {
             flash('Beide Felder ausfüllen.', 'bad');
         } else {
@@ -341,90 +373,58 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             // Transaktion, lueckenlose Positionen, und punctuation_fix() -
             // das fehlte hier, weshalb von Hand ergaenzte Vokabeln hinterher
             // in der Liste "Abstaende" auftauchten.
-            $code = (string) qv(
-                'SELECT l.code FROM units t JOIN languages l ON l.id = t.language_id
-                  WHERE t.id = ?', [$target],
-            );
-            $dazu = vocab_append($target, [['foreign' => $f, 'native' => $nv]],
+            $code = (string) ($course['code'] ?? '');
+            $dazu = vocab_append($unitId, [['foreign' => $f, 'native' => $nv]],
                                  $code !== '' ? $code : null);
             flash($dazu > 0 ? 'Vokabel ergänzt.' : 'Die Vokabel liess sich nicht ergänzen.',
                   $dazu > 0 ? 'good' : 'bad');
         }
-        back_to_filter($userId, $langId, $unitId);
+        back_to_filter($scope);
     }
 }
 
-$users = qa('SELECT id, display_name, color FROM users ORDER BY display_name');
+// ---------------------------------------------------------------- Daten
 
-$languages = $userId > 0
-    ? qa(
-        // Wie in admin/sentences.php: "Kind" meint jetzt Mitgliedschaft,
-        // nicht Besitz.
-        /*
-         * Sortiert und beschriftet nach KURS, nicht nach Sprache.
-         *
-         * Im Admin heisst das Ding seit dem Schulumbau Kurs: "Englisch - 8c"
-         * unterscheidet sich von "Englisch - 9a", "Englisch" nicht. Wer zwei
-         * gleichnamige Sprachen vor sich hatte, musste raten.
-         */
-        'SELECT DISTINCT l.id, COALESCE(co.name, l.name) AS name, l.flag_emoji, l.code,
-                (SELECT COUNT(*) FROM units t WHERE t.language_id = l.id) AS units,
-                (SELECT COUNT(*) FROM vocab v
-                   JOIN units t2 ON t2.id = v.unit_id
-                  WHERE t2.language_id = l.id) AS words
-           FROM languages l
-           JOIN courses co       ON co.language_id = l.id
-           JOIN course_members m ON m.course_id = co.id
-          WHERE m.user_id = ?
-          ORDER BY name',
-        [$userId],
-      )
-    : [];
-
-$units = $langId > 0
-    ? qa(
-        'SELECT u.id, u.title, COUNT(v.id) AS n
-           FROM units u LEFT JOIN vocab v ON v.unit_id = u.id
-          WHERE u.language_id = ?
-          GROUP BY u.id, u.title
-          ORDER BY u.position, u.id',
-        [$langId],
-      )
-    : [];
-
-$unit = $unitId > 0 ? q1('SELECT * FROM units WHERE id = ?', [$unitId]) : null;
+$kurse     = $schoolId > 0 && $course === null ? courses_for_school($schoolId) : [];
+$einheiten = $course !== null && $unit === null ? course_units_list($courseId) : [];
 
 /*
- * Wessen Lernstand hier steht.
+ * Wie weit die Klasse ist - ueber alle Kinder des Kurses.
  *
- * Frueher der Besitzer der Einheit. Den gibt es nicht mehr - eine Einheit
- * gehoert einem Kurs mit womoeglich 28 Mitgliedern. Gezeigt wird deshalb der
- * Stand des Kontos, das ohnehin fuer den Kurs geradesteht; ohne einen
- * einzelnen Filter zaehlte die Abfrage die Treffer aller Kinder zusammen und
- * ergaebe gar nichts.
+ * Hier stand der Lernstand EINES Kontos: dessen, das fuer den Kurs
+ * geradesteht, meist der Lehrkraft. Die uebt nicht, die Spalten standen auf
+ * null, und es sah aus, als koenne niemand etwas. Gezaehlt werden jetzt die
+ * Kinder, die im Kurs sind - wer ihn verlassen hat, zaehlt nicht mehr mit.
  */
-$unitUser = $unit === null ? null : course_billing_user(
-    $unit['course_id'] === null ? null : (int) $unit['course_id'],
+$kinder = $course === null ? 0 : (int) qv(
+    "SELECT COUNT(*) FROM course_members WHERE course_id = ? AND member_role = 'student'",
+    [$courseId],
 );
-$unitUserId = (int) ($unitUser['id'] ?? 0);
 
 $vocab = $unit !== null
     ? qa(
-        "SELECT v.*, p.streak, p.correct_count, p.wrong_count, p.known_at
+        "SELECT v.*,
+                COALESCE(k.gekonnt, 0) AS gekonnt,
+                COALESCE(k.richtig, 0) AS richtig,
+                COALESCE(k.falsch, 0)  AS falsch
            FROM vocab v
-           LEFT JOIN progress p
-                  ON p.vocab_id = v.id AND p.mode = 'mc' AND p.user_id = ?
+           LEFT JOIN (
+                SELECT p.vocab_id,
+                       SUM(p.known_at IS NOT NULL) AS gekonnt,
+                       SUM(p.correct_count)        AS richtig,
+                       SUM(p.wrong_count)          AS falsch
+                  FROM progress p
+                  JOIN course_members m ON m.user_id = p.user_id
+                                       AND m.course_id = ?
+                                       AND m.member_role = 'student'
+                 WHERE p.mode = 'mc'
+                 GROUP BY p.vocab_id
+           ) k ON k.vocab_id = v.id
           WHERE v.unit_id = ?
           ORDER BY v.position, v.id",
-        [$unitUserId, $unitId],
+        [$courseId, $unitId],
       )
     : [];
-
-$missingTypes = (int) qv('SELECT COUNT(*) FROM vocab WHERE word_type IS NULL');
-
-// Nur zählen, nicht ändern - die Karte erscheint dann, wenn es etwas zu tun
-// gibt, und verschwindet danach von selbst.
-$badSpacing = punctuation_repair(false);
 
 $sentences = $unit !== null
     ? qa(
@@ -438,7 +438,17 @@ $sentences = $unit !== null
     : [];
 $openSentences = $unit !== null ? vocab_without_sentences($unitId) : 0;
 
-admin_head('Vokabeln', 'vocab.php');
+/*
+ * Die beiden Karten fuer den ganzen Bestand stehen nur ueber der Auswahl,
+ * nicht ueber einer Lerneinheit. Sie betreffen alle Schulen - und wer eine
+ * Einheit offen hat, will ihre Vokabeln sehen, nicht zwei Karten davor.
+ */
+$missingTypes = $unit === null ? (int) qv('SELECT COUNT(*) FROM vocab WHERE word_type IS NULL') : 0;
+// Nur zählen, nicht ändern - die Karte erscheint dann, wenn es etwas zu tun
+// gibt, und verschwindet danach von selbst.
+$badSpacing = $unit === null ? punctuation_repair(false) : ['vocab' => 0, 'sentences' => 0];
+
+admin_head('Unterlagen', 'vocab.php');
 flash_render();
 ?>
 
@@ -454,13 +464,12 @@ flash_render();
         <code>;</code> ein Leerzeichen &ndash; &bdquo;Salut !&ldquo; ist also
         richtig gesetzt. Im Deutschen, Englischen, Dänischen und Lateinischen
         steht dort keines. Der Knopf rückt beides je Sprache zurecht und
-        räumt doppelte Abstände mit weg. Kostet nichts und fragt kein Modell.
+        räumt doppelte Abstände mit weg - in allen Schulen. Kostet nichts und
+        fragt kein Modell.
     </p>
     <form method="post">
         <?= csrf_field() ?>
-        <input type="hidden" name="user" value="<?= $userId ?>">
-        <input type="hidden" name="language" value="<?= $langId ?>">
-        <input type="hidden" name="unit" value="<?= $unitId ?>">
+        <?= admin_scope_fields($scope) ?>
         <button class="btn small" name="fix_punctuation" value="1">Abstände zurechtrücken</button>
     </form>
 </div>
@@ -472,116 +481,141 @@ flash_render();
     <p class="tiny muted" style="margin:6px 0 12px">
         Vokabeln, die vor dieser Funktion eingelesen wurden, haben noch keine
         Kategorie. Der Knopf lässt sie vom Modell bestimmen - in Blöcken zu 100,
-        höchstens 500 je Klick. Das kostet wie eine Bilderkennung und zählt
-        aufs Monatsbudget.
+        höchstens 500 je Klick, über alle Schulen. Das kostet wie eine
+        Bilderkennung und zählt aufs Monatsbudget.
     </p>
     <form method="post">
         <?= csrf_field() ?>
-        <input type="hidden" name="user" value="<?= $userId ?>">
-        <input type="hidden" name="language" value="<?= $langId ?>">
-        <input type="hidden" name="unit" value="<?= $unitId ?>">
+        <?= admin_scope_fields($scope) ?>
         <button class="btn small" name="fill_word_types" value="1">Kategorien nachtragen</button>
     </form>
 </div>
 <?php endif; ?>
 
-<?php
-// Die ausgewählte Sprache für die Karte darunter.
-$lang = null;
-foreach ($languages as $l) {
-    if ((int) $l['id'] === $langId) {
-        $lang = $l;
-    }
-}
-?>
-
 <div class="card filters">
-    <?= filter_chips('Kind',
-        array_map(static fn (array $u): array =>
-            ['id' => (int) $u['id'], 'label' => $u['display_name']], $users),
-        $userId, [], 'user') ?>
-
-    <?= filter_chips('Kurs',
-        array_map(static fn (array $l): array => [
-            'id'    => (int) $l['id'],
-            'label' => (string) $l['name'],
-            'flag'  => (string) $l['flag_emoji'],
-        ], $languages),
-        $langId, ['user' => $userId], 'language', ['unit']) ?>
-
-    <?= filter_chips('Lerneinheit',
-        array_map(static fn (array $t): array => [
-            'id'    => (int) $t['id'],
-            'label' => $t['title'] . ' (' . (int) $t['n'] . ')',
-        ], $units),
-        $unitId, ['user' => $userId, 'language' => $langId], 'unit') ?>
+    <?= admin_scope_chips($scope) ?>
 </div>
 
-<?php if ($lang !== null): ?>
-<div class="card">
-    <strong><?= flag_html((string) $lang['flag_emoji']) ?> <?= h($lang['name']) ?></strong>
-    <span class="tiny muted">
-        &middot; <?= (int) $lang['units'] ?> Lerneinheit(en),
-        <?= (int) $lang['words'] ?> Vokabel(n)
-    </span>
+<p class="tiny muted">
+    <a href="<?= h(admin_url('sentences.php') . (admin_scope_query($scope) === [] ? ''
+        : '?' . http_build_query(admin_scope_query($scope)))) ?>">Alle Lückensätze
+        <?= $unit !== null ? 'dieser Lerneinheit' : ($course !== null ? 'dieses Kurses'
+            : ($schoolId > 0 ? 'dieser Schule' : '')) ?> durchsuchen &rsaquo;</a>
+</p>
 
-    <p class="tiny muted" style="margin:8px 0 12px">
-        Das K&uuml;rzel steuert im L&uuml;ckentext den Tastaturhinweis am
-        Eingabefeld und die Reihe der Sonderzeichen dar&uuml;ber
-        (fr, en, la, da &hellip;). Beim Anlegen einer Sprache wird es aus dem
-        Namen abgeleitet; steht hier nichts, entf&auml;llt beides.
-        Leeren schaltet es wieder ab.
+<?php if ($schoolId === 0): ?>
+
+    <p class="muted"><?= (int) qv('SELECT COUNT(*) FROM schools') === 0
+        ? 'Es gibt noch keine Schule - unter „Schulen" anlegen.'
+        : 'Wähle oben eine Schule aus.' ?></p>
+
+<?php elseif ($course === null): ?>
+
+    <?php if ($kurse === []): ?>
+        <p class="muted">An dieser Schule gibt es noch keinen Kurs. Kurse legen die Lehrkräfte an.</p>
+    <?php else: ?>
+    <table class="data">
+        <tr><th>Kurs</th><th>Klasse</th><th class="num">Kinder</th><th class="num">Lehrkräfte</th>
+            <th class="num">Lerneinheiten</th><th class="num">Vokabeln</th><th class="num">freigegeben</th></tr>
+        <?php foreach ($kurse as $k): ?>
+            <tr<?= $k['active'] ? '' : ' class="dim"' ?>>
+                <td>
+                    <?= flag_html((string) $k['flag_emoji'], 'chipflag') ?>
+                    <a href="<?= h(admin_url('vocab.php') . '?' . http_build_query(
+                        ['school' => $schoolId, 'course' => (int) $k['id']])) ?>"><?= h($k['name']) ?></a>
+                </td>
+                <td><?= $k['class_name'] === null ? '<span class="muted">&ndash;</span>' : h($k['class_name']) ?></td>
+                <td class="num"><?= (int) $k['students'] ?></td>
+                <td class="num"><?= (int) $k['teachers'] ?></td>
+                <td class="num"><?= (int) $k['units'] ?></td>
+                <td class="num"><?= (int) $k['vocab'] ?></td>
+                <td class="num"><?= (int) $k['released'] ?></td>
+            </tr>
+        <?php endforeach; ?>
+    </table>
+    <?php endif; ?>
+
+<?php elseif ($unit === null): ?>
+
+    <?php $weg = course_delete_preview($courseId); ?>
+    <div class="card">
+        <strong><?= flag_html((string) $course['flag_emoji']) ?> <?= h($course['name']) ?></strong>
+        <span class="tiny muted">
+            &middot; <?= h($course['language_name']) ?>
+            <?= $course['class_name'] !== null ? '&middot; Klasse ' . h($course['class_name']) : '' ?>
+            &middot; <?= $weg['students'] ?> Kind(er), <?= $weg['teachers'] ?> Lehrkraft/-kräfte
+            <?= $course['active'] ? '' : '&middot; inaktiv' ?>
+        </span>
+
+        <p class="tiny muted" style="margin:8px 0 12px">
+            Das K&uuml;rzel steuert im L&uuml;ckentext den Tastaturhinweis am
+            Eingabefeld und die Reihe der Sonderzeichen dar&uuml;ber
+            (fr, en, la, da &hellip;). Beim Anlegen des Kurses wird es aus dem
+            Namen der Sprache abgeleitet; steht hier nichts, entf&auml;llt beides.
+            Leeren schaltet es wieder ab.
+        </p>
+
+        <form method="post" class="inline" style="margin-bottom:10px">
+            <?= csrf_field() ?>
+            <?= admin_scope_fields($scope) ?>
+            <span class="lbl">K&uuml;rzel</span>
+            <input type="text" name="lang_code" value="<?= h((string) ($course['code'] ?? '')) ?>"
+                   maxlength="8" placeholder="z. B. fr" style="margin:0;width:90px">
+            <button class="btn small secondary" name="save_language" value="1">Speichern</button>
+        </form>
+
+        <form method="post">
+            <?= csrf_field() ?>
+            <?= admin_scope_fields($scope) ?>
+            <button class="linkbtn" name="delete_course" value="<?= $courseId ?>"
+                    formnovalidate style="color:var(--bad)"
+                    data-confirm="<?= h(sprintf(
+                        'Den Kurs "%s" wirklich löschen? Damit verschwinden %d Lerneinheit(en), '
+                        . '%d Vokabel(n), %d Satz/Sätze und %d Lernstände von %d Kind(ern).',
+                        $course['name'], $weg['units'], $weg['vocab'], $weg['sentences'],
+                        $weg['progress'], $weg['students'],
+                    )) ?>">Diesen Kurs l&ouml;schen</button>
+        </form>
+    </div>
+
+    <?php if ($einheiten === []): ?>
+        <p class="muted">In diesem Kurs gibt es noch keine Lerneinheit.</p>
+    <?php else: ?>
+    <table class="data">
+        <tr><th>Lerneinheit</th><th class="num">Vokabeln</th><th class="num">freigegeben</th>
+            <th>Lückensätze</th></tr>
+        <?php foreach ($einheiten as $t): ?>
+            <tr>
+                <td><a href="<?= h(admin_url('vocab.php') . '?' . http_build_query(
+                    ['school' => $schoolId, 'course' => $courseId, 'unit' => (int) $t['id']])) ?>"><?= h($t['title']) ?></a></td>
+                <td class="num"><?= (int) $t['vocab_count'] ?></td>
+                <td class="num"><?= (int) $t['released_count'] ?></td>
+                <td class="tiny muted"><?= h((string) ($t['sentences_status'] ?? '')) ?:
+                    '&ndash;' ?><?= $t['sentences_error'] !== null
+                    ? ' &middot; ' . h((string) $t['sentences_error']) : '' ?></td>
+            </tr>
+        <?php endforeach; ?>
+    </table>
+    <?php endif; ?>
+
+    <p class="tiny muted">
+        Freigeben, Mitglieder und Einlesen erledigt die Lehrkraft in ihrem Bereich.
     </p>
 
-    <form method="post" class="inline" style="margin-bottom:10px">
-        <?= csrf_field() ?>
-        <input type="hidden" name="user" value="<?= $userId ?>">
-        <input type="hidden" name="language" value="<?= $langId ?>">
-        <input type="hidden" name="unit" value="<?= $unitId ?>">
-        <span class="lbl">K&uuml;rzel</span>
-        <input type="text" name="lang_code" value="<?= h((string) ($lang['code'] ?? '')) ?>"
-               maxlength="8" placeholder="z. B. fr" style="margin:0;width:90px">
-        <button class="btn small secondary" name="save_language"
-                value="<?= (int) $lang['id'] ?>">Speichern</button>
-    </form>
-
-    <form method="post">
-        <?= csrf_field() ?>
-        <input type="hidden" name="user" value="<?= $userId ?>">
-        <button class="linkbtn" name="delete_language" value="<?= (int) $lang['id'] ?>"
-                formnovalidate style="color:var(--bad)"
-                onclick="return confirm('<?= sprintf(
-                    'Diese Sprache wirklich l&ouml;schen? Damit verschwinden '
-                    . '%d Lerneinheit(en) und %d Vokabel(n) samt Lernstand.',
-                    (int) $lang['units'], (int) $lang['words'],
-                ) ?>')">Diese Sprache l&ouml;schen</button>
-    </form>
-</div>
-<?php endif; ?>
-
-<?php if ($userId === 0): ?>
-    <p class="muted">Wähle oben ein Kind aus.</p>
-<?php elseif ($langId === 0): ?>
-    <p class="muted"><?= $languages === []
-        ? 'Dieses Kind hat noch keine Sprache angelegt.'
-        : 'Wähle eine Sprache aus.' ?></p>
-<?php elseif ($unit === null): ?>
-    <p class="muted"><?= $units === []
-        ? 'In dieser Sprache gibt es noch keine Lerneinheit.'
-        : 'Wähle eine Lerneinheit aus.' ?></p>
 <?php else: ?>
 
 <form method="post">
     <?= csrf_field() ?>
-    <input type="hidden" name="user" value="<?= $userId ?>">
-    <input type="hidden" name="language" value="<?= $langId ?>">
-    <input type="hidden" name="unit" value="<?= $unitId ?>">
-    <input type="hidden" name="unit_id" value="<?= (int) $unit['id'] ?>">
+    <?= admin_scope_fields($scope) ?>
 
     <div class="inline" style="margin-bottom:14px">
         <label for="unit_title" style="margin:0">Titel</label>
         <input type="text" id="unit_title" name="unit_title" value="<?= h($unit['title']) ?>"
                maxlength="128" style="width:280px;margin:0">
+        <span class="tiny muted">
+            <?= (int) $unit['released_position'] ?> von <?= count($vocab) ?> freigegeben
+            &middot; <?= $kinder ?> Kind(er) im Kurs
+        </span>
     </div>
 
     <?php
@@ -607,7 +641,9 @@ foreach ($languages as $l) {
     <table class="data" id="vokabelliste">
         <tr>
             <th>Fremdsprache</th><th>Deutsch</th><th>Kategorie</th><th>Hinweis</th>
-            <th class="num">richtig</th><th class="num">falsch</th><th>Stand</th><th></th>
+            <th class="num" title="Summe über alle Kinder des Kurses">richtig</th>
+            <th class="num" title="Summe über alle Kinder des Kurses">falsch</th>
+            <th>gekonnt</th><th></th>
         </tr>
         <?php foreach ($vocab as $v): ?>
             <?php
@@ -619,8 +655,11 @@ foreach ($languages as $l) {
                 (string) ($v['note'] ?? ''),
                 (string) (WORD_TYPES[$v['word_type'] ?? '']['label'] ?? ''),
             ]));
+            // Nur anzeigen, nicht aendern: Was freigegeben ist, entscheidet
+            // die Lehrkraft.
+            $frei = (int) $v['position'] < (int) $unit['released_position'];
             ?>
-            <tr data-suchtext="<?= h($suchtext) ?>">
+            <tr data-suchtext="<?= h($suchtext) ?>"<?= $frei ? '' : ' class="dim"' ?>>
                 <td><input type="text" name="f[<?= (int) $v['id'] ?>]" value="<?= h($v['term_foreign']) ?>" maxlength="255"></td>
                 <td><input type="text" name="n[<?= (int) $v['id'] ?>]" value="<?= h($v['term_native']) ?>" maxlength="255"></td>
                 <td class="wtcell">
@@ -635,17 +674,15 @@ foreach ($languages as $l) {
                     </select>
                 </td>
                 <td><input type="text" name="note[<?= (int) $v['id'] ?>]" value="<?= h((string) ($v['note'] ?? '')) ?>" maxlength="255"></td>
-                <td class="num"><?= (int) ($v['correct_count'] ?? 0) ?></td>
-                <td class="num"><?= (int) ($v['wrong_count'] ?? 0) ?></td>
+                <td class="num"><?= (int) $v['richtig'] ?></td>
+                <td class="num"><?= (int) $v['falsch'] ?></td>
                 <td class="tiny muted">
-                    <?= $v['known_at'] !== null
-                        ? 'gekonnt'
-                        : (int) ($v['streak'] ?? 0) . '/3' ?>
+                    <?= $frei ? (int) $v['gekonnt'] . '/' . $kinder : 'nicht freigegeben' ?>
                 </td>
                 <td>
                     <button class="linkbtn" name="delete_vocab" value="<?= (int) $v['id'] ?>"
                             formnovalidate style="color:var(--bad)"
-                            onclick="return confirm('Diese Vokabel löschen?')">löschen</button>
+                            data-confirm="Diese Vokabel löschen? Der Lernstand der Kinder dazu geht mit.">löschen</button>
                 </td>
             </tr>
         <?php endforeach; ?>
@@ -657,10 +694,19 @@ foreach ($languages as $l) {
     <button class="btn small" name="save_rows" value="1">Änderungen speichern</button>
 </form>
 
+<h2>Vokabel ergänzen</h2>
+<form method="post" class="card inline">
+    <?= csrf_field() ?>
+    <?= admin_scope_fields($scope) ?>
+    <input type="text" name="new_f" placeholder="Fremdsprache" maxlength="255" style="width:220px;margin:0">
+    <input type="text" name="new_n" placeholder="Deutsch" maxlength="255" style="width:220px;margin:0">
+    <button class="btn small secondary" name="add_vocab" value="1">Hinzufügen</button>
+</form>
+
 <h2>Lückensätze (<?= count($sentences) ?>)</h2>
 
 <div class="card">
-    <?php $zustand = sentence_status($unitId, $unitUserId); ?>
+    <?php $zustand = sentence_status($unitId, 0); ?>
     <?php if ($zustand['status'] === SENTENCE_RUNNING): ?>
         <div class="notice info">Die Sätze entstehen gerade im Hintergrund.</div>
     <?php elseif ($zustand['status'] === SENTENCE_FAILED): ?>
@@ -672,9 +718,9 @@ foreach ($languages as $l) {
     <?php if ($openSentences > 0): ?>
         <strong><?= $openSentences ?> Vokabel(n) ohne Satz</strong>
         <p class="tiny muted" style="margin:6px 0 12px">
-            Erzeugt wird in Blöcken für die ganze Lerneinheit. Auch ganze
-            Äußerungen wie &bdquo;Tu t'appelles comment&nbsp;?&ldquo; bekommen
-            einen Lückentext &ndash; dort deckt die Lücke einen
+            Erzeugt wird in Blöcken für die ganze Lerneinheit, auf Rechnung des
+            Kurses. Auch ganze Äußerungen wie &bdquo;Tu t'appelles comment&nbsp;?&ldquo;
+            bekommen einen Lückentext &ndash; dort deckt die Lücke einen
             kennzeichnenden Teil ab.
         </p>
     <?php else: ?>
@@ -684,33 +730,78 @@ foreach ($languages as $l) {
     <?php endif; ?>
     <form method="post">
         <?= csrf_field() ?>
-        <input type="hidden" name="user" value="<?= $userId ?>">
-        <input type="hidden" name="language" value="<?= $langId ?>">
-        <input type="hidden" name="unit" value="<?= $unitId ?>">
-        <button class="btn small" name="make_sentences" value="<?= (int) $unit['id'] ?>">
+        <?= admin_scope_fields($scope) ?>
+        <button class="btn small" name="make_sentences" value="1"<?= $openSentences > 0 ? '' : ' disabled' ?>>
             <?= $openSentences > 0 ? 'Fehlende Sätze erzeugen' : 'Nichts zu erzeugen' ?>
         </button>
     </form>
 </div>
 
 <?php if ($sentences !== []): ?>
-    <p class="tiny muted">
-        <a href="<?= h(admin_url('sentences.php') . '?' . http_build_query([
-            'user' => $userId, 'language' => $langId, 'unit' => $unitId,
-        ])) ?>">Diese <?= count($sentences) ?> Sätze ansehen und bearbeiten &rsaquo;</a>
-    </p>
-<?php endif; ?>
+<?php
+/*
+ * Die Saetze stehen unter ihren Vokabeln, nicht auf einer eigenen Seite.
+ * Wer eine Vokabel berichtigt, will ihre Saetze gleich mit ansehen - frueher
+ * hiess das: Link klicken, Filter stehen lassen, zurueckfinden.
+ */
+?>
+<div class="inline" style="margin-bottom:10px">
+    <label for="satzsuche" style="margin:0">Suche</label>
+    <input type="search" id="satzsuche" placeholder="Satz oder Vokabel"
+           style="width:260px;margin:0" autocomplete="off"
+           data-filter-ziel="satzliste" data-filter-zaehler="satzzaehler">
+    <span class="tiny muted" id="satzzaehler"></span>
+</div>
 
-<h2>Vokabel ergänzen</h2>
-<form method="post" class="card inline">
+<form method="post">
     <?= csrf_field() ?>
-    <input type="hidden" name="user" value="<?= $userId ?>">
-    <input type="hidden" name="language" value="<?= $langId ?>">
-    <input type="hidden" name="unit" value="<?= $unitId ?>">
-    <input type="text" name="new_f" placeholder="Fremdsprache" maxlength="255" style="width:220px;margin:0">
-    <input type="text" name="new_n" placeholder="Deutsch" maxlength="255" style="width:220px;margin:0">
-    <button class="btn small secondary" name="add_vocab" value="<?= (int) $unit['id'] ?>">Hinzufügen</button>
+    <?= admin_scope_fields($scope) ?>
+
+    <table class="data" id="satzliste">
+        <tr>
+            <th>Vokabel</th><th>Deutscher Satz</th>
+            <th>Fremdsprache (<code>{}</code> = Lücke)</th><th>Lösung</th><th></th>
+        </tr>
+        <?php $vorige = 0; ?>
+        <?php foreach ($sentences as $s): ?>
+            <?php
+            $suchtext = mb_strtolower(implode(' ', [
+                (string) $s['term_foreign'], (string) $s['term_native'],
+                (string) $s['native_text'], (string) $s['foreign_text'], (string) $s['answer'],
+            ]));
+            // Die Vokabel nur in der ersten Zeile ihrer Saetze kraeftig -
+            // so sieht man die Gruppen, und gefiltert bleibt sie trotzdem lesbar.
+            $erste  = (int) $s['vocab_id'] !== $vorige;
+            $vorige = (int) $s['vocab_id'];
+            ?>
+            <tr data-suchtext="<?= h($suchtext) ?>">
+                <td class="tiny<?= $erste ? '' : ' muted' ?>">
+                    <?= h($s['term_foreign']) ?><br>
+                    <span class="muted"><?= h($s['term_native']) ?></span>
+                </td>
+                <td><input type="text" name="sn[<?= (int) $s['id'] ?>]"
+                           value="<?= h($s['native_text']) ?>" maxlength="255"></td>
+                <td><input type="text" name="sf[<?= (int) $s['id'] ?>]"
+                           value="<?= h($s['foreign_text']) ?>" maxlength="255"></td>
+                <td><input type="text" name="sa[<?= (int) $s['id'] ?>]"
+                           value="<?= h($s['answer']) ?>" maxlength="128" style="width:130px"></td>
+                <td>
+                    <button class="linkbtn" name="delete_sentence" value="<?= (int) $s['id'] ?>"
+                            formnovalidate style="color:var(--bad)"
+                            data-confirm="Diesen Satz löschen?">löschen</button>
+                </td>
+            </tr>
+        <?php endforeach; ?>
+    </table>
+
+    <button class="btn small" name="save_sentence_rows" value="1">Sätze speichern</button>
 </form>
+
+<p class="tiny muted">
+    Gespeichert wird nur, was die Prüfung besteht: <?= h(SENTENCE_FORM_HINT) ?>.
+    Was durchfällt, bleibt unverändert und wird gemeldet.
+</p>
+<?php endif; ?>
 
 <?php endif; ?>
 

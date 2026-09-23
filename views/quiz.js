@@ -1,10 +1,11 @@
 import {
-    render, esc, $, $$, go, topbar, wireBack, progressBar, showError,
+    render, esc, $, $$, topbar, wireBack, progressBar, showError,
     babing, serieAktualisieren, punkteAktualisieren, konfetti, feuerwerk,
 } from '../core.js';
 import {
-    frageWahl, antwortMerken, zuruecksetzen, MODUS_WAHL, sprache, einheit,
+    frageWahl, antwortMerken, MODUS_WAHL, sprache, einheit,
 } from '../vorrat.js';
+import { weiterKnopf, weiterVerdrahten } from './unit.js';
 import { meldeKnopf, meldenVerdrahten } from '../melden.js';
 
 const NEXT_DELAY_CORRECT = 700;    // richtig: zügig weiter
@@ -151,10 +152,10 @@ function showFinished(unitId, data) {
         ${topbar('Geschafft', { backTo: `/unit/${unitId}` })}
         <div class="celebrate">
             <span class="big">\u{1F389}</span>
-            <h1>Lerneinheit bestanden!</h1>
+            <h1>Auswählen geschafft!</h1>
             <p class="sub">Du kannst jetzt alle ${data.total} Vokabeln.</p>
         </div>
-        <button class="btn" id="again">Noch einmal üben</button>
+        ${weiterKnopf(unitId, MODUS_WAHL)}
         <button class="btn ghost" data-back="/unit/${unitId}">Zur Übersicht</button>
     `);
 
@@ -167,11 +168,7 @@ function showFinished(unitId, data) {
 
     wireBack();
 
-    $('#again').addEventListener('click', () => {
-        // Auch das geht ohne Netz: Der Vorrat vergisst den Stand sofort, und
-        // der Server erfaehrt es im selben Strom wie die Antworten - in der
-        // richtigen Reihenfolge, also vor dem, was danach geuebt wird.
-        zuruecksetzen(unitId, MODUS_WAHL);
-        go(`/quiz/${unitId}`);
-    });
+    // Hier stand "Noch einmal üben", und es setzte den Lernstand zurück -
+    // siehe weiterKnopf() in unit.js.
+    weiterVerdrahten();
 }

@@ -140,7 +140,7 @@ export async function pruefe(f, aus, wurzel) {
 
         const e = await stand();
         ok('Am Ende steht die Geschafft-Seite',
-           e.ueberschrift.includes('bestanden'), e.ueberschrift);
+           e.ueberschrift === 'Auswählen geschafft!', e.ueberschrift);
         ok('Und dazu ein Feuerwerk', e.da === true);
         /*
          * Es liegt HINTER der Seite: z-index -1. Ein fixiertes Element mit 0
@@ -175,6 +175,41 @@ export async function pruefe(f, aus, wurzel) {
         await schlafe(1200);
         ok('Ein Klick weiter, und es ist aus', (await stand()).da === false,
            'render() macht es aus - das trifft jeden Ausgang');
+
+        // ---- Zurück in der Lerneinheit: Auswählen ist geschafft.
+        const zeile = () => b.js(`(() => {
+            const r = document.querySelector('[data-mode-row="mc"]');
+            return {
+                da: !!r,
+                zu: !!r?.disabled,
+                klickbar: !!r?.dataset.mode,
+                gruen: !!r?.classList.contains('geschafft'),
+                grund: r ? getComputedStyle(r).backgroundColor : '',
+                symbol: r?.querySelector('.lead')?.textContent.trim() ?? '',
+                text: r?.querySelector('.body .tiny')?.textContent.trim() ?? '',
+            };
+        })()`);
+        const fertigZeile = await zeile();
+        ok('Die geschaffte Übung lässt sich nicht mehr anklicken',
+           fertigZeile.da && fertigZeile.zu && !fertigZeile.klickbar, JSON.stringify(fertigZeile));
+        ok('Ihr Symbol bleibt die Zielscheibe, kein Haken',
+           fertigZeile.symbol === '\u{1F3AF}', fertigZeile.symbol);
+        // --good-bg im hellen Thema: #e3f7ec.
+        ok('Die Karte ist blassgrün', fertigZeile.gruen
+           && fertigZeile.grund === 'rgb(227, 247, 236)', fertigZeile.grund);
+        if (aus) await b.bild('uebung-geschafft');
+
+        // Die Lehrkraft gibt zwei weitere frei - dann ist nicht mehr alles gekonnt.
+        php(wurzel, "require 'lib/db.php';"
+            + "q('UPDATE units SET released_position = 3 WHERE id = ?', [" + f.unit + "]);");
+        await b.hash('/', 1200);
+        await b.hash('/unit/' + f.unit, 2500);
+        const wiederOffen = await zeile();
+        ok('Nach einer neuen Freigabe ist sie von selbst wieder anklickbar',
+           !wiederOffen.zu && wiederOffen.klickbar && !wiederOffen.gruen,
+           JSON.stringify(wiederOffen));
+        ok('Und zählt die neuen Vokabeln mit', wiederOffen.text === '1 von 3 gelernt',
+           wiederOffen.text);
     } finally {
         await b.schliessen();
     }

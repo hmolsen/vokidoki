@@ -265,6 +265,7 @@ function teacher_login_page(?string $error): never
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Anmeldung - Vokidoki</title>
+<?= favicon_html() ?>
 <link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
 <link rel="stylesheet" href="<?= h(url('/admin/admin.css')) ?>">
 <?= thema_kopf_skript() ?>
@@ -293,6 +294,7 @@ function teacher_blocked_page(): never
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kurz Geduld - Vokidoki</title>
+<?= favicon_html() ?>
 <link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
 <link rel="stylesheet" href="<?= h(url('/admin/admin.css')) ?>">
 <?= thema_kopf_skript() ?>
@@ -607,6 +609,7 @@ function teacher_head(
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= h($title) ?> - Vokidoki</title>
+<?= favicon_html() ?>
 <link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
 <link rel="stylesheet" href="<?= h(url('/admin/admin.css')) ?>">
 <?php

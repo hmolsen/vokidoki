@@ -38,6 +38,7 @@ import { pruefe as sortieren } from './sortieren.mjs';
 import { pruefe as kursanlegen } from './kursanlegen.mjs';
 import { pruefe as feiern } from './feiern.mjs';
 import { pruefe as melden } from './melden.mjs';
+import { pruefe as weiter } from './weiter.mjs';
 
 const hier  = dirname(fileURLToPath(import.meta.url));
 const wurzel = resolve(hier, '..', '..');
@@ -83,6 +84,9 @@ try {
      */
     await feiern(f, aus, wurzel);
     await melden(f, aus, wurzel);
+    // Nach den Feiern: setzt den Lernstand der ersten Vokabel von Hand und
+    // nimmt der Lerneinheit am Ende die Sätze.
+    await weiter(f, aus, wurzel);
     // Zuletzt: legt einen Kurs an, und die Navigation zaehlt vorher Karten.
     await kursanlegen(f, aus);
 } finally {

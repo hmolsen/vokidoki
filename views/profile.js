@@ -19,13 +19,51 @@ import { serie, serieHeute, serieTage, heute, tagZaehlt } from '../vorrat.js';
  *                     hat dafuer einen eigenen Knopf - "erst suchen, dann
  *                     tippen" ist kein Weg, den man zweimal geht.
  */
+/*
+ * Das App-Symbol, wie es auf dem Home-Bildschirm liegt.
+ *
+ * Nachgebaut und nicht als Bild von icon.php geholt: Es soll sich beim
+ * Tippen auf eine Farbe sofort ändern, vor dem Speichern - und icon.php
+ * zeichnet nur die gespeicherte. Nachgebaut heisst aber: DIESELBEN Regeln
+ * wie dort. Der Verlauf dunkelt nach unten auf 68 % ab, und Voki nimmt
+ * 84 % der Kante ein (.appsymbol img in style.css). Eine Prüfung in
+ * tests/e2e.php hält die Stellen zusammen.
+ *
+ * Hier stand einmal der Anfangsbuchstabe, hell oder dunkel je nach Farbe.
+ * Voki braucht das nicht: Sein weisser Rand hebt ihn von jeder Farbe ab.
+ */
+const SYMBOL_DUNKEL = 0.68;
+
+/** Den Verlauf des Symbols setzen. */
+function symbolFaerben(el, farbe) {
+    if (!el || !/^#[0-9a-f]{6}$/i.test(farbe)) return;
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(farbe.slice(i, i + 2), 16));
+    const dunkel = (c) => Math.round(c * SYMBOL_DUNKEL);
+
+    el.style.setProperty('--oben', farbe);
+    el.style.setProperty('--unten', `rgb(${dunkel(r)}, ${dunkel(g)}, ${dunkel(b)})`);
+}
+
+/** Ein Stück Home-Bildschirm: Hintergrund, Symbol, Name darunter. */
+function homescreen() {
+    // Die Farben setzt symbolFaerben(), nachdem gezeichnet ist. Voki ist
+    // dasselbe SVG, aus dem icon.php sein PNG bekommt.
+    return `
+        <div class="homescreen" aria-hidden="true">
+            <div class="appsymbol" id="appsymbol">
+                <img src="${esc(VT.base)}/assets/voki-icon.svg" alt="">
+            </div>
+            <span class="appname">${esc(VT.user.appName ?? '')}</span>
+        </div>`;
+}
+
 export async function profileView(zumPasswort = false) {
     render(loading());
 
     const { profile, palette } = await api('profile', 'get');
 
     const farben = palette.map((c) => `
-        <label class="swatch-pick">
+        <label class="swatch-pick" title="${esc(c)}">
             <input type="radio" name="color" value="${esc(c)}"
                    ${c === profile.color ? 'checked' : ''}>
             <span style="--c:${esc(c)}"></span>
@@ -46,8 +84,28 @@ export async function profileView(zumPasswort = false) {
                 wird „${esc(VT.user.appName)}".
             </p>
 
-            <label>Deine Farbe</label>
-            <div class="swatches">${farben}</div>
+            <label>Dein App-Symbol</label>
+            <div class="appsymbolzeile">
+                ${homescreen()}
+                <p class="tiny muted">
+                    So sieht deine App auf dem Home-Bildschirm aus. Die Farbe
+                    gilt auch in der App selbst.
+                </p>
+            </div>
+
+            <!--
+                Das Feld liegt hinter einem Knopf, der die gewaehlte Farbe
+                zeigt. Offen nahm es mehr Platz als alles andere auf der
+                Seite, und gebraucht wird es selten. <details> klappt ohne
+                eigenes Skript auf und zu, auch mit der Tastatur.
+            -->
+            <details class="farbwahl" id="farbwahl">
+                <summary class="btn secondary farbknopf">
+                    <span class="farbpunkt" id="farbpunkt" style="--c:${esc(profile.color)}"></span>
+                    <span>Farbe ändern</span>
+                </summary>
+                <div class="swatches">${farben}</div>
+            </details>
 
             <button class="btn" id="save">Speichern</button>
         </div>
@@ -85,6 +143,7 @@ export async function profileView(zumPasswort = false) {
 
     wireBack();
     kalenderAktivieren();
+    symbolFaerben($('#appsymbol'), profile.color);
 
     if (zumPasswort) {
         const feld = $('#current');
@@ -92,9 +151,14 @@ export async function profileView(zumPasswort = false) {
         feld?.focus();
     }
 
-    // Die Farbe wirkt sofort - man soll sehen, was man waehlt.
+    // Die Farbe wirkt sofort - man soll sehen, was man waehlt: in der App,
+    // auf dem Symbol und auf dem Knopf. Das Feld bleibt dabei offen, damit
+    // sich mehrere Farben nacheinander ausprobieren lassen.
     on('input[name="color"]', 'change', (e) => {
-        document.body.style.setProperty('--accent', e.currentTarget.value);
+        const farbe = e.currentTarget.value;
+        document.body.style.setProperty('--accent', farbe);
+        symbolFaerben($('#appsymbol'), farbe);
+        $('#farbpunkt').style.setProperty('--c', farbe);
     });
 
     $('#save').addEventListener('click', async (e) => {

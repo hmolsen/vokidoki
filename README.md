@@ -289,6 +289,29 @@ Fredoka 700, auf Versalhöhe gesetzt und um ein Dreissigstel grösser als die
 Buchstaben — ein rundes Maskottchen wirkt neben fetten Buchstaben sonst
 kleiner, als es ist.
 
+### App-Symbol und Favicon
+
+Auf dem Home-Bildschirm liegt der frohe Voki mit seinen Sternen, auf der
+Farbe, die das Kind im Profil wählt. Weil diese Farbe auch Grün oder Gelb
+sein kann, tragen Voki und jeder Stern einen **weissen Rand** — ohne ihn
+verschwände er auf manchen Farben ganz. Derselbe Voki ist das Favicon, dort
+ohne farbige Fläche.
+
+`icon.php` zeichnet mit GD, und GD liest kein SVG. Deshalb liegt Voki
+zweimal bereit, beide gebaut aus `assets/voki-mini.svg`:
+
+- `assets/voki-icon.svg` — mit Rand; Favicon und Vorschau im Profil
+- `assets/voki-icon.png` — dasselbe, 1024 px, durchsichtig; für `icon.php`
+
+Ändert sich Voki, beide neu bauen und mit einchecken:
+
+```
+node tests/browser/voki-symbol.mjs
+```
+
+Schon auf einem Telefon abgelegte Symbole bleiben, wie sie sind — iOS holt
+das Bild nur beim Hinzufügen zum Home-Bildschirm.
+
 ### Zwei Schriften
 
 | | |
@@ -1163,7 +1186,7 @@ bereits protokollierte Anfragen behalten ihren damals berechneten Betrag.
 ```
 index.php            App-Shell; rendert Manifest-Link und iOS-Meta pro Kind
 manifest.php         dynamisches Manifest (Name, start_url mit Token)
-icon.php             PNG-Icon aus Farbe + Initiale (GD), gecacht
+icon.php             PNG-Icon: Voki auf der Farbe des Kontos (GD), gecacht; auch Favicon
 app.js / core.js     Router und gemeinsame Bausteine
 vorrat.js            alles zum Üben im Gerät; rechnet offline wie der Server
 menue.js             die beiden Schubladen, für App und Lehrkraft-Bereich
@@ -1178,6 +1201,7 @@ lib/                 db, auth, settings, ai, keyvault, cost, json, config,
                      sentences (Lückensätze)
 assets/fonts/        Fredoka und Nunito, selbst ausgeliefert
 assets/vokidoki_logo.svg  das Wortzeichen; das V ist Voki, "okidoki" sind Pfade
+assets/voki-icon.*   Voki mit weissem Rand fürs App-Symbol (siehe oben)
 schema.sql           Datenbankschema
 ```
 

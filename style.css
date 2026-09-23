@@ -296,14 +296,29 @@ p  { margin: 0 0 12px; }
     animation: schleierAuf .26s ease-out;
 }
 
+/*
+ * Die Schublade reicht von Kante zu Kante, ihr Inhalt aber nicht.
+ *
+ * Als App auf dem Home-Bildschirm zeichnet iOS die Seite bis unter die
+ * Dynamic Island (viewport-fit=cover in index.php). Die Leiste oben rechnet
+ * dafuer env(safe-area-inset-top) dazu - die Schubladen taten es nicht, und
+ * ihr erster Eintrag lag unter der Insel. Unten gilt dasselbe fuer den
+ * Balken zum Wischen, und seitlich im Querformat fuer die Aussparung an der
+ * Kante, an der die Schublade klebt. Im Browser sind alle drei null, und es
+ * bleibt bei 14 und 12 px.
+ */
 .menue > .schublade {
     position: fixed;
     top: 0;
     bottom: 0;
     left: 0;
     z-index: 41;
-    width: min(300px, 86vw);
-    padding: 14px 12px;
+    width: calc(min(300px, 86vw) + env(safe-area-inset-left));
+    padding:
+        calc(env(safe-area-inset-top) + 14px)
+        12px
+        calc(env(safe-area-inset-bottom) + 14px)
+        calc(env(safe-area-inset-left) + 12px);
     overflow-y: auto;
     background: var(--surface);
     border-right: 1px solid var(--border);
@@ -313,6 +328,9 @@ p  { margin: 0 0 12px; }
 .menue.rechts > .schublade {
     left: auto;
     right: 0;
+    width: calc(min(300px, 86vw) + env(safe-area-inset-right));
+    padding-left: 12px;
+    padding-right: calc(env(safe-area-inset-right) + 12px);
     border-right: 0;
     border-left: 1px solid var(--border);
     animation: schubladeRechts .26s cubic-bezier(.2, .8, .25, 1);
@@ -1231,6 +1249,19 @@ dialog.rueckfrage::backdrop { background: rgba(10, 14, 22, .45); }
 }
 .row[disabled]:active { transform: none; }
 
+/*
+ * Geschafft: ebenfalls nicht anklickbar, aber nicht grau - das wäre
+ * "geht gerade nicht". Blassgrün heisst "erledigt", und die Zeile bleibt
+ * voll lesbar. Ohne Schatten, weil sie kein Knopf mehr ist.
+ */
+.row.geschafft[disabled] {
+    opacity: 1;
+    background: var(--good-bg);
+    border-color: color-mix(in srgb, var(--good) 30%, var(--border));
+    box-shadow: none;
+}
+.row.geschafft .tiny.muted { color: var(--good); }
+
 /* ------------------------------------------------- Vokabelliste mit Ständen */
 
 /* Legende über der Liste - erklärt die Symbole rechts an jeder Zeile. */
@@ -1401,19 +1432,100 @@ dialog.rueckfrage::backdrop { background: rgba(10, 14, 22, .45); }
  * der Tastatur durchlaufen.
  */
 /*
- * Feste Kaestchen statt gedehnter Spalten.
+ * Das Farbfeld in der App: dieselben Kästchen wie der Monatskalender.
  *
- * Mit repeat(8, 1fr) wuchs das Feld mit der Karte mit: Auf einem breiten
- * Bildschirm standen dort 64 Kacheln von je siebzig Pixeln - ein Farbfeld,
- * das mehr Platz nahm als alles andere auf der Seite zusammen. Die Groesse
- * einer Farbprobe haengt nicht von der Fensterbreite ab.
+ * Sieben Spalten, 5 px Abstand, quadratisch, 7 px Rundung - die beiden
+ * Felder stehen auf derselben Seite, und zwei Raster, die fast gleich sind,
+ * sehen aus wie ein Versehen. Dass es mit der Karte breiter wird, ist hier
+ * in Ordnung: Es liegt hinter einem Knopf und nimmt nur Platz, wenn es
+ * jemand aufmacht. Offen stand es früher dauernd da, und damals war die
+ * Breite das Problem.
  */
 .swatches {
     display: grid;
-    grid-template-columns: repeat(8, 26px);
+    grid-template-columns: repeat(7, 1fr);
     gap: 5px;
-    justify-content: start;
-    margin-bottom: 16px;
+    margin: 12px 0 4px;
+}
+.swatches .swatch-pick span {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    border-radius: 7px;
+}
+
+/*
+ * Das App-Symbol auf einem Stück Home-Bildschirm.
+ *
+ * Ein dunkler Hintergrund, weil die meisten Home-Bildschirme dunkel sind,
+ * und die Rundung eines iPhone-Symbols (gut ein Fünftel der Kante). Voki
+ * so gross wie in icon.php, damit das Bild hier und das auf dem Telefon
+ * nicht auseinanderlaufen.
+ */
+.appsymbolzeile {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 0 0 14px;
+}
+.appsymbolzeile p { margin: 0; }
+.homescreen {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: 116px;
+    padding: 16px 8px 12px;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(160deg, #46598f 0%, #1f2746 55%, #33224a 100%);
+}
+.appsymbol {
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 22.5%;
+    background: linear-gradient(to bottom, var(--oben, var(--accent)), var(--unten, var(--accent)));
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
+    transition: background .2s ease;
+}
+/* Wie icon.php: VOKI_ANTEIL = 0.84 der Kante, mittig. */
+.appsymbol img {
+    display: block;
+    width: 84%;
+    height: 84%;
+}
+.appname {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: .72rem;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+}
+
+/* Der Knopf zeigt die gewählte Farbe und klappt das Feld auf. */
+.farbwahl { margin: 0 0 16px; }
+.farbwahl > summary { list-style: none; }
+.farbwahl > summary::-webkit-details-marker { display: none; }
+.farbknopf { display: flex; justify-content: flex-start; gap: 12px; cursor: pointer; }
+.farbknopf::after {
+    content: '\25BE';
+    margin-left: auto;
+    color: var(--text-soft);
+    transition: transform .2s ease;
+}
+.farbwahl[open] > .farbknopf::after { transform: rotate(180deg); }
+.farbpunkt {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    background: var(--c);
+    border: 1px solid rgba(0, 0, 0, .12);
 }
 .swatch-pick { position: relative; display: block; cursor: pointer; line-height: 0; }
 .swatch-pick input {

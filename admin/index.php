@@ -45,17 +45,34 @@ foreach (qa(
 }
 $maxDaily = max(0.000001, max($daily));
 
+/*
+ * Nach Konto, nicht nach Kind.
+ *
+ * Eingelesen wird inzwischen fast nur von Lehrkraeften, und Saetze und
+ * Kategorien gehen auf die Rechnung dessen, der fuer den Kurs geradesteht
+ * (course_billing_user()). Die Schule steht dabei: "Frau Meier" gibt es an
+ * zwei Schulen, und das Limit gilt je Schule.
+ */
 $perUser = qa(
     "SELECT COALESCE(u.display_name, a.user_label, 'gelöscht') AS name,
+            s.name AS school,
             COUNT(*) AS n, COALESCE(SUM(a.cost_usd), 0) AS c,
             COALESCE(SUM(a.image_count), 0) AS imgs,
             COALESCE(SUM(a.entry_count), 0)  AS entries
        FROM ai_requests a
-       LEFT JOIN users u ON u.id = a.user_id
+       LEFT JOIN users u   ON u.id = a.user_id
+       LEFT JOIN schools s ON s.id = a.school_id
       WHERE a.created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')
-      GROUP BY name
+      GROUP BY name, school
       ORDER BY c DESC"
 );
+
+// Wofuer eine Anfrage war. Unbekanntes bleibt, wie es gespeichert ist.
+const ZWECK = [
+    'vocab_ocr'  => 'Einlesen',
+    'sentences'  => 'Lückensätze',
+    'word_types' => 'Kategorien',
+];
 
 $perModel = qa(
     "SELECT model, COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS c,
@@ -164,16 +181,17 @@ flash_render();
 </div>
 <?php endif; ?>
 
-<h2>Nach Kind (dieser Monat)</h2>
+<h2>Nach Konto (dieser Monat)</h2>
 <?php if ($perUser === []): ?>
     <p class="muted">In diesem Monat gab es noch keine Anfragen.</p>
 <?php else: ?>
 <table class="data">
-    <tr><th>Kind</th><th class="num">Anfragen</th><th class="num">Fotos</th>
+    <tr><th>Konto</th><th>Schule</th><th class="num">Anfragen</th><th class="num">Fotos</th>
         <th class="num">Vokabeln</th><th class="num">Kosten</th></tr>
     <?php foreach ($perUser as $r): ?>
         <tr>
             <td><?= h($r['name']) ?></td>
+            <td><?= $r['school'] === null ? '<span class="muted">&ndash;</span>' : h($r['school']) ?></td>
             <td class="num"><?= (int) $r['n'] ?></td>
             <td class="num"><?= (int) $r['imgs'] ?></td>
             <td class="num"><?= (int) $r['entries'] ?></td>
@@ -207,12 +225,13 @@ flash_render();
     <p class="muted">Noch keine Anfragen protokolliert.</p>
 <?php else: ?>
 <table class="data">
-    <tr><th>Zeitpunkt</th><th>Kind</th><th>Modell</th><th class="num">Fotos</th>
+    <tr><th>Zeitpunkt</th><th>Konto</th><th>Wofür</th><th>Modell</th><th class="num">Fotos</th>
         <th class="num">Vokabeln</th><th class="num">Dauer</th><th class="num">Kosten</th><th>Status</th></tr>
     <?php foreach ($recent as $r): ?>
         <tr class="<?= $r['status'] === 'ok' ? '' : 'dim' ?>">
             <td><?= h(date('d.m.Y H:i', strtotime((string) $r['created_at']))) ?></td>
             <td><?= h($r['display_name'] ?? $r['user_label']) ?></td>
+            <td><?= h(ZWECK[$r['purpose']] ?? (string) $r['purpose']) ?></td>
             <td><?= h($r['model']) ?></td>
             <td class="num"><?= (int) $r['image_count'] ?></td>
             <td class="num"><?= (int) $r['entry_count'] ?></td>

@@ -12,6 +12,46 @@ function valid_username(string $name): bool
     return (bool) preg_match('/^[a-z0-9._-]{3,64}$/', $name);
 }
 
+/*
+ * Welche Konten zu sehen sind: Schule, Klasse, Rolle.
+ *
+ * Die Seite war eine Karte je Konto, alle Formulare offen, ueber alle
+ * Schulen. Bei drei Kindern ging das; bei einer Schule mit dreihundert
+ * sucht man sich darin tot. Die Klasse -1 heisst "ohne Klasse": Lehrkraefte
+ * stehen meist dort, und ein Kind dort ist fast immer ein vergessenes.
+ */
+const ROLLE_LEHRKRAFT = 1;
+const ROLLE_KIND      = 2;
+const OHNE_KLASSE     = -1;
+
+$filter = array_filter([
+    'school' => (int) ($_REQUEST['school'] ?? 0),
+    'klasse' => (int) ($_REQUEST['klasse'] ?? 0),
+    'rolle'  => (int) ($_REQUEST['rolle'] ?? 0),
+]);
+// Eine Klasse gilt nur in ihrer Schule - sonst stuende ein Filter da,
+// der nichts finden kann und nicht sagt, warum.
+if (($filter['klasse'] ?? 0) > 0 && (int) (qv('SELECT school_id FROM classes WHERE id = ?',
+        [$filter['klasse']]) ?? 0) !== ($filter['school'] ?? 0)) {
+    unset($filter['klasse']);
+}
+
+/** Nach dem Speichern dorthin zurueck, wo man war. */
+function back_to_users(array $filter): never
+{
+    redirect('users.php' . ($filter === [] ? '' : '?' . http_build_query($filter)));
+}
+
+/** Der Filter als versteckte Felder fuer jedes Formular der Seite. */
+function filter_fields(array $filter): string
+{
+    $html = '';
+    foreach ($filter as $k => $v) {
+        $html .= sprintf('<input type="hidden" name="%s" value="%d">', h($k), (int) $v);
+    }
+    return $html;
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     csrf_check();
 
@@ -67,7 +107,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 $role === ROLE_TEACHER ? 'Lehrkraft' : 'Account',
                 $display, $schule['name']));
         }
-        redirect('users.php');
+        back_to_users($filter);
     }
 
     if (isset($_POST['update'])) {
@@ -116,7 +156,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 flash('Account aktualisiert.');
             }
         }
-        redirect('users.php');
+        back_to_users($filter);
     }
 
     if (isset($_POST['set_password'])) {
@@ -129,61 +169,267 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
               [password_hash($password, PASSWORD_DEFAULT), $id]);
             flash('Passwort gesetzt.');
         }
-        redirect('users.php');
+        back_to_users($filter);
     }
 
     if (isset($_POST['revoke_token'])) {
         q('UPDATE device_tokens SET revoked_at = NOW() WHERE id = ?', [(int) $_POST['revoke_token']]);
         flash('Gerät abgemeldet. Das Symbol landet beim nächsten Start im Login.');
-        redirect('users.php');
+        back_to_users($filter);
     }
 
     if (isset($_POST['delete'])) {
         $id   = (int) $_POST['delete'];
         $user = q1('SELECT display_name FROM users WHERE id = ?', [$id]);
         if ($user !== null) {
-            // Sprachen, Einheiten, Vokabeln und Lernstand hängen per
-            // ON DELETE CASCADE daran; das Kostenprotokoll bleibt erhalten.
+            /*
+             * Mitgliedschaften, Geraete und Lernstand haengen per ON DELETE
+             * CASCADE daran; das Kostenprotokoll bleibt erhalten. Vokabeln
+             * gehen NICHT mit - sie gehoeren dem Kurs, nicht dem Konto. Hier
+             * stand "mit allen Vokabeln geloescht", aus der Zeit, als das so
+             * war; wer eine Lehrkraft loeschte, bekam einen Schreck, und wer
+             * ein Kind loeschen wollte, zoegerte ohne Grund.
+             */
             q('DELETE FROM users WHERE id = ?', [$id]);
-            flash('Account "' . $user['display_name'] . '" mit allen Vokabeln gelöscht.');
+            flash('Account "' . $user['display_name'] . '" gelöscht, samt Kursmitgliedschaften '
+                  . 'und Lernstand. Die Unterlagen der Kurse bleiben.');
         }
-        redirect('users.php');
+        back_to_users($filter);
     }
 }
 
 /*
- * Sprachen und Vokabeln je Konto - gezaehlt ueber die Kurse, in denen es ist.
+ * Kurse je Konto statt "Sprachen und Vokabeln".
  *
- * Frueher zaehlte hier, was das Konto angelegt hat. In einer Klasse hat die
- * Lehrkraft alles angelegt: Sie stuende mit 2.800 Vokabeln da und die 28
- * Kinder mit null, obwohl alle dasselbe lernen. Gezaehlt wird deshalb, womit
- * ein Konto arbeitet.
+ * Gezaehlt wurde einmal, was ein Konto angelegt hat - dann stand die
+ * Lehrkraft mit 2.800 Vokabeln da und die 28 Kinder mit null. Danach, womit
+ * es arbeitet, aber in Sprachen: Die gibt es nur noch als Teil eines Kurses.
+ * Was man wissen will, ist, in welchen Kursen ein Konto steckt.
  */
 $schulen = qa('SELECT id, name FROM schools WHERE active = 1 ORDER BY name');
 
+$where  = [];
+$params = [];
+if (isset($filter['school'])) {
+    $where[]  = 'u.school_id = ?';
+    $params[] = $filter['school'];
+}
+if (($filter['klasse'] ?? 0) === OHNE_KLASSE) {
+    $where[] = 'NOT EXISTS (SELECT 1 FROM class_members cm WHERE cm.user_id = u.id)';
+} elseif (isset($filter['klasse'])) {
+    $where[]  = 'EXISTS (SELECT 1 FROM class_members cm WHERE cm.user_id = u.id AND cm.class_id = ?)';
+    $params[] = $filter['klasse'];
+}
+if (isset($filter['rolle'])) {
+    $where[]  = 'u.role ' . ($filter['rolle'] === ROLLE_LEHRKRAFT ? '=' : '<>') . ' ?';
+    $params[] = ROLE_TEACHER;
+}
+
 $users = qa(
     "SELECT u.*,
-            (SELECT s.name FROM schools s WHERE s.id = u.school_id) AS school_name,
-            (SELECT COUNT(DISTINCT co.language_id)
+            s.name AS school_name,
+            (SELECT GROUP_CONCAT(c.name ORDER BY c.name SEPARATOR ', ')
+               FROM class_members cm
+               JOIN classes c ON c.id = cm.class_id
+              WHERE cm.user_id = u.id) AS klassen,
+            (SELECT GROUP_CONCAT(co.name ORDER BY co.name SEPARATOR ', ')
                FROM course_members m
                JOIN courses co ON co.id = m.course_id
-              WHERE m.user_id = u.id) AS langs,
-            (SELECT COUNT(*)
-               FROM course_members m
-               JOIN units t  ON t.course_id = m.course_id
-               JOIN vocab v  ON v.unit_id = t.id
-              WHERE m.user_id = u.id) AS words
+              WHERE m.user_id = u.id) AS kurse,
+            (SELECT COUNT(*) FROM course_members m WHERE m.user_id = u.id) AS kurszahl,
+            (SELECT MAX(d.last_used_at) FROM device_tokens d WHERE d.user_id = u.id) AS zuletzt
        FROM users u
-      ORDER BY u.display_name"
+       LEFT JOIN schools s ON s.id = u.school_id"
+    . ($where === [] ? '' : ' WHERE ' . implode(' AND ', $where)) . "
+      ORDER BY u.role = 'student', u.display_name",
+    $params,
 );
+
+// Die Geraete aller gezeigten Konten in einem Zug - vorher eine Abfrage je Konto.
+$tokens = [];
+if ($users !== []) {
+    $ids = implode(',', array_map(static fn (array $u): int => (int) $u['id'], $users));
+    foreach (qa("SELECT * FROM device_tokens WHERE user_id IN ($ids)
+                  ORDER BY revoked_at IS NOT NULL, created_at DESC") as $t) {
+        $tokens[(int) $t['user_id']][] = $t;
+    }
+}
+
+$klassen = isset($filter['school'])
+    ? qa('SELECT id, name FROM classes WHERE school_id = ? ORDER BY name', [$filter['school']])
+    : [];
 
 admin_head('Accounts', 'users.php');
 flash_render();
 ?>
 
+<div class="card filters">
+    <?= filter_chips('Schule',
+        array_map(static fn (array $s): array => ['id' => (int) $s['id'], 'label' => $s['name']], $schulen),
+        $filter['school'] ?? 0, $filter, 'school', ['klasse'], 'alle') ?>
+
+    <?php if (isset($filter['school'])): ?>
+        <?= filter_chips('Klasse',
+            array_merge(
+                array_map(static fn (array $c): array =>
+                    ['id' => (int) $c['id'], 'label' => $c['name']], $klassen),
+                [['id' => OHNE_KLASSE, 'label' => 'ohne Klasse']],
+            ),
+            $filter['klasse'] ?? 0, $filter, 'klasse', [], 'alle') ?>
+    <?php endif; ?>
+
+    <?= filter_chips('Rolle',
+        [['id' => ROLLE_LEHRKRAFT, 'label' => 'Lehrkräfte'], ['id' => ROLLE_KIND, 'label' => 'SchülerInnen']],
+        $filter['rolle'] ?? 0, $filter, 'rolle', [], 'alle') ?>
+</div>
+
+<h2>Accounts (<?= count($users) ?>)</h2>
+<?php if ($users === []): ?>
+    <p class="muted"><?= $filter === [] ? 'Noch kein Account angelegt.' : 'Keine Accounts für diese Auswahl.' ?></p>
+<?php else: ?>
+
+<div class="inline" style="margin-bottom:10px">
+    <label for="kontosuche" style="margin:0">Suche</label>
+    <input type="search" id="kontosuche" placeholder="Name, Benutzername, Klasse oder Kurs"
+           style="width:300px;margin:0" autocomplete="off"
+           data-filter-ziel="kontenliste" data-filter-zaehler="kontozaehler">
+    <span class="tiny muted" id="kontozaehler"></span>
+</div>
+
+<?php
+/*
+ * Eine Zeile je Konto, die Formulare dahinter aufklappbar.
+ *
+ * Eine Tabelle waere naheliegend, geht aber nicht: table.data schneidet mit
+ * overflow: hidden alles ab, was ueber eine Zeile hinausragt - und das
+ * Farbfeld ragt hinaus. Deshalb ein Raster in <details>.
+ */
+?>
+<div class="konten" id="kontenliste">
+    <div class="konten-kopf">
+        <span>Name</span><span>Rolle &middot; Schule</span><span>Klassen</span>
+        <span>Kurse</span><span>Zuletzt da</span>
+    </div>
+    <?php foreach ($users as $u): ?>
+        <?php
+        $ut       = $tokens[(int) $u['id']] ?? [];
+        $aktiv    = count(array_filter($ut, static fn (array $t): bool => $t['revoked_at'] === null));
+        $suchtext = mb_strtolower(implode(' ', [
+            $u['display_name'], $u['username'], (string) ($u['klassen'] ?? ''),
+            (string) ($u['kurse'] ?? ''), (string) ($u['school_name'] ?? ''),
+        ]));
+        ?>
+        <details class="konto<?= $u['active'] ? '' : ' aus' ?>" data-suchtext="<?= h($suchtext) ?>">
+            <summary>
+                <span>
+                    <span class="swatch" style="background:<?= h($u['color']) ?>"></span><strong><?= h($u['display_name']) ?></strong>
+                    <span class="tiny muted"><?= h($u['username']) ?><?= $u['active'] ? '' : ' &middot; deaktiviert' ?></span>
+                </span>
+                <span class="tiny">
+                    <?= $u['role'] === ROLE_TEACHER ? 'Lehrkraft' : 'SchülerIn' ?><br>
+                    <span class="muted"><?= $u['school_name'] === null
+                        ? '<strong>ohne Schule</strong>' : h($u['school_name']) ?></span>
+                </span>
+                <span class="tiny"><?= $u['klassen'] === null
+                    ? '<span class="muted">&ndash;</span>' : h($u['klassen']) ?></span>
+                <span class="tiny" title="<?= h((string) ($u['kurse'] ?? '')) ?>">
+                    <?= (int) $u['kurszahl'] === 0
+                        ? '<span class="muted">keine Kurse</span>'
+                        : (int) $u['kurszahl'] . ' Kurs' . ((int) $u['kurszahl'] === 1 ? '' : 'e')
+                          . '<br><span class="muted">' . h(mb_strimwidth((string) $u['kurse'], 0, 60, '…')) . '</span>' ?>
+                </span>
+                <span class="tiny muted">
+                    <?= $u['zuletzt'] === null ? 'nie' : h(date('d.m.Y', strtotime((string) $u['zuletzt']))) ?>
+                    <?= $aktiv > 0 ? '<br>' . $aktiv . ' Gerät' . ($aktiv === 1 ? '' : 'e') : '' ?>
+                </span>
+            </summary>
+
+            <div class="konto-inhalt">
+                <form method="post" class="inline">
+                    <?= csrf_field() ?>
+                    <?= filter_fields($filter) ?>
+                    <input type="hidden" name="id" value="<?= (int) $u['id'] ?>">
+                    <input type="text" name="display_name" value="<?= h($u['display_name']) ?>"
+                           maxlength="64" style="width:180px;margin:0" aria-label="Anzeigename">
+                    <?= color_picker($u['color']) ?>
+                    <select name="role" style="width:auto;margin:0" aria-label="Rolle">
+                        <option value="student"<?= $u['role'] === 'teacher' ? '' : ' selected' ?>>SchülerIn</option>
+                        <option value="teacher"<?= $u['role'] === 'teacher' ? ' selected' : '' ?>>Lehrkraft</option>
+                    </select>
+                    <select name="school_id" style="width:auto;margin:0" title="Schule" aria-label="Schule">
+                        <?php foreach ($schulen as $s): ?>
+                            <option value="<?= (int) $s['id'] ?>"
+                                <?= (int) $s['id'] === (int) ($u['school_id'] ?? 0) ? ' selected' : '' ?>>
+                                <?= h($s['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <label style="display:flex;align-items:center;gap:6px;margin:0;font-weight:500">
+                        <input type="checkbox" name="active" value="1"<?= $u['active'] ? ' checked' : '' ?>
+                               style="width:auto;min-height:auto;margin:0"> aktiv
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;margin:0;font-weight:500"
+                           title="Lektionen per Foto einlesen. Kostet Geld - Lehrkräfte dürfen es immer.">
+                        <input type="checkbox" name="can_import" value="1"<?= $u['can_import'] ? ' checked' : '' ?>
+                               style="width:auto;min-height:auto;margin:0"> einlesen
+                    </label>
+                    <button class="btn small secondary" name="update" value="1">Speichern</button>
+                </form>
+
+                <form method="post" class="inline">
+                    <?= csrf_field() ?>
+                    <?= filter_fields($filter) ?>
+                    <input type="hidden" name="id" value="<?= (int) $u['id'] ?>">
+                    <input type="text" name="password" placeholder="Neues Passwort" minlength="4"
+                           style="width:180px;margin:0" aria-label="Neues Passwort">
+                    <button class="btn small secondary" name="set_password" value="1">Passwort setzen</button>
+                </form>
+
+                <?php if ($ut === []): ?>
+                    <p class="tiny muted">Noch kein Gerät angemeldet.</p>
+                <?php else: ?>
+                    <table class="data">
+                        <tr><th>Angelegt</th><th>Zuletzt benutzt</th><th>Gerät</th><th></th></tr>
+                        <?php foreach ($ut as $t): ?>
+                            <tr class="<?= $t['revoked_at'] === null ? '' : 'dim' ?>">
+                                <td><?= h(date('d.m.Y H:i', strtotime((string) $t['created_at']))) ?></td>
+                                <td><?= $t['last_used_at']
+                                        ? h(date('d.m.Y H:i', strtotime((string) $t['last_used_at'])))
+                                        : '<span class="muted">nie</span>' ?></td>
+                                <td><code class="token"><?= h(mb_substr((string) ($t['label'] ?? ''), 0, 70)) ?></code></td>
+                                <td>
+                                    <?php if ($t['revoked_at'] === null): ?>
+                                        <form method="post" class="compact">
+                                            <?= csrf_field() ?>
+                                            <?= filter_fields($filter) ?>
+                                            <button class="linkbtn" name="revoke_token" value="<?= (int) $t['id'] ?>"
+                                                    data-confirm="Dieses Gerät abmelden?">widerrufen</button>
+                                        </form>
+                                    <?php else: ?>
+                                        <span class="muted tiny">widerrufen</span>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </table>
+                <?php endif; ?>
+
+                <form method="post" class="compact">
+                    <?= csrf_field() ?>
+                    <?= filter_fields($filter) ?>
+                    <button class="linkbtn" name="delete" value="<?= (int) $u['id'] ?>" style="color:var(--bad)"
+                            data-confirm="<?= h($u['display_name']) ?> wirklich löschen? Kursmitgliedschaften und Lernstand gehen mit, die Unterlagen der Kurse bleiben.">Account löschen</button>
+                </form>
+            </div>
+        </details>
+    <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
 <h2>Neuen Account anlegen</h2>
 <form method="post" class="card">
     <?= csrf_field() ?>
+    <?= filter_fields($filter) ?>
     <div class="formgrid">
         <div>
             <label for="display_name">Anzeigename</label>
@@ -205,7 +451,8 @@ flash_render();
                     <option value="">- erst eine Schule anlegen -</option>
                 <?php else: ?>
                     <?php foreach ($schulen as $s): ?>
-                        <option value="<?= (int) $s['id'] ?>"><?= h($s['name']) ?></option>
+                        <option value="<?= (int) $s['id'] ?>"<?=
+                            (int) $s['id'] === ($filter['school'] ?? 0) ? ' selected' : '' ?>><?= h($s['name']) ?></option>
                     <?php endforeach; ?>
                 <?php endif; ?>
             </select>
@@ -214,131 +461,23 @@ flash_render();
             <label for="new_role">Rolle</label>
             <select id="new_role" name="role">
                 <option value="student">SchülerIn</option>
-                <option value="teacher">Lehrkraft</option>
+                <option value="teacher"<?= ($filter['rolle'] ?? 0) === ROLLE_LEHRKRAFT ? ' selected' : '' ?>>Lehrkraft</option>
             </select>
         </div>
     </div>
     <div class="inline" style="margin-bottom:12px">
         <label style="margin:0">Farbe</label>
-        <?= color_picker(color_palette()[27]) ?>
+        <?= color_picker(color_default()) ?>
     </div>
 
     <p class="tiny muted">
         Der Anzeigename erscheint als App-Name auf dem Home-Bildschirm -
         aus "Lilli" wird "Lillis Vokabeln". Die Farbe ist die des
-        Homescreen-Symbols; die Initiale darauf wird hell oder dunkel gesetzt,
-        je nachdem was besser lesbar ist.
+        Homescreen-Symbols; darauf steht Voki, mit weissem Rand, damit er
+        auf jeder Farbe zu sehen ist. Kinder legt in der Regel die
+        Lehrkraft in ihrer Klasse an - dort kommen sie gleich in die Kurse.
     </p>
     <button class="btn small" name="create" value="1">Account anlegen</button>
 </form>
-
-<h2>Vorhandene Accounts</h2>
-<?php if ($users === []): ?>
-    <p class="muted">Noch kein Account angelegt.</p>
-<?php endif; ?>
-
-<?php foreach ($users as $u): ?>
-    <?php
-    $tokens = qa(
-        'SELECT * FROM device_tokens WHERE user_id = ? ORDER BY revoked_at IS NOT NULL, created_at DESC',
-        [(int) $u['id']],
-    );
-    ?>
-    <div class="card">
-        <h3 style="margin:0 0 12px">
-            <span class="swatch" style="background:<?= h($u['color']) ?>"></span>
-            <?= h($u['display_name']) ?>
-            <span class="muted" style="font-weight:400">
-                (<?= h($u['username']) ?>)
-                &middot; <?= $u['school_name'] === null
-                    ? '<strong>ohne Schule</strong>' : h($u['school_name']) ?>
-                <?= $u['role'] === 'teacher' ? ' &middot; Lehrkraft' : '' ?>
-                &middot; <?= (int) $u['langs'] ?> Sprachen,
-                <?= (int) $u['words'] ?> Vokabeln
-                <?= $u['active'] ? '' : ' &middot; deaktiviert' ?>
-            </span>
-        </h3>
-
-        <form method="post" class="inline" style="margin-bottom:12px">
-            <?= csrf_field() ?>
-            <input type="hidden" name="id" value="<?= (int) $u['id'] ?>">
-            <input type="text" name="display_name" value="<?= h($u['display_name']) ?>"
-                   maxlength="64" style="width:180px;margin:0">
-            <?= color_picker($u['color']) ?>
-            <select name="role" style="width:auto;margin:0">
-                <option value="student"<?= $u['role'] === 'teacher' ? '' : ' selected' ?>>SchülerIn</option>
-                <option value="teacher"<?= $u['role'] === 'teacher' ? ' selected' : '' ?>>Lehrkraft</option>
-            </select>
-            <select name="school_id" style="width:auto;margin:0" title="Schule">
-                <?php foreach ($schulen as $s): ?>
-                    <option value="<?= (int) $s['id'] ?>"
-                        <?= (int) $s['id'] === (int) ($u['school_id'] ?? 0) ? ' selected' : '' ?>>
-                        <?= h($s['name']) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <label style="display:flex;align-items:center;gap:6px;margin:0;font-weight:500">
-                <input type="checkbox" name="active" value="1"<?= $u['active'] ? ' checked' : '' ?>
-                       style="width:auto;min-height:auto;margin:0"> aktiv
-            </label>
-            <label style="display:flex;align-items:center;gap:6px;margin:0;font-weight:500"
-                   title="Lektionen per Foto einlesen. Kostet Geld - Lehrkräfte dürfen es immer.">
-                <input type="checkbox" name="can_import" value="1"<?= $u['can_import'] ? ' checked' : '' ?>
-                       style="width:auto;min-height:auto;margin:0"> einlesen
-            </label>
-            <button class="btn small secondary" name="update" value="1">Speichern</button>
-        </form>
-
-        <form method="post" class="inline" style="margin-bottom:12px">
-            <?= csrf_field() ?>
-            <input type="hidden" name="id" value="<?= (int) $u['id'] ?>">
-            <input type="text" name="password" placeholder="Neues Passwort" minlength="4"
-                   style="width:180px;margin:0">
-            <button class="btn small secondary" name="set_password" value="1">Passwort setzen</button>
-        </form>
-
-        <details>
-            <summary class="muted tiny" style="cursor:pointer;margin-bottom:8px">
-                Home-Bildschirm-Symbole (<?= count(array_filter($tokens, fn ($t) => $t['revoked_at'] === null)) ?> aktiv)
-            </summary>
-            <?php if ($tokens === []): ?>
-                <p class="tiny muted">Noch kein Gerät angemeldet.</p>
-            <?php else: ?>
-                <table class="data">
-                    <tr><th>Angelegt</th><th>Zuletzt benutzt</th><th>Gerät</th><th></th></tr>
-                    <?php foreach ($tokens as $t): ?>
-                        <tr class="<?= $t['revoked_at'] === null ? '' : 'dim' ?>">
-                            <td><?= h(date('d.m.Y H:i', strtotime((string) $t['created_at']))) ?></td>
-                            <td><?= $t['last_used_at']
-                                    ? h(date('d.m.Y H:i', strtotime((string) $t['last_used_at'])))
-                                    : '<span class="muted">nie</span>' ?></td>
-                            <td><code class="token"><?= h(mb_substr((string) ($t['label'] ?? ''), 0, 70)) ?></code></td>
-                            <td>
-                                <?php if ($t['revoked_at'] === null): ?>
-                                    <form method="post" class="compact"
-                                          onsubmit="return confirm('Dieses Gerät abmelden?')">
-                                        <?= csrf_field() ?>
-                                        <button class="linkbtn" name="revoke_token" value="<?= (int) $t['id'] ?>">
-                                            widerrufen
-                                        </button>
-                                    </form>
-                                <?php else: ?>
-                                    <span class="muted tiny">widerrufen</span>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                </table>
-            <?php endif; ?>
-        </details>
-
-        <form method="post" class="compact"
-              onsubmit="return confirm('<?= h($u['display_name']) ?> wirklich mit allen Sprachen und Vokabeln löschen?')">
-            <?= csrf_field() ?>
-            <button class="linkbtn" name="delete" value="<?= (int) $u['id'] ?>"
-                    style="color:var(--bad)">Account löschen</button>
-        </form>
-    </div>
-<?php endforeach; ?>
 
 <?php admin_foot(); ?>

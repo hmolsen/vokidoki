@@ -374,7 +374,7 @@ img.chipflag { width: 18px; height: 13px; object-fit: contain; vertical-align: -
 
 .palette {
     display: grid;
-    grid-template-columns: repeat(8, 22px);
+    grid-template-columns: repeat(7, 22px);
     gap: 3px;
 }
 
@@ -2086,3 +2086,54 @@ table.release tr.newrow input[type=text] { margin: 0; min-height: 34px; width: 1
 .anlegezeile .coursetitle { flex: 1 1 200px; min-width: 0; }
 .anlegezeile .suchfeld { flex: 1 1 240px; }
 .anlegezeile > .iconaction { flex: none; }
+
+/* ------------------------------------------------------------ Kontenliste */
+
+/*
+ * Eine Zeile je Konto, zum Bearbeiten aufklappbar.
+ *
+ * Vorher eine Karte je Konto mit allen Formularen offen - bei drei Kindern
+ * uebersichtlich, bei einer Schule mit dreihundert endloses Scrollen. Eine
+ * table.data ging nicht: Sie schneidet mit overflow: hidden das Farbfeld ab,
+ * das beim Bearbeiten aus der Zeile herausragt. Also ein Raster je Zeile,
+ * das aussieht wie die Tabellen daneben.
+ */
+.konten {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: .94rem;
+    margin-bottom: 18px;
+}
+.konten-kopf,
+.konto > summary {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1.3fr) minmax(0, 1.8fr) minmax(0, 1fr);
+    gap: 4px 12px;
+    align-items: center;
+    padding: 9px 12px;
+}
+.konten-kopf {
+    background: var(--surface-2);
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    font-size: .8rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--text-soft);
+}
+.konto { border-top: 1px solid var(--border); }
+.konto > summary { list-style: none; cursor: pointer; }
+.konto > summary::-webkit-details-marker { display: none; }
+.konto > summary:hover,
+.konto[open] > summary { background: var(--surface-2); }
+.konto:last-child > summary { border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+.konto:last-child[open] > summary { border-radius: 0; }
+.konto.aus > summary { color: var(--text-soft); }
+.konto-inhalt { padding: 12px; border-top: 1px dashed var(--border); }
+.konto-inhalt > form.inline { margin-bottom: 12px; }
+
+/* Am Telefon zwei Spalten statt fuenf; der Kopf erklaert dann nichts mehr. */
+@media (max-width: 620px) {
+    .konten-kopf { display: none; }
+    .konto > summary { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}

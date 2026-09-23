@@ -64,11 +64,6 @@ liegen im jeweiligen Paketverzeichnis unter `vendor/` als Datei `LICENSE`.
   Die Schrift für alles zum Lesen: Fließtext und Vokabeln. Der Lizenztext
   liegt unter `assets/fonts/OFL-Nunito.txt`.
   <https://github.com/googlefonts/nunito>
-* **Roboto** — Google Inc., **Apache-Lizenz 2.0**.
-  Benutzt wird allein der fette Schnitt, und zwar an einer einzigen Stelle:
-  um den Anfangsbuchstaben in das Symbol für den Home-Bildschirm zu zeichnen.
-  Der Lizenzhinweis liegt unter `assets/LICENSE-Roboto.txt`.
-  <https://github.com/googlefonts/roboto-2>
 
 Die beiden Schriften der Oberfläche liegen **auf diesem Server** und werden
 von dort geladen — nicht von Google. Das ist der Grund, aus dem hier früher
@@ -122,7 +117,6 @@ Die vollständigen Texte liegen dem Programm bei:
 * PHP-Bibliotheken: `vendor/<Anbieter>/<Paket>/LICENSE`
 * Fredoka: `assets/fonts/OFL-Fredoka.txt`
 * Nunito: `assets/fonts/OFL-Nunito.txt`
-* Roboto: `assets/LICENSE-Roboto.txt`
 * Twemoji: `assets/flags/HERKUNFT.md` sowie der verlinkte Lizenztext
 
 Wer sie nicht selbst einsehen kann, bekommt sie auf Anfrage — die

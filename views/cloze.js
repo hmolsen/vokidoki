@@ -1,12 +1,13 @@
 import {
-    VT, api, render, esc, $, go, topbar, wireBack, progressBar, showError,
+    VT, api, render, esc, $, topbar, wireBack, progressBar, showError,
     babing, serieAktualisieren, punkteAktualisieren, konfetti, feuerwerk,
 } from '../core.js';
 import {
-    frageLuecke, antwortPruefen, antwortMerken, zuruecksetzen, MODUS_LUECKE,
+    frageLuecke, antwortPruefen, antwortMerken, MODUS_LUECKE,
     sprache, einheit, vorratAuffrischen,
 } from '../vorrat.js';
 import { meldeKnopf, meldenVerdrahten } from '../melden.js';
+import { weiterKnopf, weiterVerdrahten } from './unit.js';
 
 const NEXT_DELAY_CORRECT = 900;
 const NEXT_DELAY_HINT    = 2400;   // Schreibweise lesen können
@@ -519,7 +520,7 @@ function showFinished(unitId, data) {
             <p class="sub">Du hast alle ${data.total} Vokabeln richtig eingesetzt.</p>
         </div>
         <div id="msg"></div>
-        <button class="btn" id="again">Noch einmal üben</button>
+        ${weiterKnopf(unitId, MODUS_LUECKE)}
         <button class="btn ghost" data-back="/unit/${unitId}">Zur Übersicht</button>
     `);
 
@@ -532,10 +533,7 @@ function showFinished(unitId, data) {
 
     wireBack();
 
-    $('#again').addEventListener('click', () => {
-        // Nur diese Übungsart zurücksetzen - Multiple Choice bleibt stehen.
-        // Auch ohne Netz: Der Server erfaehrt es im selben Strom.
-        zuruecksetzen(unitId, MODUS_LUECKE);
-        go(`/cloze/${unitId}`);
-    });
+    // Hier stand "Noch einmal üben", und es setzte den Lernstand zurück -
+    // siehe weiterKnopf() in unit.js.
+    weiterVerdrahten();
 }

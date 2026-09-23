@@ -175,6 +175,12 @@ flash_render();
             <button class="btn small secondary" name="update" value="1">Speichern</button>
         </form>
 
+        <p class="tiny" style="margin:0 0 8px">
+            <a href="<?= h(admin_url('users.php') . '?school=' . (int) $s['id']) ?>">Accounts</a>
+            &middot;
+            <a href="<?= h(admin_url('vocab.php') . '?school=' . (int) $s['id']) ?>">Kurse und Unterlagen</a>
+        </p>
+
         <form method="post" class="compact">
             <?= csrf_field() ?>
             <button class="linkbtn" name="delete" value="<?= (int) $s['id'] ?>"
@@ -193,12 +199,5 @@ flash_render();
     eingetragene 0 würde die Schule sofort aussperren.
 </p>
 <?php endif; ?>
-
-<script>
-document.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-confirm]');
-    if (b && !confirm(b.dataset.confirm)) e.preventDefault();
-});
-</script>
 
 <?php admin_foot(); ?>

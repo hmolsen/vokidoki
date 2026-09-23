@@ -16,14 +16,17 @@ function back_to_view(array $filter): never
     exit;
 }
 
-$userId = (int) ($_REQUEST['user'] ?? 0);
-$langId = (int) ($_REQUEST['language'] ?? 0);
-$unitId = (int) ($_REQUEST['unit'] ?? 0);
+/*
+ * Die Saetze einer Lerneinheit stehen unter "Unterlagen" bei ihren Vokabeln.
+ * Diese Seite ist die Suche quer durch alles: Ein Fehler der Satzerzeugung
+ * trifft selten nur eine Klasse, und finden laesst er sich nur, wenn man
+ * ueber die Kurse hinweg nach ihm suchen kann.
+ */
+$scope  = admin_scope();
 $suche  = trim((string) ($_REQUEST['q'] ?? ''));
 $seite  = max(1, (int) ($_REQUEST['p'] ?? 1));
 
-$filter = ['user' => $userId, 'language' => $langId, 'unit' => $unitId,
-           'q' => $suche, 'p' => $seite];
+$filter = admin_scope_query($scope, ['q' => $suche, 'p' => $seite]);
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     csrf_check();
@@ -36,7 +39,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $bad = 0;
 
         // Die Abstandsregel für Satzzeichen hängt an der Sprache, und diese
-        // Seite zeigt alle Kinder und Sprachen gemischt. Deshalb die Kürzel
+        // Seite zeigt alle Kurse und Sprachen gemischt. Deshalb die Kürzel
         // der bearbeiteten Zeilen in einem Zug holen.
         $codes = [];
         $ids   = array_map('intval', array_keys($nat));
@@ -84,48 +87,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
 // ---------------------------------------------------------------- Filter
 
-$users = qa('SELECT id, display_name FROM users ORDER BY display_name');
-
 /*
- * "Kind" bleibt als Blickwinkel, meint aber nicht mehr Besitz.
- *
- * Frueher gehoerte eine Sprache genau einem Konto. Jetzt gehoert sie einem
- * Kurs, und ein Kind ist darin Mitglied - oft zusammen mit 27 anderen. Der
- * Filter beantwortet deshalb nicht mehr "was hat Lilli angelegt", sondern
- * "womit arbeitet Lilli" - die einzig sinnvolle Frage, sobald eine ganze
- * Klasse an denselben Unterlagen sitzt.
+ * Hier stand ein Filter "Kind" und darunter einer, der "Kurs" hiess, aber
+ * die Sprache trug. Beides stammte aus der Zeit, als ein Kind seine
+ * Vokabeln besass. Gefiltert wird jetzt, wo die Saetze wirklich haengen.
  */
-$languages = $userId > 0
-    /*
-     * Nach Kurs, nicht nach Sprache: "Englisch - 8c" unterscheidet sich von
-     * "Englisch - 9a", "Englisch" nicht.
-     */
-    ? qa('SELECT DISTINCT l.id, COALESCE(co.name, l.name) AS name, l.flag_emoji
-            FROM languages l
-            JOIN courses co       ON co.language_id = l.id
-            JOIN course_members m ON m.course_id = co.id
-           WHERE m.user_id = ?
-           ORDER BY name', [$userId])
-    : [];
-
-$units = $langId > 0
-    ? qa('SELECT id, title FROM units WHERE language_id = ? ORDER BY position, id', [$langId])
-    : [];
-
 $where  = [];
 $params = [];
-if ($userId > 0) {
-    $where[]  = 't.course_id IN (SELECT m2.course_id FROM course_members m2
-                                  WHERE m2.user_id = ?)';
-    $params[] = $userId;
-}
-if ($langId > 0) {
-    $where[]  = 't.language_id = ?';
-    $params[] = $langId;
-}
-if ($unitId > 0) {
-    $where[]  = 't.id = ?';
-    $params[] = $unitId;
+foreach (['school' => 'co.school_id', 'course' => 't.course_id', 'unit' => 't.id'] as $k => $spalte) {
+    if ($scope['ids'][$k] > 0) {
+        $where[]  = $spalte . ' = ?';
+        $params[] = $scope['ids'][$k];
+    }
 }
 if ($suche !== '') {
     $where[]  = '(s.native_text LIKE ? OR s.foreign_text LIKE ? OR s.answer LIKE ?'
@@ -138,7 +111,8 @@ $sql = $where === [] ? '' : ' WHERE ' . implode(' AND ', $where);
 $gesamt = (int) qv(
     'SELECT COUNT(*) FROM sentences s
        JOIN vocab v ON v.id = s.vocab_id
-       JOIN units t ON t.id = v.unit_id' . $sql,
+       JOIN units t ON t.id = v.unit_id
+       LEFT JOIN courses co ON co.id = t.course_id' . $sql,
     $params,
 );
 
@@ -156,13 +130,15 @@ $rows = qa(
     // keinen Besitzer mehr - er gehoert zu Unterlagen, mit denen eine ganze
     // Gruppe arbeitet.
     'SELECT s.*, v.term_foreign, v.term_native, t.title AS unit_title,
-            l.name AS language, co.name AS display_name
+            t.id AS unit_id, t.course_id, co.school_id,
+            l.name AS language, co.name AS display_name, sc.name AS school_name
        FROM sentences s
        JOIN vocab v ON v.id = s.vocab_id
        JOIN units t ON t.id = v.unit_id
        JOIN languages l ON l.id = t.language_id
-       LEFT JOIN courses co ON co.id = t.course_id' . $sql . '
-      ORDER BY co.name, l.name, t.position, t.id, v.position, s.id
+       LEFT JOIN courses co ON co.id = t.course_id
+       LEFT JOIN schools sc ON sc.id = co.school_id' . $sql . '
+      ORDER BY sc.name, co.name, t.position, t.id, v.position, s.id
       LIMIT ' . PER_PAGE . ' OFFSET ' . $offset,
     $params,
 );
@@ -176,37 +152,23 @@ function page_link(array $filter, int $seite): string
     );
 }
 
-admin_head('Lückensätze', 'sentences.php');
+// Unter "Unterlagen" eingehaengt - von dort kommt man her.
+admin_head('Lückensätze', 'vocab.php');
 flash_render();
 ?>
 
+<p class="tiny muted">
+    <a href="<?= h(admin_url('vocab.php') . (admin_scope_query($scope) === [] ? ''
+        : '?' . http_build_query(admin_scope_query($scope)))) ?>">&lsaquo; Zurück zu den Unterlagen</a>
+</p>
+
 <div class="card filters">
-    <?= filter_chips('Kind',
-        array_map(static fn (array $u): array =>
-            ['id' => (int) $u['id'], 'label' => $u['display_name']], $users),
-        $userId, ['q' => $suche], 'user', ['language', 'unit', 'p'], 'alle') ?>
-
-    <?= filter_chips('Kurs',
-        array_map(static fn (array $l): array => [
-            'id'    => (int) $l['id'],
-            'label' => (string) $l['name'],
-            'flag'  => (string) $l['flag_emoji'],
-        ], $languages),
-        $langId, ['user' => $userId, 'q' => $suche], 'language', ['unit', 'p'], 'alle') ?>
-
-    <?= filter_chips('Lerneinheit',
-        array_map(static fn (array $t): array =>
-            ['id' => (int) $t['id'], 'label' => $t['title']], $units),
-        $unitId, ['user' => $userId, 'language' => $langId, 'q' => $suche], 'unit', ['p'], 'alle') ?>
+    <?= admin_scope_chips($scope, ['q' => $suche], true) ?>
 
     <form method="get" class="filterrow">
         <span class="lbl">Suche</span>
         <span class="inline">
-            <?php foreach (['user' => $userId, 'language' => $langId, 'unit' => $unitId] as $k => $v): ?>
-                <?php if ($v > 0): ?>
-                    <input type="hidden" name="<?= h($k) ?>" value="<?= (int) $v ?>">
-                <?php endif; ?>
-            <?php endforeach; ?>
+            <?= admin_scope_fields($scope) ?>
             <?php
             /*
              * Tippen filtert sofort, ohne die Seite neu zu laden - bei
@@ -226,7 +188,7 @@ flash_render();
             <span class="tiny muted" id="satzzaehler"></span>
             <?php if ($suche !== ''): ?>
                 <a class="chip" href="<?= h(admin_url('sentences.php') . '?' . http_build_query(
-                    array_filter(['user' => $userId, 'language' => $langId, 'unit' => $unitId])
+                    admin_scope_query($scope)
                 )) ?>">zurücksetzen</a>
             <?php endif; ?>
         </span>
@@ -241,10 +203,7 @@ flash_render();
 
 <form method="post">
     <?= csrf_field() ?>
-    <?php foreach (['user' => $userId, 'language' => $langId, 'unit' => $unitId,
-                    'q' => $suche, 'p' => $seite] as $k => $v): ?>
-        <input type="hidden" name="<?= h($k) ?>" value="<?= h((string) $v) ?>">
-    <?php endforeach; ?>
+    <?= admin_scope_fields($scope, ['q' => $suche, 'p' => $seite]) ?>
 
     <table class="data" id="satzliste">
         <tr>
@@ -262,6 +221,7 @@ flash_render();
              * und danach sucht man auch.
              */
             $suchtext = mb_strtolower(implode(' ', [
+                (string) ($s['school_name'] ?? ''),
                 (string) ($s['display_name'] ?? ''), (string) $s['language'],
                 (string) $s['unit_title'], (string) $s['term_foreign'],
                 (string) $s['term_native'], (string) $s['native_text'],
@@ -270,8 +230,14 @@ flash_render();
             ?>
             <tr data-suchtext="<?= h($suchtext) ?>">
                 <td class="tiny muted">
-                    <?= h((string) ($s['display_name'] ?? '&ndash;')) ?><br>
-                    <?= h($s['language']) ?> &middot; <?= h($s['unit_title']) ?>
+                    <?= h((string) ($s['school_name'] ?? '')) ?><br>
+                    <?= $s['display_name'] === null ? '&ndash;' : h((string) $s['display_name']) ?>
+                    &middot;
+                    <?php // Die Einheit fuehrt dorthin, wo ihre Vokabeln stehen. ?>
+                    <a href="<?= h(admin_url('vocab.php') . '?' . http_build_query(array_filter([
+                        'school' => (int) $s['school_id'], 'course' => (int) $s['course_id'],
+                        'unit'   => (int) $s['unit_id'],
+                    ]))) ?>"><?= h($s['unit_title']) ?></a>
                 </td>
                 <td class="tiny">
                     <?= h($s['term_foreign']) ?><br>

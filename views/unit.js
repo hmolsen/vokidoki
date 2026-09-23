@@ -124,8 +124,9 @@ export async function unitView(unitId) {
 
     wireBack();
 
-    wireExercises(unit.id, modes);
+    wireExercises(unit.id);
     watchSentences(unit.id, modes);
+    nachFreigabeSehen(unit.id, modes);
 
 
     /*
@@ -178,29 +179,91 @@ export async function unitView(unitId) {
  * sobald ihre Sätze fertig sind - mit Handlern an den Zeilen selbst haetten
  * wir danach zwei auf der unveränderten Nachbarzeile.
  */
-function wireExercises(unitId, modes) {
+function wireExercises(unitId) {
     $('#exercises').addEventListener('click', async (event) => {
         // Freies Ueben hat keinen Lernstand, der zurueckzusetzen waere - es
         // geht ohne Umweg los.
         const frei = event.target.closest('[data-frei]');
         if (frei) { go(`/unit/${frei.dataset.frei}/frei`); return; }
 
+        /*
+         * Eine geschaffte Übung hat kein data-mode und ist disabled - sie
+         * landet also gar nicht hier. Früher setzte ein Druck darauf still
+         * den Lernstand zurück und fing von vorn an; damit war die Arbeit
+         * weg, die das grüne Feld gerade noch gezeigt hatte. Wer wirklich
+         * von vorn will, hat unten "Fortschritt zurücksetzen".
+         */
         const row = event.target.closest('[data-mode]');
         if (!row || row.disabled) return;
 
-        const mode = row.dataset.mode;
-        const info = modes[mode];
+        go(`${row.dataset.mode === 'cloze' ? '/cloze' : '/quiz'}/${unitId}`);
+    });
+}
 
-        // Eine bestandene Übung braucht einen frischen Lernstand, sonst wären
-        // sofort wieder alle Vokabeln als gekonnt markiert. Zurückgesetzt wird
-        // nur diese Übungsart - die andere behält ihren Fortschritt.
-        if (info.total > 0 && info.known >= info.total) {
-            // Auch ohne Netz: Der Vorrat vergisst sofort, der Server erfaehrt
-            // es im selben Strom wie die Antworten - und in derselben
-            // Reihenfolge, also vor dem, was danach geuebt wird.
-            zuruecksetzen(unitId, mode);
-        }
-        go(`${mode === 'cloze' ? '/cloze' : '/quiz'}/${unitId}`);
+/** Ist eine Übungsart durch? Nur, wenn es überhaupt etwas zu üben gab. */
+function geschafft(info) {
+    return info.total > 0 && info.known >= info.total;
+}
+
+/**
+ * Der Knopf am Ende einer Übung: wohin es von hier aus weitergeht.
+ *
+ * Dort stand "Noch einmal üben", und der Knopf setzte den Lernstand dieser
+ * Übung zurück. Das Kind hatte gerade alles geschafft - und der
+ * naheliegendste Druck warf es wieder auf null. Jetzt führt er dorthin, wo
+ * noch etwas zu tun ist: zur anderen Übungsart, solange die offen ist, und
+ * wenn beide durch sind, ins Freie Üben - das hält wach, ohne am Lernstand
+ * zu rühren. Wer wirklich von vorn will, hat in der Lerneinheit
+ * "Fortschritt zurücksetzen".
+ *
+ * Steht hier und nicht in quiz.js und cloze.js, weil beide Enden dieselbe
+ * Regel brauchen und die Übungsarten samt Symbolen hier stehen.
+ *
+ * Der Lückentext gilt als offen, wenn es Sätze gibt, die noch nicht sitzen -
+ * oder wenn sie gerade entstehen; dann wartet die Übung auf sie. Gibt es
+ * gar keine, führt der Weg ins Freie Üben statt vor eine leere Übung.
+ *
+ * @param fertig 'mc' oder 'cloze' - die Übung, die gerade geschafft ist.
+ * @returns HTML des Knopfes; verdrahtet wird er mit weiterVerdrahten().
+ */
+export function weiterKnopf(unitId, fertig) {
+    const stand   = modusStand(unitId);
+    const andere  = EXERCISES.find((e) => e.mode !== fertig);
+    const info    = stand[andere.mode];
+    const moeglich = info.total > 0 || info.status === 'running';
+
+    if (moeglich && !geschafft(info)) {
+        const ziel = andere.mode === 'cloze' ? '/cloze' : '/quiz';
+        return `<button class="btn" id="weiter" data-ziel="${ziel}/${esc(unitId)}">`
+             + `Mit ${andere.icon} ${esc(andere.title)} weitermachen</button>`;
+    }
+
+    return `<button class="btn" id="weiter" data-ziel="/unit/${esc(unitId)}/frei">`
+         + `${hantel('hantel')} Freies Üben</button>`;
+}
+
+/** Den Knopf aus weiterKnopf() anschliessen. */
+export function weiterVerdrahten() {
+    $('#weiter')?.addEventListener('click', (e) => go(e.currentTarget.dataset.ziel));
+}
+
+/*
+ * Gibt die Lehrkraft weitere Vokabeln frei, wird eine geschaffte Übung von
+ * selbst wieder anklickbar: "Geschafft" heisst "alles Freigegebene gekonnt",
+ * und mit neuen Vokabeln stimmt das nicht mehr.
+ *
+ * Das Gerät erfährt von einer Freigabe aber nur, wenn der Vorrat
+ * aufgefrischt wird - beim Start und nach einer Weile im Hintergrund. Ein
+ * Kind, das gerade vor seiner grünen Übung sitzt, sähe die neuen Vokabeln
+ * sonst erst morgen. Deshalb hier einmal nachsehen, sobald eine Übung
+ * geschafft dasteht, und neu zeichnen, wenn etwas kam. Ohne Netz bleibt es
+ * beim Stand im Gerät.
+ */
+function nachFreigabeSehen(unitId, modes) {
+    if (!geschafft(modes.mc) && !geschafft(modes.cloze)) return;
+
+    vorratAuffrischen().then((frisch) => {
+        if (frisch && location.hash === `#/unit/${unitId}`) unitView(unitId);
     });
 }
 
@@ -245,18 +308,24 @@ function clozeRow(info) {
 
 /** Eine Übungsart als Zeile mit eigenem Fortschritt. */
 function exerciseRow(mode, icon, title, hint, info) {
-    const fertig = info.total > 0 && info.known >= info.total;
+    const fertig = geschafft(info);
     const wartet = info.status === 'running';
     const kaputt = info.status === 'failed';
+    const zu     = wartet || fertig;
 
-    // Solange die Sätze entstehen: Spinner statt Symbol, Zeile nicht anklickbar.
-    const lead = wartet
-        ? '<span class="spinner inline"></span>'
-        : (fertig ? '\u{2705}' : icon);
+    /*
+     * Solange die Sätze entstehen: Spinner statt Symbol, Zeile nicht
+     * anklickbar. Geschafft: auch nicht anklickbar, aber das Symbol bleibt -
+     * Zielscheibe und Stift sagen, welche Übung es war, ein Haken hätte bei
+     * beiden gleich ausgesehen. Dass sie durch ist, zeigt das Grün.
+     */
+    const lead = wartet ? '<span class="spinner inline"></span>' : icon;
 
     let text;
     if (wartet) {
         text = 'Deine Sätze werden vorbereitet...';
+    } else if (fertig) {
+        text = `Geschafft - alle ${info.total} gelernt`;
     } else if (kaputt) {
         text = info.error || 'Die Sätze konnten nicht erzeugt werden.';
     } else if (info.total > 0) {
@@ -266,15 +335,15 @@ function exerciseRow(mode, icon, title, hint, info) {
     }
 
     return `
-        <button class="row" data-mode-row="${mode}"
-                ${wartet ? 'disabled' : `data-mode="${mode}"`}>
+        <button class="row${fertig ? ' geschafft' : ''}" data-mode-row="${mode}"
+                ${zu ? 'disabled' : `data-mode="${mode}"`}>
             <span class="lead">${lead}</span>
             <span class="body">
                 <span class="title">${esc(title)}</span>
                 <span class="tiny ${kaputt ? 'warn' : 'muted'}">${esc(text)}</span>
                 ${!wartet && info.total > 0 ? progressBar(info.known, info.total) : ''}
             </span>
-            <span class="chev">${wartet ? '' : '&#8250;'}</span>
+            <span class="chev">${zu ? '' : '&#8250;'}</span>
         </button>`;
 }
 

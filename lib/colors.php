@@ -17,14 +17,19 @@ function e(string $value): string
 
 
 /**
- * 64 Farben als 8x8-Feld: acht Farbtöne, je acht Helligkeiten von hell nach
- * dunkel. Berechnet statt aufgelistet - so bleiben die Abstufungen gleichmäßig
- * und die Reihenfolge ergibt das Regenbogenmuster von selbst.
+ * 49 Farben als 7x7-Feld: sieben Farbtöne, je sieben Helligkeiten von hell
+ * nach dunkel. Berechnet statt aufgelistet - so bleiben die Abstufungen
+ * gleichmäßig und die Reihenfolge ergibt das Regenbogenmuster von selbst.
+ *
+ * Sieben, weil das Feld in der App dieselben Kästchen hat wie der
+ * Monatskalender darüber - sieben Spalten, eine je Wochentag. Acht Spalten
+ * daneben sahen aus wie ein verrutschter Kalender. Weggefallen ist dafür
+ * ein Ton zwischen Blau und Rosa; das Lila liegt jetzt dazwischen.
  */
 function color_palette(): array
 {
-    $huePerRow = [0, 30, 52, 130, 178, 212, 266, 320];
-    $steps     = [0.80, 0.71, 0.63, 0.55, 0.47, 0.40, 0.33, 0.26];
+    $huePerRow = [0, 30, 52, 130, 190, 222, 290];
+    $steps     = [0.80, 0.70, 0.61, 0.52, 0.43, 0.35, 0.27];
 
     $farben = [];
     foreach ($huePerRow as $hue) {
@@ -51,7 +56,18 @@ function valid_color(string $color): string
 {
     return preg_match('/^#[0-9a-f]{6}$/i', $color) === 1
         ? strtolower($color)
-        : color_palette()[27];   // ein kräftiges Blau als Rückfall
+        : color_default();
+}
+
+/**
+ * Ein kräftiges Blau - die Farbe, wenn keine andere feststeht.
+ *
+ * Über den Namen und nicht als color_palette()[27] an zwei Stellen: Mit dem
+ * 8x8-Feld war 27 Blau, im 7x7-Feld wäre es ein Grün gewesen.
+ */
+function color_default(): string
+{
+    return color_palette()[5 * 7 + 3];   // Zeile Blau, mittlere Helligkeit
 }
 
 function hsl_to_hex(float $h, float $s, float $l): string
@@ -89,7 +105,7 @@ function hsl_to_hex(float $h, float $s, float $l): string
 function color_picker(string $selected, string $name = 'color'): string
 {
     $farben = color_palette();
-    $gewaehlt = preg_match('/^#[0-9a-f]{6}$/i', $selected) === 1 ? strtolower($selected) : $farben[27];
+    $gewaehlt = preg_match('/^#[0-9a-f]{6}$/i', $selected) === 1 ? strtolower($selected) : color_default();
 
     $kacheln = '';
     foreach ($farben as $farbe) {

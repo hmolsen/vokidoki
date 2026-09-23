@@ -257,7 +257,7 @@ ok('Passwort liegt als Hash in der Datenbank',
    str_starts_with((string) qv("SELECT v FROM settings WHERE k = 'admin_password_hash'"), '$'));
 
 foreach (['users.php' => 'Neuen Account anlegen',
-          'vocab.php' => 'Kind',
+          'vocab.php' => 'Schule',
           'settings.php' => 'Modell für die Bilderkennung',
           'selfcheck.php' => 'Prüfung'] as $file => $needle) {
     $res = http($base . '/admin/' . $file);
@@ -358,6 +358,97 @@ ok('Manifest display=standalone', ($manifest['display'] ?? '') === 'standalone')
 $res = http($base . '/icon.php?u=' . $userId . '&s=192');
 ok('Icon ist ein PNG', str_starts_with($res['body'], "\x89PNG"), 'Antwort war kein PNG');
 
+/*
+ * Auf dem Symbol steht Voki, nicht mehr der Anfangsbuchstabe - auf der Farbe
+ * des Kontos, mit weissem Rand um ihn und jeden Stern. Nachgezaehlt wird an
+ * den Pixeln: Ein PNG kommt auch dann, wenn die Vorlage fehlt, und dann
+ * stuende nur ein Punkt darauf.
+ */
+$pixel = static function (string $png): array {
+    $bild = imagecreatefromstring($png);
+    $zaehl = ['weiss' => 0, 'gruen' => 0, 'n' => imagesx($bild)];
+    for ($y = 0; $y < imagesy($bild); $y += 2) {
+        for ($x = 0; $x < imagesx($bild); $x += 2) {
+            $c = imagecolorat($bild, $x, $y);
+            [$r, $g, $b] = [($c >> 16) & 255, ($c >> 8) & 255, $c & 255];
+            if ($r > 240 && $g > 240 && $b > 240) $zaehl['weiss']++;
+            // Vokis Gruen: #AFD535.
+            if (abs($r - 0xAF) < 18 && abs($g - 0xD5) < 18 && abs($b - 0x35) < 30) $zaehl['gruen']++;
+        }
+    }
+    $zaehl['bild'] = $bild;
+    return $zaehl;
+};
+$farbeTest = (string) qv('SELECT color FROM users WHERE id = ?', [$userId]);
+$sym = $pixel($res['body']);
+$ecke = imagecolorat($sym['bild'], 0, 0);
+ok('Das Symbol hat die Farbe des Kontos',
+   sprintf('#%06x', $ecke & 0xFFFFFF) === strtolower($farbeTest),
+   sprintf('#%06x statt %s', $ecke & 0xFFFFFF, $farbeTest));
+ok('Darauf steht Voki in seinem Gruen', $sym['gruen'] > 1000, $sym['gruen'] . ' gruene Pixel');
+/*
+ * Der Rand: Von links in die Zeile hinein ist das Erste, worauf man trifft,
+ * weiss - nicht Gruen und nicht das Gelb eines Sterns. Weisse Pixel nur zu
+ * zaehlen, reichte nicht: Vokis Augen sind auch weiss.
+ */
+$randZeilen = 0;
+foreach ([0.3, 0.45, 0.6, 0.75] as $anteil) {
+    $y     = (int) ($sym['n'] * $anteil);
+    $grund = imagecolorat($sym['bild'], 0, $y);
+    for ($x = 1; $x < $sym['n']; $x++) {
+        $c = imagecolorat($sym['bild'], $x, $y);
+        $abstand = abs((($c >> 16) & 255) - (($grund >> 16) & 255))
+                 + abs((($c >> 8) & 255) - (($grund >> 8) & 255))
+                 + abs(($c & 255) - ($grund & 255));
+        if ($abstand < 60) continue;
+        // Kantenglaettung: ein, zwei Pixel Mischfarbe, dann Weiss.
+        foreach (range($x, min($x + 3, $sym['n'] - 1)) as $xx) {
+            $w = imagecolorat($sym['bild'], $xx, $y);
+            if ((($w >> 16) & 255) > 230 && (($w >> 8) & 255) > 230 && ($w & 255) > 230) {
+                $randZeilen++;
+                break;
+            }
+        }
+        break;
+    }
+}
+ok('Mit weissem Rand um Voki und die Sterne', $randZeilen === 4, "$randZeilen von 4 Zeilen");
+
+// Maskable: Android schneidet auf einen Kreis von 80 % - am Rand darf nichts
+// von Voki stehen, sonst fehlen ihm die Sterne.
+$mask = imagecreatefromstring(http($base . '/icon.php?u=' . $userId . '&s=512&p=1')['body']);
+$randFrei = true;
+foreach (range(0, 511, 7) as $i) {
+    foreach ([[$i, 40], [$i, 471], [40, $i], [471, $i]] as [$x, $y]) {
+        $c = imagecolorat($mask, $x, $y);
+        if ((($c >> 16) & 255) > 240 && (($c >> 8) & 255) > 240 && ($c & 255) > 240) {
+            $randFrei = false;
+        }
+    }
+}
+ok('Das maskierbare Symbol laesst den Rand frei', $randFrei);
+
+// Das Favicon: nur Voki, ohne Flaeche - im Tab soll kein Quadrat stehen.
+$fav = http($base . '/icon.php?f=1&s=32');
+$favBild = imagecreatefromstring($fav['body']);
+ok('Das Favicon ist durchsichtig, wo Voki nicht ist',
+   ((imagecolorat($favBild, 0, 0) >> 24) & 0x7F) === 127);
+ok('Und hat Voki darin',
+   ((imagecolorat($favBild, 16, 18) >> 24) & 0x7F) < 64, 'Mitte ist leer');
+
+foreach (['/' => 'App', '/admin/' => 'Admin', '/teacher/' => 'Lehrkraft-Bereich'] as $pfad => $wo) {
+    $kopf = http($base . $pfad)['body'];
+    ok("$wo hat Voki als Favicon",
+       str_contains($kopf, 'rel="icon" type="image/svg+xml"') && str_contains($kopf, 'voki-icon.svg')
+       && str_contains($kopf, 'icon.php?f=1'));
+}
+ok('Auch die Seite ohne Netz',
+   str_contains((string) file_get_contents(__DIR__ . '/../offline.html'), 'voki-icon.svg'));
+
+// Eine neue Zeichnung muss ankommen, auch wenn storage/icons/ voll ist.
+ok('Der Zwischenspeicher der Symbole kennt die Vorlage',
+   str_contains((string) file_get_contents(__DIR__ . '/../icon.php'), 'filemtime($vorlage)'));
+
 $res = http($base . '/manifest.php?t=kein-gueltiger-token');
 ok('Ungültiger Token liefert generisches Manifest',
    (json_decode($res['body'], true)['name'] ?? '') === 'Vokidoki');
@@ -402,15 +493,50 @@ section('Vokabelkorrektur im Admin');
 
 $vocabRows = qa('SELECT id, term_foreign, term_native FROM vocab WHERE unit_id = ? ORDER BY position', [$unitId]);
 $firstId   = (int) $vocabRows[0]['id'];
-$filter    = http_build_query(['user' => $userId, 'language' => $languageId, 'unit' => $unitId]);
 
-$fields = ['save_rows' => '1', 'user' => $userId, 'language' => $languageId,
-           'unit' => $unitId, 'unit_id' => $unitId, 'unit_title' => 'Unit 1 korrigiert'];
+/*
+ * Ausgewaehlt wird ueber Schule, Kurs, Lerneinheit. Frueher ueber Kind und
+ * Sprache - aus der Zeit, als ein Kind seine Vokabeln besass.
+ */
+$adminKurs  = (int) course_for_language($languageId)['id'];
+$adminWahl  = ['school' => $testSchule, 'course' => $adminKurs, 'unit' => $unitId];
+$filter     = http_build_query($adminWahl);
+$kursFilter = http_build_query(['school' => $testSchule, 'course' => $adminKurs]);
+
+$fields = ['save_rows' => '1', 'unit_title' => 'Unit 1 korrigiert'] + $adminWahl;
 foreach ($vocabRows as $row) {
     $fields['f'][$row['id']]    = $row['term_foreign'];
     $fields['n'][$row['id']]    = $row['term_native'];
     $fields['note'][$row['id']] = '';
 }
+
+/*
+ * Eine Lerneinheit zaehlt nur im eigenen Kurs. Ein alter Link, der eine
+ * Einheit unter einem fremden Kurs nennt, zeigt sie nicht - und speichert
+ * nicht hinein. Frueher ging "unit_id" aus dem Formular direkt ins UPDATE.
+ */
+[$data] = apiCall('languages', 'create', ['name' => 'Nebenkurs', 'flag' => '']);
+$nebenSprache = (int) ($data['id'] ?? 0);
+$nebenKurs    = (int) course_for_language($nebenSprache)['id'];
+$falsch       = ['school' => $testSchule, 'course' => $nebenKurs, 'unit' => $unitId];
+
+$seite = http($base . '/admin/vocab.php?' . http_build_query($falsch))['body'];
+ok('Eine Lerneinheit erscheint nicht unter einem fremden Kurs',
+   !str_contains($seite, 'name="f[' . $firstId . ']"'));
+$titelVorher = (string) qv('SELECT title FROM units WHERE id = ?', [$unitId]);
+adminPost('vocab.php', ['unit_title' => 'Untergeschoben'] + $falsch + $fields,
+          http_build_query($falsch));
+ok('Und wird darunter auch nicht umbenannt',
+   qv('SELECT title FROM units WHERE id = ?', [$unitId]) === $titelVorher,
+   (string) qv('SELECT title FROM units WHERE id = ?', [$unitId]));
+
+// Wer nur die Lerneinheit nennt, landet trotzdem richtig.
+$seite = http($base . '/admin/vocab.php?unit=' . $unitId)['body'];
+ok('Ein Link mit nur der Lerneinheit findet Kurs und Schule selbst',
+   str_contains($seite, 'name="f[' . $firstId . ']"'));
+// Nimmt den Kurs ueber den Fremdschluessel mit.
+q('DELETE FROM languages WHERE id = ?', [$nebenSprache]);
+
 $fields['f'][$firstId]    = 'ONE';
 $fields['n'][$firstId]    = 'die Eins';
 $fields['note'][$firstId] = 'Zahlwort';
@@ -431,13 +557,12 @@ adminPost('vocab.php', $fields, $filter);
 ok('Leere Eingabe löscht keine Vokabel',
    qv('SELECT term_foreign FROM vocab WHERE id = ?', [$firstId]) === 'ONE');
 
-adminPost('vocab.php', ['add_vocab' => $unitId, 'user' => $userId, 'language' => $languageId,
-                        'unit' => $unitId, 'new_f' => 'six', 'new_n' => 'sechs'], $filter);
+adminPost('vocab.php', ['add_vocab' => '1', 'new_f' => 'six', 'new_n' => 'sechs'] + $adminWahl,
+          $filter);
 ok('Admin ergänzt eine Vokabel',
    (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$unitId]) === 6);
 
-adminPost('vocab.php', ['delete_vocab' => $firstId, 'user' => $userId,
-                        'language' => $languageId, 'unit' => $unitId], $filter);
+adminPost('vocab.php', ['delete_vocab' => $firstId] + $adminWahl, $filter);
 ok('Admin löscht eine Vokabel',
    q1('SELECT id FROM vocab WHERE id = ?', [$firstId]) === null);
 
@@ -526,7 +651,6 @@ section('Kategorien im Admin');
 $vocabRows = qa('SELECT id, term_foreign, term_native FROM vocab WHERE unit_id = ? ORDER BY position',
                 [$unitId]);
 $firstId   = (int) $vocabRows[0]['id'];
-$filter    = http_build_query(['user' => $userId, 'language' => $languageId, 'unit' => $unitId]);
 
 $res = http($base . '/admin/vocab.php?' . $filter);
 ok('Spalte Kategorie ist da', str_contains($res['body'], '<th>Kategorie</th>'));
@@ -538,8 +662,7 @@ $fehlend = array_values(array_filter(
 ok('Alle dreizehn Kategorien stehen zur Wahl', $fehlend === [], implode(', ', $fehlend));
 
 // Manuell setzen - über dasselbe Formular wie die Textkorrekturen.
-$fields = ['save_rows' => '1', 'user' => $userId, 'language' => $languageId,
-           'unit' => $unitId, 'unit_id' => $unitId, 'unit_title' => 'Unit 1 korrigiert'];
+$fields = ['save_rows' => '1', 'unit_title' => 'Unit 1 korrigiert'] + $adminWahl;
 foreach ($vocabRows as $row) {
     $fields['f'][$row['id']]    = $row['term_foreign'];
     $fields['n'][$row['id']]    = $row['term_native'];
@@ -565,17 +688,20 @@ ok('Fehlende Kategorie wird als Strich angezeigt', str_contains($res['body'], 'w
 $offen = (int) qv('SELECT COUNT(*) FROM vocab WHERE word_type IS NULL');
 ok('Es gibt etwas nachzutragen', $offen > 0, (string) $offen);
 
-$res = http($base . '/admin/vocab.php?' . $filter);
+// Die Karten fuer den ganzen Bestand stehen ueber der Auswahl, nicht ueber
+// einer offenen Lerneinheit - dort will man deren Vokabeln sehen.
+$res = http($base . '/admin/vocab.php?' . $kursFilter);
 ok('Knopf zum Nachtragen erscheint', str_contains($res['body'], 'Kategorien nachtragen'));
+ok('Aber nicht ueber einer offenen Lerneinheit',
+   !str_contains(http($base . '/admin/vocab.php?' . $filter)['body'], 'Kategorien nachtragen'));
 
 if ($isFake) {
-    adminPost('vocab.php', ['fill_word_types' => '1', 'user' => $userId,
-                            'language' => $languageId, 'unit' => $unitId], $filter);
+    adminPost('vocab.php', ['fill_word_types' => '1'] + $adminWahl, $kursFilter);
     ok('Nach dem Nachtragen hat jede Vokabel eine Kategorie',
        (int) qv('SELECT COUNT(*) FROM vocab WHERE word_type IS NULL') === 0,
        qv('SELECT COUNT(*) FROM vocab WHERE word_type IS NULL') . ' offen');
 
-    $res = http($base . '/admin/vocab.php?' . $filter);
+    $res = http($base . '/admin/vocab.php?' . $kursFilter);
     ok('Knopf verschwindet, wenn nichts mehr offen ist',
        !str_contains($res['body'], 'Kategorien nachtragen'));
 } else {
@@ -1014,9 +1140,15 @@ ok('Das Zuruecksetzen des einen laesst den anderen unberuehrt', $nachReset === 1
 q('DELETE FROM users WHERE id = ?', [$zweitId]);
 q('DELETE FROM progress WHERE vocab_id = ?', [$gemeinsam]);
 
-section('Sprache im Admin löschen');
+section('Kurs im Admin löschen');
 
-// Wegwerf-Sprache mit Einheit, Vokabeln und Lernstand anlegen.
+/*
+ * Hier hiess es "Sprache loeschen" - und loeschte ueber den Fremdschluessel
+ * den ganzen Kurs mit, waehrend die Rueckfrage nur Vokabeln nannte. Jetzt
+ * heisst es Kurs, und die Rueckfrage nennt, was daran haengt.
+ */
+
+// Wegwerf-Kurs mit Einheit, Vokabeln und Lernstand anlegen.
 [$data] = apiCall('languages', 'create', ['name' => 'Wegwerfisch', 'flag' => '']);
 $tmpLang = (int) $data['id'];
 [$data] = apiCall('import', 'save', [
@@ -1034,10 +1166,20 @@ ok('Wegwerf-Sprache steht mit allem Drum und Dran',
    && (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ?', [$tmpUnit]) === 2
    && (int) qv('SELECT COUNT(*) FROM progress WHERE vocab_id = ?', [$tmpVocab]) === 1);
 
-$res = adminPost('vocab.php', ['delete_language' => $tmpLang, 'user' => $userId],
-                 http_build_query(['user' => $userId]));
+$tmpKurs  = (int) course_for_language($tmpLang)['id'];
+$tmpWahl  = ['school' => $testSchule, 'course' => $tmpKurs];
 
-ok('Sprache ist gelöscht',
+$seite = http($base . '/admin/vocab.php?' . http_build_query($tmpWahl))['body'];
+ok('Der Kurs hat einen Knopf zum Löschen', str_contains($seite, 'name="delete_course"'));
+ok('Die Rückfrage nennt, was daran hängt',
+   str_contains($seite, '1 Lerneinheit(en), 2 Vokabel(n)'), 'Zahlen nicht in der Rückfrage');
+ok('Den alten Knopf "Sprache löschen" gibt es nicht mehr',
+   !str_contains($seite, 'name="delete_language"'));
+
+$res = adminPost('vocab.php', ['delete_course' => $tmpKurs] + $tmpWahl, http_build_query($tmpWahl));
+
+ok('Der Kurs ist gelöscht', q1('SELECT id FROM courses WHERE id = ?', [$tmpKurs]) === null);
+ok('Seine Sprache mit ihm',
    q1('SELECT id FROM languages WHERE id = ?', [$tmpLang]) === null);
 ok('Lerneinheiten verschwinden mit',
    (int) qv('SELECT COUNT(*) FROM units WHERE language_id = ?', [$tmpLang]) === 0);
@@ -1048,6 +1190,8 @@ ok('Lernstand verschwindet mit',
 ok('Meldung nennt, was entfernt wurde',
    str_contains($res['body'], 'Wegwerfisch') && str_contains($res['body'], '2 Vokabel'),
    'Meldung nicht gefunden');
+ok('Und die Auswahl steht danach auf der Schule, nicht im Leeren',
+   preg_match('/course=' . $tmpKurs . '(?!\d)/', $res['body']) !== 1);
 
 // Die andere Sprache des Kindes darf davon unberührt bleiben.
 ok('Andere Sprache bleibt bestehen',
@@ -1055,8 +1199,8 @@ ok('Andere Sprache bleibt bestehen',
 ok('Ihre Lerneinheit bleibt bestehen',
    q1('SELECT id FROM units WHERE id = ?', [$unitId]) !== null);
 
-$res = adminPost('vocab.php', ['delete_language' => $tmpLang, 'user' => $userId],
-                 http_build_query(['user' => $userId]));
+$res = adminPost('vocab.php', ['delete_course' => $tmpKurs] + $tmpWahl,
+                 http_build_query(['school' => $testSchule]));
 ok('Erneutes Löschen meldet sich sauber',
    str_contains($res['body'], 'gibt es nicht mehr'));
 
@@ -1094,34 +1238,31 @@ ok('Und die frei benannte bleibt leer',
 
 section('Sprache im Admin pflegen');
 
-$seite = http($base . '/admin/vocab.php?' . http_build_query(
-    ['user' => $userId, 'language' => $frId]))['body'];
+// Das Kuerzel steht beim Kurs - jeder Kurs hat seine eigene Sprachzeile.
+$frWahl = ['school' => $testSchule, 'course' => (int) course_for_language($frId)['id']];
 
-ok('Die Sprachkarte zeigt ein Feld für das Kürzel',
+$seite = http($base . '/admin/vocab.php?' . http_build_query($frWahl))['body'];
+
+ok('Die Kurskarte zeigt ein Feld für das Kürzel',
    str_contains($seite, 'name="lang_code"'));
 ok('Mit dem aktuellen Wert darin',
    preg_match('/name="lang_code" value="fr"/', $seite) === 1);
-// Der Knopf zum Löschen wurde bisher nie dargestellt - die Verarbeitung gab
-// es, aber niemand konnte sie auslösen.
-ok('Und einen Knopf zum Löschen der Sprache',
-   str_contains($seite, 'name="delete_language"'));
+ok('Und einen Knopf zum Löschen des Kurses',
+   str_contains($seite, 'name="delete_course"'));
 
 $res = adminPost('vocab.php',
-    ['save_language' => $frId, 'lang_code' => 'DA', 'user' => $userId, 'language' => $frId],
-    http_build_query(['user' => $userId, 'language' => $frId]));
+    ['save_language' => '1', 'lang_code' => 'DA'] + $frWahl, http_build_query($frWahl));
 ok('Ein Kürzel lässt sich ändern - auch groß eingetippt',
    qv('SELECT code FROM languages WHERE id = ?', [$frId]) === 'da');
 
 $res = adminPost('vocab.php',
-    ['save_language' => $frId, 'lang_code' => 'Unsinn123', 'user' => $userId, 'language' => $frId],
-    http_build_query(['user' => $userId, 'language' => $frId]));
+    ['save_language' => '1', 'lang_code' => 'Unsinn123'] + $frWahl, http_build_query($frWahl));
 ok('Unsinn wird abgewiesen', str_contains($res['body'], 'zwei oder drei Buchstaben'));
 ok('Und der alte Wert bleibt stehen',
    qv('SELECT code FROM languages WHERE id = ?', [$frId]) === 'da');
 
 $res = adminPost('vocab.php',
-    ['save_language' => $frId, 'lang_code' => '', 'user' => $userId, 'language' => $frId],
-    http_build_query(['user' => $userId, 'language' => $frId]));
+    ['save_language' => '1', 'lang_code' => ''] + $frWahl, http_build_query($frWahl));
 ok('Leeren schaltet den Hinweis wieder ab',
    qv('SELECT code FROM languages WHERE id = ?', [$frId]) === null,
    'tatsächlich: ' . var_export(qv('SELECT code FROM languages WHERE id = ?', [$frId]), true));
@@ -1182,14 +1323,14 @@ ok('Komma eng, Ausrufezeichen weit - in einer Zeile',
 q("UPDATE vocab SET term_foreign = 'Salut!', term_native = 'Hallo !'
     WHERE unit_id = ? AND position = 0", [$absUnit]);
 
-$seite = http($base . '/admin/vocab.php?' . http_build_query(['user' => $userId]))['body'];
+$seite = http($base . '/admin/vocab.php?' . http_build_query(['school' => $testSchule]))['body'];
 ok('Der Admin merkt, dass Abstände krumm sind',
    str_contains($seite, 'name="fix_punctuation"'), 'keine Karte im Markup');
 ok('Und erklärt die französische Regel',
    str_contains($seite, 'Salut !'));
 
-adminPost('vocab.php', ['fix_punctuation' => '1', 'user' => $userId],
-          http_build_query(['user' => $userId]));
+adminPost('vocab.php', ['fix_punctuation' => '1', 'school' => $testSchule],
+          http_build_query(['school' => $testSchule]));
 
 $nachher = q1('SELECT term_foreign, term_native FROM vocab WHERE unit_id = ? AND position = 0',
               [$absUnit]);
@@ -1197,13 +1338,13 @@ ok('Der Knopf rückt den Bestand zurecht',
    $nachher['term_foreign'] === 'Salut !' && $nachher['term_native'] === 'Hallo!',
    json_encode($nachher, JSON_UNESCAPED_UNICODE));
 
-$seite = http($base . '/admin/vocab.php?' . http_build_query(['user' => $userId]))['body'];
+$seite = http($base . '/admin/vocab.php?' . http_build_query(['school' => $testSchule]))['body'];
 ok('Danach verschwindet die Karte von selbst',
    !str_contains($seite, 'name="fix_punctuation"'));
 
 // Ein zweiter Klick darf nichts weiterschieben.
-adminPost('vocab.php', ['fix_punctuation' => '1', 'user' => $userId],
-          http_build_query(['user' => $userId]));
+adminPost('vocab.php', ['fix_punctuation' => '1', 'school' => $testSchule],
+          http_build_query(['school' => $testSchule]));
 ok('Ein zweiter Durchlauf ändert nichts mehr',
    qv('SELECT term_foreign FROM vocab WHERE unit_id = ? AND position = 0', [$absUnit]) === 'Salut !');
 
@@ -1384,7 +1525,8 @@ $satzId = (int) qv('SELECT s.id FROM sentences s JOIN vocab v ON v.id = s.vocab_
 $res = http($base . '/admin/sentences.php');
 ok('Die Seite listet alle Sätze', $res['status'] === 200
    && str_contains($res['body'], 'name="sn[' . $satzId . ']"'), "Status {$res['status']}");
-ok('Mit Kind, Sprache und Lerneinheit daneben',
+// Der Kurs heisst "Testisch Testkind" - Sprache und Anlegerin im Namen.
+ok('Mit Kurs und Lerneinheit daneben',
    str_contains($res['body'], 'Testkind') && str_contains($res['body'], 'Testisch'));
 
 $res = http($base . '/admin/sentences.php?q=' . urlencode('gibtsnichtxyz'));
@@ -1412,6 +1554,28 @@ $res = adminPost('sentences.php', [
 ok('Ein Satz ohne Lücke wird nicht gespeichert',
    qv('SELECT foreign_text FROM sentences WHERE id = ?', [$satzId]) === 'Un {} nouveau.');
 ok('Und die Meldung sagt warum', str_contains($res['body'], 'Form nicht stimmt'));
+
+/*
+ * Dieselben Saetze unter ihren Vokabeln, in den Unterlagen - mit derselben
+ * Pruefung. Dort stand einmal ein eigener Weg ueber sentence_clean(), den
+ * kein Formular ausloeste.
+ */
+$seite = http($base . '/admin/vocab.php?' . $filter)['body'];
+ok('Die Lerneinheit zeigt ihre Saetze gleich mit',
+   str_contains($seite, 'name="sn[' . $satzId . ']"') && str_contains($seite, 'name="save_sentence_rows"'));
+
+adminPost('vocab.php', ['save_sentence_rows' => '1',
+    'sn' => [$satzId => 'Noch ein Satz.'], 'sf' => [$satzId => 'Encore {} texte.'],
+    'sa' => [$satzId => 'un']] + $adminWahl, $filter);
+ok('Und laesst sie dort bearbeiten',
+   qv('SELECT foreign_text FROM sentences WHERE id = ?', [$satzId]) === 'Encore {} texte.');
+
+$res = adminPost('vocab.php', ['save_sentence_rows' => '1',
+    'sn' => [$satzId => 'Deutsch'], 'sf' => [$satzId => 'ohne Lücke'],
+    'sa' => [$satzId => 'un']] + $adminWahl, $filter);
+ok('Mit derselben Pruefung wie auf der Satzliste',
+   qv('SELECT foreign_text FROM sentences WHERE id = ?', [$satzId]) === 'Encore {} texte.'
+   && str_contains($res['body'], 'Form nicht stimmt'));
 
 adminPost('sentences.php', ['delete' => $satzId]);
 ok('Satz lässt sich löschen',
@@ -1803,22 +1967,26 @@ section('Filter im Admin');
 // funktionieren auch ohne JavaScript und lassen sich als Lesezeichen ablegen.
 foreach (['vocab.php', 'sentences.php'] as $seite) {
     $res = http($base . '/admin/' . $seite);
-    ok("$seite zeigt die Kinder als Knoepfe",
+    ok("$seite zeigt die Schulen als Knoepfe",
        str_contains($res['body'], 'class="chips"')
-       && str_contains($res['body'], 'class="chip"'), "Status {$res['status']}");
-    ok("$seite kommt ohne Auswahlfeld fuer das Kind aus",
-       !str_contains($res['body'], 'name="user" id="user"'));
+       && str_contains($res['body'], 'class="chip'), "Status {$res['status']}");
+    /*
+     * Die Auswahl beginnt bei der Schule, nicht beim Kind. Das Kind war der
+     * Einstieg, solange es seine Vokabeln besass; seit sie einem Kurs
+     * gehoeren, fuehrte es zu 28 gleichen Antworten.
+     */
+    ok("$seite waehlt nicht mehr ueber das Kind",
+       !str_contains($res['body'], '<span class="lbl">Kind</span>'));
 }
 
-// Ein Klick auf ein Kind fuehrt zu einem Link, der genau dieses setzt.
+// Ein Klick auf eine Schule fuehrt zu einem Link, der genau diese setzt.
 $res = http($base . '/admin/vocab.php');
-ok('Der Knopf verweist auf das gewaehlte Kind',
-   str_contains($res['body'], 'vocab.php?user=' . $userId), 'Link nicht gefunden');
+ok('Der Knopf verweist auf die Schule',
+   str_contains($res['body'], 'vocab.php?school=' . $testSchule), 'Link nicht gefunden');
 
-// Sprache wechseln muss die tiefere Auswahl fallenlassen, sonst zeigte der
-// Filter auf eine Lerneinheit, die zur neuen Sprache nicht gehoert.
-$res = http($base . '/admin/vocab.php?' . http_build_query(
-    ['user' => $userId, 'language' => $languageId, 'unit' => $unitId]));
+// Oben wechseln muss die tiefere Auswahl fallenlassen, sonst zeigte der
+// Filter auf eine Lerneinheit, die zum neuen Kurs nicht gehoert.
+$res = http($base . '/admin/vocab.php?' . http_build_query($adminWahl));
 
 /** Die Links einer Filterzeile, an ihrer Beschriftung erkannt. */
 $zeile = static function (string $body, string $label): array {
@@ -1831,53 +1999,103 @@ $zeile = static function (string $body, string $label): array {
     return array_map(static fn (string $l): string => html_entity_decode($l), $links[1]);
 };
 
-/*
- * Die Zeile heisst "Kurs", nicht "Sprache": Im Admin ist das Ding seit dem
- * Schulumbau ein Kurs, und "Englisch - 8c" unterscheidet sich von
- * "Englisch - 9a", waehrend "Englisch" das nicht tut.
- */
-$sprachLinks = $zeile($res['body'], 'Kurs');
-ok('Die Kurszeile hat Knoepfe', $sprachLinks !== []);
-ok('Beim Kurswechsel faellt die Lerneinheit weg',
-   $sprachLinks !== [] && !array_filter($sprachLinks,
-       static fn (string $l): bool => str_contains($l, 'unit=')),
-   implode(' ', $sprachLinks));
+$schulLinks = $zeile($res['body'], 'Schule');
+ok('Beim Schulwechsel fallen Kurs und Lerneinheit weg',
+   $schulLinks !== [] && !array_filter($schulLinks,
+       static fn (string $l): bool => str_contains($l, 'course=') || str_contains($l, 'unit=')),
+   implode(' ', $schulLinks));
 
-$kindLinks = $zeile($res['body'], 'Kind');
-ok('Beim Kindwechsel fallen Sprache und Lerneinheit weg',
-   $kindLinks !== [] && !array_filter($kindLinks,
-       static fn (string $l): bool => str_contains($l, 'language=') || str_contains($l, 'unit=')),
-   implode(' ', $kindLinks));
+/*
+ * Die Zeile "Kurs" traegt jetzt wirklich den Kurs. Frueher trug sie die
+ * Sprache (?language=) und hiess nur Kurs.
+ */
+$kursLinks = $zeile($res['body'], 'Kurs');
+ok('Die Kurszeile hat Knoepfe', $kursLinks !== []);
+ok('Sie setzt den Kurs, nicht die Sprache',
+   $kursLinks !== [] && !array_filter($kursLinks,
+       static fn (string $l): bool => str_contains($l, 'language=') || !str_contains($l, 'course=')),
+   implode(' ', $kursLinks));
+ok('Beim Kurswechsel faellt die Lerneinheit weg',
+   $kursLinks !== [] && !array_filter($kursLinks,
+       static fn (string $l): bool => str_contains($l, 'unit=')),
+   implode(' ', $kursLinks));
 
 $einheitLinks = $zeile($res['body'], 'Lerneinheit');
-ok('Die Lerneinheit-Knoepfe behalten Kind und Sprache',
+ok('Die Lerneinheit-Knoepfe behalten Schule und Kurs',
    $einheitLinks !== [] && !array_filter($einheitLinks,
-       static fn (string $l): bool => !str_contains($l, 'language=')),
+       static fn (string $l): bool => !str_contains($l, 'course=') || !str_contains($l, 'school=')),
    implode(' ', $einheitLinks));
 
 ok('Die gewaehlte Lerneinheit ist hervorgehoben',
    str_contains($res['body'], 'class="chip on"'));
 
 // Die Filter muessen weiter ueber die URL steuerbar sein.
-$res = http($base . '/admin/sentences.php?' . http_build_query(['user' => $userId]));
+$res = http($base . '/admin/sentences.php?' . http_build_query(['course' => $adminKurs]));
 ok('Filter per URL wirken weiterhin', $res['status'] === 200
    && str_contains($res['body'], 'Testkind'));
+ok('Und die Einheit fuehrt zu ihren Vokabeln',
+   str_contains($res['body'], 'unit=' . $unitId));
+
+section('Accounts nach Schule und Klasse');
+
+/*
+ * Eine Karte je Konto mit allen Formularen offen - bei drei Kindern ging
+ * das, bei einer Schule mit dreihundert nicht mehr. Jetzt: Filter, eine
+ * Zeile je Konto, die Formulare aufklappbar.
+ */
+$res = http($base . '/admin/users.php?school=' . $testSchule);
+ok('Die Kontenliste laesst sich nach Schule filtern',
+   str_contains($res['body'], 'class="chip on"') && str_contains($res['body'], 'Testkind'));
+ok('Mit einer Zeile je Konto, zum Aufklappen',
+   str_contains($res['body'], '<details class="konto'));
+ok('Sie nennt Kurse statt Sprachen',
+   str_contains($res['body'], 'Kurs') && !preg_match('/\d+ Sprachen,/', $res['body']));
+ok('Und die Sofortsuche findet auch die Zeilen dort',
+   str_contains($res['body'], 'data-filter-ziel="kontenliste"'));
+
+$andereSchule = (int) (qv('SELECT id FROM schools WHERE id <> ? ORDER BY id LIMIT 1', [$testSchule]) ?? 0);
+if ($andereSchule > 0) {
+    $res = http($base . '/admin/users.php?school=' . $andereSchule);
+    ok('In einer anderen Schule steht das Testkind nicht',
+       !str_contains($res['body'], '>Testkind<'));
+}
+
+$res = http($base . '/admin/users.php?' . http_build_query(['school' => $testSchule, 'rolle' => 1]));
+ok('Der Filter Lehrkraefte laesst Kinder weg', !str_contains($res['body'], '>Testkind<'));
+
+$res = adminPost('users.php', ['set_password' => '1', 'id' => $userId, 'password' => 'geheim123',
+                               'school' => $testSchule],
+                 'school=' . $testSchule);
+ok('Nach dem Speichern bleibt der Filter stehen',
+   str_contains($res['body'], 'Passwort gesetzt')
+   && preg_match('#users\.php\?school=' . $testSchule . '&amp;rolle=#', $res['body']) === 1,
+   'die Rollen-Knoepfe tragen die Schule weiter');
+
+$res = http($base . '/admin/users.php');
+ok('Die Rueckfrage beim Loeschen verspricht nicht mehr "alle Vokabeln"',
+   !str_contains($res['body'], 'mit allen Sprachen und Vokabeln'));
+
 
 section('Farbwahl im Admin');
 
 require_once __DIR__ . '/../lib/colors.php';
 
-ok('Die Palette hat 64 Farben', count(color_palette()) === 64, (string) count(color_palette()));
+ok('Die Palette hat 49 Farben - sieben mal sieben', count(color_palette()) === 49,
+   (string) count(color_palette()));
 ok('Alle sind gültige Hexwerte',
    count(array_filter(color_palette(),
-       static fn (string $c): bool => preg_match('/^#[0-9a-f]{6}$/', $c) === 1)) === 64);
-ok('Und alle verschieden', count(array_unique(color_palette())) === 64);
+       static fn (string $c): bool => preg_match('/^#[0-9a-f]{6}$/', $c) === 1)) === 49);
+ok('Und alle verschieden', count(array_unique(color_palette())) === 49);
+// Der Rueckfall heisst Blau und muss es auch sein - als Index [27] war er
+// nach dem Wechsel auf 7x7 still ein Gruen geworden.
+[$rb, $gb, $bb] = sscanf(color_default(), '#%02x%02x%02x');
+ok('Die Standardfarbe ist ein Blau', $bb > $rb && $bb > $gb, color_default());
 
 $res = http($base . '/admin/users.php');
 ok('Die Seite zeigt das Farbfeld', str_contains($res['body'], 'class="palette"'));
 ok('Kein Auswahlfeld mehr für die Farbe', !str_contains($res['body'], '<select name="color"'));
-ok('64 Kacheln stehen zur Wahl',
-   substr_count($res['body'], 'class="swatch-pick"') >= 64,
+ok('49 Kacheln stehen zur Wahl',
+   substr_count($res['body'], 'class="swatch-pick"') >= 49,
    (string) substr_count($res['body'], 'class="swatch-pick"'));
 
 // Das Feld liegt zugeklappt hinter einem Knopf - offen in der Zeile schrumpften
@@ -1906,7 +2124,7 @@ ok('Ungültige Farbe wird abgefangen',
    (string) qv('SELECT color FROM users WHERE id = ?', [$userId]));
 
 // Das Symbol muss mit heller wie dunkler Farbe lesbar bleiben.
-foreach ([color_palette()[0] => 'sehr hell', color_palette()[7] => 'sehr dunkel'] as $c => $was) {
+foreach ([color_palette()[0] => 'sehr hell', color_palette()[6] => 'sehr dunkel'] as $c => $was) {
     q('UPDATE users SET color = ? WHERE id = ?', [$c, $userId]);
     $png = http($base . '/icon.php?u=' . $userId . '&s=192');
     ok("Symbol wird erzeugt ($was: $c)", str_starts_with($png['body'], chr(0x89) . 'PNG'));
@@ -3184,6 +3402,16 @@ ok('Die Schublade schiebt sich herein',
    'als Animation, nicht als Uebergang - <details> blendet seinen Inhalt aus');
 ok('Und legt einen Schleier ueber die Seite',
    preg_match('/\.menue > \.schleier\s*\{[^}]*position:\s*fixed/s', $cssK) === 1);
+/*
+ * Als App auf dem Home-Bildschirm zeichnet iOS bis unter die Dynamic Island.
+ * Die Leiste rechnete das mit, die Schubladen nicht - ihr erster Eintrag lag
+ * unter der Insel.
+ */
+ok('Und faengt unter der Dynamic Island an',
+   preg_match('/\.menue > \.schublade\s*\{[^}]*padding:\s*calc\(env\(safe-area-inset-top\)/s',
+              $cssK) === 1);
+ok('Und endet ueber dem Balken zum Wischen',
+   preg_match('/\.menue > \.schublade\s*\{[^}]*safe-area-inset-bottom/s', $cssK) === 1);
 ok('Und sie steht dort, wo beide Bereiche sie finden',
    !str_contains($cssB, '.menue > .schublade'),
    'in admin.css waere sie fuer die App unerreichbar');
@@ -4419,7 +4647,7 @@ ok('Mit Name, Benutzername und Farbe',
    json_encode($d['profile'] ?? null));
 ok('Und der Auskunft, dass noch das Anfangspasswort gilt',
    ($d['profile']['initial'] ?? null) === true);
-ok('Dazu die Farbpalette zur Auswahl', count($d['palette'] ?? []) === 64);
+ok('Dazu die Farbpalette zur Auswahl', count($d['palette'] ?? []) === 49);
 
 // Name und Farbe aendern.
 [$d, $s] = apiAls($kontoJar, fn () => apiCall('profile', 'save',
@@ -5485,7 +5713,13 @@ ok('Waehrend der Erzeugung dreht sich ein Spinner',
    str_contains($unitQuelle, "info.status === 'running'")
    && str_contains($unitQuelle, 'spinner inline'));
 ok('Und die Zeile ist solange nicht anklickbar',
-   preg_match('/\$\{wartet \? .disabled./', $unitQuelle) === 1);
+   preg_match('/const zu\s*=\s*wartet \|\| fertig;/', $unitQuelle) === 1
+   && preg_match('/\$\{zu \? .disabled./', $unitQuelle) === 1);
+// Eine geschaffte Uebung ebenso - aber gruen statt grau, und mit ihrem Symbol.
+ok('Eine geschaffte Uebung ist ebenfalls nicht anklickbar',
+   str_contains($unitQuelle, "fertig ? ' geschafft' : ''"));
+ok('Und setzt beim Druck nicht mehr still den Lernstand zurueck',
+   !str_contains($unitQuelle, 'zuruecksetzen(unitId, mode)'));
 /*
  * Nachgefragt wird jetzt ueber den Vorrat, nicht ueber einen eigenen
  * Endpunkt: Ein Aufruf holt beides auf einmal - ob die Saetze fertig sind
@@ -6865,11 +7099,51 @@ ok('Und die Reihe ist waagerecht',
 // ---- Das Farbfeld nimmt feste Groessen statt der halben Seite.
 
 $cssS = (string) file_get_contents(__DIR__ . '/../style.css');
-ok('Das Farbfeld waechst nicht mehr mit der Fensterbreite',
-   preg_match('/\.swatches\s*\{[^}]*grid-template-columns:\s*repeat\(8,\s*\d+px\)/s', $cssS) === 1,
-   'mit 1fr wurden daraus 64 Kacheln von je siebzig Pixeln');
-ok('Die Farbprobe hat eine feste Groesse',
-   preg_match('/\.swatch-pick span\s*\{[^}]*width:\s*\d+px/s', $cssS) === 1);
+/*
+ * In der App hat das Farbfeld dieselben Kaestchen wie der Monatskalender
+ * darueber. Dass es dabei mit der Karte waechst, ist in Ordnung: Es liegt
+ * zugeklappt hinter einem Knopf.
+ */
+preg_match('/\.monatsgitter\s*\{([^}]*)\}/s', $cssS, $kal);
+preg_match('/\.swatches\s*\{([^}]*)\}/s', $cssS, $fel);
+$spalten = static fn (string $b): string =>
+    preg_match('/grid-template-columns:\s*([^;]+);/', $b, $m) === 1 ? trim($m[1]) : '';
+$abstand = static fn (string $b): string =>
+    preg_match('/\bgap:\s*([^;]+);/', $b, $m) === 1 ? trim($m[1]) : '';
+ok('Das Farbfeld hat die Spalten des Kalenders',
+   $spalten($fel[1] ?? '') === 'repeat(7, 1fr)'
+   && $spalten($fel[1] ?? '') === $spalten($kal[1] ?? ''),
+   $spalten($fel[1] ?? '') . ' / ' . $spalten($kal[1] ?? ''));
+ok('Und seinen Abstand', $abstand($fel[1] ?? '') === $abstand($kal[1] ?? ''),
+   $abstand($fel[1] ?? '') . ' / ' . $abstand($kal[1] ?? ''));
+ok('Die Kaestchen sind quadratisch und gerundet wie die Tage',
+   preg_match('/\.swatches \.swatch-pick span\s*\{[^}]*aspect-ratio:\s*1;[^}]*border-radius:\s*7px/s', $cssS) === 1
+   && preg_match('/\.monatstag\s*\{[^}]*border-radius:\s*7px/s', $cssS) === 1);
+
+$profilQ = (string) file_get_contents(__DIR__ . '/../views/profile.js');
+ok('Das Feld liegt zugeklappt hinter einem Knopf mit der Farbe',
+   str_contains($profilQ, '<details class="farbwahl"')
+   && !str_contains($profilQ, '<details class="farbwahl" open')
+   && str_contains($profilQ, 'class="farbpunkt"'));
+ok('Darueber steht das App-Symbol wie auf dem Home-Bildschirm',
+   str_contains($profilQ, 'class="homescreen"') && str_contains($profilQ, 'class="appsymbol"'));
+
+/*
+ * Die Vorschau rechnet wie icon.php: Verlauf nach unten auf 68 %, und Voki
+ * auf 84 % der Kante. Zwei Stellen, eine Regel - laeuft eine davon weg,
+ * zeigt das Konto ein anderes Symbol als das Telefon.
+ *
+ * Hier wurde einmal auch die Schrift des Anfangsbuchstabens verglichen.
+ * Den Buchstaben gibt es nicht mehr, und mit ihm ging Roboto.
+ */
+$iconQ = (string) file_get_contents(__DIR__ . '/../icon.php');
+ok('Vorschau und icon.php dunkeln gleich ab',
+   str_contains($iconQ, '$c * 0.68') && str_contains($profilQ, 'SYMBOL_DUNKEL = 0.68'));
+ok('Und zeigen Voki gleich gross',
+   str_contains($iconQ, 'VOKI_ANTEIL          = 0.84')
+   && preg_match('/\.appsymbol img\s*\{[^}]*width:\s*84%/', $cssS) === 1);
+ok('Und zeigen denselben Voki',
+   str_contains($profilQ, 'assets/voki-icon.svg') && !str_contains($profilQ, 'anfangsbuchstabe'));
 
 q('DELETE FROM classes WHERE id = ?', [$fsKlasseId]);
 
@@ -8113,9 +8387,13 @@ foreach ($sperre['packages'] ?? [] as $paket) {
 ok('Jedes mitgelieferte Paket steht in den Lizenzen', $fehlend === [],
    implode(', ', $fehlend));
 ok('Und die Schriften und die Fahnen auch',
-   str_contains($lizenzen, 'Roboto') && str_contains($lizenzen, 'Twemoji')
-   && str_contains($lizenzen, 'CC-BY 4.0') && str_contains($lizenzen, 'Apache'),
+   str_contains($lizenzen, 'Fredoka') && str_contains($lizenzen, 'Nunito')
+   && str_contains($lizenzen, 'Twemoji') && str_contains($lizenzen, 'CC-BY 4.0'),
    'beide verlangen die Nennung der Herkunft');
+// Und umgekehrt: Was nicht mehr mitkommt, steht auch nicht mehr darin.
+// Roboto ging mit dem Anfangsbuchstaben auf dem App-Symbol.
+ok('Keine Lizenz fuer eine Schrift, die nicht mehr beiliegt',
+   str_contains($lizenzen, 'Roboto') === is_file(__DIR__ . '/../assets/Roboto-Bold.ttf'));
 
 /*
  * Seit die Oberflaeche eigene Schriften mitliefert, gehoeren sie dazu - die
@@ -8335,7 +8613,7 @@ ok('Auch die Vokabeln haben jetzt eine Suche',
 
 $bootJs = (string) file_get_contents(__DIR__ . '/../admin/_boot.php');
 ok('Der Filter versteckt Zeilen, statt sie zu loeschen',
-   str_contains($bootJs, 'tr.hidden = !passt'),
+   str_contains($bootJs, 'zeile.hidden = !passt'),
    'wer das Suchwort wieder leert, soll alles wiederbekommen');
 ok('Und sagt, wie viele von wie vielen zu sehen sind',
    str_contains($bootJs, "' von ' + zeilen.length"),

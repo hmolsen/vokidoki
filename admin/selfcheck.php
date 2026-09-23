@@ -72,17 +72,20 @@ foreach (['pdo_mysql', 'gd', 'curl', 'mbstring', 'openssl', 'json'] as $ext) {
     ]);
 }
 
-check($checks, 'GD mit FreeType', static function (): array {
-    $info = function_exists('gd_info') ? gd_info() : [];
-    $ok   = !empty($info['FreeType Support']);
-    return [$ok, $ok
-        ? 'vorhanden - Icons mit Initiale möglich'
-        : 'fehlt - Icons werden ohne Buchstabe erzeugt'];
-});
-
-check($checks, 'Schriftdatei für Icons', static function (): array {
-    $f = dirname(__DIR__) . '/assets/Roboto-Bold.ttf';
-    return [is_file($f), is_file($f) ? 'assets/Roboto-Bold.ttf' : 'assets/Roboto-Bold.ttf fehlt'];
+/*
+ * Hier standen "GD mit FreeType" und "Schriftdatei fuer Icons" - fuer den
+ * Anfangsbuchstaben auf dem Symbol. Jetzt ist es Voki, als fertiges PNG:
+ * GD muss es nur lesen koennen, eine Schrift braucht es nicht mehr.
+ */
+check($checks, 'Voki fürs App-Symbol', static function (): array {
+    $f = dirname(__DIR__) . '/assets/voki-icon.png';
+    if (!is_file($f)) {
+        return [false, 'assets/voki-icon.png fehlt - Symbole zeigen nur einen Punkt'];
+    }
+    if (!function_exists('imagecreatefrompng') || @imagecreatefrompng($f) === false) {
+        return [false, 'GD kann assets/voki-icon.png nicht lesen'];
+    }
+    return [true, 'assets/voki-icon.png lesbar'];
 });
 
 check($checks, 'Icon-Cache beschreibbar', static function (): array {
@@ -122,8 +125,18 @@ check($checks, 'Datenbankverbindung', static function (): array {
 });
 
 check($checks, 'Schema vollständig', static function (): array {
-    $needed = ['users', 'device_tokens', 'languages', 'units', 'vocab',
-               'progress', 'ai_requests', 'settings'];
+    /*
+     * Die Liste kommt aus schema.sql selbst. Hier stand sie von Hand - mit
+     * den acht Tabellen der ersten Fassung. Schulen, Klassen und Kurse kamen
+     * dazu, die Liste nicht, und der Test meldete "vollstaendig" fuer eine
+     * Datenbank, in der der ganze Lehrkraft-Bereich fehlte.
+     */
+    $sql = (string) @file_get_contents(dirname(__DIR__) . '/schema.sql');
+    preg_match_all('/CREATE TABLE IF NOT EXISTS\s+`?(\w+)`?/i', $sql, $m);
+    $needed = array_map('strtolower', $m[1]);
+    if ($needed === []) {
+        return [false, 'schema.sql nicht gefunden - gehört neben index.php'];
+    }
     $have   = [];
     foreach (qa('SHOW TABLES') as $row) {
         $have[] = strtolower((string) reset($row));
@@ -149,39 +162,15 @@ check($checks, 'Kategorien der Vokabeln', static function (): array {
     $alle  = (int) qv('SELECT COUNT(*) FROM vocab');
     return [true, $offen === 0
         ? $alle . ' Vokabeln, alle eingeordnet'
-        : sprintf('%d von %d ohne Kategorie - unter "Vokabeln" nachtragen', $offen, $alle)];
+        : sprintf('%d von %d ohne Kategorie - unter "Unterlagen" nachtragen', $offen, $alle)];
 });
 
-check($checks, 'Lernstand je Kind', static function (): array {
-    if (!table_exists('progress')) {
-        return [false, 'Tabelle progress fehlt'];
-    }
-
-    $alt  = index_exists('progress', 'uq_progress');
-    $neu  = index_exists('progress', 'uq_progress_user');
-    $vocab = index_exists('progress', 'idx_progress_vocab');
-
-    /*
-     * Der alte Schlüssel (vocab_id, mode) lässt je Vokabel nur EINE Zeile zu -
-     * für alle Kinder zusammen. Solange jede Vokabel einem Kind gehört, fällt
-     * das nicht auf. Teilen sich mehrere Kinder einen Vokabelsatz, teilen sie
-     * sich damit auch den Lernstand.
-     *
-     * Der alte Schlüssel deckt zugleich den Fremdschlüssel auf vocab_id ab.
-     * Er darf deshalb erst fallen, wenn idx_progress_vocab steht.
-     */
-    if ($neu && !$alt && $vocab) {
-        return [true, 'je Kind getrennt (uq_progress_user)'];
-    }
-    if ($neu && $alt) {
-        return [true, 'umgestellt, alter Schlüssel noch da - kann entfernt werden'];
-    }
-    if ($neu && !$vocab) {
-        return [false, 'idx_progress_vocab fehlt - der Fremdschlüssel wäre ungedeckt'];
-    }
-
-    return [false, 'noch am alten Schlüssel (vocab_id, mode): ein Lernstand für alle Kinder'];
-});
+/*
+ * Hier stand "Lernstand je Kind": ob progress noch am alten Schluessel
+ * (vocab_id, mode) hing, der einen Lernstand fuer alle Kinder zuliess. Eine
+ * Frage der Umstellung - schema.sql bringt uq_progress_user von Anfang an
+ * mit, und eine Datenbank von vor der Umstellung gibt es nicht mehr.
+ */
 
 check($checks, 'Reihenfolge der Vokabeln', static function (): array {
     if (!table_exists('vocab')) {
@@ -211,7 +200,7 @@ check($checks, 'Reihenfolge der Vokabeln', static function (): array {
 
     if (!$riegel) {
         return [false, 'Positionen sind lückenlos, aber uq_vocab_pos fehlt - '
-                     . 'die Schemaänderungen ausführen'];
+                     . 'die Tabelle stammt nicht aus dem aktuellen schema.sql'];
     }
 
     return [true, 'lückenlos, und uq_vocab_pos hält es so'];
@@ -233,7 +222,7 @@ check($checks, 'Sprachkürzel', static function (): array {
 
     // Kein Fehler, nur unbequem: Die Übung läuft, aber ohne Tastaturhinweis
     // und ohne die Reihe der Sonderzeichen über dem Eingabefeld.
-    return [true, sprintf('%d von %d ohne Kürzel (%s) - im Vokabelbereich nachtragbar',
+    return [true, sprintf('%d von %d ohne Kürzel (%s) - unter "Unterlagen" beim Kurs nachtragbar',
         count($ohne), $gesamt,
         implode(', ', array_column($ohne, 'name')))];
 });
@@ -244,7 +233,7 @@ check($checks, 'Lückentext', static function (): array {
     }
     $saetze = (int) qv('SELECT COUNT(*) FROM sentences');
     if ($saetze === 0) {
-        return [true, 'noch keine Sätze - sie entstehen beim ersten Üben'];
+        return [true, 'noch keine Sätze - sie entstehen im Hintergrund, sobald eine Lerneinheit eingelesen ist'];
     }
     $vokabeln = (int) qv('SELECT COUNT(DISTINCT vocab_id) FROM sentences');
     return [true, sprintf('%d Sätze zu %d Vokabeln (%s)',

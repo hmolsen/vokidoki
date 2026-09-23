@@ -59,6 +59,7 @@ header('Referrer-Policy: same-origin');
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title><?= h($dok['titel']) ?> - Vokidoki</title>
+<?= favicon_html() ?>
 <link rel="stylesheet" href="<?= h(url('/style.css?v=' . app_version())) ?>">
 <?= thema_kopf_skript() ?>
 </head><body class="rechtsseite">
