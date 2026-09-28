@@ -2189,9 +2189,11 @@ section('Aktualisieren statt Abmelden in der App');
 // In der installierten App gibt es keine Adresszeile - ohne diesen Weg kaeme
 // eine neue Fassung dort nie an.
 $js = file_get_contents(__DIR__ . '/../app/core.js');
-ok('core.js bringt hardRefresh mit', str_contains($js, 'export async function hardRefresh'));
-ok('Es meldet den Service Worker ab', str_contains($js, 'r.unregister()'));
-ok('Und leert den Zwischenspeicher', str_contains($js, 'caches.delete'));
+$aktJs = (string) file_get_contents(__DIR__ . '/../app/aktualisieren.js');
+ok('core.js bringt hardRefresh mit', str_contains($js, 'export function hardRefresh')
+   && str_contains($js, 'frischHolen('));
+ok('Es meldet den Service Worker ab', str_contains($aktJs, 'r.unregister()'));
+ok('Und leert den Zwischenspeicher', str_contains($aktJs, 'caches.delete'));
 
 /*
  * Beides steht jetzt im Einstellungsmenue, nicht mehr als Symbol in der
@@ -2284,16 +2286,34 @@ ok('Und keine Datei steht doppelt darin',
 
 
 $appjs = (string) file_get_contents(__DIR__ . '/../app/app.js');
-ok('Die App fragt in Abständen nach', str_contains($appjs, "api('meta', 'version')"));
+ok('Die App fragt in Abständen nach',
+   str_contains($appjs, 'fassungBeobachten(') && str_contains($aktJs, 'api/meta.php?action=version'));
 ok('Vor allem, wenn sie in den Vordergrund kommt',
-   str_contains($appjs, 'visibilitychange'));
+   str_contains($aktJs, 'visibilitychange'));
 ok('Und bietet das Band von oben an',
-   str_contains($appjs, 'update-bar') && str_contains($appjs, 'hardRefresh()'));
-
-$corejs = (string) file_get_contents(__DIR__ . '/../app/core.js');
+   str_contains($aktJs, 'update-bar') && str_contains($aktJs, 'Es gibt eine neue Fassung'));
 ok('Aktualisieren holt jede Datei ausdrücklich neu',
-   str_contains($corejs, "cache: 'reload'") && str_contains($corejs, 'VT.assets'),
+   str_contains($aktJs, "cache: 'reload'") && str_contains($appjs, 'VT.assets'),
    'kein gezieltes Neuladen');
+
+/*
+ * Das Band gibt es jetzt überall, nicht nur in der App: Der Lehrkraft-
+ * Bereich hat ein eigenes Symbol auf dem Home-Bildschirm und liegt dort
+ * genauso lange im Hintergrund.
+ */
+$fassung = app_version();
+foreach (['/teacher/' => 'Anmeldung zum Lehrkraft-Bereich', '/admin/' => 'Admin'] as $pfad => $wo) {
+    $seite = http($base . $pfad)['body'];
+    ok("Die $wo hat das Band",
+       str_contains($seite, 'aktualisieren.js?v=' . $fassung)
+       && str_contains($seite, 'data-fassung="' . $fassung . '"'));
+}
+ok('Auch Lehrkraft-Bereich und Admin bewegen den Stempel',
+   in_array('teacher/teacher.js', app_assets(), true) && in_array('admin/admin.css', app_assets(), true),
+   'sonst meldet das Band eine Änderung an teacher.js nie');
+[$meta] = apiCall('meta', 'version');
+ok('Und die Fassung dort ist die, nach der das Band fragt',
+   ($meta['version'] ?? '') === $fassung);
 
 // Der Grund, warum die Sonderzeichen nach einem Update noch an der alten
 // Stelle standen: Der Service Worker selbst kam aus dem Zwischenspeicher und

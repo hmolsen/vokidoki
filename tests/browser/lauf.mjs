@@ -39,6 +39,7 @@ import { pruefe as kursanlegen } from './kursanlegen.mjs';
 import { pruefe as feiern } from './feiern.mjs';
 import { pruefe as melden } from './melden.mjs';
 import { pruefe as weiter } from './weiter.mjs';
+import { pruefe as fassung } from './fassung.mjs';
 
 const hier  = dirname(fileURLToPath(import.meta.url));
 // Die Anwendung: dort liegen lib/ und assets/, von dort laufen die php-Aufrufe.
@@ -79,6 +80,7 @@ try {
     await pruefeFreigabeKommtAn(f, aus);
     await menues(f, aus);
     await sortieren(f, aus, wurzel);
+    await fassung(f, aus, wurzel);
     /*
      * Spaet: gibt in der Lerneinheit nur noch EINE Vokabel frei und raeumt
      * den Lernstand weg. Wer davor zaehlt, zaehlt sonst etwas anderes.

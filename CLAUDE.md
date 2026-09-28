@@ -78,5 +78,6 @@ auf ausdrücklichen Wunsch.
   sieht nicht, ob und wie sie üben -, muss stimmen (`app/lib/einwilligung.php`).
   Nichts im Lehrkraft-Bereich darf zeigen, welches Kind die App benutzt.
 - Neue Dateien der Oberfläche landen automatisch in `app_assets()`
-  (`app/lib/version.php`) - sie globbt `*.js` und `views/*.js`. Ohne das merkt eine
-  auf dem Homescreen installierte App von einer Änderung nichts.
+  (`app/lib/version.php`) - sie globbt `*.js`, `views/*.js`, `teacher/*.js` und
+  `admin/*.css`. Ohne das merkt eine auf dem Homescreen installierte App - auch
+  die Verwaltung - von einer Änderung nichts.

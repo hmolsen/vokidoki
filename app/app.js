@@ -3,8 +3,9 @@
    eines Shared-Hostings läuft. */
 
 import {
-    VT, go, render, notice, api, hardRefresh, navQuelle, navAbmelden, serieQuelle,
+    VT, go, render, notice, api, navQuelle, navAbmelden, serieQuelle,
 } from './core.js';
+import { fassungBeobachten } from './aktualisieren.js';
 import { loginView } from './views/login.js';
 import { languagesView } from './views/languages.js';
 import { languageView } from './views/language.js';
@@ -277,71 +278,14 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
 
 // ------------------------------------------------------------ Aktualisierung
 
-const UPDATE_INTERVAL = 5 * 60 * 1000;
-
-/**
- * Fragt in Abständen nach, ob auf dem Server etwas Neues liegt.
- *
- * Die installierte App wird selten wirklich beendet - sie liegt wochenlang im
- * Hintergrund und merkt von einer Aktualisierung sonst gar nichts. Deshalb
- * wird nicht nur nach der Uhr gefragt, sondern vor allem dann, wenn sie wieder
- * in den Vordergrund kommt. Die API läuft nie über den Zwischenspeicher, die
- * Antwort ist also verlässlich die des Servers.
+/*
+ * Das Band "Es gibt eine neue Fassung" - dasselbe wie im Lehrkraft-Bereich
+ * und im Admin, deshalb in aktualisieren.js. Nach dem Neuholen geht es an
+ * den Anfang der App, mit frischer Adresse am Zwischenspeicher vorbei.
  */
-function watchForUpdate() {
-    if (!VT.version) return;
-
-    let gemeldet = false;
-
-    const nachsehen = async () => {
-        if (gemeldet || document.visibilityState === 'hidden') return;
-
-        try {
-            const { version } = await api('meta', 'version');
-            if (version && version !== VT.version) {
-                gemeldet = true;
-                showUpdateBar();
-            }
-        } catch {
-            // Offline oder Serverproblem - beim nächsten Mal wieder.
-        }
-    };
-
-    document.addEventListener('visibilitychange', nachsehen);
-    window.addEventListener('focus', nachsehen);
-    setInterval(nachsehen, UPDATE_INTERVAL);
-}
-
-/** Band, das von oben hereinfährt. Bleibt stehen, bis jemand darauf reagiert. */
-function showUpdateBar() {
-    if (document.getElementById('update-bar')) return;
-
-    const bar = document.createElement('div');
-    bar.className = 'update-bar';
-    bar.id = 'update-bar';
-    bar.setAttribute('role', 'status');
-    bar.innerHTML = `
-        <span class="update-text">Es gibt eine neue Fassung.</span>
-        <button type="button" class="update-go" id="update-go">Aktualisieren</button>
-        <button type="button" class="update-later" id="update-later"
-                aria-label="Später">&times;</button>
-    `;
-    document.body.appendChild(bar);
-
-    // Erst im nächsten Bild einblenden, sonst gibt es keinen Übergang.
-    requestAnimationFrame(() => bar.classList.add('show'));
-
-    document.getElementById('update-go').addEventListener('click', () => {
-        const knopf = document.getElementById('update-go');
-        knopf.disabled = true;
-        knopf.textContent = 'Einen Moment...';
-        hardRefresh();
-    });
-
-    document.getElementById('update-later').addEventListener('click', () => {
-        bar.classList.remove('show');
-        setTimeout(() => bar.remove(), 300);
-    });
-}
-
-watchForUpdate();
+fassungBeobachten({
+    base:    VT.base,
+    version: VT.version,
+    assets:  Array.isArray(VT.assets) ? VT.assets : [],
+    ziel:    () => `${VT.base}/?frisch=${Date.now()}`,
+});

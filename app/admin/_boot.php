@@ -127,8 +127,7 @@ function admin_login_page(?string $error): never
         <meta name="robots" content="noindex, nofollow">
         <title>Admin - Vokidoki</title>
         <?= favicon_html() ?>
-        <link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
-        <link rel="stylesheet" href="<?= h(admin_url('admin.css')) ?>">
+        <?= verwaltung_stile_html() ?>
     </head>
     <body>
     <div class="app" style="max-width:420px">
@@ -382,8 +381,7 @@ function admin_head(string $title, string $active): void
         <meta name="robots" content="noindex, nofollow">
         <title><?= h($title) ?> - Vokidoki Admin</title>
         <?= favicon_html() ?>
-        <link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
-        <link rel="stylesheet" href="<?= h(admin_url('admin.css')) ?>">
+        <?= verwaltung_stile_html() ?>
     </head>
     <body class="admin">
     <header class="adminbar">
@@ -428,6 +426,8 @@ function admin_head(string $title, string $active): void
 
 function admin_foot(): void
 {
+    // Das Band "Es gibt eine neue Fassung" - wie in der App.
+    echo fassung_skript_html(), "\n";
     // Kleine Zugabe: Nach der Wahl klappt das Farbfeld zu und der Knopf zeigt
     // die neue Farbe. Ohne dieses Skript funktioniert die Wahl trotzdem - dann
     // bleibt das Feld eben offen stehen, bis gespeichert wird.

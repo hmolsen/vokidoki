@@ -26,6 +26,12 @@ declare(strict_types=1);
  * dazu. Damit bewegte sich der Versionsstempel nicht, wenn sich der Vorrat
  * änderte - eine auf dem Homescreen liegende App erfuhr von der Änderung
  * also überhaupt nichts und übte wochenlang mit der alten Fassung weiter.
+ *
+ * Dazu die Dateien des Lehrkraft-Bereichs und des Admins (teacher/*.js,
+ * admin/*.css). Die standen nicht in der Liste, und eine Änderung an ihnen
+ * bewegte den Stempel nicht - teacher.js?v= blieb derselbe, der Browser
+ * behielt die alte Fassung, und das Band "Es gibt eine neue Fassung", das
+ * es inzwischen auch dort gibt, hätte von ihr nie erfahren.
  */
 function app_assets(): array
 {
@@ -45,7 +51,8 @@ function app_assets(): array
     // array_unique, weil sw.js sowohl in der festen Liste steht als auch vom
     // Muster oben getroffen wird - doppelt geholt wird sie sonst auch.
     return array_values(array_unique(array_filter(
-        array_merge(['style.css'], $sammeln('*.js'), $sammeln('views/*.js')),
+        array_merge(['style.css'], $sammeln('*.js'), $sammeln('views/*.js'),
+                    $sammeln('teacher/*.js'), $sammeln('admin/*.css')),
         static fn (string $f): bool => is_file($root . '/' . $f),
     )));
 }

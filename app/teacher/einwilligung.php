@@ -36,8 +36,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['einwilligen']
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Willkommen - Vokidoki</title>
 <?= favicon_html() ?>
-<link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
-<link rel="stylesheet" href="<?= h(url('/admin/admin.css')) ?>">
+<?= verwaltung_stile_html() ?>
 <?= thema_kopf_skript() ?>
 </head><body class="admin"><main class="adminmain" style="max-width:560px">
 

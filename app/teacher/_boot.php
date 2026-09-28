@@ -323,8 +323,7 @@ function teacher_login_page(?string $error): never
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Anmeldung - Vokidoki</title>
 <?= favicon_html() ?>
-<link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
-<link rel="stylesheet" href="<?= h(url('/admin/admin.css')) ?>">
+<?= verwaltung_stile_html() ?>
 <?= thema_kopf_skript() ?>
 </head><body class="admin"><main class="adminmain" style="max-width:420px">
 <h1>Vokidoki</h1>
@@ -339,6 +338,7 @@ function teacher_login_page(?string $error): never
     <button class="btn" name="teacher_login" value="1">Anmelden</button>
 </form>
 <?= legal_links_html('teacher') ?>
+<?= fassung_skript_html() ?>
 </main></body></html>
     <?php
     exit;
@@ -352,8 +352,7 @@ function teacher_blocked_page(): never
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kurz Geduld - Vokidoki</title>
 <?= favicon_html() ?>
-<link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
-<link rel="stylesheet" href="<?= h(url('/admin/admin.css')) ?>">
+<?= verwaltung_stile_html() ?>
 <?= thema_kopf_skript() ?>
 </head><body class="admin"><main class="adminmain" style="max-width:520px">
 <h1>Kurz Geduld</h1>
@@ -713,8 +712,7 @@ $installToken = install_token($user);
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Verwaltung">
 <meta name="theme-color" content="<?= h((string) $user['color']) ?>">
-<link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
-<link rel="stylesheet" href="<?= h(url('/admin/admin.css')) ?>">
+<?= verwaltung_stile_html() ?>
 <?php
 /*
  * Die Farbwahl vor dem ersten Bild - sonst blitzt die helle Seite auf,
@@ -750,5 +748,7 @@ function teacher_foot(): void
 
     printf("<script src=\"%s\"></script>\n",
         h(url('/teacher/teacher.js?v=' . app_version())));
+    // Das Band "Es gibt eine neue Fassung" - wie in der App.
+    echo fassung_skript_html(), "\n";
     echo "</main></body></html>\n";
 }

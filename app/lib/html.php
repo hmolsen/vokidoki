@@ -35,3 +35,42 @@ function favicon_html(): string
         h(url('/assets/voki-icon.svg?v=' . $stand)),
     );
 }
+
+/**
+ * Die Stile des Lehrkraft-Bereichs und des Admins, mit Versionsstempel.
+ *
+ * Standen an sieben Stellen ohne Stempel da. Nach einer Änderung an
+ * admin.css lieferte der Browser deshalb tagelang die alte Fassung, und
+ * die neue Seite sah aus wie kaputt - bis jemand von Hand neu lud.
+ */
+function verwaltung_stile_html(): string
+{
+    require_once __DIR__ . '/version.php';
+    $v = '?v=' . app_version();
+    return sprintf(
+        '<link rel="stylesheet" href="%s">' . "\n" . '<link rel="stylesheet" href="%s">',
+        h(url('/style.css' . $v)),
+        h(url('/admin/admin.css' . $v)),
+    );
+}
+
+/**
+ * Das Band "Es gibt eine neue Fassung" für Seiten ausserhalb der App.
+ *
+ * Der Lehrkraft-Bereich hat ein eigenes Symbol auf dem Home-Bildschirm und
+ * liegt dort wochenlang im Hintergrund - ohne Band merkte er von keiner
+ * Aktualisierung etwas. aktualisieren.js startet von selbst, wenn es so
+ * eingebunden ist: mit der Fassung, mit der diese Seite ausgeliefert wurde,
+ * und den Dateien, die beim Aktualisieren frisch geholt werden.
+ */
+function fassung_skript_html(): string
+{
+    require_once __DIR__ . '/version.php';
+    return sprintf(
+        '<script type="module" src="%s" data-fassung="%s" data-base="%s" data-assets="%s"></script>',
+        h(url('/aktualisieren.js?v=' . app_version())),
+        h(app_version()),
+        h(base_path()),
+        h(json_encode(app_assets(), JSON_UNESCAPED_SLASHES)),
+    );
+}
