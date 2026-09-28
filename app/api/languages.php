@@ -22,7 +22,7 @@ switch (action()) {
              */
             'SELECT l.id, l.name, co.name AS course_name, l.flag_emoji, l.code,
                     (SELECT COUNT(*) FROM units u
-                      WHERE u.course_id = co.id) AS unit_count,
+                      WHERE u.course_id = co.id AND ' . unit_visible_sql('u') . ') AS unit_count,
                     (SELECT COUNT(*) FROM vocab v
                        JOIN units u2 ON u2.id = v.unit_id
                       WHERE u2.course_id = co.id

@@ -470,8 +470,8 @@ function normalisieren(text) {
     // Handytastatur liefert, ist nicht vorhersagbar.
     t = t.replace(/[’ʼ‘`´]/g, "'");
     t = t.replace(/[\s   ]+/g, ' ');
-    // Der Abstand vor einem Satzzeichen zählt nicht mit: Im Französischen
-    // gehört dort einer hin, auf einer Handytastatur tippt ihn kaum ein Kind.
+    // Der Abstand vor einem Satzzeichen zählt nicht mit: Ältere französische
+    // Sätze haben dort noch einen, und manches Kind tippt ihn.
     t = t.replace(/ +([.,;:!?])/g, '$1');
     return t.trim().toLowerCase();
 }
@@ -480,7 +480,8 @@ function falten(text) {
     return [...normalisieren(text)].map((z) => DIAKRITIKA[z] ?? z).join('');
 }
 
-const vereinfachen = (text) => falten(text).replace(/['\- ]/g, '');
+// Ohne Satzzeichen: Ein vergessenes Fragezeichen ist "Fast!", nicht falsch.
+const vereinfachen = (text) => falten(text).replace(/['\- .,;:!?¿¡]/g, '');
 
 /** @return {{correct: boolean, exact: boolean}} */
 export function antwortPruefen(getippt, erwartet) {
@@ -490,8 +491,8 @@ export function antwortPruefen(getippt, erwartet) {
     if (normalisieren(getippt) === normalisieren(erwartet)) {
         return { correct: true, exact: true };
     }
-    // Fehlende Akzente und Apostrophe verzeihen - auf einer Handytastatur
-    // sind sie mühsam, und der Sinn der Übung ist die Vokabel.
+    // Fehlende Akzente, Apostrophe und Satzzeichen verzeihen - auf einer
+    // Handytastatur sind sie mühsam, und der Sinn der Übung ist die Vokabel.
     if (vereinfachen(getippt) === vereinfachen(erwartet)) {
         return { correct: true, exact: false };
     }

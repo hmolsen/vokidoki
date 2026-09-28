@@ -152,5 +152,54 @@
         "correct": false,
         "exact": false,
         "was": "Abstand entschuldigt kein anderes Wort"
+    },
+    {
+        "getippt": "Comment ça va",
+        "erwartet": "Comment ça va ?",
+        "correct": true,
+        "exact": false,
+        "was": "Fragezeichen vergessen"
+    },
+    {
+        "getippt": "Bonne nuit",
+        "erwartet": "Bonne nuit!",
+        "correct": true,
+        "exact": false,
+        "was": "Ausrufezeichen vergessen"
+    },
+    {
+        "getippt": "I like it",
+        "erwartet": "I like it.",
+        "correct": true,
+        "exact": false,
+        "was": "Punkt vergessen"
+    },
+    {
+        "getippt": "Yes I do",
+        "erwartet": "Yes, I do",
+        "correct": true,
+        "exact": false,
+        "was": "Komma vergessen"
+    },
+    {
+        "getippt": "Como estas",
+        "erwartet": "¿Cómo estás?",
+        "correct": true,
+        "exact": false,
+        "was": "spanische Zeichen vergessen"
+    },
+    {
+        "getippt": "Salut?",
+        "erwartet": "Salut!",
+        "correct": true,
+        "exact": false,
+        "was": "falsches Satzzeichen"
+    },
+    {
+        "getippt": "Bonjour",
+        "erwartet": "Salut!",
+        "correct": false,
+        "exact": false,
+        "was": "ohne Satzzeichen bleibt ein anderes Wort falsch"
     }
 ]

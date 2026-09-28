@@ -7,9 +7,13 @@
  * überhaupt keine Spur.
  */
 
+import { execFileSync } from 'node:child_process';
 import { browser, alsLehrkraft, ok, abschnitt, schlafe } from './browser.mjs';
 
-export async function pruefe(f, aus) {
+const php = (wurzel, code) =>
+    execFileSync('php', ['-r', code], { cwd: wurzel, encoding: 'utf8' });
+
+export async function pruefe(f, aus, wurzel) {
     abschnitt('Lerneinheiten sortieren');
 
     const b = await browser({ port: 9416, breite: 1100, hoehe: 900, aus });
@@ -121,12 +125,42 @@ export async function pruefe(f, aus) {
 
         // ---- Dieselbe Reihenfolge sieht die Klasse.
 
+        /*
+         * Die beiden neuen sind leer, und leere Lerneinheiten zeigt die App
+         * nicht (unit_visible_sql()). Erst so, dann mit je einer
+         * freigegebenen Vokabel - sonst prüfte der Vergleich eine
+         * Reihenfolge aus einer einzigen Zeile.
+         */
         await b.geh(f.basis + '/#/lang/' + f.sprache, 2200);
+        const ohneLeere = await b.js(`[...document.querySelectorAll('.row[data-unit]')]
+            .map((el) => el.dataset.unit)`);
+        ok('Leere Lerneinheiten sieht die Klasse nicht',
+           ohneLeere.length === 1 && ohneLeere[0] === String(f.unit),
+           ohneLeere.join(', '));
+
+        const neue = nachher.filter((id) => id !== String(f.unit)).map(Number);
+        php(wurzel, `require 'lib/db.php';
+            foreach ([${neue.join(',')}] as $u) {
+                q("INSERT INTO vocab (unit_id, term_foreign, term_native, position)
+                   VALUES (?, 'probe', 'Probe', 0)", [$u]);
+                q('UPDATE units SET released_position = 1 WHERE id = ?', [$u]);
+            }`);
+
+        await b.geh(f.basis + '/#/lang/' + f.sprache, 2200);
+        await b.neuLaden(2200);
         const inDerApp = await b.js(`[...document.querySelectorAll('.row[data-unit]')]
             .map((el) => el.dataset.unit)`);
         ok('Die Klasse sieht sie in derselben Reihenfolge',
            inDerApp.join('|') === nachher.join('|'),
            inDerApp.join(', ') + ' gegen ' + nachher.join(', '));
+
+        // Die Probevokabeln wieder weg - die Abschnitte danach üben mit
+        // genau den Wörtern der Vorlage und zählen mit ihnen.
+        php(wurzel, `require 'lib/db.php';
+            foreach ([${neue.join(',')}] as $u) {
+                q('DELETE FROM vocab WHERE unit_id = ?', [$u]);
+                q('UPDATE units SET released_position = 0 WHERE id = ?', [$u]);
+            }`);
     } finally {
         b.schliessen();
     }

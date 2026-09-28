@@ -60,10 +60,10 @@ function answer_normalize(string $text): string
     $text = str_replace(["\u{2019}", "\u{02BC}", "\u{2018}", '`', "\u{00B4}"], "'", $text);
     $text = preg_replace('/[\s\x{00A0}\x{202F}\x{2009}]+/u', ' ', $text) ?? $text;
 
-    // Der Abstand vor einem Satzzeichen zählt nicht mit. Im Französischen
-    // gehört dort eines hin ("Salut !"), auf einer Handytastatur tippt es
-    // aber kaum ein Kind - gemeint ist beides dasselbe, also darf es nicht
-    // den Unterschied zwischen richtig und falsch ausmachen.
+    // Der Abstand vor einem Satzzeichen zählt nicht mit. Ältere französische
+    // Sätze haben dort noch einen ("Salut !", siehe punctuation_fix()), und
+    // manches Kind tippt ihn - gemeint ist beides dasselbe, also darf es
+    // nicht den Unterschied zwischen richtig und falsch ausmachen.
     $text = preg_replace('/ +([.,;:!?])/u', '$1', $text) ?? $text;
 
     return mb_strtolower(trim($text));
@@ -75,10 +75,17 @@ function answer_fold(string $text): string
     return strtr(answer_normalize($text), DIACRITICS);
 }
 
-/** Zusätzlich ohne Apostrophe, Bindestriche und Leerzeichen - die tolerante Stufe. */
+/**
+ * Zusätzlich ohne Apostrophe, Bindestriche, Leerzeichen und Satzzeichen -
+ * die tolerante Stufe.
+ *
+ * Die Satzzeichen kamen dazu, als "Comment ça va" ohne Fragezeichen als
+ * falsch zählte: Die Lücke fragt die Vokabel ab, nicht das Satzende. Wer es
+ * weglässt, bekommt "Fast!" und sieht die Schreibweise mit Zeichen.
+ */
 function answer_simplify(string $text): string
 {
-    return str_replace(["'", '-', ' '], '', answer_fold($text));
+    return preg_replace("/['\- .,;:!?¿¡]/u", '', answer_fold($text)) ?? '';
 }
 
 /**
@@ -98,8 +105,9 @@ function answer_check(string $typed, string $expected): array
         return ['correct' => true, 'exact' => true];
     }
 
-    // Fehlende Akzente und Apostrophe verzeihen - auf einer Handytastatur sind
-    // sie mühsam, und der Sinn der Übung ist die Vokabel, nicht die Tipparbeit.
+    // Fehlende Akzente, Apostrophe und Satzzeichen verzeihen - auf einer
+    // Handytastatur sind sie mühsam, und der Sinn der Übung ist die Vokabel,
+    // nicht die Tipparbeit.
     if (answer_simplify($typed) === answer_simplify($expected)) {
         return ['correct' => true, 'exact' => false];
     }
@@ -122,9 +130,8 @@ function sentence_clean(array $row, array $allowedVocab, ?string $lang = null): 
         return null;   // gehört nicht zur Anfrage
     }
 
-    // Abstände vor Satzzeichen richtigstellen, bevor geprüft und gespeichert
-    // wird - im Französischen gehört vor ! ? : ; eines hin, im Deutschen
-    // nicht. Die Lücke {} bleibt davon unberührt.
+    // Abstände vor Satzzeichen wegnehmen, bevor geprüft und gespeichert
+    // wird (punctuation_fix()). Die Lücke {} bleibt davon unberührt.
     $native  = punctuation_fix((string) ($row['native'] ?? ''), 'de');
     $foreign = punctuation_fix((string) ($row['foreign'] ?? ''), $lang);
     $answer  = punctuation_fix((string) ($row['answer'] ?? ''), $lang);

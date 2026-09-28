@@ -460,12 +460,12 @@ flash_render();
         <?= $badSpacing['sentences'] ?> Satz/Sätze
     </strong>
     <p class="tiny muted" style="margin:6px 0 12px">
-        Im Französischen gehört vor <code>!</code> <code>?</code> <code>:</code>
-        <code>;</code> ein Leerzeichen &ndash; &bdquo;Salut !&ldquo; ist also
-        richtig gesetzt. Im Deutschen, Englischen, Dänischen und Lateinischen
-        steht dort keines. Der Knopf rückt beides je Sprache zurecht und
-        räumt doppelte Abstände mit weg - in allen Schulen. Kostet nichts und
-        fragt kein Modell.
+        Vor <code>!</code> <code>?</code> <code>:</code> <code>;</code>
+        <code>.</code> <code>,</code> steht kein Leerzeichen, in keiner Sprache
+        &ndash; auch nicht mehr im Französischen: &bdquo;Salut!&ldquo; statt
+        &bdquo;Salut !&ldquo;. Der Knopf rückt den Bestand zurecht und räumt
+        doppelte Abstände mit weg - in allen Schulen. Kostet nichts und fragt
+        kein Modell.
     </p>
     <form method="post">
         <?= csrf_field() ?>

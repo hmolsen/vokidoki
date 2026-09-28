@@ -110,7 +110,7 @@ switch (action()) {
                FROM units u
                JOIN courses co ON co.id = u.course_id
                JOIN course_members m ON m.course_id = co.id AND m.user_id = ?
-              WHERE u.language_id IN ($platz)
+              WHERE u.language_id IN ($platz) AND " . unit_visible_sql('u') . "
               ORDER BY u.position, u.id",
             array_merge([$uid], $sprachIds),
         );

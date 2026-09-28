@@ -247,6 +247,17 @@ function teacher_druckbar(): array
  */
 function teacher_require(): array
 {
+    /*
+     * Start aus dem Symbol "Verwaltung" auf dem Home-Bildschirm - dessen
+     * start_url trägt den Geräte-Token (manifest.php?b=verwaltung). Gilt er
+     * nicht mehr, landet man ohne ihn auf der Anmeldung.
+     */
+    $token = $_GET['t'] ?? '';
+    if (is_string($token) && $token !== '') {
+        device_token_einloesen($token);
+        teacher_redirect('index.php');
+    }
+
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['teacher_login'])) {
         $username = strtolower(trim((string) ($_POST['username'] ?? '')));
         $password = (string) ($_POST['password'] ?? '');
@@ -489,6 +500,30 @@ function teacher_nav(array $user, ?int $kursId = null): void
                 <span class="micon" aria-hidden="true">&#128101;</span>
                 <span>Klassen und Kinder</span>
             </a>
+
+            <?php
+            /*
+             * Ganz unten, mit der Zahl: Kinder, die aus ihrer Klasse
+             * genommen wurden und ihr Konto behalten haben. Bei null
+             * abgeblendet statt weg - so weiss man, wo sie auftauchen
+             * würden.
+             */
+            $ohneKlasse = ($user['school_id'] ?? 0) > 0
+                ? students_without_class_count((int) $user['school_id']) : 0;
+            ?>
+            <?php if ($ohneKlasse > 0): ?>
+                <a class="mitem ohneklasse" href="<?= h(teacher_url('ohneklasse.php')) ?>">
+                    <span class="micon" aria-hidden="true">&#128100;</span>
+                    <span>Schüler:innen ohne Klassenzuordnung</span>
+                    <span class="mzahl"><?= $ohneKlasse ?></span>
+                </a>
+            <?php else: ?>
+                <span class="mitem ohneklasse aus" aria-disabled="true">
+                    <span class="micon" aria-hidden="true">&#128100;</span>
+                    <span>Schüler:innen ohne Klassenzuordnung</span>
+                    <span class="mzahl">0</span>
+                </span>
+            <?php endif; ?>
         </nav>
     </details>
 
@@ -656,6 +691,28 @@ function teacher_head(
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= h($title) ?> - Vokidoki</title>
 <?= favicon_html() ?>
+<?php
+/*
+ * Ein eigenes Symbol für den Home-Bildschirm, auf jeder Seite des Bereichs.
+ *
+ * Bis hierher stand ein Manifest nur in der Lernansicht. "Zum
+ * Home-Bildschirm" auf "Meine Kurse" legte deshalb ein Lesezeichen ab, das
+ * in einem eigenen Container ohne Anmeldung aufging. Jetzt startet das
+ * Symbol immer auf "Meine Kurse", angemeldet, egal von welcher Seite es
+ * angelegt wurde - der Weg dorthin steht in manifest.php?b=verwaltung.
+ *
+ * Die Statusleiste bleibt "default": Die Seiten hier reichen nicht unter
+ * die Uhr, wie es die Lernansicht mit ihren Abständen tut.
+ */
+$installToken = install_token($user);
+?>
+<link rel="manifest" href="<?= h(url('/manifest.php?b=verwaltung&t=' . urlencode($installToken))) ?>">
+<link rel="apple-touch-icon" sizes="180x180" href="<?= h(url('/icon.php?u=' . (int) $user['id'] . '&s=180&w=1')) ?>">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Verwaltung">
+<meta name="theme-color" content="<?= h((string) $user['color']) ?>">
 <link rel="stylesheet" href="<?= h(url('/style.css')) ?>">
 <link rel="stylesheet" href="<?= h(url('/admin/admin.css')) ?>">
 <?php

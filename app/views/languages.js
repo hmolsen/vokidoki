@@ -4,6 +4,7 @@ import {
     rechtsZeile,
 } from '../core.js';
 import { sprachen, einheitenDerSprache, vokabelnDerEinheit } from '../vorrat.js';
+import { installHinweis } from '../installieren.js';
 
 /* Die Sprachen, die hier gebraucht werden. Alles andere lässt sich
    im Formular darunter frei eintragen. */
@@ -56,9 +57,15 @@ export async function languagesView() {
                     <span class="name">Sprache</span>
                 </button>` : ''}
         </div>
-        ${installHint()}
+        <div id="installHinweis" hidden></div>
         ${rechtsZeile()}
     `);
+
+    installHinweis($('#installHinweis'), {
+        name:   VT.user.appName,
+        symbol: `${VT.base}/icon.php?u=${VT.user.id}&s=120`,
+        wohin:  'Es öffnet deine Kurse.',
+    });
 
     on('[data-lang]', 'click', (e) => go(`/lang/${e.currentTarget.dataset.lang}`));
     const add = $('#add');
@@ -92,24 +99,6 @@ function darfAnlegen() {
  * weswegen man hergekommen ist: den eigenen Kursen.
  */
 
-/**
- * iOS-Nutzern erklären, wie das eigene App-Symbol entsteht. Nur in Safari
- * sinnvoll - in der installierten App wäre der Hinweis sinnlos.
- */
-function installHint() {
-    const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
-    if (VT.standalone || !isIOS) return '';
-    return `
-        <div class="install">
-            <span class="big">\u{1F4F2}</span>
-            <div>
-                <strong>${esc(VT.user.appName)} auf den Home-Bildschirm</strong><br>
-                Unten auf <strong>Teilen</strong> tippen, dann
-                <strong>Zum Home-Bildschirm</strong>. Danach bist du dort
-                immer direkt angemeldet.
-            </div>
-        </div>`;
-}
 
 function showAddForm() {
     const presets = PRESETS.map((p, i) => `

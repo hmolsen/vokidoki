@@ -615,7 +615,9 @@ function initStudentAdd() {
      */
     const einhaengen = (kind) => {
         const tr = document.createElement('tr');
-        tr.className = 'hit';
+        // Verblasst von selbst (admin.css, frischWeg) - eine Bestätigung,
+        // keine Markierung, die stehen bleibt.
+        tr.className = 'frisch';
         tr.innerHTML = `
             <td data-label="Name">
                 <span class="coursetitle">
@@ -681,7 +683,12 @@ function initStudentAdd() {
             <a class="iconaction quiet" title="Zettel für dieses Kind drucken"
                href="${escapeHtml(zettelJe)}${kind.id}" target="_blank" rel="noopener">
                 <span aria-hidden="true">&#128424;</span> Zettel
-            </a>`;
+            </a>
+            <button class="iconaction danger" type="button"
+                    data-auskl="${kind.id}" data-name="${escapeHtml(kind.name)}"
+                    title="Aus der Klasse nehmen">
+                <span aria-hidden="true">&#10005;</span> Entfernen
+            </button>`;
     };
 
     const senden = async () => {
@@ -1318,10 +1325,11 @@ function initEinlesen() {
 
         knopf.disabled = true;
         weg.disabled = true;
-        knopf.classList.add('laeuft');
         fehler.hidden = true;
-        const vorher = text.textContent;
-        text.textContent = 'Die Seiten werden gelesen …';
+
+        // Voki liest, und die Seite ist so lange zu - siehe lesevoki.js.
+        const { vokiLiest } = await import(stapel.dataset.lesevoki);
+        const decke = vokiLiest('Voki liest die Seiten …');
 
         try {
             /*
@@ -1346,7 +1354,7 @@ function initEinlesen() {
             );
             if (!erkannt.ok) throw new Error(erkannt.error || 'Das Erkennen ging schief.');
 
-            text.textContent = 'Wird gespeichert …';
+            decke.text('Wird gespeichert …', '');
 
             const daten = new FormData();
             daten.set('add_scanned', '1');
@@ -1366,16 +1374,18 @@ function initEinlesen() {
              * zu vieles auf einmal - die Zahlen im Satz über der Tabelle,
              * der Knopf "Alles freigeben", die Zeilen, an denen der
              * Freigabebalken misst. Ein ?neu= in der Adresse sorgt dafür,
-             * dass die neuen Zeilen drüben grün dastehen.
+             * dass die neuen Zeilen drüben grün dastehen, ein ?titel=, dass
+             * nach der Überschrift auf den Fotos gefragt wird (unit.php).
+             * Die Decke bleibt bis zum Seitenwechsel liegen.
              */
             seiten.forEach((s) => URL.revokeObjectURL(s.url));
+            const titel = erkannt.title ? `&titel=${encodeURIComponent(erkannt.title)}` : '';
             window.location.href =
-                `${stapel.dataset.ziel}&neu=${gesichert.dazu}#frisch`;
+                `${stapel.dataset.ziel}&neu=${gesichert.dazu}${titel}#frisch`;
         } catch (e) {
+            decke.weg();
             fehler.textContent = e.message || 'Keine Verbindung zum Server.';
             fehler.hidden = false;
-            text.textContent = vorher;
-            knopf.classList.remove('laeuft');
             knopf.disabled = false;
             weg.disabled = false;
         }
@@ -1396,6 +1406,70 @@ async function jsonPost(url, rumpf, kopf = {}) {
 }
 
 initEinlesen();
+
+/**
+ * Rückfragen, die der Server schon offen ausliefert: dialog[data-sofort].
+ *
+ * So die Frage nach dem Titel von den Fotos (unit.php, ?titel=) und die
+ * nach den Kursen beim Zuordnen (ohneklasse.php, ?kind=&klasse=). In
+ * data-sofort stehen die Teile der Adresse, die die Frage ausgelöst haben -
+ * sie kommen danach heraus: Wer die Seite neu lädt, hat schon geantwortet
+ * und soll nicht noch einmal gefragt werden.
+ */
+function initSofortFragen() {
+    const frage = document.querySelector('dialog[data-sofort]');
+    if (!frage || typeof frage.showModal !== 'function') return;
+    const adresse = new URL(window.location.href);
+    frage.dataset.sofort.split(' ').forEach((teil) => adresse.searchParams.delete(teil));
+    history.replaceState(null, '', adresse);
+    frage.showModal();
+}
+
+initSofortFragen();
+
+/**
+ * Der Hinweis aufs Home-Bildschirm auf "Meine Kurse" (index.php). Das
+ * Modul hört auf Chromes Angebot zum Anlegen - je früher es geladen ist,
+ * desto sicherer bekommt es das mit.
+ */
+async function initInstallHinweis() {
+    const el = document.getElementById('installHinweis');
+    if (!el?.dataset.installieren) return;
+    const { installHinweis } = await import(el.dataset.installieren);
+    installHinweis(el, {
+        name:   el.dataset.name,
+        symbol: el.dataset.symbol,
+        wohin:  el.dataset.wohin,
+    });
+}
+
+initInstallHinweis();
+
+// Eine Auswahl, die schon die ganze Antwort ist: beim Wählen abschicken.
+document.addEventListener('change', (e) => {
+    const form = e.target.closest('form[data-sofortsenden]');
+    if (form && e.target.matches('select') && e.target.value !== '') form.submit();
+});
+
+/**
+ * "Entfernen" in der Klassenliste (class.php, #auskl): ein Fenster für
+ * alle Zeilen, Name und Nummer kommen aus dem Knopf. Der Name als Text,
+ * nicht als Markup - "N'Diaye <3" darf das Fenster nicht zerlegen.
+ */
+function initAusKlasse() {
+    const fenster = document.getElementById('auskl');
+    if (!fenster || typeof fenster.showModal !== 'function') return;
+
+    document.addEventListener('click', (e) => {
+        const knopf = e.target.closest('[data-auskl]');
+        if (!knopf) return;
+        fenster.querySelector('[data-name]').textContent = knopf.dataset.name;
+        fenster.querySelector('[name="remove_student"]').value = knopf.dataset.auskl;
+        fenster.showModal();
+    });
+}
+
+initAusKlasse();
 
 // --------------------------------------------- Lerneinheiten sortieren
 

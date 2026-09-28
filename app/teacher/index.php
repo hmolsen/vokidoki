@@ -204,4 +204,18 @@ teacher_flash_render();
 
 <?php endif; ?>
 
+<?php
+/*
+ * Der Weg aufs Home-Bildschirm - derselbe Hinweis wie in der Lernansicht
+ * (installieren.js), mit dem Symbol der Verwaltung. Leer am Rechner und in
+ * der schon installierten App; das entscheidet das Skript, weil nur der
+ * Browser weiss, auf welchem Gerät er läuft.
+ */
+?>
+<div id="installHinweis" hidden
+     data-installieren="<?= h(url('/installieren.js') . '?v=' . app_version()) ?>"
+     data-name="Verwaltung"
+     data-symbol="<?= h(url('/icon.php?u=' . (int) $user['id'] . '&s=120&w=1')) ?>"
+     data-wohin="Es öffnet „Meine Kurse“."></div>
+
 <?php teacher_foot(); ?>

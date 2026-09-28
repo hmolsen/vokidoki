@@ -4,15 +4,19 @@ declare(strict_types=1);
 require_once __DIR__ . '/db.php';
 
 /**
- * Initialpasswörter aus Adjektiv und Tier: "müder Gepard", "schnelle Schnecke".
+ * Initialpasswörter aus Adjektiv und Tier: "flinker Gepard", "schnelle Schnecke".
  *
  * Der Sinn ist, dass ein Zehnjähriger sein Passwort vom Blatt abtippen und
  * sich merken kann. Zwei Wörter, die zusammen ein Bild ergeben, leisten das;
  * eine Zeichenfolge nicht.
  *
  * Die Endung des Adjektivs richtet sich nach dem Geschlecht des Tieres -
- * "müder Gepard", aber "müde Schnecke" und "müdes Nilpferd". Ohne diese
- * Rücksicht entstünde "müde Gepard", und das wäre in einer Schule peinlich.
+ * "flinker Gepard", aber "flinke Schnecke" und "flinkes Nilpferd". Ohne diese
+ * Rücksicht entstünde "flinke Gepard", und das wäre in einer Schule peinlich.
+ *
+ * Und nur freundliche oder neutrale Adjektive - ein Kind liest sein
+ * Passwort als Urteil über sich, "fauler Hamster" gehört nicht auf den
+ * Zettel (siehe die Änderung password_words.freundlich in lib/schema.php).
  * Deshalb steht bei jedem Tier sein Geschlecht, und die Adjektive werden als
  * Stamm gepflegt und hier gebeugt.
  */

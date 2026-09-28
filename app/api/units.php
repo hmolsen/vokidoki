@@ -39,6 +39,15 @@ switch (action()) {
         $frei = ' AND v.position < u.released_position';
 
         /*
+         * Leere Lerneinheiten zeigt die App nicht (unit_visible_sql()).
+         * Ausgenommen ist die Wahl beim Einlesen: Dort hängt eine Lehrkraft
+         * gerade an eine Einheit an, die noch nichts freigegeben hat - die
+         * muss sie finden können.
+         */
+        $sichtbar = ($_GET['einlesen'] ?? '') === '1' && user_can($user, CAP_IMPORT)
+            ? '' : ' AND ' . unit_visible_sql('u');
+
+        /*
          * Und der Kurs statt u.user_id.
          *
          * Bis hierher stand hier noch "die Einheit gehoert einem Konto".
@@ -70,7 +79,7 @@ switch (action()) {
                       WHERE v.unit_id = u.id{$frei}) AS wrong
                FROM units u
                JOIN course_members m ON m.course_id = u.course_id AND m.user_id = ?
-              WHERE u.language_id = ?
+              WHERE u.language_id = ?{$sichtbar}
               ORDER BY u.position, u.id",
             [$uid, $uid, $uid, $uid, $uid, (int) $lang['id']],
         );

@@ -4,6 +4,7 @@ import {
 } from '../core.js';
 
 import { MAX_IMAGES, shrinkToBase64 } from './bilder.js';
+import { vokiLiest } from '../lesevoki.js';
 
 const draftKey = (languageId) => `vt-draft-${languageId}`;
 
@@ -23,7 +24,7 @@ let einheiten = [];
 async function kursHolen(languageId) {
     if (kursName !== null) return kursName;
     try {
-        const { language, units } = await api('units', 'list', { query: { language_id: languageId } });
+        const { language, units } = await api('units', 'list', { query: { language_id: languageId, einlesen: 1 } });
         kursName  = language?.course || language?.name || '';
         einheiten = Array.isArray(units) ? units : [];
     } catch {
@@ -144,7 +145,7 @@ function showCapture(languageId, images = []) {
 
     $('#analyze').addEventListener('click', async () => {
         clearError();
-        showWorking();
+        const decke = vokiLiest('Voki liest die Vokabeln …');
         try {
             const data = await api('import', 'analyze', {
                 body: {
@@ -156,8 +157,10 @@ function showCapture(languageId, images = []) {
             // Sicherstellen, dass die Liste da ist - der Pruefschritt baut
             // seine Wahl daraus.
             await kursHolen(languageId);
+            decke.weg();
             showReview(languageId, data.title, data.entries, false);
         } catch (err) {
+            decke.weg();
             // Fotos bewusst weiterreichen - sie noch einmal zu machen wäre ärgerlich.
             showCapture(languageId, images);
             showError(err.message);
@@ -165,16 +168,6 @@ function showCapture(languageId, images = []) {
     });
 
     refresh();
-}
-
-function showWorking() {
-    render(`
-        <div class="empty" style="padding-top:22vh">
-            <div class="spinner"></div>
-            <strong>Die Vokabeln werden gelesen...</strong>
-            <p class="tiny muted">Das dauert meist zehn bis zwanzig Sekunden.</p>
-        </div>
-    `);
 }
 
 // ------------------------------------------------------------------ Schritt 2: Prüfen
@@ -305,10 +298,16 @@ function showReview(languageId, title, entries, fromDraft) {
                  * derselbe. Sie in der Lernansicht abzusetzen hiess,
                  * ihr eine leere Liste zu zeigen - freigegeben ist ja noch
                  * nichts.
+                 *
+                 * Beim Anhängen fragt die Lehrkraft-Seite nach der
+                 * Überschrift von den Fotos (unit.php, ?titel=) - bei einer
+                 * neuen Lerneinheit stand sie schon im Titelfeld.
                  */
                 if (VT.user?.isTeacher) {
+                    const vorschlag = anId > 0 && title
+                        ? `&titel=${encodeURIComponent(title)}` : '';
                     window.location.href =
-                        `${VT.base}/teacher/unit.php?id=${data.unit_id}`;
+                        `${VT.base}/teacher/unit.php?id=${data.unit_id}${vorschlag}`;
                     await new Promise((r) => setTimeout(r, 4000));
                     return;
                 }

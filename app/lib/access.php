@@ -208,6 +208,23 @@ function visible_position(array $user, array $unit): int
 }
 
 /**
+ * Zeigt die App diese Lerneinheit überhaupt? Als SQL-Baustein.
+ *
+ * Nur, wenn mindestens eine Vokabel freigegeben ist. Eine leere Einheit -
+ * frisch angelegt, eingelesen, aber noch nicht aufgemacht - stand in der
+ * Liste der Kinder als "0 Vokabeln" und führte auf eine leere Seite. Für
+ * das Kind gibt es sie noch nicht; die Lehrkraft sieht sie im
+ * Lehrkraft-Bereich, und in der App dasselbe wie ihre Klasse (siehe oben).
+ *
+ * $u ist der Tabellenname der Einheit in der Abfrage.
+ */
+function unit_visible_sql(string $u = 'u'): string
+{
+    return "EXISTS (SELECT 1 FROM vocab vis WHERE vis.unit_id = {$u}.id
+                                            AND vis.position < {$u}.released_position)";
+}
+
+/**
  * Dasselbe, wenn nur die Nummern zur Hand sind.
  *
  * Die Funktionen in lib/progress.php und lib/sentences.php bekommen Zahlen,

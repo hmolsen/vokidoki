@@ -78,7 +78,7 @@ try {
     await pruefeKaltstart(f, aus);
     await pruefeFreigabeKommtAn(f, aus);
     await menues(f, aus);
-    await sortieren(f, aus);
+    await sortieren(f, aus, wurzel);
     /*
      * Spaet: gibt in der Lerneinheit nur noch EINE Vokabel frei und raeumt
      * den Lernstand weg. Wer davor zaehlt, zaehlt sonst etwas anderes.

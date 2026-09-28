@@ -9,9 +9,20 @@ declare(strict_types=1);
  * Installationen als getrennte Apps mit getrenntem Storage führt. Erst das
  * macht "zwei Icons auf einem iPhone, jedes dauerhaft beim eigenen Kind
  * eingeloggt" möglich.
+ *
+ * Mit b=verwaltung das Manifest des Lehrkraft-Bereichs: Start auf "Meine
+ * Kurse" statt in der Lernansicht, ein eigener Name und ein Symbol mit dem
+ * grauen Balken (icon.php?w=1). Vorher hatte der Lehrkraft-Bereich gar kein
+ * Manifest - wer dort "Zum Home-Bildschirm" wählte, bekam ein Lesezeichen
+ * auf die gerade offene Seite, ohne Anmeldung darin.
+ *
+ * Der Geltungsbereich ist in beiden Fällen die ganze App: Der Schalter
+ * zwischen Verwaltung und Lernansicht soll in der installierten App bleiben
+ * und nicht in Safari aufgehen.
  */
 
 require_once __DIR__ . '/lib/auth.php';
+require_once __DIR__ . '/lib/access.php';
 
 header('Content-Type: application/manifest+json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -41,13 +52,22 @@ if ($user === null) {
     exit;
 }
 
-$uid = (int) $user['id'];
+$uid        = (int) $user['id'];
+$verwaltung = ($_GET['b'] ?? '') === 'verwaltung' && user_is_teacher($user);
+$w          = $verwaltung ? '&w=1' : '';
 
 echo json_encode([
-    'name'             => app_name_for($user),
-    'short_name'       => $user['display_name'],
-    'description'      => 'Vokidoki von ' . $user['display_name'],
-    'start_url'        => url('/?t=' . urlencode($token)),
+    // Die Kennung der Installation - ohne sie nähme Chrome die start_url,
+    // und die trägt den Token: Jede neue Sitzung wäre eine neue App.
+    'id'               => $verwaltung ? url("/teacher/?konto=$uid") : url("/?konto=$uid"),
+    'name'             => $verwaltung ? 'Vokidoki Verwaltung' : app_name_for($user),
+    'short_name'       => $verwaltung ? 'Verwaltung' : $user['display_name'],
+    'description'      => $verwaltung
+        ? 'Vokidoki - Verwaltung für ' . $user['display_name']
+        : 'Vokidoki von ' . $user['display_name'],
+    'start_url'        => $verwaltung
+        ? url('/teacher/index.php?t=' . urlencode($token))
+        : url('/?t=' . urlencode($token)),
     'scope'            => url('/'),
     'display'          => 'standalone',
     'orientation'      => 'portrait',
@@ -55,8 +75,8 @@ echo json_encode([
     'theme_color'      => $user['color'],
     'lang'             => 'de',
     'icons'            => [
-        ['src' => url("/icon.php?u=$uid&s=192"), 'sizes' => '192x192', 'type' => 'image/png'],
-        ['src' => url("/icon.php?u=$uid&s=512"), 'sizes' => '512x512', 'type' => 'image/png'],
-        ['src' => url("/icon.php?u=$uid&s=512&p=1"), 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'maskable'],
+        ['src' => url("/icon.php?u=$uid&s=192$w"), 'sizes' => '192x192', 'type' => 'image/png'],
+        ['src' => url("/icon.php?u=$uid&s=512$w"), 'sizes' => '512x512', 'type' => 'image/png'],
+        ['src' => url("/icon.php?u=$uid&s=512&p=1$w"), 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'maskable'],
     ],
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);

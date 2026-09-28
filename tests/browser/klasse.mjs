@@ -41,11 +41,11 @@ export async function pruefe(f, aus) {
         await schlafe(1600);
 
         const nachher = await b.js(`({
-            neu:      document.querySelectorAll('#kinder tr.hit').length,
-            passwort: !!document.querySelector('#kinder tr.hit [name="reset_password"]'),
-            zettelJe: !!document.querySelector('#kinder tr.hit a[href*="print.php"]'),
-            name:     document.querySelector('#kinder tr.hit strong')?.textContent ?? '',
-            konto:    document.querySelector('#kinder tr.hit code')?.textContent ?? '',
+            neu:      document.querySelectorAll('#kinder tr.frisch').length,
+            passwort: !!document.querySelector('#kinder tr.frisch [name="reset_password"]'),
+            zettelJe: !!document.querySelector('#kinder tr.frisch a[href*="print.php"]'),
+            name:     document.querySelector('#kinder tr.frisch strong')?.textContent ?? '',
+            konto:    document.querySelector('#kinder tr.frisch code')?.textContent ?? '',
             zettel:   document.getElementById('zettelAlle')?.className ?? '',
             gesperrt: document.getElementById('zettelAlle')?.getAttribute('aria-disabled'),
         })`);
@@ -57,6 +57,13 @@ export async function pruefe(f, aus) {
         ok('Und sofort mit Zettel-Knopf', nachher.zettelJe);
         ok('Der Klassenzettel ist jetzt brauchbar',
            !nachher.zettel.includes('aus') && nachher.gesperrt === null, nachher.zettel);
+
+        // Gemeldet: Die Zeile blieb gruen, fuer immer. Sie soll bestaetigen,
+        // nicht markieren - nach gut zwei Sekunden ist sie wie die anderen.
+        await schlafe(2600);
+        const grund = await b.js(`getComputedStyle(
+            document.querySelector('#kinder tr.frisch td')).backgroundColor`);
+        ok('Und das Grün verblasst wieder', grund === 'rgba(0, 0, 0, 0)', grund);
 
         await b.bild('klasse');
     } finally {

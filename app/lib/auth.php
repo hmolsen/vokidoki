@@ -150,6 +150,53 @@ function device_token_user(string $token): ?array
 }
 
 /**
+ * Start aus einem Symbol auf dem Home-Bildschirm: den Token der start_url
+ * gegen eine Sitzung in *diesem* Container tauschen.
+ *
+ * iOS führt eine installierte Web-App mit eigenen Cookies - die Anmeldung
+ * aus Safari kommt nicht mit. Deshalb trägt die start_url den Token, und
+ * wer damit ankommt, ist angemeldet. Gebraucht von der App (index.php) und
+ * vom Lehrkraft-Bereich (teacher/_boot.php), die je ein eigenes Symbol
+ * haben. Danach leitet der Aufrufer auf eine Adresse ohne Token weiter,
+ * damit er nicht in Verlauf oder Screenshots landet.
+ */
+function device_token_einloesen(string $token): ?array
+{
+    $user = device_token_user($token);
+    if ($user !== null) {
+        login_user((int) $user['id']);
+        $_SESSION['device_token'] = $token;
+    }
+    return $user;
+}
+
+/**
+ * Der Token für den Manifest-Link: der dieser Installation, sonst ein frisch
+ * erzeugter für den nächsten "Zum Home-Bildschirm"-Vorgang.
+ *
+ * Einer je Sitzung, für beide Symbole: Legt eine Lehrkraft Lernansicht und
+ * Verwaltung auf denselben Bildschirm, tragen beide denselben Token - es ist
+ * dasselbe Gerät, und im Profil soll es einmal stehen, nicht zweimal.
+ */
+function install_token(array $user): string
+{
+    session_boot();
+    $known = $_SESSION['device_token'] ?? null;
+    if (is_string($known)) {
+        $besitzer = device_token_user($known);
+        if ($besitzer !== null && (int) $besitzer['id'] === (int) $user['id']) {
+            return $known;
+        }
+    }
+    $token = device_token_create(
+        (int) $user['id'],
+        substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? 'Unbekanntes Gerät'), 0, 128),
+    );
+    $_SESSION['device_token'] = $token;
+    return $token;
+}
+
+/**
  * Besitzform des Anzeigenamens: "Lilli" -> "Lillis", "Max" -> "Max'".
  *
  * Ein Name, der schon auf einen Zischlaut endet, bekommt KEIN zweites s -

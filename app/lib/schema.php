@@ -81,6 +81,28 @@ function schema_migrations(): array
             static fn (): bool => !column_exists('users', 'letter_template'),
             'ALTER TABLE users ADD COLUMN letter_template TEXT NULL AFTER consent_at',
         ],
+        /*
+         * Nur freundliche Adjektive in den Anfangspasswörtern.
+         *
+         * "fauler Hamster" und "langsame Schnecke" standen auf den Zetteln -
+         * ein Kind liest sein Passwort als Urteil über sich. Die Wörter
+         * gehen nicht weg, sondern auf inaktiv: Wer sie schon auf dem Zettel
+         * hat, meldet sich weiter damit an; neu vergeben werden sie nicht.
+         * Eine Anweisung für beides, weil ensure_schema() eine ausführt.
+         *
+         * Offen ist die Änderung nur, solange eines der Wörter noch aktiv
+         * ist - eine frische Installation kennt sie gar nicht erst.
+         */
+        'password_words.freundlich' => [
+            static fn (): bool => !schema_was_applied('password_words.freundlich')
+                && (int) qv("SELECT COUNT(*) FROM password_words
+                              WHERE kind = 'adjective' AND active = 1
+                                AND word IN ('müd', 'faul', 'frech', 'langsam', 'grimmig', 'brummig', 'schusselig', 'zappelig', 'schwer', 'streng', 'sprunghaft', 'kribbelig', 'schüchtern', 'tapsig', 'rund', 'schlank', 'nass')") > 0,
+            "INSERT INTO password_words (kind, word, gender, active) VALUES
+               ('adjective', 'müd', NULL, 0), ('adjective', 'faul', NULL, 0), ('adjective', 'frech', NULL, 0), ('adjective', 'langsam', NULL, 0), ('adjective', 'grimmig', NULL, 0), ('adjective', 'brummig', NULL, 0), ('adjective', 'schusselig', NULL, 0), ('adjective', 'zappelig', NULL, 0), ('adjective', 'schwer', NULL, 0), ('adjective', 'streng', NULL, 0), ('adjective', 'sprunghaft', NULL, 0), ('adjective', 'kribbelig', NULL, 0), ('adjective', 'schüchtern', NULL, 0), ('adjective', 'tapsig', NULL, 0), ('adjective', 'rund', NULL, 0), ('adjective', 'schlank', NULL, 0), ('adjective', 'nass', NULL, 0),
+               ('adjective', 'schön', NULL, 1), ('adjective', 'froh', NULL, 1), ('adjective', 'fein', NULL, 1), ('adjective', 'kühn', NULL, 1), ('adjective', 'toll', NULL, 1), ('adjective', 'flott', NULL, 1), ('adjective', 'hübsch', NULL, 1), ('adjective', 'lässig', NULL, 1), ('adjective', 'schick', NULL, 1), ('adjective', 'clever', NULL, 1), ('adjective', 'genial', NULL, 1), ('adjective', 'wunderbar', NULL, 1), ('adjective', 'friedlich', NULL, 1), ('adjective', 'kreativ', NULL, 1), ('adjective', 'zauberhaft', NULL, 1), ('adjective', 'fantastisch', NULL, 1), ('adjective', 'elegant', NULL, 1), ('adjective', 'frisch', NULL, 1), ('adjective', 'strahlend', NULL, 1), ('adjective', 'glänzend', NULL, 1)
+             ON DUPLICATE KEY UPDATE active = VALUES(active)",
+        ],
     ];
 }
 

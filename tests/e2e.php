@@ -1326,8 +1326,8 @@ foreach ($vorher as $z) {
 
 section('Abstände vor Satzzeichen');
 
-// Eine eigene Sprache mit französischem Kürzel - dort gilt die weite
-// Schreibweise, auf der deutschen Seite derselben Vokabel die enge.
+// Eine eigene Sprache mit französischem Kürzel - auch dort fällt der
+// Abstand vor Satzzeichen weg, wie auf der deutschen Seite.
 [$data] = apiCall('languages', 'create', ['name' => 'Abstandstest', 'flag' => '']);
 $absLang = (int) $data['id'];
 q('UPDATE languages SET code = ? WHERE id = ?', ['fr', $absLang]);
@@ -1336,10 +1336,10 @@ q('UPDATE languages SET code = ? WHERE id = ?', ['fr', $absLang]);
     'language_id' => $absLang,
     'title'       => 'Abstände',
     'entries'     => [
-        ['foreign' => 'Salut!',          'native' => 'Hallo !'],
-        ['foreign' => 'Bonne nuit  !',   'native' => 'Gute Nacht !'],
-        ['foreign' => 'Merci , Madame!', 'native' => 'Danke , gnädige Frau!'],
-        ['foreign' => 'Comment?',        'native' => 'Wie bitte ?'],
+        ['foreign' => 'Salut !',          'native' => 'Hallo !'],
+        ['foreign' => 'Bonne nuit  !',    'native' => 'Gute Nacht !'],
+        ['foreign' => 'Merci , Madame !', 'native' => 'Danke , gnädige Frau!'],
+        ['foreign' => 'Comment ?',        'native' => 'Wie bitte ?'],
     ],
 ]);
 $absUnit = (int) $data['unit_id'];
@@ -1347,30 +1347,30 @@ $absUnit = (int) $data['unit_id'];
 $eingelesen = qa('SELECT term_foreign, term_native FROM vocab WHERE unit_id = ? ORDER BY position',
                  [$absUnit]);
 
-ok('Die Fremdsprache bekommt beim Einlesen ihr Leerzeichen',
-   ($eingelesen[0]['term_foreign'] ?? '') === 'Salut !',
+ok('Die Fremdsprache verliert beim Einlesen ihr Leerzeichen',
+   ($eingelesen[0]['term_foreign'] ?? '') === 'Salut!',
    json_encode($eingelesen[0] ?? null, JSON_UNESCAPED_UNICODE));
-ok('Und die deutsche Seite verliert ihres',
+ok('Und die deutsche Seite ihres',
    ($eingelesen[0]['term_native'] ?? '') === 'Hallo!',
    json_encode($eingelesen[0] ?? null, JSON_UNESCAPED_UNICODE));
-ok('Doppelte Abstände werden zu einem',
-   ($eingelesen[1]['term_foreign'] ?? '') === 'Bonne nuit !',
+ok('Doppelte Abstände fallen ganz weg',
+   ($eingelesen[1]['term_foreign'] ?? '') === 'Bonne nuit!',
    json_encode($eingelesen[1] ?? null, JSON_UNESCAPED_UNICODE));
-ok('Komma eng, Ausrufezeichen weit - in einer Zeile',
-   ($eingelesen[2]['term_foreign'] ?? '') === 'Merci, Madame !'
+ok('Komma und Ausrufezeichen eng - in einer Zeile',
+   ($eingelesen[2]['term_foreign'] ?? '') === 'Merci, Madame!'
    && ($eingelesen[2]['term_native'] ?? '') === 'Danke, gnädige Frau!',
    json_encode($eingelesen[2] ?? null, JSON_UNESCAPED_UNICODE));
 
 // ---------------------------------------------- der Knopf für den Bestand
 // Altbestand nachstellen: So sah es aus, bevor das Einlesen es richtigstellte.
-q("UPDATE vocab SET term_foreign = 'Salut!', term_native = 'Hallo !'
+q("UPDATE vocab SET term_foreign = 'Salut !', term_native = 'Hallo !'
     WHERE unit_id = ? AND position = 0", [$absUnit]);
 
 $seite = http($base . '/admin/vocab.php?' . http_build_query(['school' => $testSchule]))['body'];
 ok('Der Admin merkt, dass Abstände krumm sind',
    str_contains($seite, 'name="fix_punctuation"'), 'keine Karte im Markup');
-ok('Und erklärt die französische Regel',
-   str_contains($seite, 'Salut !'));
+ok('Und sagt, dass es auch fürs Französische gilt',
+   str_contains($seite, '&bdquo;Salut!&ldquo; statt'));
 
 adminPost('vocab.php', ['fix_punctuation' => '1', 'school' => $testSchule],
           http_build_query(['school' => $testSchule]));
@@ -1378,7 +1378,7 @@ adminPost('vocab.php', ['fix_punctuation' => '1', 'school' => $testSchule],
 $nachher = q1('SELECT term_foreign, term_native FROM vocab WHERE unit_id = ? AND position = 0',
               [$absUnit]);
 ok('Der Knopf rückt den Bestand zurecht',
-   $nachher['term_foreign'] === 'Salut !' && $nachher['term_native'] === 'Hallo!',
+   $nachher['term_foreign'] === 'Salut!' && $nachher['term_native'] === 'Hallo!',
    json_encode($nachher, JSON_UNESCAPED_UNICODE));
 
 $seite = http($base . '/admin/vocab.php?' . http_build_query(['school' => $testSchule]))['body'];
@@ -1389,7 +1389,7 @@ ok('Danach verschwindet die Karte von selbst',
 adminPost('vocab.php', ['fix_punctuation' => '1', 'school' => $testSchule],
           http_build_query(['school' => $testSchule]));
 ok('Ein zweiter Durchlauf ändert nichts mehr',
-   qv('SELECT term_foreign FROM vocab WHERE unit_id = ? AND position = 0', [$absUnit]) === 'Salut !');
+   qv('SELECT term_foreign FROM vocab WHERE unit_id = ? AND position = 0', [$absUnit]) === 'Salut!');
 
 q('DELETE FROM languages WHERE id = ?', [$absLang]);
 
@@ -2405,6 +2405,17 @@ require_once __DIR__ . '/../app/lib/passwords.php';
 $adjektive = password_words(PW_ADJECTIVE);
 $tiere     = password_words(PW_ANIMAL);
 
+// Ein Kind liest sein Passwort als Urteil über sich - "fauler Hamster"
+// gehört nicht auf den Zettel.
+$unfreundlich = array_intersect(array_column($adjektive, 'word'),
+    ['müd', 'faul', 'frech', 'langsam', 'grimmig', 'brummig', 'schusselig', 'zappelig',
+     'schwer', 'streng', 'sprunghaft', 'kribbelig', 'schüchtern', 'tapsig', 'rund', 'schlank', 'nass']);
+ok('Keine unfreundlichen Adjektive in den Passwörtern', $unfreundlich === [],
+   implode(', ', $unfreundlich));
+ok('Dafür freundliche wie "schön" und "neugierig"',
+   in_array('schön', array_column($adjektive, 'word'), true)
+   && in_array('neugierig', array_column($adjektive, 'word'), true));
+
 ok('Es gibt genug Adjektive', count($adjektive) >= 50, count($adjektive) . ' Stück');
 ok('Es gibt genug Tiere', count($tiere) >= 50, count($tiere) . ' Stück');
 ok('Zusammen reichen sie für eine Schule',
@@ -3343,7 +3354,7 @@ ok('Das Skript haengt sie ein, ohne zu laden',
    && str_contains($skriptB['body'], "'X-Requested-With': 'fetch'"));
 ok('Und markiert sie als frisch',
    str_contains($skriptB['body'], "'locked frisch'")
-   && preg_match('/table\.release tr\.frisch td\s*\{[^}]*animation:\s*frischWeg/s', $cssB) === 1,
+   && preg_match('/table\.data tr\.frisch td\s*\{[^}]*animation:\s*frischWeg/s', $cssB) === 1,
    'gruen auftauchen und verblassen - eine Bestaetigung, die man nicht wegklickt');
 
 // ---- Und nach dem Einlesen geht es in die Freigabe, nicht in die App.
@@ -3356,7 +3367,7 @@ ok('Und markiert sie als frisch',
  */
 $einleseQuelle = (string) file_get_contents(__DIR__ . '/../app/views/import.js');
 ok('Nach dem Einlesen landet eine Lehrkraft in der Freigabe',
-   preg_match('/if \(VT\.user\?\.isTeacher\) \{.{0,200}?teacher\/unit\.php\?id=/s',
+   preg_match('/if \(VT\.user\?\.isTeacher\) \{.{0,600}?teacher\/unit\.php\?id=/s',
               $einleseQuelle) === 1,
    'nicht in der Schueleransicht - dort waere die Liste leer');
 ok('Und ein Kind weiterhin in der App',
@@ -4293,6 +4304,70 @@ ok('Und erfaehrt nicht, woran es lag',
 $res = teacherLogin($lehrerName, 'lehrerin123');
 ok('Die Lehrkraft kommt hinein',
    $res['status'] === 200 && str_contains($res['body'], 'Klassen'), "Status {$res['status']}");
+
+/*
+ * Das Symbol "Verwaltung" auf dem Home-Bildschirm.
+ *
+ * Bis hierher hatte der Lehrkraft-Bereich kein Manifest: "Zum
+ * Home-Bildschirm" auf "Meine Kurse" legte ein Lesezeichen ab, das ohne
+ * Anmeldung aufging. Jetzt hat jede Seite des Bereichs eines, das auf
+ * "Meine Kurse" startet - mit einem eigenen Symbol.
+ */
+ok('Der Lehrkraft-Bereich hat ein eigenes Manifest',
+   preg_match('~<link rel="manifest" href="[^"]*manifest\.php\?b=verwaltung&amp;t=([^"&]+)"~',
+              $res['body'], $vm) === 1);
+ok('Und ein eigenes Symbol für iOS',
+   str_contains($res['body'], 'icon.php?u=' . $lehrerId . '&amp;s=180&amp;w=1'));
+ok('Das iPhone nennt es "Verwaltung"',
+   str_contains($res['body'], 'apple-mobile-web-app-title" content="Verwaltung"'));
+
+$vToken = rawurldecode($vm[1] ?? '');
+$vMan   = json_decode(http($base . '/manifest.php?b=verwaltung&t=' . urlencode($vToken))['body'], true);
+ok('Das Symbol startet auf "Meine Kurse"',
+   str_contains((string) ($vMan['start_url'] ?? ''), '/teacher/index.php?t='),
+   (string) ($vMan['start_url'] ?? '(fehlt)'));
+ok('Mit dem Symbol mit Balken',
+   str_contains((string) ($vMan['icons'][0]['src'] ?? ''), '&w=1'));
+ok('Und bleibt dabei in der ganzen App',
+   ($vMan['scope'] ?? '') === rtrim($base, '/') . '/' || str_ends_with((string) ($vMan['scope'] ?? ''), '/app/'),
+   (string) ($vMan['scope'] ?? ''));
+$lMan = json_decode(http($base . '/manifest.php?t=' . urlencode($vToken))['body'], true);
+ok('Die Lernansicht derselben Lehrkraft startet in der Lernansicht',
+   !str_contains((string) ($lMan['start_url'] ?? ''), '/teacher/')
+   && ($lMan['id'] ?? '') !== ($vMan['id'] ?? ''));
+
+// Ein Kind bekommt über b=verwaltung nichts anderes als sein eigenes.
+$kMan = json_decode(http($base . '/manifest.php?b=verwaltung&t=' . urlencode($token))['body'], true);
+ok('Ein Kind bekommt kein Verwaltungs-Symbol',
+   !str_contains((string) ($kMan['start_url'] ?? ''), '/teacher/'));
+
+// Der Start aus dem Symbol: neuer Container, keine Sitzung, nur der Token.
+$leer = tempnam(sys_get_temp_dir(), 'vtsym');
+$ch = curl_init($base . '/teacher/index.php?t=' . urlencode($vToken));
+curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true,
+                        CURLOPT_COOKIEJAR => $leer, CURLOPT_COOKIEFILE => $leer]);
+$start = (string) curl_exec($ch);
+$ende  = (string) curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+curl_close($ch);
+@unlink($leer);
+ok('Aus dem Symbol ist man angemeldet', str_contains($start, 'Klassen und Kinder'));
+ok('Und der Token ist aus der Adresse', !str_contains($ende, 't='), $ende);
+
+$w = http($base . '/icon.php?u=' . $lehrerId . '&s=192&w=1');
+$wBild = imagecreatefromstring($w['body']);
+$grau  = imagecolorat($wBild, 6, 186);
+ok('Das Symbol hat unten den grauen Balken',
+   abs((($grau >> 16) & 255) - 84) < 6 && abs((($grau >> 8) & 255) - 90) < 6
+   && abs(($grau & 255) - 100) < 6, sprintf('#%06x', $grau));
+$oben = imagecolorat($wBild, 6, 0);   // Zeile 0: der Verlauf fängt bei der Farbe an
+ok('Und oben die Farbe des Kontos',
+   sprintf('%02x%02x%02x', ($oben >> 16) & 255, ($oben >> 8) & 255, $oben & 255)
+   === strtolower(ltrim((string) qv('SELECT color FROM users WHERE id = ?', [$lehrerId]), '#')));
+
+ok('Auf "Meine Kurse" steht der Weg aufs Home-Bildschirm',
+   str_contains($res['body'], 'id="installHinweis"') && str_contains($res['body'], 'installieren.js'));
+ok('Mit dem Symbol der Verwaltung darin',
+   str_contains($res['body'], 's=120&amp;w=1'));
 
 /*
  * Der Name der Schule steht im Pfad oben links und fuehrt zu den Klassen.
@@ -5653,16 +5728,19 @@ ok('Die Klasse zeigt auch ihre Kurse',
    str_contains($res['body'], 'Kurse dieser Klasse'));
 
 /*
- * Das Textfeld fuer die ganze Liste gibt es nur, solange die Klasse leer
- * ist. Danach waere ein Feld mit 28 Namen darin nur noch im Weg.
+ * Das Textfeld fuer die ganze Liste ist immer da - aufgeklappt nur bei
+ * leerer Klasse. Eine Zeit lang verschwand es danach ganz, und wer nach
+ * den Ferien fuenf Kinder nachtragen wollte, fand es nicht mehr.
  */
-ok('Bei gefuellter Klasse ist das grosse Textfeld weg',
-   !str_contains($res['body'], 'name="names"'));
+ok('Bei gefuellter Klasse ist das grosse Textfeld zugeklappt, aber da',
+   str_contains($res['body'], 'name="names"')
+   && str_contains($res['body'], '<details class="card klassenliste">'));
 
 $leereKlasse = class_create((int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]),
                             'Leer' . bin2hex(random_bytes(2)));
 $res = teacherGet('class.php?id=' . (int) $leereKlasse['id']);
-ok('Bei leerer Klasse ist es da', str_contains($res['body'], 'name="names"'));
+ok('Bei leerer Klasse ist es aufgeklappt',
+   str_contains($res['body'], '<details class="card klassenliste" open>'));
 q('DELETE FROM classes WHERE id = ?', [(int) $leereKlasse['id']]);
 
 $skriptK = http($base . '/teacher/teacher.js');
@@ -5978,6 +6056,134 @@ ok('Eine Klasse einer anderen Schule bleibt verschlossen',
 q('DELETE FROM classes WHERE id = ?', [$fremdeKlasse]);
 q('DELETE FROM schools WHERE id = ?', [$fremdeSchule2]);
 
+section('Kinder aus der Klasse nehmen - und ohne Klasse wiederfinden');
+
+$schuleK = (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]);
+
+// Die Klassenliste zum Einfügen bleibt, auch wenn schon Kinder da sind -
+// nur zugeklappt.
+$seite = teacherGet('class.php?id=' . $klasseId)['body'];
+ok('Die Klassenliste zum Einfügen steht auch bei gefüllter Klasse da',
+   str_contains($seite, 'name="add_students"'));
+ok('Zugeklappt, sobald Kinder in der Klasse sind',
+   preg_match('/<details class="card klassenliste">/', $seite) === 1);
+ok('Jede Zeile hat "Entfernen"',
+   substr_count($seite, 'data-auskl="') === count(class_members_list($klasseId)));
+ok('Und es gibt ein Fenster mit beiden Wegen',
+   str_contains($seite, 'id="auskl"') && str_contains($seite, 'value="loeschen"')
+   && str_contains($seite, 'value="behalten"'));
+
+// Zwei Kurse der Klasse, damit sich zeigt, was beim Entfernen mitgeht.
+$kursSprache = (int) qv("SELECT id FROM languages ORDER BY id LIMIT 1");
+q('INSERT INTO courses (school_id, class_id, language_id, name) VALUES (?, ?, ?, ?)',
+  [$schuleK, $klasseId, $kursSprache, 'Ohneklasse-Kurs A']);
+$kursA = (int) db()->lastInsertId();
+q('INSERT INTO courses (school_id, class_id, language_id, name) VALUES (?, ?, ?, ?)',
+  [$schuleK, $klasseId, $kursSprache, 'Ohneklasse-Kurs B']);
+$kursB = (int) db()->lastInsertId();
+
+$max  = q1("SELECT u.* FROM users u JOIN class_members m ON m.user_id = u.id
+             WHERE m.class_id = ? AND u.display_name = 'Max'", [$klasseId]);
+$anna = q1("SELECT u.* FROM users u JOIN class_members m ON m.user_id = u.id
+             WHERE m.class_id = ? AND u.display_name = 'Anna-Lena S.'", [$klasseId]);
+foreach ([$kursA, $kursB] as $k) {
+    course_add_member($k, (int) $max['id']);
+    course_add_member($k, (int) $anna['id']);
+}
+$ohneVorher = students_without_class_count($schuleK);
+
+// ---- Behalten: ohne Klasse, ohne deren Kurse, Konto und Lernstand bleiben.
+$res = teacherRequest($base . '/teacher/class.php?id=' . $klasseId, [
+    'remove_student' => (int) $max['id'], 'wie' => 'behalten',
+    'class_id' => $klasseId, 'csrf' => $lehrerCsrf,
+]);
+ok('"Behalten" meldet, wo das Kind jetzt steht', str_contains($res['body'], 'Ohne Klassenzuordnung'));
+ok('Das Kind ist nicht mehr in der Klasse',
+   qv('SELECT COUNT(*) FROM class_members WHERE class_id = ? AND user_id = ?',
+      [$klasseId, (int) $max['id']]) == 0);
+ok('Und nicht mehr in den Kursen der Klasse',
+   qv('SELECT COUNT(*) FROM course_members WHERE user_id = ? AND course_id IN (?, ?)',
+      [(int) $max['id'], $kursA, $kursB]) == 0);
+ok('Das Konto gibt es noch', q1('SELECT id FROM users WHERE id = ?', [(int) $max['id']]) !== null);
+ok('Die Zahl ohne Klasse steigt um eins',
+   students_without_class_count($schuleK) === $ohneVorher + 1);
+
+$seite = teacherGet('ohneklasse.php')['body'];
+ok('Es steht unter "Ohne Klassenzuordnung"', str_contains($seite, (string) $max['username']));
+ok('Das Menü führt dorthin, mit der Zahl',
+   preg_match('~<a class="mitem ohneklasse" href="[^"]*ohneklasse\.php">.*?<span class="mzahl">'
+              . ($ohneVorher + 1) . '</span>~s', $seite) === 1);
+
+// ---- Zuordnen: erst die Frage nach den Kursen, dann nur die gewählten.
+$frage = teacherGet('ohneklasse.php?kind=' . (int) $max['id'] . '&klasse=' . $klasseId)['body'];
+ok('Beim Wählen der Klasse fragt ein Fenster nach deren Kursen',
+   str_contains($frage, 'id="kurswahl"') && str_contains($frage, 'data-sofort="kind klasse"')
+   && str_contains($frage, 'value="' . $kursA . '"') && str_contains($frage, 'value="' . $kursB . '"'));
+
+$fremderKurs = (int) qv('SELECT id FROM courses WHERE class_id IS NULL OR class_id <> ? LIMIT 1', [$klasseId]);
+teacherRequest($base . '/teacher/ohneklasse.php', [
+    'assign' => '1', 'kind' => (int) $max['id'], 'klasse' => $klasseId,
+    'kurse' => array_values(array_filter([$kursA, $fremderKurs])), 'csrf' => $lehrerCsrf,
+]);
+ok('Das Kind ist wieder in der Klasse',
+   qv('SELECT COUNT(*) FROM class_members WHERE class_id = ? AND user_id = ?',
+      [$klasseId, (int) $max['id']]) == 1);
+ok('Und nur im angekreuzten Kurs',
+   array_map('intval', array_column(qa('SELECT course_id FROM course_members WHERE user_id = ?',
+       [(int) $max['id']]), 'course_id')) === [$kursA]);
+ok('Die Zahl ohne Klasse ist wieder die alte',
+   students_without_class_count($schuleK) === $ohneVorher);
+
+// ---- Löschen: das Konto ist weg, mit den Kursen.
+teacherRequest($base . '/teacher/class.php?id=' . $klasseId, [
+    'remove_student' => (int) $anna['id'], 'wie' => 'loeschen',
+    'class_id' => $klasseId, 'csrf' => $lehrerCsrf,
+]);
+ok('"Ganz löschen" löscht das Konto', q1('SELECT id FROM users WHERE id = ?', [(int) $anna['id']]) === null);
+ok('Und damit alle Kursmitgliedschaften',
+   qv('SELECT COUNT(*) FROM course_members WHERE user_id = ?', [(int) $anna['id']]) == 0);
+
+// ---- Nur Kinder dieser Klasse, und nur Kinder.
+teacherRequest($base . '/teacher/class.php?id=' . $klasseId, [
+    'remove_student' => $lehrerId, 'wie' => 'loeschen',
+    'class_id' => $klasseId, 'csrf' => $lehrerCsrf,
+]);
+ok('Eine Lehrkraft lässt sich darüber nicht löschen',
+   q1('SELECT id FROM users WHERE id = ?', [$lehrerId]) !== null);
+
+$ohneWahl = teacherRequest($base . '/teacher/class.php?id=' . $klasseId, [
+    'remove_student' => (int) $max['id'], 'wie' => '',
+    'class_id' => $klasseId, 'csrf' => $lehrerCsrf,
+]);
+ok('Ohne Antwort auf die Frage geschieht nichts',
+   qv('SELECT COUNT(*) FROM class_members WHERE class_id = ? AND user_id = ?',
+      [$klasseId, (int) $max['id']]) == 1);
+
+// ---- Die Überschrift von den Fotos wird gefragt, nicht einfach gesetzt.
+q('INSERT INTO units (language_id, course_id, title, released_position) VALUES (?, ?, ?, 0)',
+  [$kursSprache, $kursA, 'Unit 4']);
+$titelUnit = (int) db()->lastInsertId();
+$seite = teacherGet('unit.php?id=' . $titelUnit . '&titel=' . rawurlencode('Unit 4 - In the kitchen'))['body'];
+ok('Nach dem Einlesen fragt ein Fenster nach der Überschrift',
+   str_contains($seite, 'id="titelvorschlag"') && str_contains($seite, 'data-sofort="titel"')
+   && str_contains($seite, 'Unit 4 - In the kitchen') && str_contains($seite, 'name="rename_unit"'));
+ok('Mit beiden Titeln auf den Knöpfen',
+   str_contains($seite, '&bdquo;Unit 4 - In the kitchen&ldquo; nennen')
+   && str_contains($seite, '&bdquo;Unit 4&ldquo; behalten'));
+ok('Derselbe Titel in anderer Schreibweise ist keine Frage wert',
+   !str_contains(teacherGet('unit.php?id=' . $titelUnit . '&titel=UNIT%204')['body'], 'id="titelvorschlag"'));
+ok('Ohne Überschrift auf den Fotos auch nicht',
+   !str_contains(teacherGet('unit.php?id=' . $titelUnit)['body'], 'id="titelvorschlag"'));
+$js = (string) file_get_contents(__DIR__ . '/../app/teacher/teacher.js');
+ok('Das Einlesen reicht die Überschrift weiter',
+   str_contains($js, "encodeURIComponent(erkannt.title)"));
+ok('Und legt Voki als Decke über die Seite',
+   str_contains($js, "vokiLiest('Voki liest die Seiten …')")
+   && is_file(__DIR__ . '/../app/assets/voki-liest.svg'));
+
+q('DELETE FROM units WHERE id = ?', [$titelUnit]);
+q('DELETE FROM courses WHERE id IN (?, ?)', [$kursA, $kursB]);
+
 /*
  * Aufraeumen: erst die Kinder, dann die Klasse.
  *
@@ -6036,6 +6242,27 @@ $woerter = static fn (int $u): array => array_column(qa(
 ), 'term_foreign');
 
 ok('Mit drei Vokabeln', count($woerter($anUnit)) === 3, implode(',', $woerter($anUnit)));
+
+// ---- Leere Lerneinheiten zeigt die App nicht.
+
+/*
+ * Eine Einheit ohne Freigegebenes stand in der Liste der Kinder als
+ * "0 Vokabeln" und führte auf eine leere Seite. Nur beim Einlesen muss sie
+ * zur Wahl stehen - dort hängt eine Lehrkraft gerade etwas an.
+ */
+q('UPDATE units SET released_position = 0 WHERE id = ?', [$anUnit]);
+$idsIn = static fn (?array $l): array => array_map('intval', array_column($l['units'] ?? [], 'id'));
+[$leer] = apiCall('units', 'list', null, ['language_id' => $anLang]);
+ok('Eine Lerneinheit ohne Freigegebenes fehlt in der Liste der App',
+   !in_array($anUnit, $idsIn($leer), true), json_encode($idsIn($leer)));
+[$paket] = apiCall('bundle', 'get');
+ok('Und im Vorrat fürs Üben ohne Netz',
+   !in_array($anUnit, array_column($paket['einheiten'] ?? [], 'i'), true));
+[$zumEinlesen] = apiCall('units', 'list', null, ['language_id' => $anLang, 'einlesen' => 1]);
+ok('Beim Einlesen steht sie trotzdem zur Wahl', in_array($anUnit, $idsIn($zumEinlesen), true));
+q('UPDATE units SET released_position = 2 WHERE id = ?', [$anUnit]);
+[$wieder] = apiCall('units', 'list', null, ['language_id' => $anLang]);
+ok('Mit der ersten Freigabe ist sie da', in_array($anUnit, $idsIn($wieder), true));
 
 // ---- Anhaengen statt neu anlegen.
 
@@ -6320,9 +6547,8 @@ vocab_append($posUnit2, [['foreign' => 'Ça va ?', 'native' => 'Wie geht es ?']]
 $paar = q1('SELECT term_foreign, term_native FROM vocab WHERE unit_id = ?', [$posUnit2]);
 ok('Im Deutschen faellt der Abstand vor dem Fragezeichen weg',
    ($paar['term_native'] ?? '') === 'Wie geht es?', (string) ($paar['term_native'] ?? ''));
-ok('Im Franzoesischen bleibt er',
-   str_contains((string) ($paar['term_foreign'] ?? ''), ' ?')
-   || str_contains((string) ($paar['term_foreign'] ?? ''), "\u{202F}?"),
+ok('Im Franzoesischen ebenso',
+   ($paar['term_foreign'] ?? '') === 'Ça va?',
    (string) ($paar['term_foreign'] ?? ''));
 
 /*

@@ -51,6 +51,15 @@ KI-Aufrufe bereit; `daten/config.php` zeigt lokal bereits auf sie (Port 8124/812
 - `tests/router.php` stellt diesen Webroot für den eingebauten Server nach:
   die App unter `/app`, wie auf dem Server.
 
+## Committen
+
+Jeden abgeschlossenen Schritt committen, ohne dass danach gefragt wird:
+sobald eine Aufgabe fertig ist und die Suiten grün sind. Nicht mehrere
+Aufgaben unkommittet aufeinanderstapeln - sonst lassen sie sich hinterher
+nicht mehr getrennt nachvollziehen oder zurücknehmen. Commit-Nachrichten auf
+Deutsch, ohne Umlaute, im Stil der bisherigen (`git log`). Gepusht wird nur
+auf ausdrücklichen Wunsch.
+
 ## Wie hier geschrieben wird
 
 - Bezeichner und Kommentare auf Deutsch, Code-Bezeichner ohne Umlaute

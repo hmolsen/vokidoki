@@ -31,11 +31,7 @@ $appVersion = app_version();
 // entfernt, damit er nicht in Verlauf oder Screenshots landet.
 $token = isset($_GET['t']) && is_string($_GET['t']) ? $_GET['t'] : '';
 if ($token !== '') {
-    $tokenUser = device_token_user($token);
-    if ($tokenUser !== null) {
-        login_user((int) $tokenUser['id']);
-        $_SESSION['device_token'] = $token;
-    }
+    device_token_einloesen($token);
     header('Location: ' . url('/'), true, 302);
     exit;
 }
@@ -69,22 +65,8 @@ if ($sprung !== '') {
 
 $user = current_user();
 
-// Der Token für den Manifest-Link: der Token dieser Installation, sonst ein
-// frisch erzeugter für den nächsten "Zum Home-Bildschirm"-Vorgang.
-$manifestToken = null;
-if ($user !== null) {
-    session_boot();
-    $known = $_SESSION['device_token'] ?? null;
-    if (is_string($known) && device_token_user($known) !== null) {
-        $manifestToken = $known;
-    } else {
-        $manifestToken = device_token_create(
-            (int) $user['id'],
-            substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? 'Unbekanntes Gerät'), 0, 128),
-        );
-        $_SESSION['device_token'] = $manifestToken;
-    }
-}
+// Der Token für den Manifest-Link - siehe install_token().
+$manifestToken = $user !== null ? install_token($user) : null;
 
 $appName = $user !== null ? app_name_for($user) : 'Vokidoki';
 $color   = $user !== null ? $user['color'] : '#4f7cff';

@@ -535,6 +535,40 @@ teacher_flash_render();
     <input type="hidden" name="unit_id" value="<?= $unitId ?>">
 </form>
 
+<?php
+/*
+ * Der Titel von den Fotos - als Frage, nicht als Tat.
+ *
+ * Die KI liest die Überschrift der Buchseite mit. Einfach umbenennen wäre
+ * falsch: Wer eine Lerneinheit "Unit 3 - Teil 2" nennt und die zweite
+ * Hälfte der Seiten nachliest, will nicht, dass daraus wieder "Unit 3"
+ * wird. Also kommt der Vorschlag nach dem Einlesen über ?titel= mit und
+ * wird hier gefragt; "behalten" schliesst nur das Fenster.
+ *
+ * Gleich bis auf Gross- und Kleinschreibung zählt als gleich - "UNIT 3"
+ * aus dem Buch statt "Unit 3" ist keine Frage wert.
+ */
+$vorschlag = trim(preg_replace('/\s+/u', ' ', (string) ($_GET['titel'] ?? '')) ?? '');
+$vorschlag = mb_substr($vorschlag, 0, 128);
+if ($vorschlag !== '' && mb_strtolower($vorschlag) !== mb_strtolower(trim((string) $unit['title']))):
+?>
+<dialog id="titelvorschlag" class="rueckfrage" data-sofort="titel">
+    <p class="rueckfrage-zeichen" aria-hidden="true">&#128214;</p>
+    <p class="rueckfrage-text">Auf den Fotos steht die Überschrift
+        &bdquo;<?= h($vorschlag) ?>&ldquo;. Soll die Lerneinheit so heissen?</p>
+    <form method="post" action="<?= h($zurueck) ?>" class="rueckfrage-knoepfe titelwahl">
+        <?= teacher_csrf_field() ?>
+        <input type="hidden" name="title" value="<?= h($vorschlag) ?>">
+        <button class="btn secondary" type="submit" formmethod="dialog" value="behalten">
+            &bdquo;<?= h((string) $unit['title']) ?>&ldquo; behalten
+        </button>
+        <button class="btn" type="submit" name="rename_unit" value="1">
+            &bdquo;<?= h($vorschlag) ?>&ldquo; nennen
+        </button>
+    </form>
+</dialog>
+<?php endif; ?>
+
 <?php if ($zustand['status'] === SENTENCE_RUNNING): ?>
     <div class="notice">
         Die Lückensätze entstehen gerade. Das dauert je zwanzig Vokabeln etwa
@@ -982,6 +1016,7 @@ $neu = max(0, min($gesamt, (int) ($_GET['neu'] ?? 0)));
          data-language="<?= (int) $unit['language_id'] ?>"
          data-api="<?= h(url('/api/import.php')) ?>"
          data-bilder="<?= h(url('/views/bilder.js') . '?v=' . app_version()) ?>"
+         data-lesevoki="<?= h(url('/lesevoki.js') . '?v=' . app_version()) ?>"
          data-ziel="<?= h(teacher_url('unit.php') . '?id=' . $unitId) ?>"
          data-csrf="<?= h(teacher_csrf_token()) ?>">
     <h3>Ausgew&auml;hlte Seiten</h3>

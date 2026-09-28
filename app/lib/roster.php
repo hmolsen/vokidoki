@@ -342,3 +342,91 @@ function student_reset_password(int $userId): ?string
 
     return $passwort;
 }
+
+// ------------------------------------------------- Ohne Klasse
+
+/**
+ * Die Kinder einer Schule, die in keiner Klasse sind.
+ *
+ * So entstehen sie: Eine Lehrkraft nimmt ein Kind aus seiner Klasse, will
+ * das Konto aber behalten - es wechselt die Klasse, oder es kommt nach
+ * einer Pause zurück. Ohne diese Liste wäre es danach unauffindbar; der
+ * einzige Weg zu einem Kind führte über seine Klasse.
+ */
+function students_without_class(int $schoolId): array
+{
+    return qa(
+        "SELECT u.id, u.display_name, u.username, u.active,
+                (SELECT COUNT(*) FROM course_members cm WHERE cm.user_id = u.id) AS courses
+           FROM users u
+          WHERE u.school_id = ? AND u.role = 'student'
+            AND NOT EXISTS (SELECT 1 FROM class_members m WHERE m.user_id = u.id)
+          ORDER BY u.display_name, u.id",
+        [$schoolId],
+    );
+}
+
+/** Wie viele es sind - für die Zahl im Menü, ohne die Liste zu laden. */
+function students_without_class_count(int $schoolId): int
+{
+    return (int) qv(
+        "SELECT COUNT(*) FROM users u
+          WHERE u.school_id = ? AND u.role = 'student'
+            AND NOT EXISTS (SELECT 1 FROM class_members m WHERE m.user_id = u.id)",
+        [$schoolId],
+    );
+}
+
+/**
+ * Ein Kind aus der Klasse nehmen, das Konto bleibt.
+ *
+ * Mit der Klasse gehen die Kurse DIESER Klasse: Wer nicht mehr in der 5B
+ * ist, soll auch nicht mehr in "Englisch - 5B" stehen. Kurse quer durch
+ * die Jahrgänge bleiben. Der Lernstand bleibt ohnehin - er hängt am Konto,
+ * nicht an der Mitgliedschaft, und ist wieder da, wenn das Kind zurückkommt.
+ */
+function student_remove_from_class(int $userId, int $classId): void
+{
+    q('DELETE FROM class_members WHERE class_id = ? AND user_id = ?', [$classId, $userId]);
+    q("DELETE cm FROM course_members cm
+         JOIN courses co ON co.id = cm.course_id
+        WHERE cm.user_id = ? AND co.class_id = ? AND cm.member_role = 'student'",
+      [$userId, $classId]);
+}
+
+/**
+ * Das Konto eines Kindes ganz löschen.
+ *
+ * Mitgliedschaften in Klassen und Kursen, Geräte und Lernstand hängen per
+ * ON DELETE CASCADE daran; das Kostenprotokoll behält seine Zeilen ohne
+ * Konto. Nur Kinder - eine Lehrkraft verschwindet nicht über eine
+ * Klassenliste.
+ */
+function student_delete(int $userId): bool
+{
+    return q("DELETE FROM users WHERE id = ? AND role = 'student'", [$userId])->rowCount() > 0;
+}
+
+/**
+ * Ein Kind ohne Klasse einer Klasse zuordnen - und den gewählten ihrer Kurse.
+ *
+ * Nur Kurse genau dieser Klasse werden angenommen; eine gefälschte Nummer
+ * aus einer anderen Klasse fällt still heraus.
+ *
+ * @param list<int> $kursIds
+ * @return int In wie viele Kurse das Kind kam
+ */
+function student_assign_class(int $userId, int $classId, array $kursIds): int
+{
+    q('INSERT IGNORE INTO class_members (class_id, user_id) VALUES (?, ?)', [$classId, $userId]);
+
+    $erlaubt = array_map(static fn (array $c): int => (int) $c['id'], courses_for_class($classId));
+    $n = 0;
+    foreach (array_unique(array_map('intval', $kursIds)) as $kursId) {
+        if (in_array($kursId, $erlaubt, true)) {
+            course_add_member($kursId, $userId);
+            $n++;
+        }
+    }
+    return $n;
+}

@@ -899,19 +899,35 @@ body.keyboard-open .screen-bottom .verdict:empty { min-height: 0; margin: 0; }
 
 /* ---------------------------------------------------------------- Install-Hinweis */
 
+/*
+ * Der Weg aufs Home-Bildschirm (installieren.js) - in der Lernansicht und
+ * auf "Meine Kurse". Links das echte Symbol, so gerundet wie auf dem
+ * iPhone, damit man sieht, was man bekommt.
+ */
 .install {
     display: flex;
-    gap: 12px;
-    align-items: flex-start;
+    gap: 14px;
+    align-items: center;
     padding: 14px 16px;
-    border: 1px dashed var(--border);
+    border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--surface);
     margin-top: 22px;
     font-size: .9rem;
     color: var(--text-soft);
 }
-.install .big { font-size: 1.4rem; line-height: 1; }
+.installsymbol {
+    flex: none;
+    width: 60px;
+    height: 60px;
+    border-radius: 14px;
+    box-shadow: 0 2px 8px rgba(16, 20, 30, .18);
+}
+.installtext { display: grid; gap: 3px; min-width: 0; }
+.installtext > strong { color: var(--text); }
+.installweg { margin: 4px 0 0; }
+.installknopf { justify-self: start; margin: 6px 0 0; }
+.teilenzeichen { width: 1em; height: 1.2em; vertical-align: -.2em; color: var(--accent); }
 
 /* ---------------------------------------------------------------- Lückentext */
 
@@ -2302,4 +2318,50 @@ body.keyboard-open .screen-top .freikopf { padding: 4px 12px; margin-bottom: 6px
     .freizahl b.frisch, #z-richtig.frisch { animation: none; }
     .feiergrund { animation: grundRuhig 1.5s ease forwards; }
     @keyframes grundRuhig { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+}
+
+/*
+ * Voki liest (lesevoki.js): Die Decke liegt über allem, auch über den
+ * Schubladen (z-index 100), und fängt jeden Klick ab. Voki bekommt eine
+ * eigene Karte, damit er auf dem abgedunkelten Grund nicht verschwindet.
+ */
+.lesevoki {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: grid;
+    place-items: center;
+    padding: 16px;
+    background: rgba(10, 14, 22, .45);
+    animation: lesevokiAuf .2s ease;
+}
+.lesevoki-karte {
+    width: min(100%, 320px);
+    padding: 18px 20px 20px;
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow);
+    text-align: center;
+}
+.lesevoki-karte img { display: block; width: 180px; height: 180px; margin: 0 auto 8px; }
+.lesevoki-satz { display: block; font-family: var(--schrift-kopf); font-size: 1.15rem; }
+.lesevoki-klein { margin: 6px 0 0; }
+@keyframes lesevokiAuf { from { opacity: 0; } }
+
+/* Die Frage nach dem Titel von den Fotos (teacher/unit.php): Zwei Titel
+   passen nicht nebeneinander, also untereinander - der Vorschlag oben. */
+dialog.rueckfrage:has(.titelwahl) { width: min(100% - 32px, 420px); }
+.rueckfrage-knoepfe.titelwahl { flex-direction: column-reverse; }
+.titelwahl .btn { overflow-wrap: anywhere; }
+
+/* Rückfragen mit drei Wegen (Kind aus der Klasse nehmen): untereinander,
+   jeder Knopf mit einer kleinen Zeile, was er bedeutet. */
+.rueckfrage-knoepfe.untereinander { flex-direction: column; }
+.rueckfrage-knoepfe.untereinander .btn { flex-direction: column; gap: 2px; }
+.rueckfrage-knoepfe .knopfzeile {
+    display: block;
+    font-size: .8rem;
+    font-weight: 400;
+    opacity: .85;
 }

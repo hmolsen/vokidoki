@@ -235,6 +235,45 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['reset_all']))
     teacher_redirect($zurück);
 }
 
+/*
+ * Ein Kind aus der Klasse nehmen - mit der Frage, was aus dem Konto wird.
+ *
+ * Zwei Fälle, die von aussen gleich aussehen: Das Kind hat die Schule
+ * verlassen (Konto weg, mit allen Kursen und dem Lernstand), oder es
+ * wechselt nur die Klasse (Konto bleibt, steht danach unter "Ohne Klasse"
+ * und lässt sich dort neu zuordnen). Welcher es ist, weiss nur die
+ * Lehrkraft - also fragt das Fenster, statt einen der beiden anzunehmen.
+ */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['remove_student'])) {
+    teacher_csrf_check();
+
+    $kindId = (int) $_POST['remove_student'];
+    $wie    = (string) ($_POST['wie'] ?? '');
+
+    $kind = q1(
+        "SELECT u.id, u.display_name FROM class_members m
+           JOIN users u ON u.id = m.user_id
+          WHERE m.class_id = ? AND u.id = ? AND u.role = 'student'",
+        [$classId, $kindId],
+    );
+
+    if ($kind === null || !in_array($wie, ['loeschen', 'behalten'], true)) {
+        teacher_flash('Dieses Kind ist nicht in dieser Klasse.', 'bad');
+        teacher_redirect($zurück);
+    }
+
+    if ($wie === 'loeschen') {
+        student_delete($kindId);
+        teacher_flash(sprintf('Das Konto von %s ist gelöscht - samt Kursen und Lernstand.',
+                              $kind['display_name']));
+    } else {
+        student_remove_from_class($kindId, $classId);
+        teacher_flash(sprintf('%s ist nicht mehr in der Klasse. Das Konto steht unter '
+                              . '„Ohne Klassenzuordnung“.', $kind['display_name']));
+    }
+    teacher_redirect($zurück);
+}
+
 $kinder    = array_values(array_filter(
     class_members_list($classId),
     static fn (array $m): bool => $m['role'] !== 'teacher',
@@ -418,6 +457,11 @@ teacher_flash_render();
                     <span aria-hidden="true">&#128424;</span> Zettel
                 </a>
                 <?php endif; ?>
+                <button class="iconaction danger" type="button"
+                        data-auskl="<?= (int) $k['id'] ?>" data-name="<?= h($k['display_name']) ?>"
+                        title="Aus der Klasse nehmen">
+                    <span aria-hidden="true">&#10005;</span> Entfernen
+                </button>
             </td>
         </tr>
     <?php endforeach; ?>
@@ -461,6 +505,30 @@ teacher_flash_render();
  * Adresse muss nicht an zwei Stellen gepflegt werden.
  */
 ?>
+<?php
+/*
+ * Das Fenster zu "Entfernen" - eines für alle Zeilen. Das Skript setzt
+ * Namen und Nummer des Kindes ein (teacher.js, initAusKlasse).
+ */
+?>
+<dialog id="auskl" class="rueckfrage">
+    <p class="rueckfrage-text"><span data-name></span> aus der Klasse nehmen?</p>
+    <form method="post" action="<?= h(teacher_url('class.php') . '?id=' . $classId) ?>" class="rueckfrage-knoepfe untereinander">
+        <?= teacher_csrf_field() ?>
+        <input type="hidden" name="class_id" value="<?= $classId ?>"><?= $kursFeld ?>
+        <input type="hidden" name="remove_student" value="">
+        <button class="btn danger" name="wie" value="loeschen">
+            Konto ganz löschen
+            <span class="knopfzeile">auch aus allen Kursen, mit dem Lernstand</span>
+        </button>
+        <button class="btn secondary" name="wie" value="behalten">
+            Konto behalten, ohne Klasse
+            <span class="knopfzeile">lässt sich später einer Klasse zuordnen</span>
+        </button>
+        <button class="btn ghost" type="submit" formmethod="dialog" formnovalidate>Abbrechen</button>
+    </form>
+</dialog>
+
 <form method="post" id="newstudent" data-addstudent
       action="<?= h(teacher_url('class.php') . '?id=' . $classId) ?>"
       data-print-user="<?= h(teacher_url('print.php') . '?class=' . $classId . '&user=') ?>"
@@ -515,31 +583,31 @@ teacher_flash_render();
 
 <?php
 /*
- * Die Liste am Stueck gibt es nur, solange die Klasse leer ist.
+ * Die Liste am Stueck - immer da, aufgeklappt nur bei leerer Klasse.
  *
  * Beim ersten Mal hat die Lehrkraft die Klassenliste vor sich und will sie
- * in einem Zug hineinkopieren. Danach kommt jemand einzeln dazu, und dafuer
- * ist die Zeile oben der kuerzere Weg - ein Textfeld mit 28 Namen darin
- * waere dann nur noch im Weg.
+ * in einem Zug hineinkopieren. Eine Zeit lang verschwand das Feld danach
+ * ganz, weil fuer ein einzelnes Kind die Zeile oben der kuerzere Weg ist -
+ * nur kommen nach den Ferien eben auch fuenf auf einmal, und dann fehlte
+ * es. Also bleibt es, zugeklappt, und nimmt keinen Platz weg.
  */
 ?>
-<?php if ($kinder === []): ?>
-<h2>Die ganze Klassenliste auf einmal</h2>
-
-<form method="post" class="card" style="max-width:560px">
-    <?= teacher_csrf_field() ?>
-    <input type="hidden" name="class_id" value="<?= $classId ?>"><?= $kursFeld ?>
-    <label for="names">Ein Name je Zeile</label>
-    <textarea id="names" name="names" rows="12"
-              placeholder="Lilli Molsen&#10;Schmidt, Anna-Lena&#10;Max"></textarea>
-    <button class="btn small" name="add_students" value="1">Konten anlegen</button>
-    <p class="tiny muted">
-        Einfach die Liste hineinkopieren, wie sie vorliegt &ndash; „Lilli
-        Molsen" und „Molsen, Lilli" werden beide verstanden. Wer schon in der
-        Klasse ist, wird übersprungen; die Liste lässt sich also auch ein
-        zweites Mal einfügen ohne Duplikate zu erzeugen.
-    </p>
-</form>
-<?php endif; ?>
+<details class="card klassenliste"<?= $kinder === [] ? ' open' : '' ?>>
+    <summary>Mehrere Kinder auf einmal einfügen</summary>
+    <form method="post">
+        <?= teacher_csrf_field() ?>
+        <input type="hidden" name="class_id" value="<?= $classId ?>"><?= $kursFeld ?>
+        <label for="names">Ein Name je Zeile</label>
+        <textarea id="names" name="names" rows="10"
+                  placeholder="Lilli Molsen&#10;Schmidt, Anna-Lena&#10;Max"></textarea>
+        <p class="tiny muted">
+            Einfach die Liste hineinkopieren, wie sie vorliegt &ndash; „Lilli
+            Molsen" und „Molsen, Lilli" werden beide verstanden. Wer schon in der
+            Klasse ist, wird übersprungen; die Liste lässt sich also auch ein
+            zweites Mal einfügen ohne Duplikate zu erzeugen.
+        </p>
+        <button class="btn small" name="add_students" value="1">Konten anlegen</button>
+    </form>
+</details>
 
 <?php teacher_foot(); ?>
