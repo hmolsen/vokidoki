@@ -995,6 +995,21 @@ ok('Der Selbsttest meldet nichts Offenes',
 ok('Und laedt trotzdem', str_contains($seite, 'Prüfung'));
 
 /*
+ * Eine fehlende Datei beim Hochladen - installieren.js und aktualisieren.js -
+ * liess die App weiss. Der Selbsttest nennt so etwas jetzt, und die Huelle
+ * zeigt statt weisser Flaeche einen Satz und einen Knopf.
+ */
+ok('Der Selbsttest prueft, ob jedes Modul hochgeladen ist',
+   str_contains($seite, 'Module der App vollständig')
+   && str_contains($seite, 'jeder Import findet seine Datei'));
+require_once __DIR__ . '/../app/lib/version.php';
+require_once __DIR__ . '/../app/lib/version.php';
+ok('Lokal fehlt keines', modules_missing() === [], implode(', ', modules_missing()));
+$huelle = (string) file_get_contents(__DIR__ . '/../app/index.php');
+ok('Startet die App nicht, steht ein Hinweis statt einer weissen Seite',
+   str_contains($huelle, 'onerror="vtLadefehler()"') && str_contains($huelle, 'konnte nicht starten'));
+
+/*
  * Die Woerter fuer die Anfangspasswoerter kommen jetzt aus schema.sql.
  *
  * Sie wurden einmal von einer Schemaaenderung gesaet. Faellt das weg, ohne

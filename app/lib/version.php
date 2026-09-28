@@ -57,6 +57,38 @@ function app_assets(): array
     )));
 }
 
+/**
+ * Module, die eine Datei der Oberfläche importiert, die es aber nicht gibt.
+ *
+ * Für den Selbsttest. Fehlt auf dem Server ein einziges Modul, startet der
+ * Browser keines - die App bleibt weiss. So geschehen, als beim Hochladen
+ * installieren.js und aktualisieren.js fehlten; nichts auf dem Server
+ * merkte es. Gelesen werden die festen Importe (from '...') und die
+ * import('...') mit fester Adresse, jeweils relativ zur Datei.
+ *
+ * @return list<string> "views/languages.js -> installieren.js"
+ */
+function modules_missing(): array
+{
+    $root   = dirname(__DIR__);
+    $fehlen = [];
+    foreach (app_assets() as $datei) {
+        if (!str_ends_with($datei, '.js')) {
+            continue;
+        }
+        $quelle = (string) @file_get_contents($root . '/' . $datei);
+        preg_match_all('~(?:\bfrom\s+|\bimport\s*\(\s*)[\'"](\.{1,2}/[^\'"]+)[\'"]~', $quelle, $m);
+        foreach (array_unique($m[1]) as $pfad) {
+            $ziel = $root . '/' . ltrim(dirname($datei) === '.' ? '' : dirname($datei) . '/', '/') . $pfad;
+            $ziel = preg_replace('~[?#].*$~', '', $ziel);
+            if (!is_file($ziel)) {
+                $fehlen[] = $datei . ' -> ' . $pfad;
+            }
+        }
+    }
+    return $fehlen;
+}
+
 /** Jüngstes Änderungsdatum dieser Dateien - der Versionsstempel. */
 function app_version(): string
 {

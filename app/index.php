@@ -133,6 +133,39 @@ window.VT = {
 window.VT.standalone = window.navigator.standalone === true
     || window.matchMedia('(display-mode: standalone)').matches;
 </script>
-<script type="module" src="<?= $e(url('/app.js?v=' . $appVersion)) ?>"></script>
+<?php
+/*
+ * Wenn die App gar nicht erst startet.
+ *
+ * Fehlt auf dem Server ein einziges Modul - eine Datei beim Hochladen
+ * vergessen -, startet der Browser keines davon, und es bleibt eine weisse
+ * Seite ohne jeden Hinweis. Genau so geschehen, als installieren.js und
+ * aktualisieren.js nicht mit hochgeladen waren. Das error-Ereignis am
+ * <script> kommt auch, wenn nur eine Datei weiter unten im Baum fehlt;
+ * dann steht hier wenigstens ein Satz und ein Knopf, und der Selbsttest
+ * im Admin nennt die fehlende Datei.
+ */
+?>
+<script>
+function vtLadefehler() {
+    var app = document.getElementById('app');
+    if (!app) return;
+    app.innerHTML = '<div class="empty" style="padding-top:18vh">'
+        + '<strong>Vokidoki konnte nicht starten.</strong>'
+        + '<p class="tiny muted">Ein Teil der App kam nicht an. Meist hilft es, neu zu laden.</p>'
+        + '<button class="btn" type="button" id="vtNeu">Neu laden</button></div>';
+    document.getElementById('vtNeu').onclick = function () {
+        var weiter = function () { location.replace(location.pathname + '?frisch=' + Date.now()); };
+        if (navigator.serviceWorker) {
+            navigator.serviceWorker.getRegistrations()
+                .then(function (r) { return Promise.all(r.map(function (x) { return x.unregister(); })); })
+                .then(weiter, weiter);
+        } else {
+            weiter();
+        }
+    };
+}
+</script>
+<script type="module" src="<?= $e(url('/app.js?v=' . $appVersion)) ?>" onerror="vtLadefehler()"></script>
 </body>
 </html>

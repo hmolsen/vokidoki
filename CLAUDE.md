@@ -60,6 +60,14 @@ nicht mehr getrennt nachvollziehen oder zurücknehmen. Commit-Nachrichten auf
 Deutsch, ohne Umlaute, im Stil der bisherigen (`git log`). Gepusht wird nur
 auf ausdrücklichen Wunsch.
 
+## Neue Dateien: ausdrücklich zum Hochladen nennen
+
+Hochgeladen wird von Hand per FTP. Entsteht unter `app/` eine **neue Datei**
+(oder wird eine umbenannt), am Ende der Antwort ausdrücklich und als Liste
+sagen: "Diese neuen Dateien müssen mit hochgeladen werden: …". Nicht nur im
+Commit erwähnen. Eine einzige fehlende Datei genügt, und die App bleibt
+weiss - so geschehen mit `installieren.js` und `aktualisieren.js`.
+
 ## Wie hier geschrieben wird
 
 - Bezeichner und Kommentare auf Deutsch, Code-Bezeichner ohne Umlaute

@@ -88,6 +88,18 @@ check($checks, 'Voki fürs App-Symbol', static function (): array {
     return [true, 'assets/voki-icon.png lesbar'];
 });
 
+/*
+ * Alle Dateien der App hochgeladen? Eine fehlende genügte, und die App
+ * blieb weiss - der Server selbst lief dabei tadellos.
+ */
+check($checks, 'Module der App vollständig', static function (): array {
+    require_once dirname(__DIR__) . '/lib/version.php';
+    $fehlen = modules_missing();
+    return $fehlen === []
+        ? [true, 'jeder Import findet seine Datei']
+        : [false, 'fehlt auf dem Server: ' . implode(', ', $fehlen) . ' - diese Dateien hochladen'];
+});
+
 check($checks, 'Icon-Cache beschreibbar', static function (): array {
     $dir = storage_path('icons');
     if (!is_dir($dir)) {
