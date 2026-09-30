@@ -123,6 +123,17 @@ ok('Die Anweisung steht vor dem Text',
 ok('Sprachname steht in der Anweisung', str_contains($alsText, 'Englisch'));
 ok('Die Anweisung verlangt, Berichtigungen zu nennen',
    str_contains($alsText, '"correction"'));
+/*
+ * Lautschrift liest die Texterkennung als Zeichensalat. Das Modell hielt ihn
+ * fuer Lesefehler und markierte die Zeile - ohne dass an den Woertern etwas
+ * falsch war. Es soll sie weglassen und nur die beiden Woerter berichtigen.
+ */
+ok('Die Anweisung laesst Lautschrift weg, statt sie zu berichtigen',
+   str_contains($alsText, 'Lass Lautschrift vollständig weg')
+   && !str_contains($alsText, 'eine Lautschrift oder ein Hinweis'));
+ok('Und berichtigt nur die beiden Woerter',
+   str_contains((string) ($body['output_config']['format']['schema']['properties']['entries']['items']
+       ['properties']['correction']['description'] ?? ''), 'Lautschrift und Hinweise zählen nie'));
 
 ok('output_config trägt das JSON-Schema',
    ($body['output_config']['format']['type'] ?? '') === 'json_schema',

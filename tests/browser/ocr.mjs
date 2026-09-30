@@ -49,13 +49,18 @@ export async function pruefe(f, aus, wurzel) {
                     { words: [wort('the', 50, 100), wort('spoon', 110, 102)] },
                     { words: [wort('to', 50, 160), wort('cook', 90, 161)] },
                 ] }] },
+                // Dazwischen die Lautschrift - Tesseract liest sie als Salat.
+                { paragraphs: [{ lines: [
+                    { words: [wort('[spu:n]', 350, 101)] },
+                    { words: [wort('/kuk/', 350, 160)] },
+                ] }] },
                 { paragraphs: [{ lines: [
                     { words: [wort('der', 600, 103), wort('Löffel', 660, 104)] },
                     { words: [wort('kochen', 600, 162)] },
                 ] }] },
             ]);
         })()`);
-        ok('Getrennt gelesene Spalten werden wieder zu Zeilen',
+        ok('Getrennt gelesene Spalten werden wieder zu Zeilen - ohne Lautschrift',
            JSON.stringify(zeilen) === JSON.stringify(['the spoon\tder Löffel', 'to cook\tkochen']),
            JSON.stringify(zeilen));
 

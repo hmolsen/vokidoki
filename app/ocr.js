@@ -162,5 +162,24 @@ export function zeilenBauen(blocks) {
 
     return reihen
         .sort((a, b) => a.mitte - b.mitte)
-        .map((r) => r.stuecke.sort((a, b) => a.x0 - b.x0).map((s) => s.text).join('\t'));
+        .map((r) => r.stuecke
+            .sort((a, b) => a.x0 - b.x0)
+            .map((s) => s.text)
+            .filter((text) => !istLautschrift(text))
+            .join('\t'))
+        .filter((zeile) => zeile !== '');
+}
+
+/*
+ * Lautschrift erst gar nicht weitergeben.
+ *
+ * Tesseract kennt die Zeichen der IPA nicht und liest "[ˈæpl]" als
+ * Zeichensalat. Die KI hielt den dann für einen Lesefehler, "berichtigte"
+ * ihn und markierte die Zeile - die Lehrkraft prüfte gelbe Zeilen, an
+ * deren Wörtern nichts falsch war. Eine Spalte, die ganz in eckigen
+ * Klammern oder Schrägstrichen steht, ist Lautschrift und fällt weg.
+ * Übrig gebliebene Reste erkennt die KI selbst (vocab_prompt()).
+ */
+export function istLautschrift(text) {
+    return /^\s*[[/].*[\]/]\s*$/.test(text);
 }
