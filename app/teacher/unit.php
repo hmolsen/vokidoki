@@ -716,8 +716,8 @@ $zuPruefen = count(array_filter($vokabeln, static fn (array $v): bool =>
 ?>
 <?php if ($zuPruefen > 0): ?>
 <p class="notice warn pruefhinweis-kopf">
-    <strong><?= $zuPruefen === 1 ? 'Eine Vokabel' : $zuPruefen . ' Vokabeln' ?> hat die KI
-    beim Einlesen berichtigt.</strong> Die Texterkennung hatte sie anders gelesen. Sie
+    <strong><span data-pruefzahl><?= $zuPruefen === 1 ? 'Eine Vokabel' : $zuPruefen . ' Vokabeln' ?></span>
+    hat die KI beim Einlesen berichtigt.</strong> Die Texterkennung hatte sie anders gelesen. Sie
     sind gelb markiert &ndash; bitte besonders genau prüfen, dann „Passt“ drücken oder
     die Vokabel ändern.
 </p>
@@ -787,12 +787,6 @@ $zuPruefen = count(array_filter($vokabeln, static fn (array $v): bool =>
                 <strong data-wort><?= h($v['term_foreign']) ?></strong>
                 <input type="text" name="edit_f" value="<?= h($v['term_foreign']) ?>"
                        form="vokabel<?= (int) $v['id'] ?>" maxlength="255" hidden>
-                <?php if ($pruefen !== ''): ?>
-                    <span class="pruefnotiz">
-                        <span aria-hidden="true">&#9888;&#65039;</span>
-                        Von der KI berichtigt: <?= h($pruefen) ?>
-                    </span>
-                <?php endif; ?>
             </td>
             <td>
                 <span data-wort><?= h($v['term_native']) ?></span>
@@ -804,13 +798,7 @@ $zuPruefen = count(array_filter($vokabeln, static fn (array $v): bool =>
                         value="<?= $i + 1 ?>" form="releaseform" title="Bis hier freigeben">
                     <span aria-hidden="true">&#128275;</span><span class="nurvorlesen">Bis hier freigeben</span>
                 </button>
-                <?php if ($pruefen !== ''): ?>
-                <button class="iconaction gut passt" form="vokabel<?= (int) $v['id'] ?>"
-                        name="check_ok" value="<?= (int) $v['id'] ?>"
-                        title="Geprüft - die Vokabel stimmt so">
-                    <span aria-hidden="true">&#10003;</span> Passt
-                </button>
-                <?php endif; ?>
+
                 <button class="iconaction quiet nurbild" data-edit="<?= (int) $v['id'] ?>"
                         type="button" title="Diese Vokabel ändern">
                     <span aria-hidden="true">&#9999;&#65039;</span><span class="nurvorlesen">Ändern</span>
@@ -828,6 +816,33 @@ $zuPruefen = count(array_filter($vokabeln, static fn (array $v): bool =>
                 </button>
             </td>
         </tr>
+        <?php
+        /*
+         * Was die KI berichtigt hat, in einer eigenen Zeile über die ganze
+         * Breite - direkt unter der Vokabel.
+         *
+         * Es stand einmal klein unter dem fremden Wort, in der linken
+         * Spalte eingezwängt, und "Passt" schob die Stifte der Zeile aus
+         * der Flucht. Ohne data-pos: Der Freigabebalken zählt nur
+         * Vokabelzeilen, diese gehört zu der darüber.
+         */
+        ?>
+        <?php if ($pruefen !== ''): ?>
+        <tr class="pruefzeile" data-pruefzeile="<?= (int) $v['id'] ?>">
+            <td colspan="3"><div class="pruefinhalt">
+                <span class="pruefnotiz">
+                    <span aria-hidden="true">&#9888;&#65039;</span>
+                    Von der KI berichtigt: <strong><?= h($pruefen) ?></strong>
+                    &ndash; bitte genau prüfen
+                </span>
+                <button class="btn small passt" form="vokabel<?= (int) $v['id'] ?>"
+                        name="check_ok" value="<?= (int) $v['id'] ?>" data-passt="<?= (int) $v['id'] ?>"
+                        title="Geprüft - die Vokabel stimmt so">
+                    <span aria-hidden="true">&#10003;</span> Passt
+                </button>
+            </div></td>
+        </tr>
+        <?php endif; ?>
     <?php endforeach; ?>
 
     <?php

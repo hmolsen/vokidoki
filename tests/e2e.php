@@ -6242,11 +6242,13 @@ $seite = teacherGet('unit.php?id=' . $titelUnit)['body'];
 ok('Die berichtigte Zeile steht markiert in der Tabelle',
    preg_match('~<tr class="[^"]*\bpruefen\b[^"]*"[^>]*>\s*<td id="zeile' . $loeffel . '">~', $seite) === 1);
 ok('Mit dem, was berichtigt wurde',
-   str_contains($seite, 'Von der KI berichtigt: Loffel → Löffel'));
+   str_contains($seite, 'Von der KI berichtigt: <strong>Loffel → Löffel</strong>'));
+ok('In einer eigenen Zeile über die ganze Tabelle',
+   preg_match('~<tr class="pruefzeile" data-pruefzeile="' . $loeffel . '">\s*<td colspan="3">~', $seite) === 1);
 ok('Die andere nicht',
    preg_match('~<tr class="[^"]*\bpruefen\b[^"]*"[^>]*>\s*<td id="zeile' . $teller . '">~', $seite) === 0);
 ok('Über der Tabelle steht, wie viele zu prüfen sind',
-   str_contains($seite, 'Eine Vokabel</strong>') || str_contains($seite, '<strong>Eine Vokabel hat die KI'));
+   str_contains($seite, '<span data-pruefzahl>Eine Vokabel</span>'));
 ok('Und an der Zeile ein "Passt"',
    str_contains($seite, 'name="check_ok" value="' . $loeffel . '"'));
 ok('Nach einem Titel von den Fotos wird nicht mehr gefragt',

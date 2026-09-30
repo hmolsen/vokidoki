@@ -2207,13 +2207,29 @@ table.data tr.pruefen td {
     background-image: linear-gradient(var(--warn-bg), var(--warn-bg));
 }
 table.data tr.pruefen td:first-child { box-shadow: inset 4px 0 0 var(--warn); }
-.pruefnotiz {
-    display: block;
-    margin-top: 3px;
-    font-size: .8rem;
+/*
+ * Der Hinweis in einer eigenen Zeile über die ganze Breite, direkt unter der
+ * Vokabel: links, was berichtigt wurde, rechts "Passt". Die beiden Zeilen
+ * sehen aus wie eine - ohne Trennlinie dazwischen.
+ */
+table.data tr.pruefen td { border-bottom-color: transparent; }
+table.data tr.pruefzeile td {
+    padding-top: 0;
+    background: var(--warn-bg);
+    box-shadow: inset 4px 0 0 var(--warn);
+}
+.pruefinhalt {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.pruefzeile .pruefnotiz {
+    min-width: 0;
+    font-size: .88rem;
     font-weight: 600;
     color: var(--warn);
 }
-tr.bearbeiten .pruefnotiz { display: none; }
-.iconaction.passt { color: var(--good); font-weight: 700; }
+.pruefzeile .pruefnotiz strong { color: var(--text); }
+.pruefzeile .passt { flex: none; margin: 0; min-width: 96px; }
 .pruefhinweis-kopf { margin-bottom: 12px; }

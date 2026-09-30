@@ -126,11 +126,49 @@ export async function pruefe(f, aus, wurzel) {
 
         if (aus) await b.bild('ocr-gelb');
 
-        await b.js(`document.querySelector('#freigabe [name="check_ok"]').click()`);
-        await schlafe(1500);
-        ok('"Passt" nimmt die Markierung weg',
+        // ---- "Passt" ohne Neuladen, Zeile für Zeile.
+
+        // Eine zweite markierte Zeile, damit sich das Weiterspringen zeigt.
+        php(wurzel, `require 'lib/db.php';
+            q("UPDATE vocab SET check_note = 'Tel1er → Teller' WHERE unit_id = ? AND term_foreign = 'the plate'",
+              [${einheit}]);`);
+        await b.neuLaden(1500);
+        await b.js(`window.__nichtNeuGeladen = true`);
+
+        const sofort = await b.js(`(() => {
+            const erster = document.querySelector('#freigabe [data-passt]');
+            erster.focus();
+            erster.click();
+            // Gleich nach dem Klick, bevor irgendeine Antwort da sein kann.
+            return {
+                gelb:  document.querySelectorAll('#freigabe tr.pruefen').length,
+                zahl:  document.querySelector('[data-pruefzahl]')?.textContent,
+                fokus: document.activeElement?.dataset.passt ?? null,
+                zweiter: document.querySelectorAll('#freigabe [data-passt]')[1]?.dataset.passt ?? null,
+            };
+        })()`);
+        ok('"Passt" nimmt die Markierung sofort weg, ohne auf den Server zu warten',
+           sofort.gelb === 1 && sofort.zahl === 'Eine Vokabel', JSON.stringify(sofort));
+        ok('Und der Fokus springt zum nächsten "Passt"',
+           sofort.fokus !== null && sofort.fokus === sofort.zweiter, JSON.stringify(sofort));
+
+        await schlafe(800);
+        ok('Die Seite wurde dabei nicht neu geladen',
+           (await b.js('window.__nichtNeuGeladen === true')) === true);
+        ok('Und der Server hat es trotzdem gespeichert',
+           php(wurzel, `require 'lib/db.php'; echo json_encode(qv("SELECT check_note FROM vocab
+               WHERE unit_id = ? AND term_foreign = 'the spoon'", [${einheit}]));`).trim() === 'null');
+
+        // Mit Enter weiter - die Hand bleibt auf der Tastatur. Mit dem Zeichen
+        // dazu: Ohne text löst Chrome den Knopf nicht aus.
+        await b.taste('Enter', 13, '\r');
+        await schlafe(800);
+        ok('Mit Enter ist auch die nächste erledigt, und der Hinweis oben verschwindet',
            (await b.js(`document.querySelectorAll('#freigabe tr.pruefen').length`)) === 0
-           && (await b.js(`!document.querySelector('.pruefhinweis-kopf')`)));
+           && (await b.js(`document.querySelector('.pruefhinweis-kopf').hidden`)) === true);
+        ok('Auch sie ist gespeichert',
+           php(wurzel, `require 'lib/db.php'; echo (int) qv("SELECT COUNT(*) FROM vocab
+               WHERE unit_id = ? AND check_note IS NOT NULL", [${einheit}]);`).trim() === '0');
     } finally {
         b.schliessen();
         php(wurzel, `require 'lib/db.php'; q('DELETE FROM units WHERE id = ?', [${einheit}]);`);

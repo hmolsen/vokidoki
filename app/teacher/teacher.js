@@ -1037,6 +1037,74 @@ function initVocabEdit() {
 
 initVocabEdit();
 
+/**
+ * "Passt" an einer Zeile, die die KI beim Einlesen berichtigt hat.
+ *
+ * Ohne Neuladen und ohne Warten: Die Markierung verschwindet beim Klick,
+ * die Anfrage läuft dahinter. Wer vierzig Zeilen durchsieht, soll nicht
+ * vierzigmal auf eine neue Seite warten und danach seine Stelle suchen -
+ * so war es beim ersten Versuch. Geht die Anfrage schief, kommt die
+ * Markierung zurück und es gibt eine Meldung.
+ *
+ * Der Fokus springt zum nächsten "Passt": Mit Enter geht es so Zeile für
+ * Zeile durch die Liste, ohne die Maus.
+ */
+function initPruefen() {
+    const tabelle = document.getElementById('freigabe');
+    if (!tabelle) return;
+    const kopf = document.querySelector('.pruefhinweis-kopf');
+
+    const zaehlen = () => {
+        const offen = tabelle.querySelectorAll('tr.pruefzeile:not([hidden])').length;
+        if (!kopf) return;
+        kopf.hidden = offen === 0;
+        const zahl = kopf.querySelector('[data-pruefzahl]');
+        if (zahl) zahl.textContent = offen === 1 ? 'Eine Vokabel' : `${offen} Vokabeln`;
+    };
+
+    tabelle.addEventListener('click', async (e) => {
+        const knopf = e.target.closest('[data-passt]');
+        if (!knopf) return;
+        e.preventDefault();
+
+        const id    = knopf.dataset.passt;
+        const form  = document.getElementById(`vokabel${id}`);
+        const notiz = knopf.closest('tr');
+        const zeile = notiz.previousElementSibling;
+
+        const alle      = [...tabelle.querySelectorAll('tr.pruefzeile:not([hidden]) [data-passt]')];
+        const i         = alle.indexOf(knopf);
+        const naechster = alle[i + 1] ?? alle[i - 1] ?? null;
+
+        notiz.hidden = true;
+        zeile?.classList.remove('pruefen');
+        zaehlen();
+        if (naechster) {
+            naechster.focus({ preventScroll: true });
+            naechster.closest('tr').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+
+        try {
+            const daten = new FormData(form);
+            daten.set('check_ok', id);
+            const res = await fetch(form.action || window.location.href, {
+                method: 'POST', body: daten, credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'fetch' },
+            });
+            const json = await res.json();
+            if (!json.ok) throw new Error(json.error || '');
+            notiz.remove();
+        } catch {
+            notiz.hidden = false;
+            zeile?.classList.add('pruefen');
+            zaehlen();
+            window.alert('Das hat nicht geklappt - die Vokabel ist noch markiert. Bitte noch einmal.');
+        }
+    });
+}
+
+initPruefen();
+
 // ------------------------------------------- Sprung ans Telefon
 
 /**
