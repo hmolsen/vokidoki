@@ -13,9 +13,16 @@ require_api_request();
 $user = require_user();
 $uid  = (int) $user['id'];
 
-const MAX_IMAGES      = 6;
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const ALLOWED_MEDIA   = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+/*
+ * Die Fotos kommen nicht mehr hierher - ocr.js liest sie im Browser. Was
+ * ankommt, ist Text, und die Seitenzahl nur fürs Kostenprotokoll.
+ *
+ * MAX_IMAGES bleibt die Grenze je Einlesen (views/bilder.js zeigt sie an).
+ * MAX_TEXT_CHARS: Sechs dicht bedruckte Seiten sind etwa 15 000 Zeichen;
+ * das Doppelte lässt Luft, verhindert aber, dass jemand ein Buch schickt.
+ */
+const MAX_IMAGES     = 6;
+const MAX_TEXT_CHARS = 30000;
 
 switch (action()) {
     case 'analyze':
@@ -24,17 +31,22 @@ switch (action()) {
         require_cap($user, CAP_IMPORT);
         $lang = view_language($user, body_int($b, 'language_id'));
 
-        $raw = $b['images'] ?? null;
-        if (!is_array($raw) || $raw === []) {
-            json_fail('Bitte mindestens ein Foto auswählen.');
+        $text   = trim((string) ($b['text'] ?? ''));
+        $seiten = max(1, (int) ($b['pages'] ?? 1));
+        if ($text === '' || !preg_match('/\p{L}{2,}/u', $text)) {
+            json_fail('Auf den Fotos war kein Text zu erkennen. Vielleicht noch einmal '
+                      . 'näher heran und mit mehr Licht fotografieren?', 422);
         }
-        if (count($raw) > MAX_IMAGES) {
+        if ($seiten > MAX_IMAGES) {
             json_fail('Höchstens ' . MAX_IMAGES . ' Fotos auf einmal.');
         }
+        if (mb_strlen($text) > MAX_TEXT_CHARS) {
+            json_fail('Das ist zu viel Text auf einmal. Bitte weniger Seiten einlesen.');
+        }
 
-        // Die Bilderkennung dauert regelmäßig länger als die üblichen
-        // 30 Sekunden Standardlaufzeit - sonst bricht PHP mitten im Aufruf ab,
-        // nachdem die Anfrage bereits bezahlt wurde.
+        // Das Ordnen dauert bei mehreren Seiten länger als die üblichen
+        // 30 Sekunden Standardlaufzeit - sonst bricht PHP mitten im Aufruf
+        // ab, nachdem die Anfrage bereits bezahlt wurde.
         set_time_limit(300);
 
         // Budget- und Ratenprüfung vor dem API-Aufruf, damit ein
@@ -44,31 +56,8 @@ switch (action()) {
             json_fail($blocked, 429);
         }
 
-        $images = [];
-        foreach ($raw as $i => $item) {
-            if (!is_array($item)) {
-                json_fail('Foto ' . ($i + 1) . ' ist unbrauchbar.');
-            }
-            $media = (string) ($item['media_type'] ?? '');
-            $data  = (string) ($item['data'] ?? '');
-
-            if (!in_array($media, ALLOWED_MEDIA, true)) {
-                json_fail('Foto ' . ($i + 1) . ' hat ein nicht unterstütztes Format.');
-            }
-            if ($data === '' || strlen($data) > MAX_IMAGE_BYTES) {
-                json_fail('Foto ' . ($i + 1) . ' ist zu groß oder leer.');
-            }
-
-            $bin = base64_decode($data, true);
-            if ($bin === false || @getimagesizefromstring($bin) === false) {
-                json_fail('Foto ' . ($i + 1) . ' ist kein gültiges Bild.');
-            }
-
-            $images[] = ['data' => $data, 'media_type' => $media];
-        }
-
         try {
-            $result = analyze_vocab_images($images, (string) $lang['name'], $user);
+            $result = analyze_vocab_text($text, $seiten, (string) $lang['name'], $user);
         } catch (KeyvaultException $e) {
             // Eigene Meldung, damit im Fehlerfall klar ist, wo es klemmt -
             // am Keyvault und nicht an den Fotos.
@@ -79,16 +68,17 @@ switch (action()) {
                 503,
             );
         } catch (Throwable $e) {
-            error_log('[vokabeltrainer] Bildanalyse fehlgeschlagen: ' . scrub_secrets($e->getMessage()));
+            error_log('[vokabeltrainer] Ordnen der Vokabeln fehlgeschlagen: '
+                      . scrub_secrets($e->getMessage()));
             json_fail(
-                'Die Fotos konnten nicht ausgewertet werden. Bitte noch einmal versuchen.',
+                'Die Vokabeln konnten nicht geordnet werden. Bitte noch einmal versuchen.',
                 502,
             );
         }
 
         if ($result['entries'] === []) {
             json_fail(
-                'Auf den Fotos wurden keine Vokabeln gefunden. Vielleicht noch einmal '
+                'Im erkannten Text wurden keine Vokabeln gefunden. Vielleicht noch einmal '
                 . 'näher heran und mit mehr Licht fotografieren?',
                 422,
             );
@@ -96,7 +86,6 @@ switch (action()) {
 
         json_out([
             'ok'      => true,
-            'title'   => $result['title'],
             'entries' => $result['entries'],
         ]);
 
@@ -147,15 +136,15 @@ switch (action()) {
             if (!is_array($row)) {
                 continue;
             }
-            // Abstände vor Satzzeichen gleich beim Einlesen richtigstellen:
-            // Im Französischen gehört vor ! ? : ; eines hin, im Deutschen
-            // nicht, und das Modell trifft es nicht jedes Mal.
+            // Abstände vor Satzzeichen gleich beim Einlesen richtigstellen -
+            // das Modell trifft es nicht jedes Mal (punctuation_fix()).
             $f = punctuation_fix((string) ($row['foreign'] ?? ''), $lang['code'] ?? null);
             $n = punctuation_fix((string) ($row['native'] ?? ''), 'de');
             if ($f === '' || $n === '') {
                 continue;
             }
             $note    = trim((string) ($row['note'] ?? ''));
+            $pruefen = trim((string) ($row['correction'] ?? ''));
             $clean[] = [
                 mb_substr($f, 0, 255),
                 mb_substr($n, 0, 255),
@@ -163,6 +152,9 @@ switch (action()) {
                 // Die Wortart bestimmt das Modell; das Kind bekommt sie nicht
                 // zu Gesicht und muss sie nicht prüfen.
                 word_type_clean($row['word_type'] ?? null),
+                // Was die KI berichtigt hat, solange es beim Prüfen niemand
+                // angefasst hat - views/import.js lässt es dann weg.
+                $pruefen === '' ? null : mb_substr($pruefen, 0, 255),
             ];
         }
         if ($clean === []) {
@@ -170,9 +162,9 @@ switch (action()) {
         }
 
         $paare = [];
-        foreach ($clean as [$f, $n, $note, $type]) {
+        foreach ($clean as [$f, $n, $note, $type, $pruefen]) {
             $paare[] = ['foreign' => $f, 'native' => $n,
-                        'note' => $note, 'word_type' => $type];
+                        'note' => $note, 'word_type' => $type, 'correction' => $pruefen];
         }
 
         $pdo = db();

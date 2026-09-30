@@ -951,8 +951,10 @@ table.release tr.flip td { animation: releaseflip .18s ease-out; }
  * dem fuenften sah die halbe Tabelle aus wie gerade eben.
  */
 @keyframes frischWeg {
-    from { background: var(--good-bg); }
-    to   { background: transparent; }
+    /* Nur die Farbe, nicht background: Sonst loeschte das Ende der Animation
+       auch das Gelb von "von der KI berichtigt" (tr.pruefen). */
+    from { background-color: var(--good-bg); }
+    to   { background-color: transparent; }
 }
 table.data tr.frisch td { animation: frischWeg 2.4s ease-out forwards; }
 
@@ -2192,3 +2194,42 @@ details.klassenliste[open] > summary { margin-bottom: 14px; }
 .kurshaken .cflag { flex: none; }
 .klassenwahl { display: flex; gap: 8px; align-items: center; margin: 0; }
 .klassenwahl select { flex: 0 1 220px; width: auto; min-width: 0; margin: 0; }
+
+/*
+ * Von der KI beim Einlesen berichtigt (teacher/unit.php, vocab.check_note).
+ *
+ * Gelb als eigene Bildebene statt als Hintergrundfarbe: Die grüne
+ * Bestätigung frisch eingelesener Zeilen (frischWeg) blendet die
+ * Hintergrundfarbe aus - das Gelb soll aber stehen bleiben, bis die
+ * Lehrkraft "Passt" drückt oder die Vokabel ändert.
+ */
+table.data tr.pruefen td {
+    background-image: linear-gradient(var(--warn-bg), var(--warn-bg));
+}
+table.data tr.pruefen td:first-child { box-shadow: inset 4px 0 0 var(--warn); }
+/*
+ * Der Hinweis in einer eigenen Zeile über die ganze Breite, direkt unter der
+ * Vokabel: links, was berichtigt wurde, rechts "Passt". Die beiden Zeilen
+ * sehen aus wie eine - ohne Trennlinie dazwischen.
+ */
+table.data tr.pruefen td { border-bottom-color: transparent; }
+table.data tr.pruefzeile td {
+    padding-top: 0;
+    background: var(--warn-bg);
+    box-shadow: inset 4px 0 0 var(--warn);
+}
+.pruefinhalt {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.pruefzeile .pruefnotiz {
+    min-width: 0;
+    font-size: .88rem;
+    font-weight: 600;
+    color: var(--warn);
+}
+.pruefzeile .pruefnotiz strong { color: var(--text); }
+.pruefzeile .passt { flex: none; margin: 0; min-width: 96px; }
+.pruefhinweis-kopf { margin-bottom: 12px; }

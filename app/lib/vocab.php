@@ -157,8 +157,9 @@ function vocab_append(int $unitId, array $paare, ?string $sprachcode = null): in
         }
 
         $st = db()->prepare(
-            'INSERT INTO vocab (unit_id, term_foreign, term_native, note, word_type, position)
-             VALUES (?, ?, ?, ?, ?, ?)',
+            'INSERT INTO vocab (unit_id, term_foreign, term_native, note, word_type,
+                                check_note, position)
+             VALUES (?, ?, ?, ?, ?, ?, ?)',
         );
 
         $dazu = 0;
@@ -180,12 +181,16 @@ function vocab_append(int $unitId, array $paare, ?string $sprachcode = null): in
             $schon[$schluessel] = true;
 
             $notiz = trim((string) ($p['note'] ?? ''));
+            // Was die KI beim Einlesen berichtigt hat - die Zeile bleibt
+            // markiert, bis die Lehrkraft sie geprüft hat.
+            $pruefen = trim((string) ($p['correction'] ?? ''));
             $st->execute([
                 $unitId,
                 mb_substr($f, 0, 255),
                 mb_substr($n, 0, 255),
                 $notiz === '' ? null : mb_substr($notiz, 0, 255),
                 ($p['word_type'] ?? null) !== null ? mb_substr((string) $p['word_type'], 0, 16) : null,
+                $pruefen === '' ? null : mb_substr($pruefen, 0, 255),
                 $naechste + $dazu,
             ]);
             $dazu++;
@@ -226,11 +231,19 @@ function vocab_update(int $vocabId, string $foreign, string $native,
         return false;
     }
 
+    // Wer die Vokabel ändert, hat sie angesehen - die Markierung "von der
+    // KI berichtigt" hat damit ihren Zweck erfüllt.
     q(
-        'UPDATE vocab SET term_foreign = ?, term_native = ? WHERE id = ?',
+        'UPDATE vocab SET term_foreign = ?, term_native = ?, check_note = NULL WHERE id = ?',
         [mb_substr($f, 0, 255), mb_substr($n, 0, 255), $vocabId],
     );
     return true;
+}
+
+/** Die Markierung "von der KI berichtigt" wegnehmen: Die Lehrkraft sagt "passt". */
+function vocab_check_done(int $vocabId): void
+{
+    q('UPDATE vocab SET check_note = NULL WHERE id = ?', [$vocabId]);
 }
 
 /**

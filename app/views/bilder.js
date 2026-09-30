@@ -1,12 +1,12 @@
 /*
- * Fotos fuer die Bilderkennung vorbereiten.
+ * Fotos fuer die Texterkennung vorbereiten.
  *
  * Steht fuer sich, weil es zwei Aufrufer hat, die sonst nichts gemeinsam
  * haben: die Einleseansicht der App (ein Modul) und die Lerneinheitsseite
  * im Lehrkraft-Bereich (ein gewoehnliches Skript, das sich das hier per
  * import() nachlaedt). Zwei Abschriften derselben Rechnerei waeren bald
- * zwei verschiedene Bildgroessen - und damit zwei verschiedene Rechnungen
- * beim Modell.
+ * zwei verschiedene Bildgroessen - und damit zwei verschieden gut
+ * gelesene Seiten.
  *
  * Ohne Abhaengigkeiten: kein core.js, kein DOM ausserhalb des eigenen
  * <canvas>. Damit laesst es sich von ueberall laden.
@@ -16,9 +16,12 @@
  *  MAX_IMAGES in api/import.php passen - dort wird es durchgesetzt. */
 export const MAX_IMAGES = 6;
 
-/* Claude skaliert größere Bilder ohnehin herunter - kleiner hochladen spart
-   Uploadzeit und Token, ohne an Erkennungsqualität zu verlieren. */
-export const MAX_EDGE = 1568;
+/* Die Texterkennung läuft auf dem Gerät (ocr.js), und Tesseract braucht
+   Buchstaben mit gut zwanzig Pixeln Höhe. Hier standen 1568 - so weit
+   verkleinerte Claude ohnehin, als die Fotos noch zur KI gingen. Für eine
+   ganze Buchseite war das zu knapp; 2400 hält kleine Schrift lesbar und
+   das Lesen am Telefon trotzdem schnell. */
+export const MAX_EDGE = 2400;
 
 export const JPEG_QUALITY = 0.82;
 

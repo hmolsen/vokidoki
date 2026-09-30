@@ -2365,3 +2365,14 @@ dialog.rueckfrage:has(.titelwahl) { width: min(100% - 32px, 420px); }
     font-weight: 400;
     opacity: .85;
 }
+
+/* Von der KI beim Einlesen berichtigt - im Prüfschritt der App
+   (views/import.js), wie in der Tabelle der Lehrkraft (admin.css). */
+.pair.pruefen input { border-color: var(--warn); background: var(--warn-bg); }
+.pair .pruefnotiz {
+    grid-column: 1 / -1;
+    margin-top: -4px;
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--warn);
+}

@@ -81,6 +81,12 @@ function schema_migrations(): array
             static fn (): bool => !column_exists('users', 'letter_template'),
             'ALTER TABLE users ADD COLUMN letter_template TEXT NULL AFTER consent_at',
         ],
+        // Die Markierung "von der KI berichtigt" je Vokabel - siehe ocr.js
+        // und analyze_vocab_text() in lib/ai.php.
+        'vocab.check_note' => [
+            static fn (): bool => !column_exists('vocab', 'check_note'),
+            'ALTER TABLE vocab ADD COLUMN check_note VARCHAR(255) NULL AFTER word_type',
+        ],
         /*
          * Nur freundliche Adjektive in den Anfangspasswörtern.
          *

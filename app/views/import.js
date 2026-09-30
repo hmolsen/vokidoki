@@ -5,6 +5,7 @@ import {
 
 import { MAX_IMAGES, shrinkToBase64 } from './bilder.js';
 import { vokiLiest } from '../lesevoki.js';
+import { texterkennung } from '../ocr.js';
 
 const draftKey = (languageId) => `vt-draft-${languageId}`;
 
@@ -21,12 +22,16 @@ let kursName = null;
 /* Die vorhandenen Lerneinheiten - Ziele zum Anhaengen. */
 let einheiten = [];
 
+/* Das Sprachkürzel - es wählt die Sprachdatei der Texterkennung. */
+let sprachCode = '';
+
 async function kursHolen(languageId) {
     if (kursName !== null) return kursName;
     try {
         const { language, units } = await api('units', 'list', { query: { language_id: languageId, einlesen: 1 } });
         kursName  = language?.course || language?.name || '';
         einheiten = Array.isArray(units) ? units : [];
+        sprachCode = language?.code || '';
     } catch {
         kursName  = '';
         einheiten = [];
@@ -147,18 +152,35 @@ function showCapture(languageId, images = []) {
         clearError();
         const decke = vokiLiest('Voki liest die Vokabeln …');
         try {
-            const data = await api('import', 'analyze', {
-                body: {
-                    language_id: Number(languageId),
-                    images: images.map((i) => ({ data: i.data, media_type: i.media_type })),
-                },
-            });
-            saveDraft(languageId, data.title, data.entries);
             // Sicherstellen, dass die Liste da ist - der Pruefschritt baut
-            // seine Wahl daraus.
+            // seine Wahl daraus, und die Texterkennung braucht das Kürzel.
             await kursHolen(languageId);
+
+            /*
+             * Gelesen wird hier, auf dem Gerät (ocr.js) - die Fotos
+             * verlassen es nicht. Zum Server geht nur der erkannte Text.
+             */
+            const text = await texterkennung(
+                images.map((i) => `data:${i.media_type};base64,${i.data}`),
+                sprachCode,
+                {
+                    fortschritt: (seite, alle, anteil) => decke.text(
+                        alle > 1 ? `Voki liest Foto ${seite} von ${alle} …` : 'Voki liest das Foto …',
+                        `${Math.round(anteil * 100)} % - die Fotos bleiben auf diesem Gerät.`,
+                    ),
+                },
+            );
+
+            decke.text('Voki sortiert die Vokabeln …',
+                       'Die KI ordnet den erkannten Text und berichtigt Lesefehler.');
+            const data = await api('import', 'analyze', {
+                body: { language_id: Number(languageId), text, pages: images.length },
+            });
+
+            // Einen Titel liefert das Einlesen nicht mehr - er wird eingetippt.
+            saveDraft(languageId, '', data.entries);
             decke.weg();
-            showReview(languageId, data.title, data.entries, false);
+            showReview(languageId, '', data.entries, false);
         } catch (err) {
             decke.weg();
             // Fotos bewusst weiterreichen - sie noch einmal zu machen wäre ärgerlich.
@@ -196,7 +218,7 @@ function showReview(languageId, title, entries, fromDraft) {
                 <label for="title">Titel der Lerneinheit</label>
                 <input type="text" id="title" maxlength="128"
                        placeholder="z. B. Unit 1" value="${esc(title || '')}">
-                ${title ? '' : '<p class="tiny muted" style="margin:-6px 0 0">Auf den Fotos stand keine Überschrift - denk dir einen Namen aus.</p>'}
+                <p class="tiny muted" style="margin:-6px 0 0">Meist steht er als Überschrift im Buch, zum Beispiel „Unit 4“.</p>
             </div>
         </div>
 
@@ -227,7 +249,19 @@ function showReview(languageId, title, entries, fromDraft) {
         button.closest('.pair')?.remove();
         persist();
     });
-    pairs.addEventListener('input', persist);
+    /*
+     * Wer eine von der KI berichtigte Zeile anfasst, hat sie geprüft -
+     * die Markierung geht weg und reist auch nicht mit in die Tabelle.
+     */
+    pairs.addEventListener('input', (event) => {
+        const zeile = event.target.closest('.pair');
+        if (zeile?.dataset.korrektur) {
+            delete zeile.dataset.korrektur;
+            zeile.classList.remove('pruefen');
+            zeile.querySelector('.pruefnotiz')?.remove();
+        }
+        persist();
+    });
     $('#title')?.addEventListener('input', persist);
 
     $('#addRow').addEventListener('click', () => {
@@ -298,16 +332,9 @@ function showReview(languageId, title, entries, fromDraft) {
                  * derselbe. Sie in der Lernansicht abzusetzen hiess,
                  * ihr eine leere Liste zu zeigen - freigegeben ist ja noch
                  * nichts.
-                 *
-                 * Beim Anhängen fragt die Lehrkraft-Seite nach der
-                 * Überschrift von den Fotos (unit.php, ?titel=) - bei einer
-                 * neuen Lerneinheit stand sie schon im Titelfeld.
                  */
                 if (VT.user?.isTeacher) {
-                    const vorschlag = anId > 0 && title
-                        ? `&titel=${encodeURIComponent(title)}` : '';
-                    window.location.href =
-                        `${VT.base}/teacher/unit.php?id=${data.unit_id}${vorschlag}`;
+                    window.location.href = `${VT.base}/teacher/unit.php?id=${data.unit_id}`;
                     await new Promise((r) => setTimeout(r, 4000));
                     return;
                 }
@@ -350,22 +377,26 @@ function pairRow(entry, index) {
     // Die Wortart kommt vom Modell und wird dem Kind nicht gezeigt - sie reist
     // unsichtbar am Element mit, damit sie beim Speichern erhalten bleibt.
     return `
-        <div class="pair" data-row="${index}" data-wt="${esc(entry.word_type || '')}">
+        <div class="pair${entry.correction ? ' pruefen' : ''}" data-row="${index}"
+             data-wt="${esc(entry.word_type || '')}"
+             ${entry.correction ? `data-korrektur="${esc(entry.correction)}"` : ''}>
             <input type="text" class="f" value="${esc(entry.foreign || '')}"
                    placeholder="Fremdsprache" maxlength="255"
                    autocapitalize="none" autocorrect="off" spellcheck="false">
             <input type="text" class="n" value="${esc(entry.native || '')}"
                    placeholder="Deutsch" maxlength="255" autocorrect="off">
             <button class="del" data-del="${index}" aria-label="Zeile löschen">&times;</button>
+            ${entry.correction ? `<span class="pruefnotiz">⚠️ Von der KI berichtigt: ${esc(entry.correction)} - bitte genau prüfen</span>` : ''}
         </div>`;
 }
 
 /** Alle Zeilen inklusive halb ausgefüllter - Grundlage für den Entwurf. */
 function collectAll() {
     return $$('.pair').map((row) => ({
-        foreign:   row.querySelector('.f').value,
-        native:    row.querySelector('.n').value,
-        word_type: row.dataset.wt || null,
+        foreign:    row.querySelector('.f').value,
+        native:     row.querySelector('.n').value,
+        word_type:  row.dataset.wt || null,
+        correction: row.dataset.korrektur || null,
     }));
 }
 
@@ -373,9 +404,10 @@ function collectAll() {
 function collectComplete() {
     return collectAll()
         .map((e) => ({
-            foreign:   e.foreign.trim(),
-            native:    e.native.trim(),
-            word_type: e.word_type,
+            foreign:    e.foreign.trim(),
+            native:     e.native.trim(),
+            word_type:  e.word_type,
+            correction: e.correction,
         }))
         .filter((e) => e.foreign !== '' && e.native !== '');
 }

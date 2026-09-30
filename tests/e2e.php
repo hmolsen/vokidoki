@@ -293,7 +293,7 @@ ok('Passwort liegt als Hash in der Datenbank',
 
 foreach (['users.php' => 'Neuen Account anlegen',
           'vocab.php' => 'Schule',
-          'settings.php' => 'Modell für die Bilderkennung',
+          'settings.php' => 'Modell für das Einlesen',
           'selfcheck.php' => 'Prüfung'] as $file => $needle) {
     $res = http($base . '/admin/' . $file);
     ok("Seite $file lädt", $res['status'] === 200 && str_contains($res['body'], $needle),
@@ -617,31 +617,38 @@ if (!$isFake) {
     echo "  - übersprungen (anthropic_base_url zeigt nicht auf den Simulator)
 ";
 } else {
-    $im = imagecreatetruecolor(60, 40);
-    imagefilledrectangle($im, 0, 0, 60, 40, imagecolorallocate($im, 250, 250, 250));
-    ob_start();
-    imagejpeg($im, null, 90);
-    $photo = base64_encode((string) ob_get_clean());
-    imagedestroy($im);
+    /*
+     * Die Fotos liest ocr.js im Browser; beim Server kommt nur der erkannte
+     * Text an. So sieht er aus: Seitenkopf, Zeilen, Spalten per Tabulator.
+     */
+    $ocrText = "Seite 1\nthe spoon\tder Loffel\nthe plate\tder Teller\nto cook\tkochen";
 
     [$data, $status] = apiCall('import', 'analyze', [
         'language_id' => $languageId,
-        'images'      => [['data' => $photo, 'media_type' => 'image/jpeg']],
+        'text'        => $ocrText,
+        'pages'       => 1,
     ]);
-    ok('Foto wird ausgewertet', $status === 200 && ($data['ok'] ?? false), $data['error'] ?? '');
-    ok('Titel kommt aus dem Bild', ($data['title'] ?? '') === 'Unit 4 - In the kitchen');
+    ok('Der erkannte Text wird geordnet', $status === 200 && ($data['ok'] ?? false), $data['error'] ?? '');
+    ok('Einen Titel liefert das Einlesen nicht mehr', !array_key_exists('title', $data ?? []));
     ok('Nur vollständige Paare werden zurückgegeben', count($data['entries'] ?? []) === 5);
+    ok('Was die KI berichtigt hat, ist markiert',
+       ($data['entries'][0]['correction'] ?? '') === 'Loffel → Löffel');
 
     [$saved, $status] = apiCall('import', 'save', [
         'language_id' => $languageId,
-        'title'       => $data['title'],
+        'title'       => 'Unit 4',
         'entries'     => $data['entries'],
     ]);
     ok('Erkannte Vokabeln lassen sich speichern', $status === 200 && ($saved['count'] ?? 0) === 5);
 
     $newUnit = (int) ($saved['unit_id'] ?? 0);
-    ok('Lerneinheit trägt den erkannten Titel',
-       qv('SELECT title FROM units WHERE id = ?', [$newUnit]) === 'Unit 4 - In the kitchen');
+    ok('Lerneinheit trägt den eingetippten Titel',
+       qv('SELECT title FROM units WHERE id = ?', [$newUnit]) === 'Unit 4');
+    ok('Die Markierung reist mit in die Datenbank',
+       qv('SELECT check_note FROM vocab WHERE unit_id = ? ORDER BY position LIMIT 1',
+          [$newUnit]) === 'Loffel → Löffel'
+       && (int) qv('SELECT COUNT(*) FROM vocab WHERE unit_id = ? AND check_note IS NOT NULL',
+                   [$newUnit]) === 1);
 
     ok('Kategorie wird mitgeliefert, ohne dass das Kind sie prüfen muss',
        ($data['entries'][0]['word_type'] ?? null) === 'substantiv');
@@ -671,14 +678,29 @@ if (!$isFake) {
     // Nicht im Quiz-Abschnitt mitzählen lassen.
     q('DELETE FROM units WHERE id = ?', [$newUnit]);
 
-    [$data, $status] = apiCall('import', 'analyze', ['language_id' => $languageId, 'images' => []]);
-    ok('Ohne Foto wird abgelehnt', $status === 400, "Status $status");
+    [$data, $status] = apiCall('import', 'analyze', ['language_id' => $languageId, 'text' => '']);
+    ok('Ohne erkannten Text wird abgelehnt', $status === 422, "Status $status");
+
+    [$data, $status] = apiCall('import', 'analyze', ['language_id' => $languageId, 'text' => "1\n2 -- 3"]);
+    ok('Text ohne ein einziges Wort auch', $status === 422, "Status $status");
 
     [$data, $status] = apiCall('import', 'analyze', [
-        'language_id' => $languageId,
-        'images'      => [['data' => base64_encode('kein bild'), 'media_type' => 'image/jpeg']],
+        'language_id' => $languageId, 'text' => str_repeat("apple\tApfel\n", 3000),
     ]);
-    ok('Ungültiges Bild wird abgelehnt', $status === 400, "Status $status");
+    ok('Zu viel Text auf einmal wird abgelehnt', $status === 400, "Status $status");
+
+    [$data, $status] = apiCall('import', 'analyze', [
+        'language_id' => $languageId, 'text' => "apple\tApfel", 'pages' => 7,
+    ]);
+    ok('Mehr als sechs Seiten auch', $status === 400, "Status $status");
+
+    // Ein Foto im alten Format wird nicht mehr angenommen - nichts davon
+    // darf versehentlich doch beim Modell ankommen.
+    [$data, $status] = apiCall('import', 'analyze', [
+        'language_id' => $languageId,
+        'images'      => [['data' => base64_encode('bild'), 'media_type' => 'image/jpeg']],
+    ]);
+    ok('Fotos nimmt die Schnittstelle nicht mehr an', $status === 422, "Status $status");
 }
 
 section('Kategorien im Admin');
@@ -1004,6 +1026,11 @@ ok('Der Selbsttest prueft, ob jedes Modul hochgeladen ist',
    && str_contains($seite, 'jeder Import findet seine Datei'));
 require_once __DIR__ . '/../app/lib/version.php';
 require_once __DIR__ . '/../app/lib/version.php';
+ok('Der Selbsttest prueft auch die Texterkennung',
+   preg_match('~Texterkennung vollständig.*?ocr/ mit 7 Sprachen~s', $seite) === 1);
+foreach (['ocr.js', 'ocr/tesseract.min.js', 'ocr/worker.min.js', 'ocr/sprachen/deu.traineddata.gz'] as $datei) {
+    ok("Der Server liefert $datei aus", http($base . '/' . $datei)['status'] === 200);
+}
 ok('Lokal fehlt keines', modules_missing() === [], implode(', ', modules_missing()));
 $huelle = (string) file_get_contents(__DIR__ . '/../app/index.php');
 ok('Startet die App nicht, steht ein Hinweis statt einer weissen Seite',
@@ -3191,8 +3218,9 @@ ok('Und weiss, wohin sie gehoert',
 ok('Die Lupe ist ein Fenster, kein neuer Tab',
    str_contains($res['body'], '<dialog id="lupe" class="lupe">'),
    'das Bild liegt im Browser - es gibt keine Adresse, die sich oeffnen liesse');
-ok('Und die Ablage sagt, dass die Maschine sich verlesen kann',
-   preg_match('/Was dabei herauskommt, kann Fehler enthalten/', $res['body']) === 1);
+ok('Und die Ablage sagt, dass die Fotos auf dem Geraet bleiben und berichtigt wird',
+   str_contains($res['body'], 'die Fotos verlassen es')
+   && str_contains($res['body'], 'gelb markiert'));
 
 ok('Die Bildverkleinerung steht nur noch einmal im Quelltext',
    file_exists(__DIR__ . '/../app/views/bilder.js')
@@ -4705,7 +4733,7 @@ $ergebnis = apiAls($darfJar, function () use ($unitId, $languageId) {
         'loeschen'  => apiCall('units', 'delete', ['id' => $unitId]),
         'umbenennen' => apiCall('units', 'rename', ['id' => $unitId, 'title' => 'Gekapert']),
         'sprache'   => apiCall('languages', 'delete', ['id' => $languageId]),
-        'einlesen'  => apiCall('import', 'analyze', ['language_id' => $languageId, 'images' => []]),
+        'einlesen'  => apiCall('import', 'analyze', ['language_id' => $languageId, 'text' => "apple\tApfel"]),
     ];
 });
 
@@ -6194,27 +6222,59 @@ ok('Ohne Antwort auf die Frage geschieht nichts',
    qv('SELECT COUNT(*) FROM class_members WHERE class_id = ? AND user_id = ?',
       [$klasseId, (int) $max['id']]) == 1);
 
-// ---- Die Überschrift von den Fotos wird gefragt, nicht einfach gesetzt.
+// ---- Was die KI beim Einlesen berichtigt hat, steht markiert da.
 q('INSERT INTO units (language_id, course_id, title, released_position) VALUES (?, ?, ?, 0)',
   [$kursSprache, $kursA, 'Unit 4']);
 $titelUnit = (int) db()->lastInsertId();
-$seite = teacherGet('unit.php?id=' . $titelUnit . '&titel=' . rawurlencode('Unit 4 - In the kitchen'))['body'];
-ok('Nach dem Einlesen fragt ein Fenster nach der Überschrift',
-   str_contains($seite, 'id="titelvorschlag"') && str_contains($seite, 'data-sofort="titel"')
-   && str_contains($seite, 'Unit 4 - In the kitchen') && str_contains($seite, 'name="rename_unit"'));
-ok('Mit beiden Titeln auf den Knöpfen',
-   str_contains($seite, '&bdquo;Unit 4 - In the kitchen&ldquo; nennen')
-   && str_contains($seite, '&bdquo;Unit 4&ldquo; behalten'));
-ok('Derselbe Titel in anderer Schreibweise ist keine Frage wert',
-   !str_contains(teacherGet('unit.php?id=' . $titelUnit . '&titel=UNIT%204')['body'], 'id="titelvorschlag"'));
-ok('Ohne Überschrift auf den Fotos auch nicht',
-   !str_contains(teacherGet('unit.php?id=' . $titelUnit)['body'], 'id="titelvorschlag"'));
+$gespeichert = json_decode(teacherRequest($base . '/teacher/unit.php?id=' . $titelUnit, [
+    'add_scanned' => '1', 'unit_id' => $titelUnit, 'csrf' => $lehrerCsrf,
+    'entries'     => json_encode([
+        ['foreign' => 'the spoon', 'native' => 'der Löffel', 'correction' => 'Loffel → Löffel'],
+        ['foreign' => 'the plate', 'native' => 'der Teller', 'correction' => null],
+    ], JSON_UNESCAPED_UNICODE),
+])['body'], true);
+ok('Das Einlesen der Lehrkraft nimmt die Markierung an', ($gespeichert['dazu'] ?? 0) === 2,
+   json_encode($gespeichert));
+$loeffel = (int) qv("SELECT id FROM vocab WHERE unit_id = ? AND term_foreign = 'the spoon'", [$titelUnit]);
+$teller  = (int) qv("SELECT id FROM vocab WHERE unit_id = ? AND term_foreign = 'the plate'", [$titelUnit]);
+
+$seite = teacherGet('unit.php?id=' . $titelUnit)['body'];
+ok('Die berichtigte Zeile steht markiert in der Tabelle',
+   preg_match('~<tr class="[^"]*\bpruefen\b[^"]*"[^>]*>\s*<td id="zeile' . $loeffel . '">~', $seite) === 1);
+ok('Mit dem, was berichtigt wurde',
+   str_contains($seite, 'Von der KI berichtigt: <strong>Loffel → Löffel</strong>'));
+ok('In einer eigenen Zeile über die ganze Tabelle',
+   preg_match('~<tr class="pruefzeile" data-pruefzeile="' . $loeffel . '">\s*<td colspan="3">~', $seite) === 1);
+ok('Die andere nicht',
+   preg_match('~<tr class="[^"]*\bpruefen\b[^"]*"[^>]*>\s*<td id="zeile' . $teller . '">~', $seite) === 0);
+ok('Über der Tabelle steht, wie viele zu prüfen sind',
+   str_contains($seite, '<span data-pruefzahl>Eine Vokabel</span>'));
+ok('Und an der Zeile ein "Passt"',
+   str_contains($seite, 'name="check_ok" value="' . $loeffel . '"'));
+ok('Nach einem Titel von den Fotos wird nicht mehr gefragt',
+   !str_contains($seite, 'titelvorschlag'));
+
+teacherRequest($base . '/teacher/unit.php?id=' . $titelUnit, [
+    'check_ok' => $loeffel, 'unit_id' => $titelUnit, 'csrf' => $lehrerCsrf,
+]);
+ok('"Passt" nimmt die Markierung weg',
+   qv('SELECT check_note FROM vocab WHERE id = ?', [$loeffel]) === null);
+
+q("UPDATE vocab SET check_note = 'Tel1er → Teller' WHERE id = ?", [$teller]);
+teacherRequest($base . '/teacher/unit.php?id=' . $titelUnit, [
+    'save_vocab' => $teller, 'unit_id' => $titelUnit, 'csrf' => $lehrerCsrf,
+    'edit_f' => 'the plate', 'edit_n' => 'der Teller',
+]);
+ok('Wer die Vokabel ändert, hat sie geprüft - die Markierung ist weg',
+   qv('SELECT check_note FROM vocab WHERE id = ?', [$teller]) === null);
+
 $js = (string) file_get_contents(__DIR__ . '/../app/teacher/teacher.js');
-ok('Das Einlesen reicht die Überschrift weiter',
-   str_contains($js, "encodeURIComponent(erkannt.title)"));
-ok('Und legt Voki als Decke über die Seite',
-   str_contains($js, "vokiLiest('Voki liest die Seiten …')")
-   && is_file(__DIR__ . '/../app/assets/voki-liest.svg'));
+ok('Das Einlesen liest auf dem Gerät und schickt nur Text',
+   str_contains($js, 'texterkennung(') && str_contains($js, 'text, pages: bilder.length')
+   && !str_contains($js, 'images: bilder'));
+ok('Und reicht keinen Titel mehr weiter', !str_contains($js, 'erkannt.title'));
+ok('Voki liegt dabei als Decke über der Seite',
+   str_contains($js, 'vokiLiest(') && is_file(__DIR__ . '/../app/assets/voki-liest.svg'));
 
 q('DELETE FROM units WHERE id = ?', [$titelUnit]);
 q('DELETE FROM courses WHERE id IN (?, ?)', [$kursA, $kursB]);

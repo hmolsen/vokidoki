@@ -171,16 +171,18 @@ if ($schemaKeys === ['sentences']) {
 }
 
 // Antwort im Format, das das JSON-Schema der App verlangt.
+// Kein title mehr - den gibt die Lehrkraft selbst ein. Dafuer correction:
+// Eine Zeile hat das "Modell" berichtigt, und die App muss sie markieren.
 $payload = [
-    'title'   => 'Unit 4 - In the kitchen',
     'entries' => [
-        ['foreign' => 'the spoon', 'native' => 'der Löffel', 'note' => null,    'word_type' => 'substantiv'],
-        ['foreign' => 'the plate', 'native' => 'der Teller', 'note' => 'flach', 'word_type' => 'substantiv'],
-        ['foreign' => 'to cook',   'native' => 'kochen',     'note' => null,    'word_type' => 'verb'],
-        ['foreign' => 'Good night!', 'native' => 'Gute Nacht!', 'note' => null, 'word_type' => 'aussage'],
-        ['foreign' => 'How are you?', 'native' => 'Wie geht es dir?', 'note' => null, 'word_type' => 'frage'],
+        ['foreign' => 'the spoon', 'native' => 'der Löffel', 'note' => null,    'word_type' => 'substantiv',
+         'correction' => 'Loffel → Löffel'],
+        ['foreign' => 'the plate', 'native' => 'der Teller', 'note' => 'flach', 'word_type' => 'substantiv', 'correction' => null],
+        ['foreign' => 'to cook',   'native' => 'kochen',     'note' => null,    'word_type' => 'verb', 'correction' => null],
+        ['foreign' => 'Good night!', 'native' => 'Gute Nacht!', 'note' => null, 'word_type' => 'aussage', 'correction' => null],
+        ['foreign' => 'How are you?', 'native' => 'Wie geht es dir?', 'note' => null, 'word_type' => 'frage', 'correction' => null],
         // Unvollständige Zeile: muss von der App verworfen werden.
-        ['foreign' => '',          'native' => 'leer',       'note' => null,    'word_type' => 'sonstiges'],
+        ['foreign' => '',          'native' => 'leer',       'note' => null,    'word_type' => 'sonstiges', 'correction' => null],
     ],
 ];
 

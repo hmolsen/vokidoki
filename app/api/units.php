@@ -145,6 +145,8 @@ switch (action()) {
             'id'       => (int) $lang['id'],
             'name'     => $lang['name'],
             'flag'     => $lang['flag_emoji'],
+            // Für die Texterkennung beim Einlesen (ocr.js): welche Sprachdatei.
+            'code'     => $lang['code'],
             'course'   => $kurs,
             'courseId' => $kursZeile !== null && user_is_teacher($user)
                 ? (int) $kursZeile['id'] : null,

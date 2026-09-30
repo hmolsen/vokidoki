@@ -135,7 +135,7 @@ admin_head('Einstellungen', 'settings.php');
 flash_render();
 ?>
 
-<h2>Modell für die Bilderkennung</h2>
+<h2>Modell für das Einlesen</h2>
 <form method="post" class="card">
     <?= csrf_field() ?>
     <div class="formgrid">
@@ -161,10 +161,11 @@ flash_render();
         </div>
     </div>
     <p class="tiny muted">
-        Opus 5 liest Handschrift und enge Buchlayouts am zuverlässigsten.
-        Sonnet 5 kostet rund 60&nbsp;% weniger und reicht für sauber gedruckte Listen.
-        Der Aufwand steuert, wie gründlich das Modell arbeitet - <code>medium</code>
-        ist für das Abtippen von Vokabelseiten die passende Stufe.
+        Die Fotos liest die Texterkennung auf dem Gerät der Lehrkraft; das Modell
+        bekommt nur den erkannten Text, ordnet ihn zu Vokabelpaaren und berichtigt
+        Lesefehler. Opus 5 berichtigt am zuverlässigsten, Sonnet 5 kostet rund
+        60&nbsp;% weniger und reicht für sauber gedruckte Listen. Der Aufwand steuert,
+        wie gründlich es arbeitet - <code>medium</code> passt für Vokabelseiten.
     </p>
     <button class="btn small" name="save_model" value="1">Speichern</button>
 </form>
@@ -227,7 +228,7 @@ flash_render();
         </div>
     </div>
     <p class="tiny muted">
-        Ist das Monatslimit erreicht, blockiert die App die Bilderkennung, bevor
+        Ist das Monatslimit erreicht, blockiert die App das Einlesen, bevor
         eine Anfrage an die API geht. Der Kurs dient nur der Anzeige in Euro.
     </p>
     <button class="btn small" name="save_budget" value="1">Speichern</button>
