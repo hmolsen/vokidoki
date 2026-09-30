@@ -1755,6 +1755,57 @@ ok('Und rechnet mit den Schritten beider Uebungsarten',
 ok('Sie benennt auch, woraus sich das zusammensetzt',
    str_contains($js, 'Auswählen') && str_contains($js, 'Lückentext'));
 
+section('Einsetzen - die dritte Übungsart');
+
+/*
+ * Einsetzen führt einen eigenen Lernstand ("pick") und zählt für die Serie.
+ * Der Server muss die Antworten also annehmen - die Liste der Übungsarten
+ * stand dreimal im Code, und wo "pick" gefehlt hätte, wären sie still
+ * verworfen worden.
+ */
+require_once __DIR__ . '/../app/lib/progress.php';
+ok('Die Übungsarten stehen an einer Stelle', MODES === ['mc', 'pick', 'cloze']);
+foreach (['app/api/bundle.php', 'app/api/units.php'] as $datei) {
+    ok("$datei prüft gegen diese Liste",
+       !str_contains((string) file_get_contents(__DIR__ . '/../' . $datei), '[MODE_CHOICE, MODE_CLOZE]'));
+}
+
+$pVokabel = (int) qv('SELECT v.id FROM vocab v JOIN units u ON u.id = v.unit_id
+                       WHERE v.unit_id = ? AND v.position < u.released_position
+                       ORDER BY v.position LIMIT 1', [$unitId]);
+q("UPDATE vocab SET word_type = 'verb' WHERE id = ?", [$pVokabel]);
+[$paket] = apiCall('bundle', 'get');
+$imPaket = array_values(array_filter($paket['vokabeln'] ?? [],
+    static fn ($v) => (int) $v['i'] === $pVokabel));
+ok('Der Vorrat bringt die Wortart mit - die falschen Wörter kommen aus derselben',
+   ($imPaket[0]['t'] ?? null) === 'verb', json_encode($imPaket[0] ?? null));
+
+$pMarke = bin2hex(random_bytes(6));
+$pVorher = (int) (qv('SELECT correct FROM learn_days WHERE user_id = ? AND day = CURDATE()',
+                     [$userId]) ?? 0);
+[$res, $code] = apiCall('bundle', 'push', ['ereignisse' => [
+    ['e' => $pMarke . '-1', 'v' => $pVokabel, 'm' => 'pick', 'r' => 1],
+    ['e' => $pMarke . '-2', 'v' => $pVokabel, 'm' => 'pick', 'r' => 1],
+]]);
+ok('Antworten aus dem Einsetzen werden angenommen',
+   $code === 200 && ($res['genommen'] ?? 0) === 2, (string) json_encode($res));
+$pStand = q1("SELECT streak, correct_count FROM progress
+               WHERE user_id = ? AND vocab_id = ? AND mode = 'pick'", [$userId, $pVokabel]);
+ok('Mit eigenem Lernstand', (int) ($pStand['streak'] ?? 0) === 2, (string) json_encode($pStand));
+ok('Und sie zählen für die Serie',
+   (int) qv('SELECT correct FROM learn_days WHERE user_id = ? AND day = CURDATE()', [$userId])
+   === $pVorher + 2);
+ok('Die anderen Übungen rührt das nicht an',
+   (int) qv("SELECT COUNT(*) FROM progress WHERE user_id = ? AND vocab_id = ? AND mode <> 'pick'",
+            [$userId, $pVokabel]) === 0);
+
+[$res, $code] = apiCall('units', 'reset', ['id' => $unitId, 'mode' => 'pick']);
+ok('Auch Einsetzen lässt sich für sich zurücksetzen', $code === 200, (string) json_encode($res));
+ok('Und dann ist sein Stand weg',
+   (int) qv("SELECT COUNT(*) FROM progress WHERE user_id = ? AND vocab_id = ? AND mode = 'pick'",
+            [$userId, $pVokabel]) === 0);
+q('UPDATE vocab SET word_type = NULL WHERE id = ?', [$pVokabel]);
+
 section('Vokabel melden');
 
 require_once __DIR__ . '/../app/lib/meldungen.php';

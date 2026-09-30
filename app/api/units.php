@@ -250,7 +250,7 @@ switch (action()) {
 
         // Ohne Angabe wird alles zurückgesetzt; mit 'mode' nur eine Übungsart.
         $mode = isset($b['mode']) ? body_str($b, 'mode', 16) : '';
-        if ($mode !== '' && !in_array($mode, [MODE_CHOICE, MODE_CLOZE], true)) {
+        if ($mode !== '' && !in_array($mode, MODES, true)) {
             json_fail('Unbekannte Übungsart.');
         }
 

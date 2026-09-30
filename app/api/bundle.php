@@ -128,7 +128,7 @@ switch (action()) {
              * dreihundertmal ist ein Kilobyte Feldname.
              */
             foreach (qa(
-                "SELECT v.id, v.unit_id, v.term_foreign, v.term_native
+                "SELECT v.id, v.unit_id, v.term_foreign, v.term_native, v.word_type
                    FROM vocab v
                    JOIN units u ON u.id = v.unit_id
                   WHERE v.unit_id IN ($ep) AND v.position < u.released_position
@@ -140,6 +140,9 @@ switch (action()) {
                     'u' => (int) $v['unit_id'],
                     'f' => (string) $v['term_foreign'],
                     'n' => (string) $v['term_native'],
+                    // Die Wortart - "Einsetzen" nimmt die falschen Wörter
+                    // aus derselben (vorrat.js, einsetzAblenker()).
+                    't' => (string) ($v['word_type'] ?? ''),
                 ];
             }
 
@@ -290,7 +293,7 @@ switch (action()) {
 
             if ($art === 'reset') {
                 $unitId = (int) ($e['u'] ?? 0);
-                if ($modus !== '' && !in_array($modus, [MODE_CHOICE, MODE_CLOZE], true)) {
+                if ($modus !== '' && !in_array($modus, MODES, true)) {
                     continue;
                 }
                 if (!isset($erlaubteEinheiten[$unitId])) {
@@ -359,7 +362,7 @@ switch (action()) {
                 continue;
             }
 
-            if (!in_array($modus, [MODE_CHOICE, MODE_CLOZE], true)) {
+            if (!in_array($modus, MODES, true)) {
                 continue;
             }
             if (!isset($erlaubt[$vocabId])) {
