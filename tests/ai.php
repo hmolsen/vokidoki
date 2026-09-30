@@ -57,18 +57,12 @@ function section(string $name): void
     echo "\n$name\n";
 }
 
-echo "Bilderkennung gegen " . cfg('anthropic_base_url') . "\n";
+echo "Vokabeln ordnen gegen " . cfg('anthropic_base_url') . "\n";
 
-// Zwei kleine, echte JPEGs als Foto-Attrappen.
-$images = [];
-foreach ([0, 1] as $i) {
-    $im = imagecreatetruecolor(60, 40);
-    imagefilledrectangle($im, 0, 0, 60, 40, imagecolorallocate($im, 250, 250, 250));
-    ob_start();
-    imagejpeg($im, null, 90);
-    $images[] = ['data' => base64_encode((string) ob_get_clean()), 'media_type' => 'image/jpeg'];
-    imagedestroy($im);
-}
+// So sieht der Text aus, den ocr.js im Browser erzeugt: Seitenkopf, Zeilen,
+// Spalten durch Tabulator - mit einem typischen Lesefehler (Loffel).
+$ocrText = "Seite 1\nUnit 4 Vocabulary\nthe spoon\tder Loffel\nthe plate\tder Teller\tflach\n"
+         . "Seite 2\nto cook\tkochen\nGood night!\tGute Nacht!\nHow are you?\tWie geht es dir?";
 
 // Testkonto, damit das Kostenprotokoll eine gültige Zuordnung bekommt.
 q("DELETE FROM users WHERE username = 'ai_test'");
@@ -81,9 +75,10 @@ $before = (int) qv('SELECT COALESCE(MAX(id), 0) FROM ai_requests');
 
 section('Aufruf');
 
-$result = analyze_vocab_images($images, 'Englisch', $user);
+$result = analyze_vocab_text($ocrText, 2, 'Englisch', $user);
 
-ok('Titel wird übernommen', $result['title'] === 'Unit 4 - In the kitchen', (string) $result['title']);
+ok('Einen Titel gibt es nicht mehr - den tippt die Lehrkraft',
+   !array_key_exists('title', $result));
 ok('Fünf vollständige Vokabeln', count($result['entries']) === 5, (string) count($result['entries']));
 ok('Unvollständige Zeile wird verworfen',
    !in_array('leer', array_column($result['entries'], 'native'), true));
@@ -96,6 +91,11 @@ ok('Kategorie wird übernommen', $result['entries'][0]['word_type'] === 'substan
 ok('Verb wird als Verb erkannt', $result['entries'][2]['word_type'] === 'verb');
 ok('Grußformel wird als Aussage eingeordnet', $result['entries'][3]['word_type'] === 'aussage');
 ok('Frage wird als Frage eingeordnet', $result['entries'][4]['word_type'] === 'frage');
+ok('Was das Modell berichtigt hat, kommt mit',
+   $result['entries'][0]['correction'] === 'Loffel → Löffel',
+   (string) $result['entries'][0]['correction']);
+ok('Und wo es nichts berichtigt hat, steht null',
+   $result['entries'][1]['correction'] === null);
 
 section('Was beim Modell ankommt');
 
@@ -107,21 +107,31 @@ ok('Key aus dem Keyvault landet im Header',
    ($headers['x-api-key'] ?? '') === 'sk-ant-api03-FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE');
 ok('Modell aus den Einstellungen', $body['model'] === setting('vision_model'), (string) $body['model']);
 
+/*
+ * Die Fotos verlassen das Gerät nicht mehr: Beim Modell kommt reiner Text
+ * an, kein einziger Bildblock.
+ */
 $content = $body['messages'][0]['content'];
-ok('Beide Bilder sind dabei',
-   count(array_filter($content, static fn ($b) => $b['type'] === 'image')) === 2);
-ok('Bildblock hat media_type in Schreibweise der API',
-   ($content[0]['source']['media_type'] ?? null) === 'image/jpeg', json_encode($content[0]['source'] ?? []));
-ok('Bilddaten sind base64', ($content[0]['source']['type'] ?? '') === 'base64');
-ok('Anweisung steht nach den Bildern', ($content[2]['type'] ?? '') === 'text');
-ok('Sprachname steht in der Anweisung', str_contains($content[2]['text'] ?? '', 'Englisch'));
+$alsText = is_string($content) ? $content
+    : implode("\n", array_map(static fn ($b) => (string) ($b['text'] ?? ''), $content));
+ok('Kein Bild geht an das Modell',
+   is_string($content) || array_filter($content, static fn ($b) => ($b['type'] ?? '') === 'image') === []);
+ok('Der erkannte Text ist dabei, Zeile für Zeile',
+   str_contains($alsText, "the spoon\tder Loffel") && str_contains($alsText, 'Seite 2'));
+ok('Die Anweisung steht vor dem Text',
+   strpos($alsText, 'Aufgabe:') < strpos($alsText, 'the spoon'));
+ok('Sprachname steht in der Anweisung', str_contains($alsText, 'Englisch'));
+ok('Die Anweisung verlangt, Berichtigungen zu nennen',
+   str_contains($alsText, '"correction"'));
 
 ok('output_config trägt das JSON-Schema',
    ($body['output_config']['format']['type'] ?? '') === 'json_schema',
    json_encode($body['output_config'] ?? []));
-ok('Schema verlangt foreign, native, note und word_type',
+ok('Schema verlangt foreign, native, note, word_type und correction',
    ($body['output_config']['format']['schema']['properties']['entries']['items']['required'] ?? [])
-   === ['foreign', 'native', 'note', 'word_type']);
+   === ['foreign', 'native', 'note', 'word_type', 'correction']);
+ok('Und keinen Titel mehr',
+   !isset($body['output_config']['format']['schema']['properties']['title']));
 ok('Schema gibt die dreizehn Kategorien als feste Auswahl vor',
    ($body['output_config']['format']['schema']['properties']['entries']['items']
         ['properties']['word_type']['enum'] ?? []) === word_type_keys());
@@ -136,7 +146,7 @@ ok('Eintrag wurde geschrieben', $log !== null);
 ok('Status ok', ($log['status'] ?? '') === 'ok');
 ok('Token werden übernommen',
    (int) $log['input_tokens'] === 2400 && (int) $log['output_tokens'] === 180);
-ok('Anzahl Fotos stimmt', (int) $log['image_count'] === 2);
+ok('Anzahl gelesener Seiten stimmt', (int) $log['image_count'] === 2);
 ok('Anzahl erkannter Vokabeln stimmt', (int) $log['entry_count'] === 5);
 ok('Kind ist zugeordnet', (int) $log['user_id'] === (int) $user['id']);
 
@@ -268,7 +278,7 @@ $countBefore = (int) qv('SELECT COUNT(*) FROM ai_requests');
 $threw       = false;
 try {
     // Der Simulator antwortet bei diesem Sprachnamen mit HTTP 500.
-    analyze_vocab_images($images, 'Fehlerfall', $user);
+    analyze_vocab_text($ocrText, 1, 'Fehlerfall', $user);
 } catch (Throwable $e) {
     $threw = true;
 }

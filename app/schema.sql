@@ -89,6 +89,10 @@ CREATE TABLE IF NOT EXISTS vocab (
   note         VARCHAR(255) NULL,
   -- Wortart, vom Modell beim Einlesen bestimmt; NULL = noch nicht bestimmt.
   word_type    VARCHAR(16)  NULL,
+  -- Was die KI beim Einlesen an einem Lesefehler berichtigt hat ("Loffel ->
+  -- Löffel"). Die Lehrkraft sieht die Zeile markiert, bis sie sie ändert
+  -- oder mit "Passt" bestätigt; dann wieder NULL.
+  check_note   VARCHAR(255) NULL,
   -- position ist zweierlei: Reihenfolge UND Freigabezeiger. Elf Abfragen
   -- vergleichen v.position < u.released_position, und "Alles freigeben"
   -- setzt die Marke auf COUNT(*). Das traegt nur, solange die Positionen

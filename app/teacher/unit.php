@@ -316,6 +316,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_scanned']
             'note'      => $notiz === '' ? null : $notiz,
             // Die Wortart bestimmt das Modell; sie wird hier nur durchgereicht.
             'word_type' => word_type_clean($zeile['word_type'] ?? null),
+            // Was die KI an einem Lesefehler berichtigt hat - die Zeile steht
+            // danach markiert in der Tabelle, bis die Lehrkraft sie prüft.
+            'correction' => ($k = trim((string) ($zeile['correction'] ?? ''))) === '' ? null : $k,
         ];
     }
 
@@ -421,6 +424,27 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_vocab']))
     teacher_redirect($zurueck);
 }
 
+/*
+ * "Passt" an einer Zeile, die die KI beim Einlesen berichtigt hat.
+ *
+ * Die Markierung soll nicht ewig stehen: Wer die Zeile angesehen hat und
+ * sie richtig findet, nimmt sie weg. Wer sie ändert, ebenso - das erledigt
+ * vocab_update().
+ */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['check_ok'])) {
+    teacher_csrf_check();
+
+    $vokabelId = (int) $_POST['check_ok'];
+    if ((int) qv('SELECT COUNT(*) FROM vocab WHERE id = ? AND unit_id = ?',
+                 [$vokabelId, $unitId]) === 1) {
+        vocab_check_done($vokabelId);
+    }
+    if (unit_will_json()) {
+        unit_json(['ok' => true]);
+    }
+    teacher_redirect($zurueck . '#zeile' . $vokabelId);
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['save_vocab'])) {
     teacher_csrf_check();
 
@@ -465,7 +489,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['delete_vocab'
 }
 
 $vokabeln = qa(
-    'SELECT v.id, v.position, v.term_foreign, v.term_native, v.word_type
+    'SELECT v.id, v.position, v.term_foreign, v.term_native, v.word_type, v.check_note
        FROM vocab v
       WHERE v.unit_id = ?
       ORDER BY v.position, v.id',
@@ -535,39 +559,6 @@ teacher_flash_render();
     <input type="hidden" name="unit_id" value="<?= $unitId ?>">
 </form>
 
-<?php
-/*
- * Der Titel von den Fotos - als Frage, nicht als Tat.
- *
- * Die KI liest die Überschrift der Buchseite mit. Einfach umbenennen wäre
- * falsch: Wer eine Lerneinheit "Unit 3 - Teil 2" nennt und die zweite
- * Hälfte der Seiten nachliest, will nicht, dass daraus wieder "Unit 3"
- * wird. Also kommt der Vorschlag nach dem Einlesen über ?titel= mit und
- * wird hier gefragt; "behalten" schliesst nur das Fenster.
- *
- * Gleich bis auf Gross- und Kleinschreibung zählt als gleich - "UNIT 3"
- * aus dem Buch statt "Unit 3" ist keine Frage wert.
- */
-$vorschlag = trim(preg_replace('/\s+/u', ' ', (string) ($_GET['titel'] ?? '')) ?? '');
-$vorschlag = mb_substr($vorschlag, 0, 128);
-if ($vorschlag !== '' && mb_strtolower($vorschlag) !== mb_strtolower(trim((string) $unit['title']))):
-?>
-<dialog id="titelvorschlag" class="rueckfrage" data-sofort="titel">
-    <p class="rueckfrage-zeichen" aria-hidden="true">&#128214;</p>
-    <p class="rueckfrage-text">Auf den Fotos steht die Überschrift
-        &bdquo;<?= h($vorschlag) ?>&ldquo;. Soll die Lerneinheit so heissen?</p>
-    <form method="post" action="<?= h($zurueck) ?>" class="rueckfrage-knoepfe titelwahl">
-        <?= teacher_csrf_field() ?>
-        <input type="hidden" name="title" value="<?= h($vorschlag) ?>">
-        <button class="btn secondary" type="submit" formmethod="dialog" value="behalten">
-            &bdquo;<?= h((string) $unit['title']) ?>&ldquo; behalten
-        </button>
-        <button class="btn" type="submit" name="rename_unit" value="1">
-            &bdquo;<?= h($vorschlag) ?>&ldquo; nennen
-        </button>
-    </form>
-</dialog>
-<?php endif; ?>
 
 <?php if ($zustand['status'] === SENTENCE_RUNNING): ?>
     <div class="notice">
@@ -715,6 +706,22 @@ $neu = max(0, min($gesamt, (int) ($_GET['neu'] ?? 0)));
  * beim Freigeben von selbst.
  */
 ?>
+<?php
+/*
+ * Was die KI beim Einlesen berichtigt hat, steht gelb markiert - und hier
+ * gezählt, damit niemand die Tabelle nach den gelben Zeilen absuchen muss.
+ */
+$zuPruefen = count(array_filter($vokabeln, static fn (array $v): bool =>
+    (string) ($v['check_note'] ?? '') !== ''));
+?>
+<?php if ($zuPruefen > 0): ?>
+<p class="notice warn pruefhinweis-kopf">
+    <strong><?= $zuPruefen === 1 ? 'Eine Vokabel' : $zuPruefen . ' Vokabeln' ?> hat die KI
+    beim Einlesen berichtigt.</strong> Die Texterkennung hatte sie anders gelesen. Sie
+    sind gelb markiert &ndash; bitte besonders genau prüfen, dann „Passt“ drücken oder
+    die Vokabel ändern.
+</p>
+<?php endif; ?>
 <table class="data release" id="freigabe" data-released="<?= $frei ?>">
     <thead>
         <?php
@@ -768,16 +775,24 @@ $neu = max(0, min($gesamt, (int) ($_GET['neu'] ?? 0)));
         <?php
         $istFrei   = $i < $frei;
         $istFrisch = $neu > 0 && $i >= $gesamt - $neu;
-        $klassen   = ($istFrei ? 'released' : 'locked') . ($istFrisch ? ' frisch' : '');
+        $pruefen   = (string) ($v['check_note'] ?? '');
+        $klassen   = ($istFrei ? 'released' : 'locked') . ($istFrisch ? ' frisch' : '')
+                   . ($pruefen !== '' ? ' pruefen' : '');
         // Ein Anker auf der ersten frischen Zeile: Das Skript springt nach
         // dem Einlesen dorthin, statt oben auf der Seite zu landen.
         $anker     = $istFrisch && $i === $gesamt - $neu ? ' id="frisch"' : '';
         ?>
         <tr class="<?= $klassen ?>" data-pos="<?= $i + 1 ?>"<?= $anker ?>>
-            <td>
+            <td id="zeile<?= (int) $v['id'] ?>">
                 <strong data-wort><?= h($v['term_foreign']) ?></strong>
                 <input type="text" name="edit_f" value="<?= h($v['term_foreign']) ?>"
                        form="vokabel<?= (int) $v['id'] ?>" maxlength="255" hidden>
+                <?php if ($pruefen !== ''): ?>
+                    <span class="pruefnotiz">
+                        <span aria-hidden="true">&#9888;&#65039;</span>
+                        Von der KI berichtigt: <?= h($pruefen) ?>
+                    </span>
+                <?php endif; ?>
             </td>
             <td>
                 <span data-wort><?= h($v['term_native']) ?></span>
@@ -789,6 +804,13 @@ $neu = max(0, min($gesamt, (int) ($_GET['neu'] ?? 0)));
                         value="<?= $i + 1 ?>" form="releaseform" title="Bis hier freigeben">
                     <span aria-hidden="true">&#128275;</span><span class="nurvorlesen">Bis hier freigeben</span>
                 </button>
+                <?php if ($pruefen !== ''): ?>
+                <button class="iconaction gut passt" form="vokabel<?= (int) $v['id'] ?>"
+                        name="check_ok" value="<?= (int) $v['id'] ?>"
+                        title="Geprüft - die Vokabel stimmt so">
+                    <span aria-hidden="true">&#10003;</span> Passt
+                </button>
+                <?php endif; ?>
                 <button class="iconaction quiet nurbild" data-edit="<?= (int) $v['id'] ?>"
                         type="button" title="Diese Vokabel ändern">
                     <span aria-hidden="true">&#9999;&#65039;</span><span class="nurvorlesen">Ändern</span>
@@ -1017,6 +1039,8 @@ $neu = max(0, min($gesamt, (int) ($_GET['neu'] ?? 0)));
          data-api="<?= h(url('/api/import.php')) ?>"
          data-bilder="<?= h(url('/views/bilder.js') . '?v=' . app_version()) ?>"
          data-lesevoki="<?= h(url('/lesevoki.js') . '?v=' . app_version()) ?>"
+         data-ocr="<?= h(url('/ocr.js') . '?v=' . app_version()) ?>"
+         data-sprachcode="<?= h((string) ($unit['code'] ?? '')) ?>"
          data-ziel="<?= h(teacher_url('unit.php') . '?id=' . $unitId) ?>"
          data-csrf="<?= h(teacher_csrf_token()) ?>">
     <h3>Ausgew&auml;hlte Seiten</h3>
@@ -1037,10 +1061,11 @@ $neu = max(0, min($gesamt, (int) ($_GET['neu'] ?? 0)));
     <p class="notice bad" id="stapelFehler" hidden></p>
 
     <p class="tiny muted">
-        Das Erkennen macht ein Sprachmodell &ndash; es dauert je Seite
-        einige Sekunden. Was dabei herauskommt, kann Fehler enthalten:
-        Bitte sieh die neuen Vokabeln durch und berichtige sie, bevor du sie
-        freigibst.
+        Die Seiten werden auf diesem Gerät gelesen &ndash; die Fotos verlassen es
+        nicht. Nur der erkannte Text geht an ein Sprachmodell, das ihn zu
+        Vokabeln ordnet und Lesefehler berichtigt; was es berichtigt hat, steht
+        danach gelb markiert. Bitte sieh die neuen Vokabeln durch, bevor du sie
+        freigibst. Den Titel der Lerneinheit gibst du oben selbst ein.
     </p>
 </section>
 

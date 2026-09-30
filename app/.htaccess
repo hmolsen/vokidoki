@@ -24,6 +24,16 @@ Options -Indexes
   </IfModule>
 </FilesMatch>
 
+# Die Sprachdateien der Texterkennung (ocr/sprachen/*.traineddata.gz) als
+# Datei ausliefern, nicht als "gepackte Antwort": Sonst entpackt der Browser
+# sie unterwegs, und je nach Server kaeme mal die gepackte, mal die
+# entpackte Fassung an. Tesseract erkennt zwar beides - verlassen soll sich
+# darauf aber niemand muessen.
+<IfModule mod_mime.c>
+  RemoveEncoding .gz
+  AddType application/octet-stream .gz
+</IfModule>
+
 <IfModule mod_headers.c>
   # Module und Stile immer gegenpruefen lassen.
   #

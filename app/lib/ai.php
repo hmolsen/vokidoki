@@ -8,8 +8,6 @@ require_once __DIR__ . '/keyvault.php';
 require_once __DIR__ . '/wordtypes.php';
 
 use Anthropic\Client;
-use Anthropic\Messages\Base64ImageSource;
-use Anthropic\Messages\ImageBlockParam;
 use Anthropic\Messages\JSONOutputFormat;
 use Anthropic\Messages\OutputConfig;
 
@@ -47,17 +45,20 @@ function anthropic_client(): Client
     );
 }
 
-/** JSON-Schema für das Extraktionsergebnis. Erzwingt sauberes JSON statt Freitext-Parsing. */
+/**
+ * JSON-Schema für das Ordnen des erkannten Texts. Erzwingt sauberes JSON
+ * statt Freitext-Parsing.
+ *
+ * Kein "title" mehr: Die Überschrift las das Modell früher von den Fotos.
+ * Seit die Fotos das Gerät nicht mehr verlassen (ocr.js), gibt die
+ * Lehrkraft den Titel selbst ein - aus ein paar Zeilen erkanntem Text die
+ * richtige Überschrift zu raten, ging zu oft daneben.
+ */
 function vocab_schema(): array
 {
     return [
         'type'       => 'object',
         'properties' => [
-            'title' => [
-                'type'        => ['string', 'null'],
-                'description' => 'Überschrift der Lerneinheit, z. B. "Unit 1" oder '
-                               . '"Lektion 3 - Im Restaurant". null, wenn auf den Bildern keine steht.',
-            ],
             'entries' => [
                 'type'  => 'array',
                 'items' => [
@@ -76,13 +77,19 @@ function vocab_schema(): array
                                            . 'zehn Wortarten, oder "frage" bzw. "aussage" für '
                                            . 'ganze Äußerungen, oder "sonstiges".',
                         ],
+                        'correction' => [
+                            'type'        => ['string', 'null'],
+                            'description' => 'Nur wenn du einen Lesefehler der Texterkennung in '
+                                           . 'dieser Zeile berichtigt hast: kurz, was vorher dastand '
+                                           . 'und was jetzt, z. B. "Loffel → Löffel". Sonst null.',
+                        ],
                     ],
-                    'required'             => ['foreign', 'native', 'note', 'word_type'],
+                    'required'             => ['foreign', 'native', 'note', 'word_type', 'correction'],
                     'additionalProperties' => false,
                 ],
             ],
         ],
-        'required'             => ['title', 'entries'],
+        'required'             => ['entries'],
         'additionalProperties' => false,
     ];
 }
@@ -90,25 +97,34 @@ function vocab_schema(): array
 function vocab_prompt(string $languageName): string
 {
     $lines = [
-        'Du liest Vokabelseiten aus einem Schulbuch für ein deutsches Schulkind aus.',
+        'Unten steht der Text von Vokabelseiten aus einem Schulbuch, gelesen von einer',
+        'Texterkennung (OCR) auf dem Gerät der Lehrkraft. Du bekommst keine Bilder, nur diesen Text.',
         'Die Fremdsprache ist: ' . $languageName . '. Die Muttersprache ist Deutsch.',
         '',
+        'So ist der Text aufgebaut:',
+        '- Jede Zeile ist eine Zeile der Buchseite. Ein Tabulator trennt Spalten, die auf',
+        '  gleicher Höhe nebeneinander standen - meist Fremdsprache, Deutsch, manchmal ein Hinweis.',
+        '- Stehen zwei Vokabelspalten nebeneinander, enthält eine Zeile zwei Paare hintereinander.',
+        '- "Seite n" markiert den Beginn einer neuen Seite.',
+        '- Die Texterkennung macht Fehler: vertauschte Buchstaben (rn/m, l/I/1, 0/O),',
+        '  fehlende Akzente und Umlaute (Loffel statt Löffel), abgeschnittene Wörter.',
+        '',
         'Aufgabe:',
-        '- Erfasse jedes Vokabelpaar von allen Bildern in der Reihenfolge, in der es auf den',
-        '  Seiten steht. Mehrere Bilder gehören zu einer einzigen Lerneinheit.',
+        '- Erfasse jedes Vokabelpaar in der Reihenfolge, in der es im Text steht. Mehrere',
+        '  Seiten gehören zu einer einzigen Lerneinheit.',
         '- Ordne jeden Begriff korrekt zu: "foreign" ist ' . $languageName . ', "native" ist Deutsch.',
-        '  Buchseiten sind oft zweispaltig - lies spaltenweise, nicht zeilenweise quer über die Seite.',
-        '- Übernimm die Schreibweise exakt, inklusive Akzenten und Sonderzeichen.',
+        '- Berichtige offensichtliche Lesefehler der Texterkennung - aber nur die. Erfinde',
+        '  keine Wörter, die nicht dastehen, und "verbessere" nichts, was richtig gelesen ist.',
+        '- Hast du in einer Zeile etwas berichtigt, schreibe in "correction" kurz, was vorher',
+        '  dastand und was jetzt ("Loffel → Löffel", "garcon → garçon"). Die Lehrkraft prüft',
+        '  genau diese Zeilen. Hast du nichts berichtigt, ist "correction" null.',
         '- Behalte Artikel ("das Haus", "la maison"), Pluralformen und Verbpartikel bei.',
         '- Steht zu einem Eintrag ein Beispielsatz, eine Lautschrift oder ein Hinweis, kommt er',
         '  nach "note", nicht in die Begriffsfelder.',
         '- Trenne mehrere Bedeutungen desselben Begriffs mit Komma innerhalb eines Feldes,',
         '  statt zwei Einträge anzulegen.',
-        '- Ignoriere Seitenzahlen, Kopf- und Fußzeilen, Grammatikkästen, Übungsaufgaben',
-        '  und alles, was kein Vokabelpaar ist.',
-        '- Suche eine Überschrift der Lerneinheit ("Unit 1", "Lektion 3", "Vocabulary 2A")',
-        '  und gib sie in "title" zurück. Findest du keine, setze "title" auf null - rate nicht.',
-        '- Ist ein Wort schwer lesbar, gib deine beste Lesart an, statt den Eintrag wegzulassen.',
+        '- Ignoriere Seitenzahlen, Überschriften, Kopf- und Fußzeilen, Grammatikkästen,',
+        '  Übungsaufgaben und alles, was kein Vokabelpaar ist.',
         '- Bestimme zu jedem Eintrag die Kategorie in "word_type".',
         '  Richte dich nach dem fremdsprachigen Eintrag, nicht nach der Übersetzung.',
         '  Einzelne Wörter bekommen ihre Wortart. Steht ein Artikel dabei',
@@ -126,12 +142,19 @@ function vocab_prompt(string $languageName): string
 }
 
 /**
- * Schickt die Fotos an die Claude-API und liefert Titel + Vokabelpaare.
+ * Ordnet den Text der Texterkennung zu Vokabelpaaren - und berichtigt dabei
+ * Lesefehler, sichtbar markiert.
  *
- * @param array<int,array{data:string,media_type:string}> $images
- * @return array{title:?string, entries:array<int,array{foreign:string,native:string,note:?string}>, cost:float, model:string}
+ * Bis hierher gingen die Fotos selbst an die API. Jetzt liest ocr.js sie im
+ * Browser, und hier kommt nur noch Text an: Die Buchseite verlässt das
+ * Gerät nicht, und eine Anfrage aus Text kostet einen Bruchteil einer aus
+ * Bildern.
+ *
+ * @param int $seiten Wie viele Fotos gelesen wurden - fürs Kostenprotokoll
+ *                    (Spalte image_count, sie zählt weiter die Seiten).
+ * @return array{entries:array<int,array{foreign:string,native:string,note:?string,word_type:?string,correction:?string}>, cost:float, model:string}
  */
-function analyze_vocab_images(array $images, string $languageName, array $user): array
+function analyze_vocab_text(string $text, int $seiten, string $languageName, array $user): array
 {
     anthropic_autoload();
 
@@ -141,16 +164,10 @@ function analyze_vocab_images(array $images, string $languageName, array $user):
         $effort = 'medium';
     }
 
-    $content = [];
-    foreach ($images as $img) {
-        $content[] = ImageBlockParam::with(
-            source: Base64ImageSource::with(
-                data: $img['data'],
-                mediaType: $img['media_type'],
-            ),
-        );
-    }
-    $content[] = ['type' => 'text', 'text' => vocab_prompt($languageName)];
+    // Anweisung zuerst, dann der Text - klar getrennt, damit eine Zeile im
+    // Buch, die wie eine Anweisung klingt, als Buchtext gelesen wird.
+    $content = vocab_prompt($languageName)
+        . "\n\n--- Text der Texterkennung ---\n" . $text . "\n--- Ende des Texts ---";
 
     $started = microtime(true);
     $logBase = [
@@ -158,7 +175,7 @@ function analyze_vocab_images(array $images, string $languageName, array $user):
         'user_label'  => (string) $user['display_name'],
         'model'       => $model,
         'purpose'     => 'vocab_ocr',
-        'image_count' => count($images),
+        'image_count' => $seiten,
     ];
 
     try {
@@ -196,7 +213,7 @@ function analyze_vocab_images(array $images, string $languageName, array $user):
             'status'        => 'refusal',
             'error'         => scrub_secrets((string) $message->stopDetails?->explanation),
         ]);
-        throw new RuntimeException('Die Bilder konnten nicht ausgewertet werden.');
+        throw new RuntimeException('Der Text konnte nicht ausgewertet werden.');
     }
 
     $json = '';
@@ -219,20 +236,17 @@ function analyze_vocab_images(array $images, string $languageName, array $user):
             if ($foreign === '' || $native === '') {
                 continue;
             }
-            $note      = isset($row['note']) && is_string($row['note']) ? trim($row['note']) : '';
+            $note       = isset($row['note']) && is_string($row['note']) ? trim($row['note']) : '';
+            $correction = isset($row['correction']) && is_string($row['correction'])
+                ? trim($row['correction']) : '';
             $entries[] = [
-                'foreign'   => mb_substr($foreign, 0, 255),
-                'native'    => mb_substr($native, 0, 255),
-                'note'      => $note === '' ? null : mb_substr($note, 0, 255),
-                'word_type' => word_type_clean($row['word_type'] ?? null),
+                'foreign'    => mb_substr($foreign, 0, 255),
+                'native'     => mb_substr($native, 0, 255),
+                'note'       => $note === '' ? null : mb_substr($note, 0, 255),
+                'word_type'  => word_type_clean($row['word_type'] ?? null),
+                'correction' => $correction === '' ? null : mb_substr($correction, 0, 255),
             ];
         }
-    }
-
-    $title = null;
-    if (is_array($data) && isset($data['title']) && is_string($data['title'])) {
-        $t     = trim($data['title']);
-        $title = $t === '' ? null : mb_substr($t, 0, 128);
     }
 
     $cost = ai_log($logBase + [
@@ -245,7 +259,7 @@ function analyze_vocab_images(array $images, string $languageName, array $user):
         'status'             => 'ok',
     ]);
 
-    return ['title' => $title, 'entries' => $entries, 'cost' => $cost, 'model' => $model];
+    return ['entries' => $entries, 'cost' => $cost, 'model' => $model];
 }
 
 /** JSON-Schema für das Nachtragen der Kategorien. */

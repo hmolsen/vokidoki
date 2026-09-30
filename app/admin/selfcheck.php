@@ -100,6 +100,25 @@ check($checks, 'Module der App vollständig', static function (): array {
         : [false, 'fehlt auf dem Server: ' . implode(', ', $fehlen) . ' - diese Dateien hochladen'];
 });
 
+/*
+ * Die Texterkennung im Browser besteht aus einem Dutzend Dateien unter
+ * ocr/ - vier Megabyte große darunter, die ein FTP-Programm beim
+ * Hochladen gern auslässt oder abbricht. Fehlt eine, scheitert das
+ * Einlesen erst beim Lehrer am Telefon.
+ */
+check($checks, 'Texterkennung vollständig', static function (): array {
+    $ordner = dirname(__DIR__) . '/ocr/';
+    $noetig = ['tesseract.min.js', 'worker.min.js', 'tesseract-core-lstm.wasm.js',
+               'tesseract-core-simd-lstm.wasm.js', 'tesseract-core-relaxedsimd-lstm.wasm.js',
+               'sprachen/deu.traineddata.gz', 'sprachen/eng.traineddata.gz'];
+    $fehlen = array_values(array_filter($noetig, static fn (string $f): bool =>
+        !is_file($ordner . $f) || filesize($ordner . $f) < 1000));
+    $sprachen = glob($ordner . 'sprachen/*.traineddata.gz') ?: [];
+    return $fehlen === []
+        ? [true, sprintf('ocr/ mit %d Sprachen', count($sprachen))]
+        : [false, 'fehlt oder unvollständig: ocr/' . implode(', ocr/', $fehlen)];
+});
+
 check($checks, 'Icon-Cache beschreibbar', static function (): array {
     $dir = storage_path('icons');
     if (!is_dir($dir)) {

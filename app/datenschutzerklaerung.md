@@ -64,14 +64,17 @@ Die Erfassung dieser Daten dient ausschließlich der Gewährleistung eines stör
 * **Rechtsgrundlage:** Art. 6 Abs. 1 lit. f DSGVO (Berechtigtes Interesse an der Stabilität und Sicherheit des Dienstes).
 * **Auftragsverarbeitung:** Mit ALL-INKL.COM wurde ein Vertrag zur Auftragsverarbeitung (AVV) gemäß Art. 28 DSGVO abgeschlossen. Serverstandort ist ausschließlich Deutschland.
 
-### C. KI-gestützte Vokabelextraktion aus Fotos (Anthropic API)
-Lehrkräfte haben die Möglichkeit, Fotos von Lehrmaterialien (z. B. Vokabelbuchseiten) in die App hochzuladen, um automatisiert Vokabellisten erstellen zu lassen.
+### C. Vokabeln aus Fotos einlesen (Texterkennung auf dem Gerät, Anthropic API)
+Lehrkräfte können Fotos von Vokabellisten aufnehmen oder auswählen, um daraus automatisiert Vokabeln erstellen zu lassen.
 
-* **Datenverarbeitung:** Das hochgeladene Foto wird an die Programmierschnittstelle (API) des Anbieters **Anthropic PBC** (USA) übermittelt, dort per Bild- und Texterkennung (OCR) analysiert und der extrahierte Text an die App zurückgesendet.
+* **Texterkennung auf dem Gerät:** Die Fotos werden ausschließlich auf dem Gerät der Lehrkraft, im Browser, gelesen (Texterkennung mit Tesseract, siehe „Lizenzen“). Die Fotos werden **weder an unseren Server noch an Dritte übertragen** und nicht gespeichert; sie liegen nur so lange im Browser, bis die Seite verlassen wird. Die dafür nötigen Programmdateien und Sprachdaten werden von unserem Server geladen und im Browser zwischengespeichert, nicht von einem fremden Anbieter.
+* **Ordnen durch KI:** Nur der erkannte **Text** wird über unseren Server an die Programmierschnittstelle (API) des Anbieters **Anthropic PBC** (USA) übermittelt. Dort wird er zu Vokabelpaaren geordnet; offensichtliche Lesefehler der Texterkennung werden berichtigt und für die Lehrkraft sichtbar markiert.
 * **Anonymität & Datenschutz:**
-  * Es werden **keine** personenbezogenen Daten (wie Namen, IP-Adressen oder Nutzer-IDs) an Anthropic übermittelt.
-  * Fotos enthalten reine Lehrmaterialien und keine Personenabbildungen.
-  * Das Foto wird ausschließlich flüchtig im Arbeitsspeicher verarbeitet (transiente Verarbeitung) und nach Generierung der Vokabeln **sofort unwiderruflich gelöscht**. Es findet keine dauerhafte Speicherung oder Verwendung der Daten zum Training von KI-Modellen statt.
+  * Es werden **keine** personenbezogenen Daten (wie Namen, IP-Adressen oder Nutzer-IDs) an Anthropic übermittelt. Die Anfrage stellt unser Server, nicht das Gerät der Lehrkraft.
+  * Übermittelt wird nur der Text der fotografierten Vokabelliste. Bitte fotografieren Sie ausschließlich Vokabellisten – keine Schülerarbeiten, Namenslisten oder andere Dokumente mit personenbezogenen Daten.
+  * **Speicherdauer bei Anthropic:** Nach den Angaben von Anthropic werden Eingaben und Ausgaben der API in der Regel innerhalb von **30 Tagen** automatisch gelöscht. Ausnahmen: Werden Inhalte von den automatischen Sicherheitssystemen des Anbieters als möglicher Verstoß gegen dessen Nutzungsrichtlinien markiert, können sie bis zu 2 Jahre aufbewahrt werden; außerdem, soweit eine gesetzliche Pflicht besteht (siehe [Anthropic Privacy Center](https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data)). Eine Vereinbarung ohne Datenspeicherung (Zero Data Retention) ist beantragt, aber noch nicht bestätigt.
+  * Über die API übermittelte Daten werden nach den kommerziellen Bedingungen von Anthropic nicht zum Training von KI-Modellen verwendet.
+  * Unser Server speichert den übermittelten Text nicht; gespeichert werden nur die erkannten Vokabelpaare in der Lerneinheit und, für die Kostenabrechnung, die Zahl der gelesenen Seiten.
 
 ### D. KI-Hilfe-Bot für Lehrkräfte
 Innerhalb der App steht Lehrkräften ein automatisierter Support-Bot zur Seite, der Fragen zur Bedienung der App beantwortet.

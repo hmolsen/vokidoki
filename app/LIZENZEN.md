@@ -26,8 +26,8 @@ Urheberrechtsvermerk und der Lizenztext erhalten bleiben. Die Lizenztexte
 liegen im jeweiligen Paketverzeichnis unter `vendor/` als Datei `LICENSE`.
 
 * **anthropic-ai/sdk** — Anthropic, PBC.
-  Zugriff auf die Programmierschnittstelle, mit der Buchseiten gelesen und
-  Lückensätze erzeugt werden.
+  Zugriff auf die Programmierschnittstelle, mit der erkannter Text zu
+  Vokabeln geordnet und Lückensätze erzeugt werden.
   <https://github.com/anthropics/anthropic-sdk-php>
 * **guzzlehttp/guzzle** — Michael Dowling und Mitwirkende.
   HTTP-Client, über den das SDK spricht.
@@ -51,6 +51,32 @@ liegen im jeweiligen Paketverzeichnis unter `vendor/` als Datei `LICENSE`.
 * **symfony/deprecation-contracts**, **symfony/polyfill-php80** —
   Fabien Potencier und Mitwirkende.
   <https://symfony.com/>
+
+---
+
+## Texterkennung (JavaScript, im Browser)
+
+Die Fotos beim Einlesen werden auf dem Gerät gelesen, nicht auf dem Server.
+Dafür liegen unter `ocr/` diese Bestandteile bei:
+
+* **Tesseract.js** — Naptha und Mitwirkende, **Apache-Lizenz 2.0**.
+  Steuert die Texterkennung im Browser (`ocr/tesseract.min.js`,
+  `ocr/worker.min.js`). Lizenztext: `ocr/LICENSE-tesseract.js.txt`; die
+  darin gebündelten kleinen Hilfsbibliotheken (u. a. zlib.js,
+  regenerator-runtime, buffer) nennen ihre Lizenzen (MIT, BSD) in
+  `ocr/worker.min.js.LICENSE.txt` und `ocr/tesseract.min.js.LICENSE.txt`.
+  <https://github.com/naptha/tesseract.js>
+* **tesseract.js-core** — die nach WebAssembly übersetzte Tesseract-Engine,
+  **Apache-Lizenz 2.0** (`ocr/tesseract-core-*.wasm.js`). Sie enthält
+  **Tesseract OCR** (Google und Mitwirkende, Apache-Lizenz 2.0) und dessen
+  Hilfsbibliotheken, darunter **Leptonica** (BSD-artige Lizenz); die
+  vollständige Liste steht im Ordner `third_party` des Projekts.
+  Lizenztext: `ocr/LICENSE-tesseract.js-core.txt`.
+  <https://github.com/naptha/tesseract.js-core>
+* **Sprachdaten für Tesseract** (`ocr/sprachen/*.traineddata.gz`) — aus
+  `tessdata` des Tesseract-Projekts, **Apache-Lizenz 2.0**, bereitgestellt
+  über die Pakete `@tesseract.js-data` (MIT).
+  <https://github.com/tesseract-ocr/tessdata_best>
 
 ---
 
@@ -102,9 +128,10 @@ mitgeliefert.
 
 ## Dienste
 
-* **Anthropic PBC** — die Programmierschnittstelle, die Buchseiten liest und
-  Lückensätze erzeugt. Was dabei übermittelt wird und was nicht, steht in
-  der Datenschutzerklärung.
+* **Anthropic PBC** — die Programmierschnittstelle, die den auf dem Gerät
+  erkannten Text zu Vokabeln ordnet und Lückensätze erzeugt. Fotos erhält
+  sie nicht. Was dabei übermittelt wird und was nicht, steht in der
+  Datenschutzerklärung.
 * **ALL-INKL.COM** — der Betrieb des Servers. Serverstandort Deutschland,
   mit Vertrag zur Auftragsverarbeitung.
 
@@ -115,6 +142,8 @@ mitgeliefert.
 Die vollständigen Texte liegen dem Programm bei:
 
 * PHP-Bibliotheken: `vendor/<Anbieter>/<Paket>/LICENSE`
+* Texterkennung: `ocr/LICENSE-tesseract.js.txt`,
+  `ocr/LICENSE-tesseract.js-core.txt` und die `*.LICENSE.txt` daneben
 * Fredoka: `assets/fonts/OFL-Fredoka.txt`
 * Nunito: `assets/fonts/OFL-Nunito.txt`
 * Twemoji: `assets/flags/HERKUNFT.md` sowie der verlinkte Lizenztext

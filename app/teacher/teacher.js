@@ -1344,12 +1344,27 @@ function initEinlesen() {
             const { shrinkToBase64 } = await import(stapel.dataset.bilder);
             const bilder = [];
             for (const s of seiten.slice(0, HOECHSTENS)) {
-                bilder.push(await shrinkToBase64(s.datei));
+                const { data, media_type: typ } = await shrinkToBase64(s.datei);
+                bilder.push(`data:${typ};base64,${data}`);
             }
 
+            /*
+             * Gelesen wird hier, auf diesem Gerät (ocr.js) - die Fotos
+             * verlassen es nicht. Zum Server geht nur der erkannte Text.
+             */
+            const { texterkennung } = await import(stapel.dataset.ocr);
+            const text = await texterkennung(bilder, stapel.dataset.sprachcode, {
+                fortschritt: (seite, alle, anteil) => decke.text(
+                    alle > 1 ? `Voki liest Seite ${seite} von ${alle} …` : 'Voki liest die Seite …',
+                    `${Math.round(anteil * 100)} % - die Fotos bleiben auf diesem Gerät.`,
+                ),
+            });
+
+            decke.text('Voki sortiert die Vokabeln …',
+                       'Die KI ordnet den erkannten Text und berichtigt Lesefehler.');
             const erkannt = await jsonPost(
                 `${stapel.dataset.api}?action=analyze`,
-                { language_id: +stapel.dataset.language, images: bilder },
+                { language_id: +stapel.dataset.language, text, pages: bilder.length },
                 { 'X-Vokabeltrainer': '1' },
             );
             if (!erkannt.ok) throw new Error(erkannt.error || 'Das Erkennen ging schief.');
@@ -1374,14 +1389,12 @@ function initEinlesen() {
              * zu vieles auf einmal - die Zahlen im Satz über der Tabelle,
              * der Knopf "Alles freigeben", die Zeilen, an denen der
              * Freigabebalken misst. Ein ?neu= in der Adresse sorgt dafür,
-             * dass die neuen Zeilen drüben grün dastehen, ein ?titel=, dass
-             * nach der Überschrift auf den Fotos gefragt wird (unit.php).
-             * Die Decke bleibt bis zum Seitenwechsel liegen.
+             * dass die neuen Zeilen drüben grün dastehen; was die KI
+             * berichtigt hat, steht dort gelb. Die Decke bleibt bis zum
+             * Seitenwechsel liegen.
              */
             seiten.forEach((s) => URL.revokeObjectURL(s.url));
-            const titel = erkannt.title ? `&titel=${encodeURIComponent(erkannt.title)}` : '';
-            window.location.href =
-                `${stapel.dataset.ziel}&neu=${gesichert.dazu}${titel}#frisch`;
+            window.location.href = `${stapel.dataset.ziel}&neu=${gesichert.dazu}#frisch`;
         } catch (e) {
             decke.weg();
             fehler.textContent = e.message || 'Keine Verbindung zum Server.';
