@@ -308,4 +308,19 @@ $oben = array_values(array_filter(language_choices(),
 </p>
 <?php endif; ?>
 
+<?php
+/*
+ * Ein Weg zurueck, ohne Rueckfrage. Von der Klassenseite aus ("Sprachkurs
+ * anlegen") gab es keinen: Wer es sich anders ueberlegt hatte, kam nur ueber
+ * das Menue weg. Angelegt ist bis hierher nichts, also gibt es nichts zu
+ * bestaetigen - zurueck zur Klasse, oder ohne Klasse zur Startseite.
+ */
+$verwerfenZiel = $klasse !== null
+    ? teacher_url('class.php') . '?id=' . (int) $klasse['id']
+    : teacher_url('index.php');
+?>
+<p class="verwerfen">
+    <a class="btn secondary" href="<?= h($verwerfenZiel) ?>" data-verwerfen>Verwerfen</a>
+</p>
+
 <?php teacher_foot(); ?>

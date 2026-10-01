@@ -5098,6 +5098,13 @@ $res = teacherGet('neu.php?klasse=' . $kursKlasseId);
 ok('Schritt 2 fragt nach der Sprache',
    str_contains($res['body'], '<h1>Für welche Sprache?</h1>'));
 ok('Und sagt, wo man steht', str_contains($res['body'], 'Schritt 2 von 2'));
+ok('Unten fuehrt "Verwerfen" ohne Rueckfrage zur Klasse zurueck',
+   preg_match('/<a class="btn secondary" href="[^"]*class\.php\?id=' . $kursKlasseId
+              . '" data-verwerfen>Verwerfen<\/a>/', $res['body']) === 1,
+   'von "Sprachkurs anlegen" aus gab es keinen Weg zurueck');
+ok('Ohne Klasse fuehrt es zur Startseite',
+   preg_match('/href="[^"]*index\.php" data-verwerfen>/',
+              teacherGet('neu.php?klasse=0')['body']) === 1);
 ok('Die Klasse steht auf den Kacheln',
    str_contains($res['body'], h($kursKlasse)),
    'sonst weiss man auf Schritt 2 nicht mehr, fuer wen');
