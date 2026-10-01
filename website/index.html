@@ -647,14 +647,14 @@ dialog.ablauf::backdrop { background: rgba(10, 14, 22, .5); }
                    handgeschriebene Liste in deutlicher Schrift, oder Sie tippen sie direkt ein.
                    Aus all dem stellen Sie Lerneinheiten für Ihre Klasse zusammen.</p>
                 <p>Eine Liste erfassen Sie bequem mit der Kamera – am Rechner genügt ein
-                   <strong>QR-Code</strong>, und das Telefon steht angemeldet im richtigen Kurs.
-                   Die Texterkennung läuft auf Ihrem Gerät: <strong>Das Foto wird nirgends
-                   gespeichert, auch nicht auf dem Gerät, und verlässt es nie.</strong> Weiter geht
-                   nur die erkannte Wortliste.</p>
+                   <strong>QR-Code</strong>, und das Telefon öffnet im Browser den richtigen Kurs.
+                   Die Texterkennung läuft auf Ihrem Gerät: <strong>Das Foto weder versendet noch
+                   gespeichert, auch nicht auf Ihrem Gerät.</strong> Weiter gehen
+                   nur die eingelesenen Vokabeln.</p>
                 <ul class="punkte">
-                    <li>Lesefehler berichtigt die KI – und markiert sie gelb, damit Sie genau diese Zeilen prüfen.</li>
-                    <li>Eine zweite Liste hängen Sie einfach an dieselbe Lerneinheit an.</li>
-                    <li>Lückensätze zu jeder Vokabel entstehen von selbst im Hintergrund, im Wortschatz Ihrer Klasse.</li>
+                    <li>Lesefehler werden von der KI erkannt und Korrekturvorschläge erstellt.</li>
+                    <li>Ihre Lerneinheiten können durch weitere Vokabeln ergänzt werden.</li>
+                    <li>Lückensätze zu jeder Vokabel entstehen von selbst im Hintergrund, mit dem Wortschatz Ihrer Klasse.</li>
                 </ul>
                 <button type="button" class="infoknopf" data-ablauf hidden aria-haspopup="dialog">
                     <span class="i" aria-hidden="true">i</span>
@@ -674,13 +674,13 @@ dialog.ablauf::backdrop { background: rgba(10, 14, 22, .5); }
             </div>
             <div class="text">
                 <span class="etikett">Freigeben</span>
-                <h3>Die Klasse übt, was heute dran ist</h3>
-                <p>Eingelesen wird eine ganze Unité auf einmal, geübt wird Stück für Stück.
-                   Ziehen Sie den Balken bis zur letzten Vokabel dieser Stunde – Ihre Klasse
-                   sieht genau das, nicht mehr.</p>
+                <h3>"Geübt wird bis 'avoir'"</h3>
+                <p>Eine Vokabelliste können sie für eine ganze Lerneinheit vorbereiten, geübt
+                   wird dann Stück für Stück. Ziehen Sie den Balken bis zur letzten Vokabel
+                   dieser Stunde – Ihre Klasse sieht alle Vokabeln bis dahin.</p>
                 <p>Zurücknehmen geht jederzeit: Die Sätze bleiben, und der Lernstand der Kinder
-                   ist beim nächsten Freigeben wieder da. Tippfehler korrigieren Sie direkt in
-                   der Tabelle.</p>
+                   ist beim nächsten Freigeben wieder da. Tippfehler korrigieren Sie jederzeit
+                   direkt in der Tabelle.</p>
             </div>
         </article>
 
@@ -725,9 +725,9 @@ dialog.ablauf::backdrop { background: rgba(10, 14, 22, .5); }
                 <span class="etikett">Meldungen</span>
                 <h3>Die Klasse schaut mit</h3>
                 <p>Stimmt eine Übersetzung nicht oder ist ein Satz holprig, melden die Kinder es
-                   mit einem Tipp. Sie sehen, was getippt wurde, und ändern es an Ort und
+                   mit einem Tipp. Sie sehen, was gemeldet wurde, und ändern es an Ort und
                    Stelle – oder bestätigen mit „Stimmt so“.</p>
-                <p>Eine rote Zahl am Zahnrad zeigt, ob etwas wartet.</p>
+                <p>Eine rote Zahl am Zahnrad oben rechts zeigt, ob etwas wartet.</p>
             </div>
         </article>
 
@@ -804,7 +804,7 @@ dialog.ablauf::backdrop { background: rgba(10, 14, 22, .5); }
             <ol>
                 <li><span class="bild" aria-hidden="true">📷</span>
                     <div><span class="nr">1</span><br><b>Kamera</b><br>
-                    <span>Sie nehmen die Liste auf. Das Foto liegt nur im Arbeitsspeicher des Browsers.</span></div></li>
+                    <span>Sie nutzen die Kamera von ihrem Smartphone. Das Foto liegt nur im Arbeitsspeicher des Browsers.</span></div></li>
                 <li><span class="bild" aria-hidden="true">🔍</span>
                     <div><span class="nr">2</span><br><b>Texterkennung</b><br>
                     <span>Die Wörter werden direkt auf dem Gerät gelesen. Danach ist das Foto weg – gespeichert wird es nirgends.</span></div></li>
@@ -815,19 +815,19 @@ dialog.ablauf::backdrop { background: rgba(10, 14, 22, .5); }
             <ol start="3">
                 <li><span class="bild" aria-hidden="true">📋</span>
                     <div><span class="nr">3</span><br><b>Nur die Wortliste</b><br>
-                    <span>Zum Server geht der erkannte Text – kein Bild, kein Name, kein Konto.</span></div></li>
+                    <span>Zum Server gehen die erkannten Vokabeln – kein Bild, kein Name, kein Konto.</span></div></li>
                 <li><span class="bild" aria-hidden="true">✏️</span>
                     <div><span class="nr">4</span><br><b>KI berichtigt</b><br>
-                    <span>Lesefehler werden korrigiert und für Sie gelb markiert, damit Sie genau diese Zeilen prüfen.</span></div></li>
+                    <span>Für mögliche Lesefehler werden Korrekturvorschläge erstellt, Sie prüfen und bestätigen.</span></div></li>
                 <li><span class="bild" aria-hidden="true">🧩</span>
                     <div><span class="nr">5</span><br><b>KI erstellt Übungen</b><br>
-                    <span>Wortarten und Lückensätze für Auswählen, Einsetzen und Lückentext.</span></div></li>
+                    <span>Zu jeder Vokabel werden Übungen, zum Beispiel Lückensätze, von der KI erstellt.</span></div></li>
             </ol>
         </section>
     </div>
 
     <p class="grenze"><strong>Das Foto überschreitet die Grenze zwischen den beiden Bändern nie.</strong>
-        Es verlässt Ihr Gerät nicht und wird nirgends gespeichert, auch nicht dort. Die KI
+        Es verlässt Ihr Gerät nicht und wird nirgends gespeichert, nicht einmal auf Ihrem Gerät. Die KI
         (Anthropic) bekommt nur den Text der Vokabelliste. Einzelheiten, auch zur Speicherdauer
         beim KI-Anbieter, stehen in der <a href="app/rechtliches.php?d=datenschutz">Datenschutzerklärung</a>.</p>
 </dialog>
