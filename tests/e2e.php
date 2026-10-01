@@ -1360,11 +1360,9 @@ ok('Und ein Admin-Aufruf trägt es nicht wieder ein',
    qv('SELECT code FROM languages WHERE id = ?', [$frId]) === null,
    'tatsächlich: ' . var_export(qv('SELECT code FROM languages WHERE id = ?', [$frId]), true));
 
-// Aufraeumen - die drei Wegwerf-Sprachen und der alte Stand der uebrigen.
+// Aufraeumen - die drei Wegwerf-Sprachen. Andere fasst der Abschnitt nicht
+// mehr an, seit es den Nachtrag nicht mehr gibt.
 q('DELETE FROM languages WHERE id IN (?, ?, ?)', [$frId, $daId, $klId]);
-foreach ($vorher as $z) {
-    q('UPDATE languages SET code = ? WHERE id = ?', [$z['code'], (int) $z['id']]);
-}
 
 section('Abstände vor Satzzeichen');
 
