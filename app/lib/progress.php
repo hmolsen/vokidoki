@@ -24,7 +24,18 @@ require_once __DIR__ . '/streak.php';
 const KNOWN_THRESHOLD = 3;
 
 const MODE_CHOICE = 'mc';      // Multiple Choice
+const MODE_PICK   = 'pick';    // Einsetzen: Lückensatz, das Wort aus drei wählen
 const MODE_CLOZE  = 'cloze';   // Lückentext
+
+/*
+ * Alle Übungsarten, die einen Lernstand führen - an einer Stelle.
+ *
+ * Die Liste stand dreimal da, in api/bundle.php zweimal und in
+ * api/units.php, jedesmal als [MODE_CHOICE, MODE_CLOZE]. Eine dritte
+ * Übungsart hätte an jeder davon nachgetragen werden müssen; wo es
+ * vergessen worden wäre, hätte der Server ihre Antworten still verworfen.
+ */
+const MODES = [MODE_CHOICE, MODE_PICK, MODE_CLOZE];
 
 /**
  * Fortschritt einer Lerneinheit für ein Kind als [gekonnt, gesamt].

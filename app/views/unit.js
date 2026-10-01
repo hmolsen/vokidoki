@@ -7,11 +7,33 @@ import {
     einheit, vokabelListe, modusStand, zuruecksetzen, vorratAuffrischen,
 } from '../vorrat.js';
 
-/** Die Übungsarten - Reihenfolge und Symbole gelten für die ganze Ansicht. */
-const EXERCISES = [
-    { mode: 'mc',    icon: '\u{1F3AF}', title: 'Auswählen' },
-    { mode: 'cloze', icon: '\u{270F}\u{FE0F}', title: 'Lückentext' },
+/**
+ * Die Übungsarten - in dieser Reihenfolge stehen sie da, und in dieser
+ * Reihenfolge führt "weitermachen" am Ende einer Übung zur nächsten.
+ *
+ * Einsetzen steht zwischen den beiden anderen: Es ist die Stufe dazwischen -
+ * das Wort im Satz, aber noch ohne es selbst zu schreiben.
+ */
+const UEBUNGEN = [
+    { mode: 'mc',    icon: '\u{1F3AF}', title: 'Auswählen',  ziel: '/quiz',
+      hint: 'Vier Antworten, eine ist richtig' },
+    { mode: 'pick',  icon: '\u{1F9E9}', title: 'Einsetzen',  ziel: '/einsetzen',
+      hint: 'Das passende Wort in die Lücke ziehen' },
+    { mode: 'cloze', icon: '\u{270F}\u{FE0F}', title: 'Lückentext', ziel: '/cloze',
+      hint: 'Das fehlende Wort in den Satz eintippen' },
 ];
+
+/*
+ * Die Übungsarten mit einem Zeichen neben jeder Vokabel.
+ *
+ * Einsetzen fehlt hier mit Absicht: Neben jeder Vokabel stehen zwei
+ * Zellen - Zeichen und drei Punkte oder Haken -, und für eine dritte ist
+ * auf dem Telefon kein Platz. Solange die Liste nicht neu gezeichnet ist,
+ * zählt sie auch nicht zu "in allen Übungen geschafft".
+ */
+const EXERCISES = UEBUNGEN.filter((u) => u.mode !== 'pick');
+
+const uebung = (mode) => UEBUNGEN.find((u) => u.mode === mode);
 
 /**
  * Wer benennt hier um und loescht?
@@ -83,9 +105,9 @@ export async function unitView(unitId) {
 
         <h2>Üben</h2>
         <div id="exercises">
-            ${exerciseRow(EXERCISES[0].mode, EXERCISES[0].icon, EXERCISES[0].title,
-                'Vier Antworten, eine ist richtig', modes.mc)}
-            ${clozeRow(modes.cloze)}
+            ${uebungRow('mc', modes.mc)}
+            ${uebungRow('pick', modes.pick)}
+            ${uebungRow('cloze', modes.cloze)}
             <!--
                 Freies Ueben: alles, was freigegeben ist, ohne Ziel und ohne
                 Ende. Es ruehrt den Lernstand nicht an - deshalb steht hier
@@ -196,7 +218,7 @@ function wireExercises(unitId) {
         const row = event.target.closest('[data-mode]');
         if (!row || row.disabled) return;
 
-        go(`${row.dataset.mode === 'cloze' ? '/cloze' : '/quiz'}/${unitId}`);
+        go(`${uebung(row.dataset.mode)?.ziel ?? '/quiz'}/${unitId}`);
     });
 }
 
@@ -216,26 +238,30 @@ function geschafft(info) {
  * zu rühren. Wer wirklich von vorn will, hat in der Lerneinheit
  * "Fortschritt zurücksetzen".
  *
- * Steht hier und nicht in quiz.js und cloze.js, weil beide Enden dieselbe
- * Regel brauchen und die Übungsarten samt Symbolen hier stehen.
+ * Steht hier und nicht in quiz.js, einsetzen.js und cloze.js, weil alle
+ * Enden dieselbe Regel brauchen und die Übungsarten samt Symbolen hier
+ * stehen. Mit drei Übungen gilt: die nächste offene nach der geschafften,
+ * in der Reihenfolge von UEBUNGEN - nach dem Lückentext wieder von vorn.
  *
  * Der Lückentext gilt als offen, wenn es Sätze gibt, die noch nicht sitzen -
  * oder wenn sie gerade entstehen; dann wartet die Übung auf sie. Gibt es
  * gar keine, führt der Weg ins Freie Üben statt vor eine leere Übung.
  *
- * @param fertig 'mc' oder 'cloze' - die Übung, die gerade geschafft ist.
+ * @param fertig 'mc', 'pick' oder 'cloze' - die Übung, die gerade geschafft ist.
  * @returns HTML des Knopfes; verdrahtet wird er mit weiterVerdrahten().
  */
 export function weiterKnopf(unitId, fertig) {
-    const stand   = modusStand(unitId);
-    const andere  = EXERCISES.find((e) => e.mode !== fertig);
-    const info    = stand[andere.mode];
-    const moeglich = info.total > 0 || info.status === 'running';
+    const stand = modusStand(unitId);
+    const ab    = UEBUNGEN.findIndex((u) => u.mode === fertig);
 
-    if (moeglich && !geschafft(info)) {
-        const ziel = andere.mode === 'cloze' ? '/cloze' : '/quiz';
-        return `<button class="btn" id="weiter" data-ziel="${ziel}/${esc(unitId)}">`
-             + `Mit ${andere.icon} ${esc(andere.title)} weitermachen</button>`;
+    for (let schritt = 1; schritt < UEBUNGEN.length; schritt++) {
+        const andere   = UEBUNGEN[(ab + schritt) % UEBUNGEN.length];
+        const info     = stand[andere.mode];
+        const moeglich = info.total > 0 || info.status === 'running';
+        if (moeglich && !geschafft(info)) {
+            return `<button class="btn" id="weiter" data-ziel="${andere.ziel}/${esc(unitId)}">`
+                 + `Mit ${andere.icon} ${esc(andere.title)} weitermachen</button>`;
+        }
     }
 
     return `<button class="btn" id="weiter" data-ziel="/unit/${esc(unitId)}/frei">`
@@ -260,7 +286,7 @@ export function weiterVerdrahten() {
  * beim Stand im Gerät.
  */
 function nachFreigabeSehen(unitId, modes) {
-    if (!geschafft(modes.mc) && !geschafft(modes.cloze)) return;
+    if (!geschafft(modes.mc) && !geschafft(modes.pick) && !geschafft(modes.cloze)) return;
 
     vorratAuffrischen().then((frisch) => {
         if (frisch && location.hash === `#/unit/${unitId}`) unitView(unitId);
@@ -285,25 +311,29 @@ function watchSentences(unitId, modes) {
             setTimeout(tick, 6000);   // Aussetzer überbrücken, nicht aufgeben
             return;
         }
-        const data = { cloze: modusStand(unitId).cloze };
+        const data = modusStand(unitId);
 
         if (data.cloze.status === 'running') {
             setTimeout(tick, 2500);
             return;
         }
 
-        // Nur die Zeile tauschen; der Handler sitzt am Behälter und bleibt.
+        // Nur die Zeilen tauschen; der Handler sitzt am Behälter und bleibt.
+        // Einsetzen hängt an denselben Sätzen - es wird mit frei.
         modes.cloze = data.cloze;
-        row.outerHTML = clozeRow(data.cloze);
+        modes.pick  = data.pick;
+        row.outerHTML = uebungRow('cloze', data.cloze);
+        const einsetzen = document.querySelector('[data-mode-row="pick"]');
+        if (einsetzen) einsetzen.outerHTML = uebungRow('pick', data.pick);
     };
 
     setTimeout(tick, 2000);
 }
 
-/** Die Lückentext-Zeile - sie wechselt ihren Zustand im laufenden Betrieb. */
-function clozeRow(info) {
-    return exerciseRow(EXERCISES[1].mode, EXERCISES[1].icon, EXERCISES[1].title,
-        'Das fehlende Wort in den Satz eintippen', info);
+/** Die Zeile einer Übungsart - Lückentext und Einsetzen wechseln ihren Zustand im Betrieb. */
+function uebungRow(mode, info) {
+    const u = uebung(mode);
+    return exerciseRow(u.mode, u.icon, u.title, u.hint, info);
 }
 
 /** Eine Übungsart als Zeile mit eigenem Fortschritt. */

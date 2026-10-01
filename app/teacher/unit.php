@@ -988,7 +988,7 @@ $zuPruefen = count(array_filter($vokabeln, static fn (array $v): bool =>
         <span class="cflag">&#128193;</span>
         <span class="wahltext">
             <strong>Vokabeln aus Dateisystem hochladen</strong>
-            <span class="tiny muted">Fotos von Buchseiten auswählen</span>
+            <span class="tiny muted">Fotos von Vokabellisten auswählen</span>
         </span>
     </a>
 
@@ -1018,7 +1018,7 @@ $zuPruefen = count(array_filter($vokabeln, static fn (array $v): bool =>
     <button class="card erweiternkarte" type="button" id="perKamera" hidden>
         <span class="cflag">&#128247;</span>
         <span class="wahltext">
-            <strong>Buchseite fotografieren</strong>
+            <strong>Vokabelliste fotografieren</strong>
             <span class="tiny muted">Öffnet die Kamera</span>
         </span>
     </button>
@@ -1117,7 +1117,7 @@ $zuPruefen = count(array_filter($vokabeln, static fn (array $v): bool =>
     <p class="tiny muted" id="handoffHint">
         Code mit der Kamera des Telefons scannen. Du bist dann angemeldet und
         stehst am Telefon auf genau dieser Seite &ndash; dort fotografierst du
-        die Buchseiten.
+        die Vokabelliste.
     </p>
     <p class="tiny muted">
         <strong>Der Code ist ein Schlüssel.</strong> Er gilt

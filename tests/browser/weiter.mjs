@@ -73,33 +73,47 @@ export async function pruefe(f, aus, wurzel) {
             return b.js('location.hash');
         };
 
-        // ---- Auswählen geschafft, Lückentext offen.
+        // ---- Auswählen geschafft: weiter zum Einsetzen, der nächsten Stufe.
         lernstand(['mc']);
         let e = await endeVon('quiz');
         ok('Nach dem Auswählen steht die Geschafft-Seite', e.ende === 'Auswählen geschafft!', e.ende);
-        ok('Der Knopf führt zum Lückentext',
-           e.text === 'Mit \u{270F}\u{FE0F} Lückentext weitermachen', e.text);
+        ok('Der Knopf führt zum Einsetzen',
+           e.text === 'Mit \u{1F9E9} Einsetzen weitermachen', e.text);
         ok('"Noch einmal üben" gibt es nicht mehr', !e.nochmal);
-        if (aus) await b.bild('weiter-lueckentext');
-        ok('Ein Druck öffnet den Lückentext', (await klick()) === `#/cloze/${f.unit}`);
+        if (aus) await b.bild('weiter-einsetzen');
+        ok('Ein Druck öffnet das Einsetzen', (await klick()) === `#/einsetzen/${f.unit}`);
         const mcStand = Number(php(wurzel, "require 'lib/db.php';"
             + "echo (int) qv(\"SELECT COUNT(*) FROM progress WHERE vocab_id = ? AND mode = 'mc'"
             + "  AND known_at IS NOT NULL\", [" + vokabel + "]);"));
         ok('Und das Auswählen bleibt geschafft', mcStand === 1,
            'der alte Knopf setzte es an dieser Stelle zurück');
 
-        // ---- Lückentext geschafft, Auswählen offen.
+        // ---- Einsetzen auch geschafft: weiter zum Lückentext.
+        lernstand(['mc', 'pick']);
+        e = await endeVon('einsetzen');
+        ok('Nach dem Einsetzen steht die Geschafft-Seite', e.ende === 'Einsetzen geschafft!', e.ende);
+        ok('Der Knopf führt zum Lückentext',
+           e.text === 'Mit \u{270F}\u{FE0F} Lückentext weitermachen', e.text);
+        ok('Ein Druck öffnet den Lückentext', (await klick()) === `#/cloze/${f.unit}`);
+
+        // ---- Nur der Lückentext geschafft: wieder von vorn, beim Auswählen.
         lernstand(['cloze']);
         e = await endeVon('cloze');
         ok('Nach dem Lückentext der Knopf zum Auswählen',
            e.text === 'Mit \u{1F3AF} Auswählen weitermachen', e.text);
         ok('Ein Druck öffnet das Auswählen', (await klick()) === `#/quiz/${f.unit}`);
 
-        // ---- Beides geschafft.
+        // ---- Lückentext und Auswählen geschafft, Einsetzen offen.
         lernstand(['mc', 'cloze']);
-        for (const uebung of ['quiz', 'cloze']) {
+        e = await endeVon('cloze');
+        ok('Ist nur noch das Einsetzen offen, führt der Lückentext dorthin',
+           e.text === 'Mit \u{1F9E9} Einsetzen weitermachen', e.text);
+
+        // ---- Alle drei geschafft.
+        lernstand(['mc', 'pick', 'cloze']);
+        for (const uebung of ['quiz', 'einsetzen', 'cloze']) {
             e = await endeVon(uebung);
-            ok(`Sind beide geschafft, führt ${uebung} ins Freie Üben`,
+            ok(`Sind alle drei geschafft, führt ${uebung} ins Freie Üben`,
                e.text === 'Freies Üben' && e.hantel, JSON.stringify(e));
         }
         if (aus) await b.bild('weiter-frei');

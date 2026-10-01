@@ -33,6 +33,15 @@ const ANZAHL_OPTIONEN = 4;
 
 export const MODUS_WAHL  = 'mc';
 export const MODUS_LUECKE = 'cloze';
+/* Einsetzen: derselbe Lückensatz wie im Lückentext, aber das Wort wird aus
+   drei Knöpfen gewählt statt getippt - siehe frageEinsetzen(). */
+export const MODUS_EINSETZEN = 'pick';
+
+/* So viele Wörter stehen beim Einsetzen zur Wahl - die Lösung eingerechnet. */
+const ANZAHL_WOERTER = 3;
+
+/* Die Übungsarten, die einen Lückensatz brauchen. */
+const MIT_SATZ = [MODUS_LUECKE, MODUS_EINSETZEN];
 
 /* Der geladene Vorrat, mit Registern darüber. Einmal je Seitenaufruf
    aufgebaut - JSON.parse über ein halbes Megabyte will man nicht je Frage. */
@@ -243,7 +252,7 @@ export function fortschritt(unitId, modus) {
     if (v === null) return { known: 0, total: 0 };
 
     const alle = vokabelnDerEinheit(unitId).filter(
-        (w) => modus !== MODUS_LUECKE || (v.saetze.get(w.i)?.length ?? 0) > 0,
+        (w) => !MIT_SATZ.includes(modus) || (v.saetze.get(w.i)?.length ?? 0) > 0,
     );
     const gekonnt = alle.filter((w) => standVon(w.i, modus).k === 1).length;
     return { known: gekonnt, total: alle.length };
@@ -322,16 +331,20 @@ export function vokabelListe(unitId) {
  * Fehler bei sich.
  */
 export function modusStand(unitId) {
-    const wahl   = fortschritt(unitId, MODUS_WAHL);
-    const luecke = fortschritt(unitId, MODUS_LUECKE);
-    const roh    = einheit(unitId)?.z ?? '';
+    const wahl      = fortschritt(unitId, MODUS_WAHL);
+    const luecke    = fortschritt(unitId, MODUS_LUECKE);
+    const einsetzen = fortschritt(unitId, MODUS_EINSETZEN);
+    const roh       = einheit(unitId)?.z ?? '';
 
     const status = roh === ''
         ? (luecke.total > 0 ? 'done' : 'pending')
         : roh;
 
+    // Einsetzen hängt an denselben Sätzen wie der Lückentext - also auch an
+    // demselben Zustand ihrer Entstehung.
     return {
         mc:    { known: wahl.known, total: wahl.total },
+        pick:  { known: einsetzen.known, total: einsetzen.total, status, error: null },
         cloze: { known: luecke.known, total: luecke.total, status, error: null },
     };
 }
@@ -431,6 +444,86 @@ export function frageLuecke(unitId) {
         streak:    standVon(karte.i, MODUS_LUECKE).s,
         ...stand,
     };
+}
+
+/**
+ * Die nächste Aufgabe zum Einsetzen.
+ *
+ * Derselbe Satz wie im Lückentext, aber statt zu tippen wählt das Kind aus
+ * drei Wörtern - für alle, denen das Tippen (noch) zu schwer ist, und als
+ * Stufe zwischen Auswählen und Lückentext.
+ */
+export function frageEinsetzen(unitId) {
+    const v = vorratLaden();
+    if (v === null) return null;
+
+    const stand = fortschritt(unitId, MODUS_EINSETZEN);
+    if (stand.total === 0) return { leer: true };
+
+    const offen = vokabelnDerEinheit(unitId).filter(
+        (w) => (v.saetze.get(w.i)?.length ?? 0) > 0
+            && standVon(w.i, MODUS_EINSETZEN).k !== 1,
+    );
+    if (offen.length === 0) return { done: true, ...stand };
+
+    const karte    = wuerfel(offen);
+    const satz     = wuerfel(v.saetze.get(karte.i));
+    const optionen = mischen([satz.a, ...einsetzAblenker(v, unitId, karte, satz.a)]);
+    const spr      = sprache(einheit(unitId)?.l);
+
+    return {
+        done: false,
+        vocabId:  karte.i,
+        satzId:   satz.i,
+        native:   satz.n,
+        foreign:  satz.f,
+        loesung:  satz.a,
+        optionen,
+        richtig:  optionen.indexOf(satz.a),
+        lang:     spr?.code ?? '',
+        streak:   standVon(karte.i, MODUS_EINSETZEN).s,
+        ...stand,
+    };
+}
+
+/**
+ * Die zwei falschen Wörter zum Einsetzen.
+ *
+ * Aus derselben Wortart und aus allem, was in dieser Sprache freigegeben
+ * ist - nicht nur aus der Einheit, die für drei Verben oft zu klein ist.
+ *
+ * Genommen wird bevorzugt die Lösung eines anderen Lückensatzes, nicht das
+ * Wort aus der Liste: Die Lösung im Satz ist gebeugt ("mange", "went"),
+ * das Listenwort nicht ("manger", "to go"). Stünde neben "mange" ein
+ * "courir", verriete schon die Form die richtige Wahl.
+ *
+ * Kein Wort, das der Lösung gleicht - auch nicht bis auf Akzente oder
+ * Grossschreibung: Zwei Knöpfe, die gleich aussehen, wären beide richtig.
+ * Reicht die Wortart nicht, wird mit anderen aufgefüllt.
+ */
+function einsetzAblenker(v, unitId, karte, loesung) {
+    const alle = v.vokabelnDerSprache.get(v.einheit.get(Number(unitId))?.l) ?? [];
+    const wortVon = (w) => {
+        const saetze = v.saetze.get(w.i) ?? [];
+        return saetze.length ? wuerfel(saetze).a : w.f;
+    };
+
+    const genommen = [loesung];
+    const ablenker = [];
+    const nachlegen = (quelle) => {
+        for (const w of mischen(quelle)) {
+            if (ablenker.length >= ANZAHL_WOERTER - 1) return;
+            if (w.i === karte.i) continue;
+            const wort = String(wortVon(w) ?? '').trim();
+            if (wort === '' || genommen.some((g) => vereinfachen(g) === vereinfachen(wort))) continue;
+            genommen.push(wort);
+            ablenker.push(wort);
+        }
+    };
+
+    if (karte.t) nachlegen(alle.filter((w) => w.t === karte.t));
+    if (ablenker.length < ANZAHL_WOERTER - 1) nachlegen(alle);
+    return ablenker;
 }
 
 /** Fisher-Yates - eine Kopie, damit der Aufrufer seine Liste behält. */
@@ -567,7 +660,7 @@ export function zuruecksetzen(unitId, modus = null) {
     if (v === null) return;
 
     for (const w of vokabelnDerEinheit(unitId)) {
-        for (const m of [MODUS_WAHL, MODUS_LUECKE]) {
+        for (const m of [MODUS_WAHL, MODUS_EINSETZEN, MODUS_LUECKE]) {
             if (modus !== null && m !== modus) continue;
             v.stand.delete(`${w.i}:${m}`);
         }

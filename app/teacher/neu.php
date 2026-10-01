@@ -303,8 +303,8 @@ $oben = array_values(array_filter(language_choices(),
 
 <p class="tiny muted">
     <strong>Jeder Kurs hat seine eigenen Unterlagen.</strong> „Englisch - 5B"
-    und „Englisch - 6A" teilen sich nichts &ndash; jede Lerngruppe liest ihre
-    eigenen Buchseiten ein und gibt sie in ihrem eigenen Tempo frei.
+    und „Englisch - 6A" teilen sich nichts &ndash; jede Lerngruppe bekommt ihre
+    eigenen Vokabeln und gibt sie in ihrem eigenen Tempo frei.
 </p>
 <?php endif; ?>
 

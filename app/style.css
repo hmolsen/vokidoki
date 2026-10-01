@@ -2376,3 +2376,79 @@ dialog.rueckfrage:has(.titelwahl) { width: min(100% - 32px, 420px); }
     font-weight: 600;
     color: var(--warn);
 }
+
+/* ---------------------------------------------------------------- Einsetzen */
+
+/*
+ * Die Lücke beim Einsetzen (views/einsetzen.js) - wie das Eingabefeld des
+ * Lückentexts ein Strich im Satz, aber ein Ziel: Wer ein Wort darüber
+ * zieht, sieht sie aufleuchten. Leer ist sie so breit, dass ein Finger sie
+ * trifft; sie verrät nicht, wie lang das Wort ist.
+ */
+.luecke {
+    display: inline-block;
+    min-width: 6ch;
+    min-height: 1.5em;
+    margin: 0 4px;
+    padding: 0 6px 2px;
+    border-bottom: 3px solid var(--accent);
+    border-radius: 6px 6px 0 0;
+    font-weight: 700;
+    line-height: 1.4;
+    vertical-align: baseline;
+    transition: background .15s ease, border-color .15s ease, transform .15s ease;
+}
+.luecke.ueber   { background: var(--surface-2); transform: scale(1.06); }
+.luecke.correct { border-bottom-color: var(--good); color: var(--good); background: var(--good-bg); }
+.luecke.wrong   { border-bottom-color: var(--bad);  color: var(--bad);  background: var(--bad-bg);
+                  text-decoration: line-through; }
+
+/*
+ * Die drei Wörter: gross genug für einen Daumen, nebeneinander, solange sie
+ * passen, sonst untereinander. touch-action: none, damit ein Ziehen das
+ * Wort bewegt und nicht die Seite.
+ */
+.wortwahl {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin: 4px 0 12px;
+}
+.wort {
+    flex: 1 1 28%;
+    min-width: 0;
+    min-height: var(--tap);
+    padding: 10px 12px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 1.1rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
+.wort:disabled { cursor: default; opacity: 1; }
+.wort.gezogen  { opacity: .35; }
+.wort.good { border-color: var(--good); background: var(--good-bg); color: var(--good); }
+.wort.bad  { border-color: var(--bad);  background: var(--bad-bg);  color: var(--bad); }
+
+/* Das Abbild, das beim Ziehen dem Finger folgt. */
+.wort-geist {
+    position: fixed;
+    z-index: 150;
+    margin: 0;
+    pointer-events: none;
+    box-shadow: 0 10px 28px rgba(16, 20, 30, .25);
+    cursor: grabbing;
+}
+/* "Weiter" gibt es erst nach einer falschen Wahl. .btn setzt display und
+   schlug damit das hidden-Attribut - der Knopf stand von Anfang an da. */
+.cloze-actions .btn[hidden] { display: none; }
+.cloze-actions .btn[hidden] + .flagbtn { margin-left: auto; }
