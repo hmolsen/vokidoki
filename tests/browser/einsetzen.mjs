@@ -69,6 +69,17 @@ export async function pruefe(f, aus, wurzel) {
            ansicht.zeichen === 2 && !ansicht.legende.includes('Einsetzen'),
            `${ansicht.zeichen} Zeichen, Legende: ${ansicht.legende}`);
 
+        // Die Leiste bleibt stehen, wenn die Seite rollt - wie im Lehrkraft-Bereich.
+        await b.groesse(390, 480);
+        await b.js('window.scrollTo(0, 600)');
+        await schlafe(300);
+        const leiste = await b.js(`({ oben: Math.round(document.querySelector('.topbar').getBoundingClientRect().top),
+                                      gerollt: Math.round(window.scrollY) })`);
+        ok('Die Leiste oben bleibt beim Rollen stehen', leiste.gerollt > 100 && leiste.oben === 0,
+           JSON.stringify(leiste));
+        await b.groesse(390, 844);
+        await b.js('window.scrollTo(0, 0)');
+
         await b.js(`document.querySelector('[data-mode="pick"]').click()`);
         await schlafe(1000);
         ok('Ein Druck öffnet die Übung', (await b.js('location.hash')) === `#/einsetzen/${einheit}`);

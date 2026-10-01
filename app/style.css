@@ -174,12 +174,47 @@ p  { margin: 0 0 12px; }
 
 /* ---------------------------------------------------------------- Kopfzeile */
 
+/*
+ * Die Leiste bleibt stehen, wenn die Seite rollt - wie im Lehrkraft-Bereich.
+ *
+ * Sie rollte mit weg, und mit ihr Menü, Zurück und Zahnrad: Wer in einer
+ * langen Vokabelliste unten war, musste erst wieder ganz nach oben. Jetzt
+ * ist sie sticky und reicht mit negativen Rändern bis an die Kanten, mit
+ * eigenem Grund, damit darunter rollender Inhalt nicht durchscheint. Oben
+ * kommt der Sicherheitsabstand des Geräts als Polster zurück - sonst läge
+ * sie in der installierten App unter der Uhr.
+ */
 .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-bottom: 18px;
     min-height: 44px;
+    margin:
+        calc((env(safe-area-inset-top) + 14px) * -1)
+        calc((env(safe-area-inset-right) + 16px) * -1)
+        18px
+        calc((env(safe-area-inset-left) + 16px) * -1);
+    padding:
+        calc(env(safe-area-inset-top) + 14px)
+        calc(env(safe-area-inset-right) + 16px)
+        10px
+        calc(env(safe-area-inset-left) + 16px);
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+}
+/*
+ * Unter dem Streifen "Lernansicht" (nur für Lehrkräfte): Der steht dann
+ * selbst oben fest und trägt den Sicherheitsabstand, die Leiste hängt
+ * direkt darunter.
+ */
+.lernansicht { position: sticky; top: 0; z-index: 31; }
+.lernansicht + .topbar {
+    top: calc(env(safe-area-inset-top) + 26px);
+    margin-top: -14px;
+    padding-top: 10px;
 }
 /*
  * Der Titel gibt nach, alles andere nicht.
