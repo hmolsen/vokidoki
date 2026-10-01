@@ -105,7 +105,7 @@ export async function languageView(languageId) {
                 <span class="lead">\u{1F4F7}</span>
                 <span class="body">
                     <span class="title">Vokabeln einlesen</span>
-                    <span class="tiny muted">Buchseite fotografieren und automatisch erfassen</span>
+                    <span class="tiny muted">Vokabelliste fotografieren und automatisch erfassen</span>
                 </span>
                 <span class="chev">&#8250;</span>
             </button>` : ''}

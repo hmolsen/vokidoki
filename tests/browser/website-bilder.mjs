@@ -196,6 +196,13 @@ try {
         await l.geh(`${basis}/teacher/class.php?id=${d.klasse}`, 1500);
         await foto(l, 'lehrer-klasse', { ...RECHNER, hoehe: 900 });
 
+        /*
+         * Zettel gibt es nur für frisch vergebene Passwörter - danach sieht
+         * die Lehrkraft nicht mehr, wer seines geändert hat. Also für die
+         * Vorführklasse neue vergeben; sie wird am Ende ohnehin weggeräumt.
+         */
+        await l.js(`window.confirm = () => true; document.querySelector('[name="reset_all"]').click()`);
+        await schlafe(1500);
         await l.geh(`${basis}/teacher/print.php?class=${d.klasse}`, 1500);
         await echteAdresse(l);
         await foto(l, 'lehrer-zettel', { breite: 900, hoehe: 900, dpr: 1.5,
@@ -208,7 +215,8 @@ try {
         await l.schliessen();
     }
 
-    // Einlesen am Telefon: der Prüfschritt nach dem Foto der Buchseite.
+    // Einlesen am Telefon: der Prüfschritt nach dem Foto der Vokabelliste -
+    // mit einer Zeile, die die KI berichtigt hat und die gelb markiert ist.
     const t = await browser({ port: 9473, breite: 390, hoehe: 844, handy: true });
     try {
         await alsLehrkraft(t, basis, d.lehrer, d.passwort);
@@ -218,7 +226,8 @@ try {
             entries: [
                 { foreign: 'le loisir', native: 'die Freizeit', word_type: 'substantiv' },
                 { foreign: 'jouer au foot', native: 'Fußball spielen', word_type: 'verb' },
-                { foreign: 'la plage', native: 'der Strand', word_type: 'substantiv' },
+                { foreign: 'la plage', native: 'der Strand', word_type: 'substantiv',
+                  correction: 'der Stand → der Strand' },
                 { foreign: 'nager', native: 'schwimmen', word_type: 'verb' },
                 { foreign: 'le vélo', native: 'das Fahrrad', word_type: 'substantiv' },
                 { foreign: 'Qu\\'est-ce que tu fais ?', native: 'Was machst du?', word_type: 'frage' },
