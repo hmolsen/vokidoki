@@ -274,6 +274,38 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['remove_studen
     teacher_redirect($zurück);
 }
 
+/*
+ * Die ganze Klasse löschen - mit ihren Kursen und den Konten der Kinder.
+ *
+ * Dieselbe Zäsur wie beim Kurs (teacher/course.php, delete_course): das
+ * eigene Passwort, ohne Anmeldebremse. Am Ende eines Schuljahres ist das der
+ * Weg, eine Klasse loszuwerden, ohne achtundzwanzig Kinder einzeln zu
+ * entfernen und danach jeden Kurs einzeln zu löschen.
+ */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['delete_class'])) {
+    teacher_csrf_check();
+
+    if (!password_verify((string) ($_POST['password'] ?? ''), (string) $user['password_hash'])) {
+        usleep(random_int(200_000, 500_000));
+        teacher_flash('Das Passwort stimmt nicht. Die Klasse ist unverändert.', 'bad');
+        teacher_redirect($zurück);
+    }
+
+    try {
+        $verlust = class_delete($classId);
+    } catch (Throwable $e) {
+        error_log('[vokabeltrainer] Klasse loeschen: ' . $e->getMessage());
+        teacher_flash('Die Klasse ließ sich nicht löschen. Es wurde nichts verändert.', 'bad');
+        teacher_redirect($zurück);
+    }
+
+    teacher_flash(sprintf(
+        'Klasse "%s" gelöscht - mit %d Kinderkonten, %d Sprachkursen und %d Lerneinheiten.',
+        $klasse['name'], count($verlust['loeschen']), count($verlust['kurse']), $verlust['units'],
+    ));
+    teacher_redirect('classes.php');
+}
+
 $kinder    = array_values(array_filter(
     class_members_list($classId),
     static fn (array $m): bool => $m['role'] !== 'teacher',
@@ -606,6 +638,92 @@ teacher_flash_render();
             zweites Mal einfügen ohne Duplikate zu erzeugen.
         </p>
         <button class="btn small" name="add_students" value="1">Konten anlegen</button>
+    </form>
+</details>
+
+<?php
+/*
+ * Klasse löschen - gebaut wie "Kurs löschen" (teacher/course.php):
+ * zugeklappt, die Warnung, alles aufgezählt, was geht, und das Passwort.
+ *
+ * Die Lernstände stehen nur als eine Zahl da, nicht je Kind: Nichts im
+ * Lehrkraft-Bereich darf zeigen, welches Kind die App benutzt.
+ */
+$verlust = class_delete_preview($classId);
+?>
+<h2>Klasse löschen</h2>
+
+<details class="card" id="klasseloeschen">
+    <summary style="cursor:pointer;font-weight:600">
+        Diese Klasse endgültig löschen
+    </summary>
+
+    <div class="notice bad" style="margin-top:14px">
+        <strong>Das lässt sich nicht rückgängig machen.</strong>
+        Gelöscht werden nicht nur die Klasse, sondern auch ihre Sprachkurse
+        mit allen Unterlagen und die Konten ihrer Kinder mit allem, was sie
+        gelernt haben:
+    </div>
+
+    <table class="data">
+        <tr><th>Was</th><th class="num">Anzahl</th></tr>
+        <tr>
+            <td><strong>Kinderkonten</strong>
+                <?php if ($verlust['loeschen'] !== []): ?>
+                    <span class="tiny muted"><?= h(implode(', ', array_column($verlust['loeschen'], 'display_name'))) ?></span>
+                <?php endif; ?></td>
+            <td class="num"><strong><?= count($verlust['loeschen']) ?></strong></td>
+        </tr>
+        <tr>
+            <td><strong>Sprachkurse</strong>
+                <?php if ($verlust['kurse'] !== []): ?>
+                    <span class="tiny muted"><?= h(implode(', ', array_column($verlust['kurse'], 'name'))) ?></span>
+                <?php endif; ?></td>
+            <td class="num"><strong><?= count($verlust['kurse']) ?></strong></td>
+        </tr>
+        <tr>
+            <td>Lerneinheiten</td>
+            <td class="num"><?= $verlust['units'] ?></td>
+        </tr>
+        <tr>
+            <td>Vokabeln</td>
+            <td class="num"><?= $verlust['vocab'] ?></td>
+        </tr>
+        <tr>
+            <td>Lückensätze</td>
+            <td class="num"><?= $verlust['sentences'] ?></td>
+        </tr>
+        <tr>
+            <td><strong>Gespeicherte Lernstände</strong>
+                <span class="tiny muted">Serien, Fehler, „gekonnt"</span></td>
+            <td class="num"><strong><?= $verlust['progress'] ?></strong></td>
+        </tr>
+    </table>
+
+    <?php if ($verlust['bleiben'] !== []): ?>
+    <p class="tiny">
+        <strong>Bleiben erhalten:</strong>
+        <?= h(implode(', ', array_column($verlust['bleiben'], 'display_name'))) ?>
+        &ndash; sie stehen noch in einer anderen Klasse und verlieren nur diese.
+    </p>
+    <?php endif; ?>
+
+    <p class="tiny muted">
+        Lehrkräfte behalten ihre Konten. Wer nur einzelne Kinder herausnehmen
+        will, tut das oben in der Liste; wer nur einen Kurs nicht mehr braucht,
+        löscht ihn auf seiner Seite.
+    </p>
+
+    <form method="post" style="max-width:360px">
+        <?= teacher_csrf_field() ?>
+        <input type="hidden" name="class_id" value="<?= $classId ?>"><?= $kursFeld ?>
+        <label for="pw_delete_class">Zum Bestätigen dein eigenes Passwort</label>
+        <input type="password" id="pw_delete_class" name="password"
+               autocomplete="current-password" required>
+        <button class="btn small danger" name="delete_class" value="1"
+                data-confirm="Klasse &quot;<?= h($klasse['name']) ?>&quot; mit allen Kursen, Kinderkonten und Lernständen endgültig löschen?">
+            Endgültig löschen
+        </button>
     </form>
 </details>
 

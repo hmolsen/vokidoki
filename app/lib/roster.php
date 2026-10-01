@@ -408,6 +408,105 @@ function student_delete(int $userId): bool
 }
 
 /**
+ * Was das Löschen einer ganzen Klasse mitnimmt - für die Warnung davor.
+ *
+ * Kinder, die noch in einer anderen Klasse stehen, verlieren ihr Konto
+ * NICHT: Sonst nähme das Löschen der 5B einer anderen Klasse ein Kind weg,
+ * und deren Lehrkraft erführe es nicht. Sie verlassen nur diese Klasse und
+ * stehen gesondert in der Warnung.
+ *
+ * @return array{
+ *     loeschen: list<array{id: int, display_name: string}>,
+ *     bleiben: list<array{id: int, display_name: string}>,
+ *     kurse: list<array{id: int, name: string}>,
+ *     units: int, vocab: int, sentences: int, progress: int
+ * }
+ */
+function class_delete_preview(int $classId): array
+{
+    $loeschen = [];
+    $bleiben  = [];
+    foreach (class_members_list($classId) as $m) {
+        if ($m['role'] === 'teacher') {
+            continue;
+        }
+        $woanders = (int) qv('SELECT COUNT(*) FROM class_members
+                               WHERE user_id = ? AND class_id <> ?',
+                             [(int) $m['id'], $classId]) > 0;
+        $zeile = ['id' => (int) $m['id'], 'display_name' => (string) $m['display_name']];
+        if ($woanders) {
+            $bleiben[] = $zeile;
+        } else {
+            $loeschen[] = $zeile;
+        }
+    }
+
+    $kurse = array_map(static fn (array $c): array =>
+        ['id' => (int) $c['id'], 'name' => (string) $c['name']], courses_for_class($classId));
+
+    $summe = ['units' => 0, 'vocab' => 0, 'sentences' => 0];
+    foreach ($kurse as $k) {
+        $v = course_delete_preview($k['id']);
+        foreach ($summe as $was => $n) {
+            $summe[$was] = $n + $v[$was];
+        }
+    }
+
+    /*
+     * Lernstände zweimal zu zählen wäre leicht: die eines gelöschten Kindes
+     * in einem gelöschten Kurs. Deshalb eine Abfrage über beides - was am
+     * Kind hängt oder am Kurs, je Zeile einmal.
+     */
+    $kindIds = array_column($loeschen, 'id') ?: [0];
+    $kursIds = array_column($kurse, 'id') ?: [0];
+    $fragen  = static fn (array $l): string => implode(',', array_fill(0, count($l), '?'));
+    $progress = (int) qv(
+        'SELECT COUNT(*) FROM progress p
+           JOIN vocab v ON v.id = p.vocab_id
+           JOIN units t ON t.id = v.unit_id
+          WHERE p.user_id IN (' . $fragen($kindIds) . ')
+             OR t.course_id IN (' . $fragen($kursIds) . ')',
+        [...$kindIds, ...$kursIds],
+    );
+
+    return ['loeschen' => $loeschen, 'bleiben' => $bleiben, 'kurse' => $kurse]
+         + $summe + ['progress' => $progress];
+}
+
+/**
+ * Eine Klasse mit ihren Kursen und den Konten ihrer Kinder löschen.
+ *
+ * Alles oder nichts, in einer Transaktion: Bräche es nach dem dritten Kurs
+ * ab, stünde eine halbe Klasse da, deren Rest niemand mehr gezeigt bekommt.
+ * Lehrkräfte bleiben, und Kinder, die noch in einer anderen Klasse stehen,
+ * auch (class_delete_preview()) - sie verlieren nur diese Klasse; ihre
+ * Kurse gehen ohnehin mit.
+ *
+ * @return array Was gelöscht wurde, wie class_delete_preview() es zählt.
+ */
+function class_delete(int $classId): array
+{
+    $verlust = class_delete_preview($classId);
+
+    db()->beginTransaction();
+    try {
+        foreach ($verlust['kurse'] as $k) {
+            course_delete($k['id']);
+        }
+        foreach ($verlust['loeschen'] as $kind) {
+            student_delete($kind['id']);
+        }
+        // Nimmt class_members mit, das haengt am Fremdschluessel.
+        q('DELETE FROM classes WHERE id = ?', [$classId]);
+        db()->commit();
+    } catch (Throwable $e) {
+        db()->rollBack();
+        throw $e;
+    }
+    return $verlust;
+}
+
+/**
  * Ein Kind ohne Klasse einer Klasse zuordnen - und den gewählten ihrer Kurse.
  *
  * Nur Kurse genau dieser Klasse werden angenommen; eine gefälschte Nummer

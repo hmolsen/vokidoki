@@ -6113,6 +6113,82 @@ ok('Eine von zweien laesst sich entfernen', course_role($lkZweite, $lkKurs) === 
 q('DELETE FROM courses WHERE id = ?', [$lkKurs]);
 q('DELETE FROM users WHERE id = ?', [$lkZweite]);
 
+section('Eine ganze Klasse loeschen');
+
+/*
+ * Am Ende des Schuljahres: die Klasse mit ihren Kursen und Kinderkonten in
+ * einem Zug, statt jedes Kind und jeden Kurs einzeln. Gebaut wie das
+ * Loeschen eines Kurses - Warnung, Aufzaehlung, eigenes Passwort.
+ */
+$klLehrer = q1('SELECT * FROM users WHERE id = ?', [$lehrerId]);
+$klSchule = (int) $klLehrer['school_id'];
+$klKlasse = class_create($klSchule, 'Loesch-9z');
+$klAndere = class_create($klSchule, 'Bleib-9y');
+$klKlasseId = (int) $klKlasse['id'];
+$klAndereId = (int) $klAndere['id'];
+$klKind1 = student_create($klSchule, $klKlasseId, 'Abschied', 'A');
+$klKind2 = student_create($klSchule, $klKlasseId, 'Wechsel', 'W');
+// Das zweite Kind steht auch in einer anderen Klasse - es bleibt.
+q('INSERT INTO class_members (class_id, user_id) VALUES (?, ?)', [$klAndereId, (int) $klKind2['id']]);
+$klKurs = course_create($klLehrer, 'Testsprache-Loeschklasse', '', $klKlasseId);
+$klKursId = (int) $klKurs['id'];
+$klUnit = makeUnit($lehrerId, (int) $klKurs['language_id'], 'Weg damit');
+q('UPDATE units SET course_id = ? WHERE id = ?', [$klKursId, $klUnit]);
+q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, 0)',
+  [$klUnit, 'adieu', 'tschuess']);
+$klVokabel = (int) qv('SELECT id FROM vocab WHERE unit_id = ?', [$klUnit]);
+record_answer((int) $klKind1['id'], $klVokabel, MODE_CHOICE, true);
+record_answer((int) $klKind2['id'], $klVokabel, MODE_CHOICE, true);
+
+$vorschau = class_delete_preview($klKlasseId);
+ok('Die Vorschau zaehlt Konten, Kurse und Lernstaende',
+   array_column($vorschau['loeschen'], 'id') === [(int) $klKind1['id']]
+   && array_column($vorschau['bleiben'], 'id') === [(int) $klKind2['id']]
+   && array_column($vorschau['kurse'], 'id') === [$klKursId]
+   && $vorschau['units'] === 1 && $vorschau['vocab'] === 1 && $vorschau['progress'] === 2,
+   json_encode($vorschau));
+
+$seite = teacherGet('class.php?id=' . $klKlasseId)['body'];
+ok('Die Klassenseite bietet das Loeschen an, mit Warnung und Passwort',
+   str_contains($seite, 'name="delete_class"')
+   && str_contains($seite, 'nicht rückgängig')
+   && str_contains($seite, 'id="pw_delete_class"'));
+ok('Und nennt, was mitgeht - und wer bleibt',
+   str_contains($seite, 'Testsprache-Loeschklasse - Loesch-9z')
+   && str_contains($seite, h((string) $klKind1['display_name']))
+   && preg_match('/Bleiben erhalten:<\/strong>\s*' . preg_quote(h((string) $klKind2['display_name']), '/') . '/',
+                 $seite) === 1);
+
+$res = teacherRequest($base . '/teacher/class.php?id=' . $klKlasseId, [
+    'delete_class' => '1', 'class_id' => $klKlasseId,
+    'password' => 'bestimmt-falsch', 'csrf' => $lehrerCsrf,
+]);
+ok('Mit falschem Passwort bleibt alles',
+   q1('SELECT id FROM classes WHERE id = ?', [$klKlasseId]) !== null
+   && q1('SELECT id FROM courses WHERE id = ?', [$klKursId]) !== null
+   && str_contains($res['body'], 'Passwort stimmt nicht'));
+
+$res = teacherRequest($base . '/teacher/class.php?id=' . $klKlasseId, [
+    'delete_class' => '1', 'class_id' => $klKlasseId,
+    'password' => 'lehrerin123', 'csrf' => $lehrerCsrf,
+]);
+ok('Mit dem richtigen ist die Klasse weg, samt Kurs und Einheit',
+   q1('SELECT id FROM classes WHERE id = ?', [$klKlasseId]) === null
+   && q1('SELECT id FROM courses WHERE id = ?', [$klKursId]) === null
+   && q1('SELECT id FROM units WHERE id = ?', [$klUnit]) === null
+   && (int) qv('SELECT COUNT(*) FROM progress WHERE vocab_id = ?', [$klVokabel]) === 0);
+ok('Das Kind nur dieser Klasse ist geloescht',
+   q1('SELECT id FROM users WHERE id = ?', [(int) $klKind1['id']]) === null);
+ok('Das Kind der anderen Klasse bleibt - dort, nicht hier',
+   q1('SELECT id FROM users WHERE id = ?', [(int) $klKind2['id']]) !== null
+   && array_column(class_members_list($klAndereId), 'id') == [(int) $klKind2['id']]);
+ok('Die Lehrkraft bleibt', q1('SELECT id FROM users WHERE id = ?', [$lehrerId]) !== null);
+ok('Die Meldung sagt, was mitgegangen ist',
+   str_contains($res['body'], 'Klasse &quot;Loesch-9z&quot; gelöscht - mit 1 Kinderkonten, 1 Sprachkursen'));
+
+q('DELETE FROM users WHERE id = ?', [(int) $klKind2['id']]);
+q('DELETE FROM classes WHERE id = ?', [$klAndereId]);
+
 section('Zettel mit den Zugangsdaten');
 
 require_once __DIR__ . '/../app/lib/letter.php';

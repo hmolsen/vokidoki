@@ -347,26 +347,38 @@ function course_delete_preview(int $courseId): array
  */
 function course_delete(int $courseId): void
 {
+    // class_delete() loescht mehrere Kurse in einer Transaktion - dann
+    // gehoert dieser Kurs zu ihrer, statt eine eigene zu oeffnen. MariaDB
+    // kennt keine geschachtelten.
+    if (db()->inTransaction()) {
+        course_delete_inhalt($courseId);
+        return;
+    }
     db()->beginTransaction();
     try {
-        q('DELETE FROM units WHERE course_id = ?', [$courseId]);
-
-        $languageId = (int) (qv('SELECT language_id FROM courses WHERE id = ?',
-                                [$courseId]) ?? 0);
-
-        // Nimmt course_members mit, das haengt am Fremdschluessel.
-        q('DELETE FROM courses WHERE id = ?', [$courseId]);
-
-        if ($languageId > 0
-            && (int) qv('SELECT COUNT(*) FROM courses WHERE language_id = ?',
-                        [$languageId]) === 0) {
-            q('DELETE FROM languages WHERE id = ?', [$languageId]);
-        }
-
+        course_delete_inhalt($courseId);
         db()->commit();
     } catch (Throwable $e) {
         db()->rollBack();
         throw $e;
+    }
+}
+
+/** Das eigentliche Loeschen von course_delete(), ohne eigene Transaktion. */
+function course_delete_inhalt(int $courseId): void
+{
+    q('DELETE FROM units WHERE course_id = ?', [$courseId]);
+
+    $languageId = (int) (qv('SELECT language_id FROM courses WHERE id = ?',
+                            [$courseId]) ?? 0);
+
+    // Nimmt course_members mit, das haengt am Fremdschluessel.
+    q('DELETE FROM courses WHERE id = ?', [$courseId]);
+
+    if ($languageId > 0
+        && (int) qv('SELECT COUNT(*) FROM courses WHERE language_id = ?',
+                    [$languageId]) === 0) {
+        q('DELETE FROM languages WHERE id = ?', [$languageId]);
     }
 }
 
