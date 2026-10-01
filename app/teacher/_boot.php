@@ -655,13 +655,29 @@ function teacher_nav(array $user, ?int $kursId = null): void
 
             <hr class="mtrenner">
 
-            <form method="post" action="<?= h(teacher_url('index.php')) ?>">
+            <?php
+            /*
+             * Abmelden - oder, in der installierten App, Aktualisieren.
+             *
+             * Wie in der Lernansicht (navRechtsHtml() in core.js): Das
+             * Symbol "Verwaltung" auf dem Home-Bildschirm gehört genau
+             * diesem Konto, sich dort abzumelden nimmt nur den Zugang. Was
+             * dort fehlt, ist ein Weg zu einer neuen Fassung - keine
+             * Adresszeile, kein Neu-Laden. Ob die Seite als App läuft, weiss
+             * nur der Browser; teacher.js tauscht die beiden Einträge.
+             */
+            ?>
+            <form method="post" action="<?= h(teacher_url('index.php')) ?>" data-abmelden>
                 <?= teacher_csrf_field() ?>
                 <button class="mitem" name="teacher_logout" value="1">
                     <span class="micon" aria-hidden="true">&#9099;</span>
                     <span>Abmelden</span>
                 </button>
             </form>
+            <button class="mitem" type="button" data-nav-refresh hidden>
+                <span class="micon" aria-hidden="true">&#8635;</span>
+                <span>App aktualisieren</span>
+            </button>
         </nav>
     </details>
 </div>
@@ -764,9 +780,10 @@ function teacher_foot(): void
     // Impressum, Datenschutz, Lizenzen - ganz unten, auf jeder Seite.
     echo legal_links_html('teacher');
 
+    // Das Band "Es gibt eine neue Fassung" - wie in der App. Vor teacher.js:
+    // Das liest an diesem Element ab, womit "App aktualisieren" neu holt.
+    echo fassung_skript_html(), "\n";
     printf("<script src=\"%s\"></script>\n",
         h(url('/teacher/teacher.js?v=' . app_version())));
-    // Das Band "Es gibt eine neue Fassung" - wie in der App.
-    echo fassung_skript_html(), "\n";
     echo "</main></body></html>\n";
 }

@@ -62,4 +62,57 @@ export async function pruefe(f, aus, wurzel) {
     } finally {
         b.schliessen();
     }
+
+    abschnitt('Installierte Verwaltung: Aktualisieren statt Abmelden');
+
+    /*
+     * Als App auf dem Home-Bildschirm steht rechts kein "Abmelden", sondern
+     * "App aktualisieren" - wie in der Lernansicht. Ob die Seite als App
+     * läuft, weiss nur der Browser; hier wird es ihm eingeredet, bevor die
+     * Seite lädt (navigator.standalone, wie auf dem iPhone).
+     */
+    const app = await browser({ port: 9421, breite: 390, hoehe: 844, handy: true, aus });
+    try {
+        await alsLehrkraft(app, f.basis, f.lehrer, f.passwort);
+        await app.send('Page.addScriptToEvaluateOnNewDocument', {
+            source: "Object.defineProperty(navigator, 'standalone', { get: () => true });",
+        });
+        await app.geh(f.basis + '/teacher/index.php', 1500);
+        const menue = await app.js(`({
+            abmelden:     (document.querySelector('[data-abmelden]')?.offsetParent ?? null) !== null,
+            aktualisieren: !document.querySelector('[data-nav-refresh]')?.hidden,
+        })`);
+        await app.js(`document.getElementById('menuRechts').open = true`);
+        await schlafe(300);
+        const sichtbar = await app.js(`({
+            abmelden:     (document.querySelector('[data-abmelden] button')?.offsetParent ?? null) !== null,
+            aktualisieren: (document.querySelector('[data-nav-refresh]')?.offsetParent ?? null) !== null,
+        })`);
+        ok('In der installierten App steht "App aktualisieren" statt "Abmelden"',
+           sichtbar.aktualisieren && !sichtbar.abmelden && menue.aktualisieren,
+           JSON.stringify(sichtbar));
+        await app.js(`window.__alt = true; document.querySelector('[data-nav-refresh]').click()`);
+        await schlafe(2500);
+        const danach = await app.js(`({ alt: window.__alt === true, seite: location.pathname })`);
+        ok('Ein Druck holt die Seite frisch und bleibt dort',
+           !danach.alt && danach.seite.endsWith('/teacher/index.php'), JSON.stringify(danach));
+    } finally {
+        app.schliessen();
+    }
+
+    // Im Browser bleibt es beim Abmelden.
+    const web = await browser({ port: 9422, breite: 1100, hoehe: 800, aus });
+    try {
+        await alsLehrkraft(web, f.basis, f.lehrer, f.passwort);
+        await web.geh(f.basis + '/teacher/index.php', 1200);
+        await web.js(`document.getElementById('menuRechts').open = true`);
+        await schlafe(300);
+        const im = await web.js(`({
+            abmelden:     (document.querySelector('[data-abmelden] button')?.offsetParent ?? null) !== null,
+            aktualisieren: (document.querySelector('[data-nav-refresh]')?.offsetParent ?? null) !== null,
+        })`);
+        ok('Im Browser steht weiter "Abmelden"', im.abmelden && !im.aktualisieren, JSON.stringify(im));
+    } finally {
+        web.schliessen();
+    }
 }

@@ -1526,6 +1526,35 @@ async function initInstallHinweis() {
 
 initInstallHinweis();
 
+/**
+ * In der installierten App: "App aktualisieren" statt "Abmelden".
+ *
+ * Dieselbe Regel wie in der Lernansicht (core.js). Geholt wird über
+ * aktualisieren.js - dasselbe gründliche Neuholen wie beim Band "Es gibt
+ * eine neue Fassung", danach lädt die Seite neu, auf der man gerade ist.
+ */
+function initAktualisierenStattAbmelden() {
+    const installiert = window.navigator.standalone === true
+        || window.matchMedia('(display-mode: standalone)').matches;
+    const knopf = document.querySelector('[data-nav-refresh]');
+    const fassung = document.querySelector('script[data-fassung]');
+    if (!installiert || !knopf || !fassung) return;
+
+    document.querySelector('[data-abmelden]')?.setAttribute('hidden', '');
+    knopf.hidden = false;
+    knopf.addEventListener('click', async () => {
+        knopf.disabled = true;
+        knopf.querySelector('.micon').innerHTML = '<span class="spinner inline"></span>';
+        const { frischHolen } = await import(fassung.src);
+        await frischHolen({
+            base:   fassung.dataset.base,
+            assets: JSON.parse(fassung.dataset.assets || '[]'),
+        });
+    });
+}
+
+initAktualisierenStattAbmelden();
+
 // Eine Auswahl, die schon die ganze Antwort ist: beim Wählen abschicken.
 document.addEventListener('change', (e) => {
     const form = e.target.closest('form[data-sofortsenden]');
