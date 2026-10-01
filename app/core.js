@@ -238,6 +238,24 @@ export function topbar(title, { backTo = null, action = '', lead = '' } = {}) {
  */
 let navQuelleFn = () => ({ kurse: [], aktiv: null });
 
+/**
+ * Der Kopf der linken Schublade: das Wortzeichen wie auf der Anmeldung, und
+ * darunter die Schule. Dasselbe steht im Lehrkraft-Bereich (teacher_nav() in
+ * teacher/_boot.php) - dort vom Server gebaut, hier im Gerät; die Gestalt
+ * kommt aus style.css und ist für beide dieselbe.
+ */
+function menueKopfHtml(start) {
+    const schule = VT.user?.school ?? '';
+    return `
+        <div class="mkopf">
+            <a href="${esc(start)}" class="mlogo" aria-label="Vokidoki - zur Startseite">
+                <img src="${esc(VT.base)}/assets/vokidoki_logo.svg" alt="Vokidoki"
+                     width="768" height="256">
+            </a>
+            ${schule ? `<span class="mschule">${esc(schule)}</span>` : ''}
+        </div>`;
+}
+
 /** app.js sagt, woher die Kursliste kommt und welcher Kurs gerade offen ist. */
 export function navQuelle(fn) {
     navQuelleFn = fn;
@@ -277,6 +295,7 @@ function navLinksHtml() {
             </summary>
             <span class="schleier" data-zu></span>
             <nav class="schublade" aria-label="Navigation">
+                ${menueKopfHtml('#/')}
                 <a class="mitem haupt" href="#/">
                     <span class="micon" aria-hidden="true">&#127968;</span>
                     <span>Meine Kurse</span>

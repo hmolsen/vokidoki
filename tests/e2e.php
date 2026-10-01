@@ -4500,6 +4500,14 @@ $schulName = (string) qv('SELECT s.name FROM schools s
                             JOIN users u ON u.school_id = s.id WHERE u.id = ?', [$lehrerId]);
 ok('Das Menue links fuehrt auf die eigenen Kurse',
    str_contains($res['body'], '<a class="mitem haupt" href='));
+/*
+ * Oben in der Schublade: das Wortzeichen wie auf der Anmeldung und darunter
+ * die Schule. In der App kommt der Name ueber VT.user (app_user_data()).
+ */
+ok('Oben im Menue steht das Logo und darunter die Schule',
+   str_contains($res['body'], 'class="mkopf"') && str_contains($res['body'], 'vokidoki_logo.svg')
+   && str_contains($res['body'], '<span class="mschule">' . htmlspecialchars($schulName, ENT_QUOTES) . '</span>'),
+   $schulName);
 ok('Und zeigt ein Haeuschen dazu', str_contains($res['body'], '&#127968;'));
 ok('Darunter stehen alle Kurse der Schule',
    str_contains($res['body'], 'Alle Kurse der Schule'));

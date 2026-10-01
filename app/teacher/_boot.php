@@ -458,6 +458,24 @@ function teacher_nav(array $user, ?int $kursId = null): void
         </summary>
         <span class="schleier" data-zu></span>
         <nav class="schublade" aria-label="Navigation">
+            <?php
+            /*
+             * Oben das Wortzeichen wie auf der Anmeldung, darunter die
+             * Schule - dieselbe Gestalt wie in der App (menueKopfHtml() in
+             * core.js), die Regeln dafür stehen in style.css.
+             */
+            $schulName = school_name_for($user);
+            ?>
+            <div class="mkopf">
+                <a href="<?= h(teacher_url('index.php')) ?>" class="mlogo"
+                   aria-label="Vokidoki - zu „Meine Kurse“">
+                    <img src="<?= h(url('/assets/vokidoki_logo.svg')) ?>" alt="Vokidoki"
+                         width="768" height="256">
+                </a>
+                <?php if ($schulName !== null): ?>
+                    <span class="mschule"><?= h($schulName) ?></span>
+                <?php endif; ?>
+            </div>
             <a class="mitem haupt" href="<?= h(teacher_url('index.php')) ?>">
                 <span class="micon" aria-hidden="true">&#127968;</span>
                 <span>Meine Kurse</span>

@@ -239,5 +239,18 @@ function app_user_data(array $user): array
         'isTeacher' => user_is_teacher($user),
         // null, oder die Punkte, die vor dem ersten Üben zu bestätigen sind.
         'einwilligung' => einwilligung_fuer_app($user),
+        // Der Name der Schule - oben im linken Menü, unter dem Logo.
+        'school'    => school_name_for($user),
     ];
+}
+
+/** Der Name der Schule eines Kontos, oder null, wenn es zu keiner gehört. */
+function school_name_for(array $user): ?string
+{
+    $id = (int) ($user['school_id'] ?? 0);
+    if ($id === 0) {
+        return null;
+    }
+    $name = qv('SELECT name FROM schools WHERE id = ?', [$id]);
+    return $name === null ? null : (string) $name;
 }

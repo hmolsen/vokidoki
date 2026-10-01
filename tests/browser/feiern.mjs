@@ -457,7 +457,7 @@ export async function pruefe(f, aus, wurzel) {
         + "  q('INSERT INTO learn_days (user_id, `day`, learned, correct)"
         + "     VALUES (?, ?, ?, ?)',"
         + "    [$uid, $tag, ($i % 4 === 0) ? 2 : 0,"
-        + "     $i === 1 ? 999 : (2 + ($i * 7) % 40)]);"
+        + "     $i === 0 ? 999 : (2 + ($i * 7) % 40)]);"
         + "}");
 
     const k = await browser({ port: 9417, breite: 320, hoehe: 1000, aus });
@@ -486,7 +486,17 @@ export async function pruefe(f, aus, wurzel) {
         ok('Sieben Spalten - eine Woche je Zeile', l.spalten === 7, String(l.spalten));
         ok('Der laufende Monat steht oben', /\d{4}$/.test(l.monat.trim()), l.monat);
         ok('Heute ist markiert', l.heute === 1, String(l.heute));
-        ok('In den Kästchen stehen Zahlen', l.zahlen > 5, String(l.zahlen));
+        /*
+         * Wie viele Tage dieses Monats Zahlen tragen, hängt vom Datum ab: Am
+         * Ersten ist es genau einer. Die Prüfung stand auf "mehr als fünf"
+         * und die 999 auf gestern - am Ersten eines Monats fiel beides um,
+         * weil gestern im Vormonat liegt. Jetzt wird gezählt, was der
+         * Vorrat oben anlegt (jeder dritte Tag fehlt), und die 999 steht
+         * heute, und heute ist immer in diesem Monat.
+         */
+        const tagImMonat = new Date().getDate();
+        const erwartet = [...Array(tagImMonat).keys()].filter((i) => i % 3 !== 2).length;
+        ok('In den Kästchen stehen Zahlen', l.zahlen === erwartet, `${l.zahlen}, erwartet ${erwartet}`);
         ok('Auch eine dreistellige ist dabei', l.gross >= 1, String(l.gross));
         /*
          * Bei 320 px ist das Kästchen rund 31 px breit. Eine 999, die dort
@@ -504,8 +514,15 @@ export async function pruefe(f, aus, wurzel) {
             await schlafe(70);
             schritte++;
         }
+        // Wie viele Monatswechsel 200 Tage überspannen, hängt vom Tag ab:
+        // sechs oder sieben.
+        const jetzt  = new Date();
+        const anfang = new Date(jetzt.getTime() - 200 * 86400000);
+        const monate = (jetzt.getFullYear() * 12 + jetzt.getMonth())
+                     - (anfang.getFullYear() * 12 + anfang.getMonth());
         ok('Zurück geht es bis zum Anlegen des Kontos, dann ist Schluss',
-           schritte === 6, schritte + ' Monate - das Konto ist 200 Tage alt');
+           schritte === Math.min(12, monate),
+           `${schritte} Monate, erwartet ${monate} - das Konto ist 200 Tage alt`);
         l = await lage();
         ok('Dort steht der Pfeil still', l.zurueckAus === true);
         ok('Und der Kalender zeigt trotzdem einen Monat', l.spalten === 7);
