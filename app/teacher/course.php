@@ -463,7 +463,8 @@ teacher_flash_render();
             <td class="actions">
                 <?php if ($m['member_role'] === 'teacher' && $lehrkraefteImKurs === 1): ?>
                     <?php // Die letzte Lehrkraft bleibt - siehe course_is_last_teacher(). ?>
-                    <span class="tiny muted" title="Ein Kurs braucht mindestens eine Lehrkraft">einzige Lehrkraft</span>
+                    <?php // Am Telefon war "einzige Lehrkraft" abgeschnitten - wie bei "Entfernen" nur das Zeichen. ?>
+                    <span class="tiny muted" title="Ein Kurs braucht mindestens eine Lehrkraft"><span aria-hidden="true">&#128274;</span><span class="nurbreit"> einzige Lehrkraft</span></span>
                 <?php else: ?>
                 <form method="post" class="compact">
                     <?= teacher_csrf_field() ?>
