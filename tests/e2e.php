@@ -5043,6 +5043,21 @@ ok('Die Klasse fuehrt zum Assistenten',
 ok('Und legt selbst keinen Kurs mehr an',
    !str_contains($res['body'], 'name="create_course"'));
 
+/*
+ * Die Knoepfe unter den Tabellen sahen verschieden aus: "Neuer Kurs fuer
+ * diese Klasse" ein grauer Textknopf, "+ Hinzufuegen" ein farbiger. Jetzt
+ * sind alle derselbe, und sagen, was sie anlegen.
+ */
+ok('Die Knoepfe unter den Tabellen sehen gleich aus und sagen, was sie anlegen',
+   preg_match('/<a class="iconaction primary" href="[^"]*neu\.php\?klasse=\d+">\s*'
+              . '<span aria-hidden="true">\+<\/span> Sprachkurs anlegen/', $res['body']) === 1
+   && preg_match('/class="iconaction primary" form="newstudent"[^>]*>\s*'
+                 . '<span aria-hidden="true">\+<\/span> Kind hinzufügen/', $res['body']) === 1);
+$einheitenKnopf = (string) file_get_contents(__DIR__ . '/../app/teacher/course.php');
+ok('Auch "Lerneinheit anlegen", in der Tabelle wie in der leeren Liste',
+   substr_count($einheitenKnopf, '<span aria-hidden="true">+</span> Lerneinheit anlegen') === 2
+   && !str_contains($einheitenKnopf, 'Lerneinheit hinzuf'));
+
 // ---- Schritt 1: Fuer welche Klasse?
 
 $res = teacherGet('neu.php');

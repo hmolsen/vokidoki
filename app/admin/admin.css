@@ -1673,7 +1673,7 @@ a.rowmain:hover { text-decoration: underline; }
 
     /* Auch am Telefon nebeneinander, solange sie nebeneinander passen. */
     .coursetitle.addbuttons { gap: 8px; }
-    .coursetitle.addbuttons .btn { flex: 1 1 auto; }
+    .coursetitle.addbuttons .iconaction { flex: 1 1 auto; justify-content: center; }
 
     .titelzeile { gap: 10px; }
     .titelzeile h1 { font-size: 1.3rem; }

@@ -362,10 +362,9 @@ teacher_flash_render();
     <tr class="newrow">
         <td colspan="5" data-label="Neuer Kurs">
             <span class="coursetitle addbuttons">
-                <span class="cflag plus">+</span>
-                <a class="btn small" href="<?= h(teacher_url('neu.php')
+                <a class="iconaction primary" href="<?= h(teacher_url('neu.php')
                     . '?klasse=' . $classId) ?>">
-                    Neuer Kurs für diese Klasse
+                    <span aria-hidden="true">+</span> Sprachkurs anlegen
                 </a>
             </span>
         </td>
@@ -491,7 +490,7 @@ teacher_flash_render();
         <td class="actions">
             <button class="iconaction primary" form="newstudent"
                     name="add_student" value="1" title="Kind hinzufügen">
-                <span aria-hidden="true">+</span> Hinzufügen
+                <span aria-hidden="true">+</span> Kind hinzufügen
             </button>
         </td>
     </tr>

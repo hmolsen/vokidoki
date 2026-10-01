@@ -283,8 +283,8 @@ teacher_flash_render();
     'Noch keine Lerneinheit. Leg eine an &ndash; auf ihrer Seite stehen die '
     . 'drei Wege, sie zu f&uuml;llen: von Hand, aus Dateien, oder mit dem '
     . 'Telefon fotografiert.',
-    '<button class="btn small" form="neueEinheit" name="add_unit" value="1">'
-    . 'Lerneinheit hinzuf&uuml;gen</button>',
+    '<button class="iconaction primary" form="neueEinheit" name="add_unit" value="1">'
+    . '<span aria-hidden="true">+</span> Lerneinheit anlegen</button>',
 ) ?>
 <?php else: ?>
 <table class="data courses rowlink kompakt" id="einheiten">
@@ -390,9 +390,10 @@ teacher_flash_render();
     <tr class="newrow">
         <td colspan="4" data-label="Neue Lerneinheit">
             <span class="coursetitle addbuttons">
-                <span class="cflag plus">+</span>
-                <button class="btn small" form="neueEinheit"
-                        name="add_unit" value="1">Lerneinheit hinzuf&uuml;gen</button>
+                <button class="iconaction primary" form="neueEinheit"
+                        name="add_unit" value="1">
+                    <span aria-hidden="true">+</span> Lerneinheit anlegen
+                </button>
             </span>
         </td>
     </tr>
