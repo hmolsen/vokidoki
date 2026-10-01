@@ -13,8 +13,19 @@ sind, steht jeweils dabei.
 ## Das Programm selbst
 
 Vokidoki ist kein fremder Bestandteil, sondern die Anwendung, die
-Sie gerade benutzen. Er ist in PHP und JavaScript geschrieben und kommt ohne
+Sie gerade benutzen. Es ist in PHP und JavaScript geschrieben und kommt ohne
 Rahmenwerk aus.
+
+Copyright © 2026 Hannes Molsen. Der Quelltext steht unter der
+**GNU Affero General Public License v3.0** (AGPL-3.0) und ist öffentlich:
+<https://github.com/hmolsen/vokidoki>. Wer eine veränderte Fassung über das
+Netz anbietet, muss deren Quelltext ebenso zugänglich machen. Der vollständige
+Lizenztext liegt als `LICENSE` im Quelltext bei und steht unter
+<https://www.gnu.org/licenses/agpl-3.0.html>.
+
+Nicht unter dieser Lizenz stehen die Figur **Voki** in allen Darstellungen,
+das Vokidoki-Logo und der Name „Vokidoki“ – alle Rechte vorbehalten (siehe
+`assets/VOKI.md`).
 
 ---
 

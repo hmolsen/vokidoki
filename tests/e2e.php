@@ -8835,6 +8835,19 @@ ok('Und die Schriften und die Fahnen auch',
    str_contains($lizenzen, 'Fredoka') && str_contains($lizenzen, 'Nunito')
    && str_contains($lizenzen, 'Twemoji') && str_contains($lizenzen, 'CC-BY 4.0'),
    'beide verlangen die Nennung der Herkunft');
+/*
+ * Die eigene Lizenz: AGPL-3.0. Sie verlangt, dass wer die App ueber das Netz
+ * anbietet, auf den Quelltext hinweist - die Seite "Lizenzen" ist die Stelle,
+ * die jede Nutzerin und jeder Nutzer erreicht. Voki und der Name sind davon
+ * ausgenommen, und das muss neben den Dateien stehen, nicht nur im README.
+ */
+ok('Die Lizenzen nennen die AGPL und wo der Quelltext liegt',
+   str_contains($lizenzen, 'GNU Affero General Public License v3.0')
+   && str_contains($lizenzen, 'https://github.com/hmolsen/vokidoki'));
+ok('Der Lizenztext liegt bei',
+   str_contains((string) @file_get_contents(__DIR__ . '/../LICENSE'), 'GNU AFFERO GENERAL PUBLIC LICENSE'));
+ok('Und neben Voki steht, dass er nicht dazugehoert',
+   str_contains((string) @file_get_contents(__DIR__ . '/../app/assets/VOKI.md'), 'Alle Rechte vorbehalten'));
 // Und umgekehrt: Was nicht mehr mitkommt, steht auch nicht mehr darin.
 // Roboto ging mit dem Anfangsbuchstaben auf dem App-Symbol.
 ok('Keine Lizenz fuer eine Schrift, die nicht mehr beiliegt',

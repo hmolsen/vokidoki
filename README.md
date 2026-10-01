@@ -3,10 +3,51 @@
 *(Das Verzeichnis heisst weiterhin `vokabeltrainer` — der Name der App hat
 sich geändert, der Ablageort nicht.)*
 
-Eine PWA, mit der Kinder Vokabelseiten aus dem Schulbuch abfotografieren, von
-Claude auslesen lassen und anschließend mit einem Flashcard-Trainer üben.
-Jedes Kind hat einen eigenen Account und ein eigenes Symbol auf dem iOS-Home-Bildschirm
-("Lillis Vokidoki"), das dauerhaft beim richtigen Kind angemeldet bleibt.
+Ein Vokabeltrainer für die Schule, als PWA. Lehrkräfte stellen die Vokabeln
+zu Lerneinheiten zusammen – aus gedruckten oder handgeschriebenen Listen, die
+die Texterkennung **auf dem Gerät** liest (das Foto verlässt es nie), oder von
+Hand eingetippt. Eine KI berichtigt Lesefehler, markiert sie zum Prüfen und
+erzeugt Lückensätze. Die Klasse übt, was freigegeben ist – in drei Übungen
+(Auswählen, Einsetzen, Lückentext), auch ohne Netz. Jedes Kind hat ein eigenes
+Symbol auf dem Home-Bildschirm („Lillis Vokidoki“), das dauerhaft angemeldet
+bleibt.
+
+Live: <https://vokidoki.de>
+
+---
+
+## Lizenz
+
+Copyright © 2026 Hannes Molsen
+
+Der **Quelltext** steht unter der
+[GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0). Sie dürfen ihn
+nutzen, verändern und weitergeben – auch eine eigene Instanz für Ihre Schule
+betreiben. Wer eine **veränderte** Fassung für andere über das Netz anbietet,
+muss deren Nutzerinnen und Nutzern den geänderten Quelltext zugänglich machen
+(AGPL, Abschnitt 13). So bleibt jede Weiterentwicklung offen, auch wenn sie
+nur als Website läuft.
+
+**Nicht** unter dieser Lizenz stehen:
+
+- **Die Figur Voki** in allen Darstellungen – `app/assets/voki*.svg`,
+  `app/assets/voki*.png`, `app/assets/voki-liest.svg`, das Logo
+  `app/assets/vokidoki_logo.svg` sowie Voki in den Bildschirmfotos unter
+  `website/bilder/`. Alle Rechte vorbehalten.
+- **Der Name „Vokidoki“.** Eine eigene Instanz oder einen Ableger betreiben Sie
+  bitte unter eigenem Namen und mit eigenem Zeichen, damit niemand ihn für das
+  Original hält.
+
+Wer eine eigene Instanz betreibt, ersetzt diese Dateien durch eigene unter
+denselben Namen. Fehlen sie, läuft die App trotzdem – an ihren Stellen fehlt
+dann nur das Bild, und das App-Symbol zeigt einen Punkt (der Selbsttest
+meldet es).
+
+**Fremde Bestandteile** – PHP-Bibliotheken, Tesseract.js mit seinen
+Sprachdaten, die Schriften Fredoka und Nunito, die Fahnen aus Twemoji – stehen
+unter ihren eigenen, freizügigen Lizenzen. Welche das sind und wo die Texte
+liegen, steht in [`app/LIZENZEN.md`](app/LIZENZEN.md); in der App ist das die
+Seite „Lizenzen“.
 
 ---
 
