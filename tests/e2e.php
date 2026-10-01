@@ -6048,6 +6048,51 @@ ok('Ein Kind aus einer anderen Klasse bleibt unberührt',
 
 // ------------------------------------------------------ Der Ausdruck
 
+section('Ein Kurs behaelt mindestens eine Lehrkraft');
+
+/*
+ * Ohne Lehrkraft steht ein Kurs in niemandes "Meine Kurse", und niemand gibt
+ * mehr frei. Die letzte laesst sich deshalb nicht entfernen - weder auf der
+ * Kursseite noch ueber den Admin (Umzug in eine andere Schule, Loeschen).
+ */
+$lkSchule = (int) qv('SELECT school_id FROM users WHERE id = ?', [$lehrerId]);
+$lkSprache = (int) qv('SELECT id FROM languages ORDER BY id LIMIT 1');
+q('INSERT INTO courses (school_id, language_id, name) VALUES (?, ?, ?)',
+  [$lkSchule, $lkSprache, 'Letzte-Lehrkraft-Probe']);
+$lkKurs = (int) db()->lastInsertId();
+course_add_member($lkKurs, $lehrerId, COURSE_ROLE_TEACHER);
+
+$seite = teacherGet('course.php?id=' . $lkKurs)['body'];
+ok('Bei der einzigen Lehrkraft steht kein "Entfernen"',
+   preg_match('/name="remove_member"\s+value="' . $lehrerId . '"/', $seite) === 0
+   && str_contains($seite, 'einzige Lehrkraft'));
+
+$res = teacherRequest($base . '/teacher/course.php?id=' . $lkKurs, [
+    'remove_member' => $lehrerId, 'course_id' => $lkKurs, 'csrf' => $lehrerCsrf,
+]);
+ok('Auch ein untergeschobenes Formular nimmt sie nicht heraus',
+   course_role($lehrerId, $lkKurs) === COURSE_ROLE_TEACHER
+   && str_contains($res['body'], 'mindestens eine Lehrkraft'));
+
+ok('Der Admin zieht sie nicht in eine andere Schule um, und loescht sie nicht',
+   courses_where_last_teacher($lehrerId) !== []
+   && in_array('Letzte-Lehrkraft-Probe', courses_where_last_teacher($lehrerId), true));
+adminPost('users.php', ['delete' => $lehrerId], 'school=' . $lkSchule);
+ok('Ein Loeschen ueber den Admin laeuft ins Leere',
+   q1('SELECT id FROM users WHERE id = ?', [$lehrerId]) !== null);
+
+// Mit einer zweiten Lehrkraft geht es.
+$lkZweite = makeUser('e2e_zweitlehrer', 'Zweite Lehrkraft');
+q("UPDATE users SET role = 'teacher', school_id = ? WHERE id = ?", [$lkSchule, $lkZweite]);
+course_add_member($lkKurs, $lkZweite, COURSE_ROLE_TEACHER);
+teacherRequest($base . '/teacher/course.php?id=' . $lkKurs, [
+    'remove_member' => $lkZweite, 'course_id' => $lkKurs, 'csrf' => $lehrerCsrf,
+]);
+ok('Eine von zweien laesst sich entfernen', course_role($lkZweite, $lkKurs) === null);
+
+q('DELETE FROM courses WHERE id = ?', [$lkKurs]);
+q('DELETE FROM users WHERE id = ?', [$lkZweite]);
+
 section('Zettel mit den Zugangsdaten');
 
 require_once __DIR__ . '/../app/lib/letter.php';

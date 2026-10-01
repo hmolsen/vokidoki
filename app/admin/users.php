@@ -146,6 +146,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                  $role, $import, $id],
             );
 
+            /*
+             * Ein Kurs braucht mindestens eine Lehrkraft (lib/courses.php).
+             * Der Umzug in eine andere Schule nimmt alle Mitgliedschaften -
+             * also nicht, solange das Konto die letzte Lehrkraft eines
+             * Kurses ist.
+             */
+            $letzte = $vorher !== (int) $schule['id'] ? courses_where_last_teacher($id) : [];
+            if ($letzte !== []) {
+                flash('Nicht umgezogen: Das Konto ist die einzige Lehrkraft in '
+                      . implode(', ', $letzte) . '. Dort erst eine andere Lehrkraft '
+                      . 'aufnehmen oder den Kurs löschen.', 'bad');
+                back_to_users($filter);
+            }
+
             if ($vorher !== (int) $schule['id']) {
                 q('DELETE FROM class_members WHERE user_id = ?', [$id]);
                 q('DELETE FROM course_members WHERE user_id = ?', [$id]);
@@ -181,6 +195,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if (isset($_POST['delete'])) {
         $id   = (int) $_POST['delete'];
         $user = q1('SELECT display_name FROM users WHERE id = ?', [$id]);
+        $letzte = $user !== null ? courses_where_last_teacher($id) : [];
+        if ($letzte !== []) {
+            // Ein Kurs braucht mindestens eine Lehrkraft (lib/courses.php).
+            flash('Nicht gelöscht: "' . $user['display_name'] . '" ist die einzige Lehrkraft in '
+                  . implode(', ', $letzte) . '. Dort erst eine andere Lehrkraft aufnehmen '
+                  . 'oder den Kurs löschen.', 'bad');
+            back_to_users($filter);
+        }
         if ($user !== null) {
             /*
              * Mitgliedschaften, Geraete und Lernstand haengen per ON DELETE

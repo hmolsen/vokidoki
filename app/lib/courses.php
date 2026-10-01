@@ -247,11 +247,51 @@ function course_class_missing(int $courseId): int
     );
 }
 
-/** Jemanden aus einem Kurs nehmen. Der Lernstand bleibt, falls er zurückkommt. */
-function course_remove_member(int $courseId, int $userId): void
+/**
+ * Ist dieses Konto die letzte Lehrkraft des Kurses?
+ *
+ * Ein Kurs braucht mindestens eine: Ohne sie steht er in niemandes "Meine
+ * Kurse", niemand gibt mehr frei, und die Kinder üben vor einer Lerneinheit,
+ * die nie weitergeht. Sichtbar wäre er nur noch unter "Alle Kurse der Schule".
+ */
+function course_is_last_teacher(int $courseId, int $userId): bool
 {
+    $lehrkraefte = array_map('intval', array_column(qa(
+        "SELECT user_id FROM course_members WHERE course_id = ? AND member_role = 'teacher'",
+        [$courseId],
+    ), 'user_id'));
+    return $lehrkraefte === [$userId];
+}
+
+/** Die Kurse, deren letzte Lehrkraft dieses Konto ist - als Namen. */
+function courses_where_last_teacher(int $userId): array
+{
+    return array_column(qa(
+        "SELECT co.name FROM course_members m
+           JOIN courses co ON co.id = m.course_id
+          WHERE m.user_id = ? AND m.member_role = 'teacher'
+            AND (SELECT COUNT(*) FROM course_members t
+                  WHERE t.course_id = m.course_id AND t.member_role = 'teacher') = 1
+          ORDER BY co.name",
+        [$userId],
+    ), 'name');
+}
+
+/**
+ * Jemanden aus einem Kurs nehmen. Der Lernstand bleibt, falls er zurückkommt.
+ *
+ * Gibt eine Meldung zurück, wenn es nicht geht - die letzte Lehrkraft eines
+ * Kurses bleibt (course_is_last_teacher()). Sonst null.
+ */
+function course_remove_member(int $courseId, int $userId): ?string
+{
+    if (course_is_last_teacher($courseId, $userId)) {
+        return 'Ein Kurs braucht mindestens eine Lehrkraft. Nimm erst eine andere '
+             . 'Lehrkraft auf - oder lösche den Kurs, wenn er nicht mehr gebraucht wird.';
+    }
     q('DELETE FROM course_members WHERE course_id = ? AND user_id = ?',
       [$courseId, $userId]);
+    return null;
 }
 
 /**

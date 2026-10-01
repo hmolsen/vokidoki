@@ -181,7 +181,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['remove_member
         teacher_redirect($zurueck);
     }
 
-    course_remove_member($courseId, $wer);
+    $nein = course_remove_member($courseId, $wer);
+    if ($nein !== null) {
+        teacher_flash($nein, 'bad');
+        teacher_redirect($zurueck);
+    }
     teacher_flash(sprintf(
         '%s ist nicht mehr im Kurs. Der Lernstand bleibt erhalten, falls '
         . 'die Aufnahme zurückgenommen wird.', $konto['display_name'],
@@ -236,6 +240,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['delete_course
 }
 
 $mitglieder = course_members_list($courseId);
+// Wie viele Lehrkraefte - die letzte laesst sich nicht entfernen.
+$lehrkraefteImKurs = count(array_filter($mitglieder, static fn (array $m): bool => $m['member_role'] === 'teacher'));
 $einheiten  = course_units_list($courseId);
 $offene     = course_candidates($courseId, $schoolId);
 $verlust    = course_delete_preview($courseId);
@@ -454,6 +460,10 @@ teacher_flash_render();
                         : h((string) $m['class_name'])) ?><?php
                 if (!$m['active']) { echo ' <span class="tiny muted">stillgelegt</span>'; } ?></td>
             <td class="actions">
+                <?php if ($m['member_role'] === 'teacher' && $lehrkraefteImKurs === 1): ?>
+                    <?php // Die letzte Lehrkraft bleibt - siehe course_is_last_teacher(). ?>
+                    <span class="tiny muted" title="Ein Kurs braucht mindestens eine Lehrkraft">einzige Lehrkraft</span>
+                <?php else: ?>
                 <form method="post" class="compact">
                     <?= teacher_csrf_field() ?>
                     <input type="hidden" name="course_id" value="<?= $courseId ?>">
@@ -464,6 +474,7 @@ teacher_flash_render();
                         <span class="nurbreit"> Entfernen</span>
                     </button>
                 </form>
+                <?php endif; ?>
             </td>
         </tr>
     <?php endforeach; ?>
