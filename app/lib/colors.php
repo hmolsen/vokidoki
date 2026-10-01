@@ -102,6 +102,39 @@ function hsl_to_hex(float $h, float $s, float $l): string
  * details/summary statt eigener Klapplogik: Das kommt ohne JavaScript aus und
  * ist mit der Tastatur bedienbar.
  */
+/**
+ * Die Farbwahl aus "Mein Konto" - dieselbe wie in der App (views/profile.js):
+ * ein Knopf mit der gewählten Farbe, darunter aufklappbar die Palette in
+ * sieben Spalten. Für den Lehrkraft-Bereich, der ohne Skript auskommen soll;
+ * <details> klappt von selbst, die Wahl ist ein gewöhnliches Radiofeld.
+ * Lebendig (Vorschau, Knopffarbe) macht sie appsymbol.js.
+ */
+function farbwahl_html(string $selected): string
+{
+    $farben   = color_palette();
+    $gewaehlt = preg_match('/^#[0-9a-f]{6}$/i', $selected) === 1 ? strtolower($selected) : color_default();
+    if (!in_array($gewaehlt, $farben, true)) {
+        $farben[] = $gewaehlt;   // eine Farbe aus einer früheren Palette bleibt wählbar
+    }
+
+    $kacheln = '';
+    foreach ($farben as $farbe) {
+        $kacheln .= sprintf(
+            '<label class="swatch-pick" title="%s"><input type="radio" name="color" value="%s"%s>'
+                . '<span style="--c:%s"></span></label>',
+            e($farbe), e($farbe), $farbe === $gewaehlt ? ' checked' : '', e($farbe),
+        );
+    }
+
+    return sprintf(
+        '<details class="farbwahl" id="farbwahl">'
+            . '<summary class="btn secondary farbknopf">'
+            . '<span class="farbpunkt" id="farbpunkt" style="--c:%s"></span><span>Farbe ändern</span>'
+            . '</summary><div class="swatches">%s</div></details>',
+        e($gewaehlt), $kacheln,
+    );
+}
+
 function color_picker(string $selected, string $name = 'color'): string
 {
     $farben = color_palette();

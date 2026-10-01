@@ -2233,3 +2233,12 @@ table.data tr.pruefzeile td {
 .pruefzeile .pruefnotiz strong { color: var(--text); }
 .pruefzeile .passt { flex: none; margin: 0; min-width: 96px; }
 .pruefhinweis-kopf { margin-bottom: 12px; }
+
+/*
+ * "Name und Farbe" in "Mein Konto" sieht aus wie in der App: die Knöpfe
+ * über die ganze Breite, und die Vorschau des Symbols ohne den Abstand,
+ * den die Formulare hier sonst jedem Block geben.
+ */
+.kontoform.namefarbe .farbknopf,
+.kontoform.namefarbe > .btn { width: 100%; }
+.kontoform.namefarbe .homescreen > .appsymbol { margin: 0; }

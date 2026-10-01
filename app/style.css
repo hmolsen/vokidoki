@@ -2475,3 +2475,32 @@ dialog.rueckfrage:has(.titelwahl) { width: min(100% - 32px, 420px); }
     line-height: 1.3;
     overflow-wrap: anywhere;
 }
+
+/*
+ * Das Symbol der Verwaltung in der Vorschau (teacher/konto.php) - nach
+ * denselben Massen wie icon.php mit w=1: Voki 64 % der Kante, 6 % von oben;
+ * der graue Balken ab 77 % bis unten, darin das Wort auf 62 % der Breite.
+ */
+.appsymbol.verwaltung {
+    position: relative;
+    display: block;
+    overflow: hidden;
+}
+.appsymbol.verwaltung > img {
+    position: absolute;
+    left: 18%;
+    top: 6%;
+    width: 64%;
+    height: 64%;
+}
+.appsymbol.verwaltung .appbalken {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 77%;
+    bottom: 0;
+    display: grid;
+    place-items: center;
+    background: rgb(84, 90, 100);
+}
+.appsymbol.verwaltung .appbalken img { width: 62%; height: auto; }

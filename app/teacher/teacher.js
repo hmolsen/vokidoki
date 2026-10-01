@@ -1555,6 +1555,16 @@ function initAktualisierenStattAbmelden() {
 
 initAktualisierenStattAbmelden();
 
+/** "Mein Konto": die Farbwahl wie in der App - sofort sichtbar (appsymbol.js). */
+async function initFarbwahl() {
+    const feld = document.querySelector('[data-farbwahl]');
+    if (!feld) return;
+    const { farbwahlVerdrahten } = await import(feld.dataset.farbwahl);
+    farbwahlVerdrahten(feld.closest('form') ?? document);
+}
+
+initFarbwahl();
+
 // Eine Auswahl, die schon die ganze Antwort ist: beim Wählen abschicken.
 document.addEventListener('change', (e) => {
     const form = e.target.closest('form[data-sofortsenden]');

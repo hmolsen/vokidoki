@@ -7258,14 +7258,23 @@ ok('Und traegt dessen Leiste',
    'nahtlos heisst: dieselbe Navigation wie jede andere Seite hier');
 ok('Sie zeigt Name, Farbe und Passwort',
    str_contains($res['body'], 'name="name"')
-   && str_contains($res['body'], 'class="colorpick"')
+   && str_contains($res['body'], '<details class="farbwahl" id="farbwahl">')
    && str_contains($res['body'], 'name="change_password"'));
+// Dieselbe Karte wie bei den Kindern - nur mit dem Symbol der Verwaltung.
+ok('Mit derselben Farbwahl wie in der App, sieben Spalten zum Antippen',
+   str_contains($res['body'], 'class="btn secondary farbknopf"')
+   && str_contains($res['body'], '<div class="swatches">')
+   && !str_contains($res['body'], 'class="colorpick"'));
+ok('Und dem App-Symbol der Verwaltung als Vorschau',
+   str_contains($res['body'], 'class="appsymbol verwaltung"')
+   && str_contains($res['body'], 'verwaltung-schrift.png')
+   && str_contains($res['body'], '<span class="appname">Verwaltung</span>'));
 ok('Und den eigenen Benutzernamen, der sich nicht aendern laesst',
    str_contains($res['body'], '<code>' . h($lehrerName) . '</code>'),
    $lehrerName);
 // Name und Farbe, Passwort, und die eigene Vorlage fuer die Zettel.
 ok('Ohne JavaScript bedienbar: drei gewoehnliche Formulare',
-   substr_count($res['body'], '<form method="post" class="card kontoform">') === 3);
+   preg_match_all('/<form method="post" class="card kontoform[^"]*">/', $res['body']) === 3);
 
 $altName = (string) qv('SELECT display_name FROM users WHERE id = ?', [$lehrerId]);
 $res = teacherRequest($base . '/teacher/konto.php', [
@@ -7590,8 +7599,20 @@ ok('Darueber steht das App-Symbol wie auf dem Home-Bildschirm',
  * Den Buchstaben gibt es nicht mehr, und mit ihm ging Roboto.
  */
 $iconQ = (string) file_get_contents(__DIR__ . '/../app/icon.php');
+$symbolQ = (string) file_get_contents(__DIR__ . '/../app/appsymbol.js');
 ok('Vorschau und icon.php dunkeln gleich ab',
-   str_contains($iconQ, '$c * 0.68') && str_contains($profilQ, 'SYMBOL_DUNKEL = 0.68'));
+   str_contains($iconQ, '$c * 0.68') && str_contains($symbolQ, 'SYMBOL_DUNKEL = 0.68')
+   && str_contains($profilQ, "from '../appsymbol.js'"));
+/*
+ * Das Symbol der Verwaltung in "Mein Konto" der Lehrkraft: dieselben Masse
+ * wie icon.php mit w=1 - Voki 64 % bei 6 % von oben, der Balken ab 77 %,
+ * das Wort auf 62 %.
+ */
+ok('Die Vorschau der Verwaltung hat die Masse von icon.php',
+   str_contains($iconQ, 'VERWALTUNG          = [0.64, 0.06, 0.77, 1.00, 0.62]')
+   && preg_match('/\.appsymbol\.verwaltung > img\s*\{[^}]*top:\s*6%;[^}]*width:\s*64%/s', $cssS) === 1
+   && preg_match('/\.appsymbol\.verwaltung \.appbalken\s*\{[^}]*top:\s*77%/s', $cssS) === 1
+   && preg_match('/\.appbalken img\s*\{\s*width:\s*62%/', $cssS) === 1);
 ok('Und zeigen Voki gleich gross',
    str_contains($iconQ, 'VOKI_ANTEIL          = 0.84')
    && preg_match('/\.appsymbol img\s*\{[^}]*width:\s*84%/', $cssS) === 1);

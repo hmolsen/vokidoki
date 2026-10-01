@@ -1,8 +1,9 @@
 import {
-    VT, api, render, esc, $, on, go, topbar, loading, wireBack,
+    VT, api, render, esc, $, go, topbar, loading, wireBack,
     showError, clearError, withBusy,
 } from '../core.js';
 import { serie, serieHeute, serieTage, heute, tagZaehlt } from '../vorrat.js';
+import { farbwahlVerdrahten } from '../appsymbol.js';
 
 /**
  * Das eigene Konto: Name, Farbe, Passwort.
@@ -20,29 +21,10 @@ import { serie, serieHeute, serieTage, heute, tagZaehlt } from '../vorrat.js';
  *                     tippen" ist kein Weg, den man zweimal geht.
  */
 /*
- * Das App-Symbol, wie es auf dem Home-Bildschirm liegt.
- *
- * Nachgebaut und nicht als Bild von icon.php geholt: Es soll sich beim
- * Tippen auf eine Farbe sofort ändern, vor dem Speichern - und icon.php
- * zeichnet nur die gespeicherte. Nachgebaut heisst aber: DIESELBEN Regeln
- * wie dort. Der Verlauf dunkelt nach unten auf 68 % ab, und Voki nimmt
- * 84 % der Kante ein (.appsymbol img in style.css). Eine Prüfung in
- * tests/e2e.php hält die Stellen zusammen.
- *
- * Hier stand einmal der Anfangsbuchstabe, hell oder dunkel je nach Farbe.
- * Voki braucht das nicht: Sein weisser Rand hebt ihn von jeder Farbe ab.
+ * Das App-Symbol, wie es auf dem Home-Bildschirm liegt - die Regeln dafür
+ * (Verlauf, Farbwahl) stehen in appsymbol.js, zusammen mit dem
+ * Lehrkraft-Bereich, der dieselbe Karte zeigt.
  */
-const SYMBOL_DUNKEL = 0.68;
-
-/** Den Verlauf des Symbols setzen. */
-function symbolFaerben(el, farbe) {
-    if (!el || !/^#[0-9a-f]{6}$/i.test(farbe)) return;
-    const [r, g, b] = [1, 3, 5].map((i) => parseInt(farbe.slice(i, i + 2), 16));
-    const dunkel = (c) => Math.round(c * SYMBOL_DUNKEL);
-
-    el.style.setProperty('--oben', farbe);
-    el.style.setProperty('--unten', `rgb(${dunkel(r)}, ${dunkel(g)}, ${dunkel(b)})`);
-}
 
 /** Ein Stück Home-Bildschirm: Hintergrund, Symbol, Name darunter. */
 function homescreen() {
@@ -143,7 +125,7 @@ export async function profileView(zumPasswort = false) {
 
     wireBack();
     kalenderAktivieren();
-    symbolFaerben($('#appsymbol'), profile.color);
+    farbwahlVerdrahten();
 
     if (zumPasswort) {
         const feld = $('#current');
@@ -151,15 +133,6 @@ export async function profileView(zumPasswort = false) {
         feld?.focus();
     }
 
-    // Die Farbe wirkt sofort - man soll sehen, was man waehlt: in der App,
-    // auf dem Symbol und auf dem Knopf. Das Feld bleibt dabei offen, damit
-    // sich mehrere Farben nacheinander ausprobieren lassen.
-    on('input[name="color"]', 'change', (e) => {
-        const farbe = e.currentTarget.value;
-        document.body.style.setProperty('--accent', farbe);
-        symbolFaerben($('#appsymbol'), farbe);
-        $('#farbpunkt').style.setProperty('--c', farbe);
-    });
 
     $('#save').addEventListener('click', async (e) => {
         clearError();

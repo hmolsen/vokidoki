@@ -93,26 +93,45 @@ teacher_flash_render();
 
 <h2>Name und Farbe</h2>
 
-<form method="post" class="card kontoform">
+<form method="post" class="card kontoform namefarbe">
     <?= teacher_csrf_field() ?>
 
+    <?php
+    /*
+     * Dieselbe Karte wie im Konto der App (views/profile.js) - Name,
+     * App-Symbol, Farbwahl -, nur zeigt das Symbol hier das der
+     * Verwaltung: kleinerer Voki, grauer Balken mit dem Wort (icon.php,
+     * w=1). Vorher stand hier der kleine Farbwähler des Admins, ohne
+     * Vorschau; wer die Farbe wechselte, sah erst auf dem Telefon, was er
+     * gewählt hatte.
+     */
+    ?>
     <label for="name">Dein Name</label>
     <input type="text" id="name" name="name" maxlength="64" required
            value="<?= h((string) $user['display_name']) ?>">
     <p class="tiny muted">
-        So heißt die App auf deinem Home-Bildschirm und so steht es oben in
-        der Leiste.
+        So steht es oben in der Leiste. Auf dem Home-Bildschirm heißt die
+        Lernansicht „<?= h(app_name_for($user)) ?>“, die Verwaltung „Verwaltung“.
     </p>
 
-    <label>Deine Farbe</label>
-    <?php
-    /*
-     * Derselbe Farbwähler wie im Admin-Bereich - ein <details> mit einer
-     * Palette darin. Ohne JavaScript bedienbar, weil <details> das von
-     * selbst kann, und die Wahl ist ein gewöhnliches Radiofeld.
-     */
-    ?>
-    <div class="kontofarbe"><?= color_picker((string) $user['color']) ?></div>
+    <label>Dein App-Symbol</label>
+    <div class="appsymbolzeile">
+        <div class="homescreen" aria-hidden="true">
+            <div class="appsymbol verwaltung" id="appsymbol">
+                <img src="<?= h(url('/assets/voki-icon.svg')) ?>" alt="">
+                <span class="appbalken"><img src="<?= h(url('/assets/verwaltung-schrift.png')) ?>" alt=""></span>
+            </div>
+            <span class="appname">Verwaltung</span>
+        </div>
+        <p class="tiny muted">
+            So sieht die Verwaltung auf dem Home-Bildschirm aus. Die Farbe
+            gilt auch in der App selbst.
+        </p>
+    </div>
+
+    <div data-farbwahl="<?= h(url('/appsymbol.js') . '?v=' . app_version()) ?>">
+        <?= farbwahl_html((string) $user['color']) ?>
+    </div>
 
     <button class="btn" name="save_profile" value="1">Speichern</button>
 </form>
