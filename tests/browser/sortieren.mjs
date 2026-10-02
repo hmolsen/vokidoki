@@ -28,6 +28,8 @@ export async function pruefe(f, aus, wurzel) {
          */
         for (let i = 0; i < 2; i++) {
             await b.geh(f.basis + '/teacher/course.php?id=' + f.kurs, 1400);
+            // Seit die Anlegezeile nach dem Namen fragt, ist das Feld Pflicht.
+            await b.js(`document.getElementById('neueEinheitTitel').value = 'Sortierprobe ${i + 2}'`);
             await b.js(`document.querySelector('[name="add_unit"]').click()`);
             await schlafe(1600);
         }
@@ -37,8 +39,8 @@ export async function pruefe(f, aus, wurzel) {
         const vorher = await b.js(`({
             titel:   [...document.querySelectorAll('#einheiten tr[data-unit] .rowmain')]
                        .map((a) => a.textContent.trim()),
-            /* Die Kennungen, nicht die Titel: Zwei frisch angelegte heissen
-               beide "Unbenannte Lerneinheit", und ein Vergleich darueber
+            /* Die Kennungen, nicht die Titel: Zwei Lerneinheiten koennen
+               gleich heissen, und ein Vergleich darueber
                saehe eine Vertauschung gar nicht. */
             ids:     [...document.querySelectorAll('#einheiten tr[data-unit]')]
                        .map((tr) => tr.dataset.unit),
@@ -55,7 +57,7 @@ export async function pruefe(f, aus, wurzel) {
          * suchte sie dann oben, wo man sie nicht vermutet hätte.
          */
         ok('Die zuletzt angelegte steht unten',
-           vorher.titel[2].includes('Unbenannte'), vorher.titel.join(', '));
+           vorher.titel[2] === 'Sortierprobe 3', vorher.titel.join(', '));
         ok('Jede Zeile hat einen Griff', vorher.griffe === 3, String(vorher.griffe));
         ok('Am Rechner verschwinden die Pfeile', vorher.pfeile === 0,
            vorher.pfeile + ' - sie sind der Weg ohne Skript');

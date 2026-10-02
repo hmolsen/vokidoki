@@ -2252,3 +2252,68 @@ table.data tr.pruefzeile td {
 .kontoform.namefarbe .farbknopf,
 .kontoform.namefarbe > .btn { width: 100%; }
 .kontoform.namefarbe .homescreen > .appsymbol { margin: 0; }
+
+/*
+ * Die Anlegezeile am Fuss einer Tabelle - teacher_anlegezeile() in
+ * teacher/_boot.php. Klein und fett darüber, was entsteht; das Feld dort,
+ * wo in den Zeilen darüber der Name steht; rechts ein Knopf mit nur "+".
+ *
+ * Absichtlich am Ende der Datei und mit .anlegen: Die älteren Regeln für
+ * tr.newrow (auch in den Telefon-Blöcken) gelten weiter für die Zeilen,
+ * die noch nicht so gebaut sind, und hier wird für diese Form überstimmt.
+ */
+table.data tr.newrow.anlegen td { vertical-align: bottom; white-space: normal; }
+.anlegeinnen {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+}
+.anlegeinnen > .coursetitle,
+.anlegeinnen > .anlegeblock { flex: 1 1 auto; min-width: 0; }
+tr.newrow.anlegen .coursetitle { align-items: flex-end; }
+tr.newrow.anlegen .cflag.anlegeplatz { visibility: hidden; height: 38px; }
+.anlegeblock {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1 1 auto;
+    min-width: 0;
+    line-height: 1.3;
+}
+.anlegewas {
+    margin: 0;
+    font-size: .78rem;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: .01em;
+}
+table.data tr.newrow.anlegen .anlegeblock input[type=text] {
+    margin: 0;
+    width: 100%;
+    max-width: 440px;
+    min-height: 38px;
+}
+table.data tr.newrow.anlegen .iconaction.anlegeplus {
+    flex: none;
+    margin-left: auto;
+    justify-content: center;
+    width: auto;
+    min-width: 42px;
+    min-height: 38px;
+    padding: 0 12px;
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+@media (max-width: 720px) {
+    /* Am Telefon bleibt es eine Zeile: Feld und "+" nebeneinander. */
+    table.data tr.newrow.anlegen td.anlegefeld { display: table-cell; padding: 8px 6px; }
+    /* Die leere Spalte des Anfassers bleibt stehen - die aeltere Regel fuer
+       leere Zellen naehme sie weg, und das Feld rueckte unter den Griff. */
+    table.data.kompakt tr.newrow.anlegen td.anlegeleer { display: table-cell; padding: 0; }
+    table.data:not(.kompakt) tr.newrow.anlegen td.anlegefeld { display: block; padding: 4px 0; }
+    table.data tr.newrow.anlegen .anlegeblock input[type=text] { max-width: none; min-height: 40px; }
+    table.data tr.newrow.anlegen .iconaction.anlegeplus { min-height: 40px; }
+    tr.newrow.anlegen .cflag.anlegeplatz { display: none; }
+}

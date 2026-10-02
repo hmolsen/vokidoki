@@ -38,12 +38,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_unit'])) 
 
     // Ans Ende - dorthin, wo man sie sucht. Die Reihenfolge in der Tabelle
     // ist dieselbe, die die Klasse in ihrer App sieht.
+    /*
+     * Mit Namen, wenn einer kommt - aus der Anlegezeile unter den
+     * Lerneinheiten. Vorher entstand jede als "Unbenannte Lerneinheit" und
+     * musste auf ihrer Seite erst umbenannt werden; wer das vergass, hatte
+     * drei davon. Der Knopf auf der Kurskarte (Meine Kurse) schickt keinen
+     * Namen mit, dann bleibt es bei der Vorgabe. Bereinigt wie beim
+     * Umbenennen (unit.php, rename_unit).
+     */
+    $titel = mb_substr(trim(preg_replace('/\s+/u', ' ', (string) ($_POST['title'] ?? '')) ?? ''), 0, 128);
+    $mitNamen = $titel !== '';
+
     q('INSERT INTO units (language_id, course_id, title, released_position, position)
        VALUES (?, ?, ?, 0, ?)',
-      [(int) $kurs['language_id'], $courseId, 'Unbenannte Lerneinheit',
+      [(int) $kurs['language_id'], $courseId, $mitNamen ? $titel : 'Unbenannte Lerneinheit',
        unit_next_position($courseId)]);
 
-    teacher_flash('Leere Lerneinheit angelegt. Gib ihr einen Namen und füll sie.');
+    teacher_flash($mitNamen
+        ? sprintf('Lerneinheit „%s“ angelegt. Jetzt füllen.', $titel)
+        : 'Leere Lerneinheit angelegt. Gib ihr einen Namen und füll sie.');
     teacher_redirect('unit.php?id=' . (int) db()->lastInsertId());
 }
 
@@ -282,13 +295,12 @@ teacher_flash_render();
  */
 ?>
 <?= teacher_leer(
-    'Noch keine Lerneinheit. Leg eine an &ndash; auf ihrer Seite stehen die '
-    . 'drei Wege, sie zu f&uuml;llen: von Hand, aus Dateien, oder mit dem '
+    'Noch keine Lerneinheit. Leg unten eine an &ndash; auf ihrer Seite stehen '
+    . 'die drei Wege, sie zu f&uuml;llen: von Hand, aus Dateien, oder mit dem '
     . 'Telefon fotografiert.',
-    '<button class="iconaction primary" form="neueEinheit" name="add_unit" value="1">'
-    . '<span aria-hidden="true">+</span> Lerneinheit anlegen</button>',
 ) ?>
-<?php else: ?>
+<?php endif; ?>
+<?php // Die Tabelle steht auch leer da: Ihre Anlegezeile ist der Weg zur ersten. ?>
 <table class="data courses rowlink kompakt" id="einheiten">
     <?php
     /*
@@ -299,12 +311,14 @@ teacher_flash_render();
      * keine Frage, die sich beim Unterrichten stellt.
      */
     ?>
+    <?php if ($einheiten !== []): ?>
     <tr>
         <th class="griffspalte"><span class="nurvorlesen">Reihenfolge</span></th>
         <th>Titel</th>
         <th>Freigegeben</th>
         <th class="actions"></th>
     </tr>
+    <?php endif; ?>
     <?php foreach ($einheiten as $i => $e): ?>
         <?php $ziel = teacher_url('unit.php') . '?id=' . (int) $e['id']; ?>
         <tr data-href="<?= h($ziel) ?>" data-unit="<?= (int) $e['id'] ?>" draggable="true">
@@ -389,17 +403,20 @@ teacher_flash_render();
      * stehen - auch der von Hand, den es hier gar nicht gab.
      */
     ?>
-    <tr class="newrow">
-        <td colspan="4" data-label="Neue Lerneinheit">
-            <span class="coursetitle addbuttons">
-                <button class="iconaction primary" form="neueEinheit"
-                        name="add_unit" value="1">
-                    <span aria-hidden="true">+</span> Lerneinheit anlegen
-                </button>
-            </span>
-        </td>
-    </tr>
+    <?= teacher_anlegezeile([
+        'was'     => 'Lerneinheit anlegen',
+        'feld_id' => 'neueEinheitTitel',
+        'feld'    => '<input type="text" id="neueEinheitTitel" name="title" form="neueEinheit"'
+                   . ' maxlength="128" required placeholder="Unit 5 &ndash; At the zoo"'
+                   . ' autocomplete="off">',
+        'form'    => 'neueEinheit',
+        'name'    => 'add_unit',
+        'vorne'   => 1,
+        'spalten' => 2,
+    ]) ?>
 </table>
+
+<?php if ($einheiten !== []): ?>
 
 <?php
 /*

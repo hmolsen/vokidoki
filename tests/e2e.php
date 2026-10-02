@@ -5131,8 +5131,8 @@ ok('Die Knoepfe unter den Tabellen sehen gleich aus und sagen, was sie anlegen',
    && preg_match('/class="iconaction primary" form="newstudent"[^>]*>\s*'
                  . '<span aria-hidden="true">\+<\/span> Kind hinzufügen/', $res['body']) === 1);
 $einheitenKnopf = (string) file_get_contents(__DIR__ . '/../app/teacher/course.php');
-ok('Auch "Lerneinheit anlegen", in der Tabelle wie in der leeren Liste',
-   substr_count($einheitenKnopf, '<span aria-hidden="true">+</span> Lerneinheit anlegen') === 2
+ok('Auch "Lerneinheit anlegen" - als Anlegezeile, die auch im leeren Kurs steht',
+   substr_count($einheitenKnopf, "'was'     => 'Lerneinheit anlegen'") === 1
    && !str_contains($einheitenKnopf, 'Lerneinheit hinzuf'));
 
 // ---- Schritt 1: Fuer welche Klasse?
@@ -7400,8 +7400,33 @@ $umbauUnit = makeUnit($lehrerId, $umbauSprache, 'Umbau-Unit');
 $res = teacherGet('course.php?id=' . $umbauKursId);
 ok('Mit Lerneinheiten ist die Karte weg', !str_contains($res['body'], 'importcard'));
 ok('Dafuer steht eine Anlegezeile in der Tabelle',
-   preg_match('/<tr class="newrow">.*?name="add_unit"/s', $res['body']) === 1,
+   preg_match('/<tr class="newrow anlegen">.*?name="add_unit"/s', $res['body']) === 1,
    'ein Knopf, eine Frage: Ich brauche eine neue Lerneinheit');
+
+/*
+ * Und sie fragt nach dem Namen. Vorher entstand jede als "Unbenannte
+ * Lerneinheit" und musste auf ihrer Seite erst umbenannt werden.
+ */
+ok('Die Anlegezeile fragt nach dem Namen',
+   preg_match('/<label class="anlegewas" for="neueEinheitTitel">Lerneinheit anlegen<\/label>'
+              . '<input type="text" id="neueEinheitTitel" name="title" form="neueEinheit"[^>]*required/',
+              $res['body']) === 1);
+$resNeu = teacherRequest($base . '/teacher/course.php?id=' . $umbauKursId, [
+    'add_unit' => '1', 'course_id' => $umbauKursId, 'title' => "  Unit 5 \t– At the zoo ",
+    'csrf' => $lehrerCsrf,
+]);
+$benannt = q1('SELECT id, title FROM units WHERE course_id = ? ORDER BY id DESC LIMIT 1', [$umbauKursId]);
+ok('Sie entsteht mit diesem Namen - bereinigt wie beim Umbenennen',
+   ($benannt['title'] ?? '') === 'Unit 5 – At the zoo', (string) ($benannt['title'] ?? 'keine'));
+ok('Und man landet auf ihrer Seite',
+   str_contains($resNeu['body'], 'data-titel>Unit 5 – At the zoo</span>'));
+teacherRequest($base . '/teacher/course.php?id=' . $umbauKursId, [
+    'add_unit' => '1', 'course_id' => $umbauKursId, 'csrf' => $lehrerCsrf,
+]);
+ok('Ohne Namen - der Knopf auf der Kurskarte - heisst sie wie bisher',
+   qv('SELECT title FROM units WHERE course_id = ? ORDER BY id DESC LIMIT 1', [$umbauKursId])
+   === 'Unbenannte Lerneinheit');
+q('DELETE FROM units WHERE course_id = ? AND id > ?', [$umbauKursId, $umbauUnit]);
 ok('Die Lerneinheit oeffnet sich per Zeilenklick',
    preg_match('/<tr data-href="[^"]*unit\.php\?id=' . $umbauUnit . '"/', $res['body']) === 1);
 
@@ -7794,8 +7819,9 @@ ok('Und ist klein',
 // ---- Die beiden Wege zum Einlesen stehen nebeneinander.
 
 $res = teacherGet('course.php?id=' . $fsKursId);
-ok('Die Anlegezeile stellt beide Wege nebeneinander',
-   preg_match('/class="coursetitle addbuttons"/', $res['body']) === 1);
+ok('Die Lerneinheiten haben die gemeinsame Anlegezeile',
+   preg_match('/<tr class="newrow anlegen">/', $res['body']) === 1,
+   'teacher_anlegezeile() - "Sprachkurs anlegen" auf der Klassenseite ist die Ausnahme');
 $cssF = (string) file_get_contents(__DIR__ . '/../app/admin/admin.css');
 ok('Und die Reihe ist waagerecht',
    preg_match('/\.coursetitle\.addbuttons\s*\{[^}]*display:\s*flex/s', $cssF) === 1,

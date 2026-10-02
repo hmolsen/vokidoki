@@ -728,6 +728,68 @@ function teacher_haus_html(): string
     );
 }
 
+/**
+ * Die Anlegezeile am Fuss einer Tabelle - überall dieselbe.
+ *
+ * Sie sah in jeder Tabelle anders aus: mal ein Knopf allein, mal Feld und
+ * Knopf mit Text, mal ein "+" vorn und eines im Knopf. Jetzt: Was angelegt
+ * wird, steht klein und fett über dem Feld; das Feld beginnt dort, wo in den
+ * Zeilen darüber der Name beginnt; rechts in der Spalte der Aktionen ein
+ * Knopf mit nur einem "+". Ausnahme ist "Sprachkurs anlegen" auf der
+ * Klassenseite - der führt in einen Assistenten und hat kein Feld.
+ *
+ * @param array{
+ *     was: string,          Was angelegt wird - die Zeile über dem Feld
+ *     feld: string,         Das Feld als HTML; sein id gehört nach 'feld_id'
+ *     feld_id: string,
+ *     form: string,         id des Formulars neben der Tabelle
+ *     name: string,         name des Knopfes, den der Server erwartet
+ *     spalten: int,         Über wie viele Spalten das Feld reicht (ohne die der Aktionen)
+ *     vorne?: int,          Leere Spalten davor, etwa die des Anfassers
+ *     einzug?: bool,        Platz für das Zeichen, das die Zeilen darüber vorn tragen
+ *     hinweis?: string,     Kleiner Text unter dem Feld (HTML)
+ *     id?: string,          id der Zeile
+ * } $z
+ */
+function teacher_anlegezeile(array $z): string
+{
+    $vorne = str_repeat('<td class="anlegeleer"></td>', (int) ($z['vorne'] ?? 0));
+    $block = sprintf(
+        '<span class="anlegeblock"><label class="anlegewas" for="%s">%s</label>%s%s</span>',
+        h($z['feld_id']),
+        h($z['was']),
+        $z['feld'],
+        isset($z['hinweis']) ? '<span class="tiny muted">' . $z['hinweis'] . '</span>' : '',
+    );
+    if ($z['einzug'] ?? false) {
+        // Unsichtbar, aber so breit wie die Fahne oder das Bildchen in den
+        // Zeilen darüber - sonst stünde das Feld links neben den Namen.
+        $block = '<span class="coursetitle"><span class="cflag anlegeplatz" aria-hidden="true"></span>'
+               . $block . '</span>';
+    }
+
+    /*
+     * Der Knopf steht in derselben Zelle wie das Feld, und die reicht über
+     * die Spalte der Aktionen mit: Am Telefon ist die in den kompakten
+     * Tabellen zwanzig Pixel breit, und eine eigene Zelle fuer das "+"
+     * passte dort nicht hinein. Ganz rechts steht er trotzdem.
+     */
+    return sprintf(
+        '<tr class="newrow anlegen"%s>%s<td class="anlegefeld" colspan="%d">'
+        . '<span class="anlegeinnen">%s<button class="iconaction primary anlegeplus" form="%s"'
+        . ' name="%s" value="1" title="%s" aria-label="%s"><span aria-hidden="true">+</span>'
+        . '</button></span></td></tr>',
+        isset($z['id']) ? ' id="' . h($z['id']) . '"' : '',
+        $vorne,
+        (int) $z['spalten'] + 1,
+        $block,
+        h($z['form']),
+        h($z['name']),
+        h($z['was']),
+        h($z['was']),
+    );
+}
+
 function teacher_head(
     string $title,
     array $user,
