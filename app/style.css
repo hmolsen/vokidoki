@@ -209,8 +209,15 @@ p  { margin: 0 0 12px; }
  * Unter dem Streifen "Lernansicht" (nur für Lehrkräfte): Der steht dann
  * selbst oben fest und trägt den Sicherheitsabstand, die Leiste hängt
  * direkt darunter.
+ *
+ * z-index UNTER der Leiste, nicht darüber: Die Schubladen der Menüs stecken
+ * in der Leiste, und die bildet als sticky-Element mit z-index ihre eigene
+ * Ebene - ihre 41 gilt nur innerhalb der 30. Mit 31 lag der Streifen über
+ * dem offenen Menü und schob sich beim Herunterziehen sichtbar darüber.
+ * Überlappen tun sich Streifen und Leiste nicht, die Reihenfolge zählt nur
+ * für die Schubladen.
  */
-.lernansicht { position: sticky; top: 0; z-index: 31; }
+.lernansicht { position: sticky; top: 0; z-index: 29; }
 .lernansicht + .topbar {
     top: calc(env(safe-area-inset-top) + 26px);
     margin-top: -14px;
@@ -370,6 +377,14 @@ p  { margin: 0 0 12px; }
     border-left: 1px solid var(--border);
     animation: schubladeRechts .26s cubic-bezier(.2, .8, .25, 1);
 }
+/*
+ * Bei offenem Menü federt die Seite dahinter nicht mit. Sonst zog ein
+ * Herunterziehen auf der Schublade die ganze Seite samt Leiste nach unten,
+ * während die Schublade stand - zwei Ebenen, die sich gegeneinander
+ * verschieben.
+ */
+.menue > .schublade { overscroll-behavior: contain; }
+html:has(.menue[open]) { overscroll-behavior: none; }
 
 /*
  * Als Animation, nicht als Übergang: <details> blendet seinen Inhalt beim

@@ -104,6 +104,28 @@ export async function pruefe(f, aus) {
            probe.ort + ' - in einem zweiten Tab stünde hier noch die Freigabe');
         ok('Und sie trägt den Streifen „Lernansicht"', probe.banner);
 
+        /*
+         * Das offene Menue liegt ueber dem Streifen, nicht darunter. Die
+         * Schubladen stecken in der Leiste, und deren z-index ist ihre
+         * Obergrenze - mit 31 lag der Streifen ueber dem Schleier und schob
+         * sich beim Herunterziehen sichtbar ueber das Menue.
+         */
+        for (const menue of ['menuLinks', 'menuRechts']) {
+            await b.js(`document.getElementById('${menue}').querySelector('summary').click()`);
+            await schlafe(400);
+            // Beide Enden des Streifens: eines liegt unter der Schublade, eines unter dem Schleier.
+            const oben = await b.js(`(() => {
+                const r = document.querySelector('.lernansicht').getBoundingClientRect();
+                return [r.left + 10, r.right - 10].map((x) =>
+                    document.elementFromPoint(x, r.top + r.height / 2)?.className ?? '');
+            })()`);
+            ok(`Das offene Menü (${menue}) deckt den Streifen ab`,
+               !oben.includes('lernansicht'),
+               'an der Stelle des Streifens liegt: ' + oben.join(', '));
+            await b.js(`document.getElementById('${menue}').querySelector('summary').click()`);
+            await schlafe(400);
+        }
+
         await b.js(`document.getElementById('menuRechts').querySelector('summary').click()`);
         await schlafe(400);
         await b.js(`document.querySelector('.ansichtwahl a.ansichtknopf').click()`);
