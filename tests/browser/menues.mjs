@@ -91,6 +91,43 @@ export async function pruefe(f, aus) {
         await b.js(`document.querySelector('#menuLinks .schleier')?.click()`);
         await schlafe(400);
 
+        /*
+         * Die grosse Feier, wenn der Tag geschafft ist: Voki tanzt ueber der
+         * verschwommenen Seite, und die Zahl zaehlt von der alten auf die
+         * neue. Ohne Anlass (feier = false, bei jeder Antwort) bleibt sie weg.
+         */
+        ok('Ohne geschafften Tag keine grosse Feier',
+           (await b.js(`!!document.getElementById('seriefeier')`)) === false);
+        const feier = await b.js(`(async () => {
+            const c = await import('${f.basis}/core.js');
+            const vorher = parseInt(document.querySelector('.seriezahl').textContent, 10);
+            c.serieAktualisieren(true);
+            const el = document.getElementById('seriefeier');
+            const band = [...(el?.querySelectorAll('.seriefeier-band > span') ?? [])].map((s) => s.textContent);
+            const voki = el?.querySelector('.seriefeier-voki');
+            return {
+                da:     !!el,
+                vorher,
+                band,
+                blur:   el ? getComputedStyle(el).backdropFilter : '',
+                tanz:   voki ? getComputedStyle(voki).animationName : '',
+                bild:   voki?.getAttribute('src') ?? '',
+                text:   el?.textContent.replace(/\\s+/g, ' ').trim() ?? '',
+            };
+        })()`);
+        ok('Ist der Tag geschafft, liegt die Feier ueber der Seite', feier.da);
+        ok('Die Seite dahinter ist verschwommen', feier.blur.includes('blur'), feier.blur);
+        ok('Voki tanzt - der kleine, ohne weissen Grund', feier.tanz === 'vokiTanz'
+           && feier.bild.endsWith('voki-mini.svg'), feier.tanz + ' / ' + feier.bild);
+        ok('Die Zahl zaehlt von der bisherigen weiter',
+           feier.band.length >= 2 && Number(feier.band[feier.band.length - 1]) > Number(feier.band[0]),
+           JSON.stringify(feier));
+        ok('Und sagt, was gefeiert wird', feier.text.includes('Serie verlängert'), feier.text);
+        await b.js(`document.getElementById('seriefeier').click()`);
+        await schlafe(500);
+        ok('Ein Druck schliesst sie',
+           (await b.js(`!!document.getElementById('seriefeier')`)) === false);
+
 
         // ---- Die Schublade fliegt herein.
 

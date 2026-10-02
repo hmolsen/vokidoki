@@ -594,6 +594,13 @@ export function serieAktualisieren(feier = false) {
     const neu = huelle.firstElementChild;
     if (!neu) return;
 
+    // Die Zahl vorher - von ihr aus zählt die große Feier hoch.
+    const vorher = parseInt(alt.querySelector('.seriezahl')?.textContent ?? '', 10);
+    const nachher = parseInt(neu.querySelector('.seriezahl')?.textContent ?? '', 10);
+    if (feier && Number.isFinite(nachher)) {
+        serieFeier(Number.isFinite(vorher) ? vorher : nachher - 1, nachher);
+    }
+
     // War die Karte offen, bleibt sie offen - sonst klappt sie einem Kind,
     // das gerade liest, unter den Fingern weg.
     neu.open = alt.open;
@@ -606,6 +613,72 @@ export function serieAktualisieren(feier = false) {
         knopf?.addEventListener('animationend', () => knopf.classList.remove('feiert'),
                                 { once: true });
     }
+}
+
+/**
+ * Die große Feier, wenn der Tag geschafft ist: Voki tanzt, und die Serie
+ * zählt von der alten Zahl auf die neue.
+ *
+ * Bis hierher wackelte nur das kleine Abzeichen oben - der Augenblick, um
+ * den sich die ganze Serie dreht, ging zwischen zwei Fragen unter. Jetzt
+ * liegt er groß über der Seite, die Seite verschwommen dahinter.
+ *
+ * Voki ist voki-mini.svg aus dem Abzeichen, nicht voki.svg: Die hat einen
+ * weissen Grund eingebacken und stand als Kachel ueber der verschwommenen
+ * Seite. Die kleine ist gezeichnet, also scharf in jeder Groesse, und liegt
+ * ohnehin im Speicher - das Abzeichen laedt sie immer, auch ohne Netz.
+ *
+ * Anders als Konfetti und Feuerwerk hält diese Feier kurz an - einmal am
+ * Tag ist das richtig. Ein Druck irgendwohin (oder Escape) schließt sie
+ * sofort, und nach dreieinhalb Sekunden geht sie von selbst. Die nächste
+ * Frage wird darunter längst gezeichnet.
+ */
+const SERIEFEIER_MS = 3500;
+
+export function serieFeier(von, bis) {
+    document.getElementById('seriefeier')?.remove();
+
+    // Die Serie wächst um einen Tag. Steht vorher schon dieselbe Zahl da
+    // (oder gar keine), zählt die Feier trotzdem einen Schritt.
+    bis = Math.max(1, bis);
+    von = Math.max(0, Math.min(von, bis - 1));
+
+    const ruhig = RUHIG();
+    const tage  = bis === 1 ? 'Tag' : 'Tage';
+    const leiste = [];
+    for (let n = von; n <= bis; n++) leiste.push(`<span>${n}</span>`);
+
+    const f = document.createElement('div');
+    f.id = 'seriefeier';
+    f.className = 'seriefeier' + (ruhig ? ' ruhig' : '');
+    f.setAttribute('role', 'status');
+    f.setAttribute('aria-live', 'polite');
+    f.innerHTML = `
+        <div class="seriefeier-buehne">
+            <p class="seriefeier-titel">Serie verlängert!</p>
+            <img class="seriefeier-voki" src="${esc(VT.base)}/assets/voki-mini.svg" alt=""
+                 width="220" height="220">
+            <div class="seriefeier-zahl" aria-hidden="true">
+                <span class="seriefeier-band" style="--schritte:${bis - von}">${leiste.join('')}</span>
+            </div>
+            <p class="seriefeier-text">${tage} in Folge</p>
+            <span class="nurvorlesen">Serie verlängert: ${bis} ${tage} in Folge.</span>
+        </div>`;
+
+    let zu = false;
+    const schliessen = () => {
+        if (zu) return;
+        zu = true;
+        document.removeEventListener('keydown', taste);
+        f.classList.add('geht');
+        setTimeout(() => f.remove(), ruhig ? 0 : 320);
+    };
+    const taste = (e) => { if (e.key === 'Escape') schliessen(); };
+
+    f.addEventListener('click', schliessen);
+    document.addEventListener('keydown', taste);
+    document.body.appendChild(f);
+    setTimeout(schliessen, SERIEFEIER_MS);
 }
 
 /* ------------------------------------------------------------ Belohnung
