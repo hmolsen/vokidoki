@@ -511,6 +511,10 @@ $zustand = sentence_status($unitId, (int) $user['id']);
  * Haeuschen im Pfad, und eine Ebene hoeher will man von hier aus oefter
  * als ganz nach oben.
  *
+ * Der Name der Lerneinheit steht in einer eigenen Zeile unter dem Pfad
+ * (Häuschen > Kurs). Hinter dem Kurs umbrach er sonst irgendwo - am Telefon
+ * fast immer, und dann hing das ">" allein am Zeilenende.
+ *
  * Und der Stift: Der Titel wird an Ort und Stelle zum Eingabefeld, mit
  * Haken zum Sichern und Kreuz zum Verwerfen. Er stand vorher als eigenes
  * Formular am Fuss der Seite - eine Zeile, die dasselbe noch einmal sagte,
@@ -522,7 +526,7 @@ $importUrl = url('/') . '#/lang/' . (int) $unit['language_id'] . '/import';
 
 $titelHtml = teacher_haus_html() . sprintf(
     '<a class="kursknopf" href="%s" title="Zur&uuml;ck zum Kurs">%s%s</a>'
-    . '<span class="titelsep" aria-hidden="true">&#8250;</span>'
+    . '<span class="titelumbruch" aria-hidden="true"></span>'
     . '<span class="einheitname" data-titel>%s</span>'
     . '<input class="einheitfeld" type="text" name="title" form="titelform"'
     . ' value="%s" maxlength="128" required aria-label="Titel der Lerneinheit">'

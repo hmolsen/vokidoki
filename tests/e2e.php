@@ -8113,8 +8113,13 @@ ok('Die Ueberschrift traegt den Kurs als Knopf zurueck',
               . '<a class="kursknopf" href="[^"]*course\.php\?id=' . $lvKursId . '"/',
               $res['body']) === 1,
    'ein unterstrichenes Wort in einer Ueberschrift liest man als Ueberschrift');
-ok('Danach kommt der Name der Lerneinheit',
-   preg_match('/<span class="einheitname" data-titel>Unit vorher<\/span>/', $res['body']) === 1);
+ok('Danach kommt der Name der Lerneinheit - in einer eigenen Zeile',
+   preg_match('/course\.php\?id=' . $lvKursId . '"[^>]*>.*?<\/a>'
+              . '<span class="titelumbruch" aria-hidden="true"><\/span>'
+              . '<span class="einheitname" data-titel>Unit vorher<\/span>/', $res['body']) === 1);
+$tzCss = (string) file_get_contents(__DIR__ . '/../app/admin/admin.css');
+ok('Der Umbruch nimmt die volle Breite',
+   preg_match('/\.titelumbruch\s*\{[^}]*flex-basis:\s*100%/', $tzCss) === 1);
 preg_match('/<div class="titelzeile">.*?<\/div>/s', $res['body'], $tz);
 ok('Und "Meine Kurse" steht nicht mehr daneben',
    !str_contains($tz[0] ?? '', '>Meine Kurse<'),
