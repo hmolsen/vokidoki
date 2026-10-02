@@ -569,12 +569,12 @@ CREATE TABLE IF NOT EXISTS settings (
 
 -- Voreinstellungen. Preise in USD pro 1 Mio. Token, im Admin editierbar.
 INSERT INTO settings (k, v) VALUES
-  ('vision_model',        'claude-opus-5'),
+  ('vision_model',        'claude-opus-5-5'),
   ('vision_effort',       'medium'),
-  ('sentence_model',      'claude-sonnet-5'),
+  ('sentence_model',      'claude-sonnet-5-5'),
   ('sentences_per_vocab', '3'),
   ('usd_eur',             '0.92'),
   ('monthly_cost_cap_usd','10.00'),
   ('imports_per_hour',    '20'),
-  ('prices_json', '{"claude-opus-5":{"in":5,"out":25,"cache_read":0.5,"cache_write":6.25},"claude-opus-4-8":{"in":5,"out":25,"cache_read":0.5,"cache_write":6.25},"claude-sonnet-5":{"in":2,"out":10,"cache_read":0.2,"cache_write":2.5},"claude-haiku-4-5":{"in":1,"out":5,"cache_read":0.1,"cache_write":1.25}}')
+  ('prices_json', '{"claude-opus-5-5":{"in":4,"out":20,"cache_read":0.4,"cache_write":5},"claude-sonnet-5-5":{"in":2,"out":10,"cache_read":0.2,"cache_write":2.5},"claude-opus-5":{"in":5,"out":25,"cache_read":0.5,"cache_write":6.25},"claude-opus-4-8":{"in":5,"out":25,"cache_read":0.5,"cache_write":6.25},"claude-sonnet-5":{"in":2,"out":10,"cache_read":0.2,"cache_write":2.5},"claude-haiku-4-5":{"in":1,"out":5,"cache_read":0.1,"cache_write":1.25}}')
 ON DUPLICATE KEY UPDATE k = k;

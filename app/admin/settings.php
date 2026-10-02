@@ -21,7 +21,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
         setting_set('vision_model', $model);
         setting_set('vision_effort', $effort);
-        flash('Modell gespeichert: ' . $model);
+        flash('Modell für die Fehlerkorrektur gespeichert: ' . $model);
         redirect('settings.php');
     }
 
@@ -84,7 +84,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
         setting_set('sentence_model', $model);
         setting_set('sentences_per_vocab', (string) $per);
-        flash('Einstellungen für den Lückentext gespeichert.');
+        flash('Einstellungen für die Lückensätze gespeichert.');
         redirect('settings.php');
     }
 
@@ -101,7 +101,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
 
     if (isset($_POST['save_prices'])) {
-        $prices = [];
+        /*
+         * Auf der bisherigen Tabelle aufsetzen, nicht auf einer leeren: Ein
+         * Modell, das nicht mehr zur Wahl steht (Opus 5), steht weiter im
+         * Protokoll. Fiele sein Preis beim Speichern weg, meldete die
+         * Kostenseite es als "ohne Preis".
+         */
+        $prices = price_table();
         foreach (array_keys(VISION_MODELS) as $model) {
             $prices[$model] = [
                 'in'          => (float) str_replace(',', '.', (string) ($_POST['in'][$model] ?? '0')),
@@ -128,14 +134,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 }
 
 $prices  = price_table();
-$current = setting('vision_model', 'claude-opus-5');
+$current = setting_model('vision_model');
 $effort  = setting('vision_effort', 'medium');
 
 admin_head('Einstellungen', 'settings.php');
 flash_render();
 ?>
 
-<h2>Modell für das Einlesen</h2>
+<?php
+/*
+ * Die beiden Schritte in der Reihenfolge, in der sie laufen: Erst
+ * berichtigt ein Modell den erkannten Text, dann schreibt eines die
+ * Lückensätze. Die Fotos selbst liest das Gerät - dafür gibt es hier nichts
+ * einzustellen.
+ */
+?>
+<h2>Schritt 1: Fehlerkorrektur</h2>
 <form method="post" class="card">
     <?= csrf_field() ?>
     <div class="formgrid">
@@ -162,15 +176,16 @@ flash_render();
     </div>
     <p class="tiny muted">
         Die Fotos liest die Texterkennung auf dem Gerät der Lehrkraft; das Modell
-        bekommt nur den erkannten Text, ordnet ihn zu Vokabelpaaren und berichtigt
-        Lesefehler. Opus 5 berichtigt am zuverlässigsten, Sonnet 5 kostet rund
-        60&nbsp;% weniger und reicht für sauber gedruckte Listen. Der Aufwand steuert,
-        wie gründlich es arbeitet - <code>medium</code> passt für Vokabelseiten.
+        bekommt nur den erkannten Text, ordnet ihn zu Vokabelpaaren, berichtigt
+        Lesefehler und bestimmt die Wortart. Opus 5.5 (Voreinstellung) berichtigt
+        am zuverlässigsten, Sonnet 5.5 kostet die Hälfte und reicht für sauber
+        gedruckte Listen. Der Aufwand steuert, wie gründlich es arbeitet -
+        <code>medium</code> passt für Vokabelseiten.
     </p>
     <button class="btn small" name="save_model" value="1">Speichern</button>
 </form>
 
-<h2>Lückentext</h2>
+<h2>Schritt 2: Lückensätze</h2>
 <form method="post" class="card">
     <?= csrf_field() ?>
     <div class="formgrid">
@@ -178,7 +193,7 @@ flash_render();
             <label for="sentence_model">Modell für die Sätze</label>
             <select name="sentence_model" id="sentence_model">
                 <?php foreach (VISION_MODELS as $id => $label): ?>
-                    <option value="<?= h($id) ?>"<?= $id === setting('sentence_model') ? ' selected' : '' ?>>
+                    <option value="<?= h($id) ?>"<?= $id === setting_model('sentence_model') ? ' selected' : '' ?>>
                         <?= h($label) ?>
                     </option>
                 <?php endforeach; ?>
@@ -202,7 +217,7 @@ flash_render();
         so teuer, weil Anweisung und Wortschatz jedes Mal mitbezahlt würden.
         Drei Sätze passen zur Lernregel &bdquo;dreimal hintereinander richtig&ldquo;.
         Bei 60 Vokabeln und drei Sätzen kostet eine Lerneinheit einmalig rund
-        8&nbsp;ct mit Sonnet 5, rund 21&nbsp;ct mit Opus 5.
+        8&nbsp;ct mit Sonnet 5.5 (Voreinstellung), rund 16&nbsp;ct mit Opus 5.5.
     </p>
     <button class="btn small" name="save_sentences" value="1">Speichern</button>
 </form>
@@ -222,13 +237,13 @@ flash_render();
                    value="<?= h(setting('usd_eur', '0.92')) ?>">
         </div>
         <div>
-            <label for="per_hour">Analysen pro Konto und Stunde</label>
+            <label for="per_hour">Einlesevorgänge pro Konto und Stunde</label>
             <input type="text" id="per_hour" name="per_hour" inputmode="numeric"
                    value="<?= h(setting('imports_per_hour', '20')) ?>">
         </div>
     </div>
     <p class="tiny muted">
-        Ist das Monatslimit erreicht, blockiert die App das Einlesen, bevor
+        Ist das Monatslimit erreicht, blockiert die App beide Schritte, bevor
         eine Anfrage an die API geht. Der Kurs dient nur der Anzeige in Euro.
     </p>
     <button class="btn small" name="save_budget" value="1">Speichern</button>
@@ -248,7 +263,7 @@ flash_render();
         <?php foreach (VISION_MODELS as $id => $label): ?>
             <?php $p = $prices[$id] ?? []; ?>
             <tr>
-                <td><?= h($id) ?></td>
+                <td><?= h($id) ?><br><span class="tiny muted"><?= h($label) ?></span></td>
                 <td class="num"><input type="text" name="in[<?= h($id) ?>]" inputmode="decimal"
                         value="<?= h((string) ($p['in'] ?? 0)) ?>" style="width:90px;text-align:right"></td>
                 <td class="num"><input type="text" name="out[<?= h($id) ?>]" inputmode="decimal"

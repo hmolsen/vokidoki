@@ -146,14 +146,14 @@ function budget_block_reason(int $userId): ?string
         $eigener = qv('SELECT monthly_cost_cap_usd FROM schools WHERE id = ?', [$schoolId]);
         if ($eigener !== null && (float) $eigener > 0
             && cost_this_month($schoolId) >= (float) $eigener) {
-            return 'Die Bilderkennung ist für diese Schule gerade gesperrt. '
+            return 'Das Einlesen ist für diese Schule gerade gesperrt. '
                  . 'Die Schulleitung kann sie wieder freischalten lassen.';
         }
     }
 
     $cap = (float) setting('monthly_cost_cap_usd', '10.00');
     if ($cap > 0 && cost_this_month() >= $cap) {
-        return 'Die Bilderkennung ist gerade nicht verfügbar. '
+        return 'Das Einlesen ist gerade nicht verfügbar. '
              . 'Der Betreiber kann sie im Admin-Bereich wieder freischalten.';
     }
 

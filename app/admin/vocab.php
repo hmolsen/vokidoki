@@ -481,8 +481,8 @@ flash_render();
     <p class="tiny muted" style="margin:6px 0 12px">
         Vokabeln, die vor dieser Funktion eingelesen wurden, haben noch keine
         Kategorie. Der Knopf lässt sie vom Modell bestimmen - in Blöcken zu 100,
-        höchstens 500 je Klick, über alle Schulen. Das kostet wie eine
-        Bilderkennung und zählt aufs Monatsbudget.
+        höchstens 500 je Klick, über alle Schulen. Das läuft mit dem Modell der
+        Fehlerkorrektur und zählt aufs Monatsbudget.
     </p>
     <form method="post">
         <?= csrf_field() ?>

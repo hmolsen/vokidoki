@@ -109,6 +109,32 @@ function schema_migrations(): array
                ('adjective', 'schön', NULL, 1), ('adjective', 'froh', NULL, 1), ('adjective', 'fein', NULL, 1), ('adjective', 'kühn', NULL, 1), ('adjective', 'toll', NULL, 1), ('adjective', 'flott', NULL, 1), ('adjective', 'hübsch', NULL, 1), ('adjective', 'lässig', NULL, 1), ('adjective', 'schick', NULL, 1), ('adjective', 'clever', NULL, 1), ('adjective', 'genial', NULL, 1), ('adjective', 'wunderbar', NULL, 1), ('adjective', 'friedlich', NULL, 1), ('adjective', 'kreativ', NULL, 1), ('adjective', 'zauberhaft', NULL, 1), ('adjective', 'fantastisch', NULL, 1), ('adjective', 'elegant', NULL, 1), ('adjective', 'frisch', NULL, 1), ('adjective', 'strahlend', NULL, 1), ('adjective', 'glänzend', NULL, 1)
              ON DUPLICATE KEY UPDATE active = VALUES(active)",
         ],
+        /*
+         * Opus 5.5 und Sonnet 5.5: ihre Preise, und die Voreinstellungen.
+         *
+         * Ohne Preis rechnete cost_for() mit dem teuersten bekannten - die
+         * Kosten wären zu hoch, und der Deckel griffe zu früh. Umgestellt
+         * wird ein Schritt nur, wenn er noch auf der alten Voreinstellung
+         * steht (Opus 5 für die Fehlerkorrektur, Sonnet 5 für die Sätze);
+         * wer im Admin bewusst etwas anderes gewählt hat, behält es. Opus 5
+         * bleibt in der Preistabelle - das Protokoll nennt es noch.
+         */
+        'settings.modelle_5_5' => [
+            static fn (): bool => !schema_was_applied('settings.modelle_5_5')
+                && qv("SELECT JSON_EXTRACT(v, '$.\"claude-opus-5-5\"') FROM settings
+                        WHERE k = 'prices_json'") === null,
+            "UPDATE settings SET v = CASE
+                 WHEN k = 'prices_json' THEN JSON_SET(
+                     IF(JSON_VALID(v), v, '{}'),
+                     '$.\"claude-opus-5-5\"',
+                     JSON_OBJECT('in', 4, 'out', 20, 'cache_read', 0.4, 'cache_write', 5),
+                     '$.\"claude-sonnet-5-5\"',
+                     JSON_OBJECT('in', 2, 'out', 10, 'cache_read', 0.2, 'cache_write', 2.5))
+                 WHEN k = 'vision_model' AND v = 'claude-opus-5' THEN 'claude-opus-5-5'
+                 WHEN k = 'sentence_model' AND v = 'claude-sonnet-5' THEN 'claude-sonnet-5-5'
+                 ELSE v END
+              WHERE k IN ('prices_json', 'vision_model', 'sentence_model')",
+        ],
     ];
 }
 

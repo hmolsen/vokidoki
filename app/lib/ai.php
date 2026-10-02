@@ -169,7 +169,7 @@ function analyze_vocab_text(string $text, int $seiten, string $languageName, arr
 {
     anthropic_autoload();
 
-    $model  = setting('vision_model', 'claude-opus-5');
+    $model  = setting_model('vision_model');
     $effort = setting('vision_effort', 'medium');
     if (!in_array($effort, EFFORT_LEVELS, true)) {
         $effort = 'medium';
@@ -311,7 +311,7 @@ function classify_word_types(array $rows, string $languageName, array $user): ar
         return [];
     }
 
-    $model  = setting('vision_model', 'claude-opus-5');
+    $model  = setting_model('vision_model');
     $effort = setting('vision_effort', 'medium');
     if (!in_array($effort, EFFORT_LEVELS, true)) {
         $effort = 'medium';

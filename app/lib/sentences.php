@@ -395,10 +395,7 @@ function generate_sentences(array $unit, array $user): array
 
     $unitId   = (int) $unit['id'];
     $perVocab = max(1, min(5, (int) setting('sentences_per_vocab', '3')));
-    $model    = setting('sentence_model', 'claude-sonnet-5');
-    if (!array_key_exists($model, VISION_MODELS)) {
-        $model = 'claude-sonnet-5';
-    }
+    $model    = setting_model('sentence_model');
 
     $lang = q1('SELECT name, code FROM languages WHERE id = ?', [(int) $unit['language_id']]);
 

@@ -69,7 +69,8 @@ $perUser = qa(
 
 // Wofuer eine Anfrage war. Unbekanntes bleibt, wie es gespeichert ist.
 const ZWECK = [
-    'vocab_ocr'  => 'Einlesen',
+    // Der Schluessel stammt aus der Zeit der Fotos; heute ist es Schritt 1.
+    'vocab_ocr'  => 'Fehlerkorrektur',
     'sentences'  => 'Lückensätze',
     'word_types' => 'Kategorien',
 ];
@@ -122,7 +123,7 @@ flash_render();
 </div>
 
 <?php if ($cap > 0 && $remaining <= 0): ?>
-    <div class="notice">Das Monatsbudget ist aufgebraucht - die Bilderkennung ist gesperrt,
+    <div class="notice">Das Monatsbudget ist aufgebraucht - das Einlesen ist gesperrt,
         bis das Limit unter <a href="<?= h(admin_url('settings.php')) ?>">Einstellungen</a>
         erhöht wird oder der Monat wechselt.</div>
 <?php endif; ?>
@@ -186,7 +187,7 @@ flash_render();
     <p class="muted">In diesem Monat gab es noch keine Anfragen.</p>
 <?php else: ?>
 <table class="data">
-    <tr><th>Konto</th><th>Schule</th><th class="num">Anfragen</th><th class="num">Fotos</th>
+    <tr><th>Konto</th><th>Schule</th><th class="num">Anfragen</th><th class="num">Seiten</th>
         <th class="num">Vokabeln</th><th class="num">Kosten</th></tr>
     <?php foreach ($perUser as $r): ?>
         <tr>
@@ -225,7 +226,7 @@ flash_render();
     <p class="muted">Noch keine Anfragen protokolliert.</p>
 <?php else: ?>
 <table class="data">
-    <tr><th>Zeitpunkt</th><th>Konto</th><th>Wofür</th><th>Modell</th><th class="num">Fotos</th>
+    <tr><th>Zeitpunkt</th><th>Konto</th><th>Wofür</th><th>Modell</th><th class="num">Seiten</th>
         <th class="num">Vokabeln</th><th class="num">Dauer</th><th class="num">Kosten</th><th>Status</th></tr>
     <?php foreach ($recent as $r): ?>
         <tr class="<?= $r['status'] === 'ok' ? '' : 'dim' ?>">

@@ -293,7 +293,7 @@ ok('Passwort liegt als Hash in der Datenbank',
 
 foreach (['users.php' => 'Neuen Account anlegen',
           'vocab.php' => 'Schule',
-          'settings.php' => 'Modell für das Einlesen',
+          'settings.php' => 'Schritt 1: Fehlerkorrektur',
           'selfcheck.php' => 'Prüfung'] as $file => $needle) {
     $res = http($base . '/admin/' . $file);
     ok("Seite $file lädt", $res['status'] === 200 && str_contains($res['body'], $needle),
@@ -1010,6 +1010,85 @@ foreach (['schema_migrations', 'schema_pending', 'ensure_schema',
 }
 ok('ensure_schema() laeuft auch ohne Aenderungen sauber durch',
    ensure_schema() === []);
+
+section('Opus 5.5 und Sonnet 5.5');
+
+require_once __DIR__ . '/../app/lib/cost.php';
+
+/*
+ * Opus 5.5 fuer Schritt 1 (Fehlerkorrektur), Sonnet 5.5 fuer Schritt 2
+ * (Lueckensaetze); Opus 5 steht nicht mehr zur Wahl. Die laufende Datenbank
+ * bekommt Preise und Voreinstellungen ueber schema_migrations() - geprueft
+ * an einem nachgestellten alten Stand: Opus 5 als Voreinstellung, und fuer
+ * die Saetze ein bewusst gewaehltes Haiku, das bleiben muss.
+ */
+ok('Zur Wahl stehen Opus 5.5 und Sonnet 5.5, Opus 5 nicht mehr',
+   array_key_exists('claude-opus-5-5', VISION_MODELS)
+   && array_key_exists('claude-sonnet-5-5', VISION_MODELS)
+   && !array_key_exists('claude-opus-5', VISION_MODELS));
+ok('Voreingestellt: Opus 5.5 korrigiert, Sonnet 5.5 schreibt die Saetze',
+   SETTING_DEFAULTS['vision_model'] === 'claude-opus-5-5'
+   && SETTING_DEFAULTS['sentence_model'] === 'claude-sonnet-5-5');
+$frischSql = (string) file_get_contents(__DIR__ . '/../app/schema.sql');
+ok('Eine frische Installation startet genauso',
+   str_contains($frischSql, "('vision_model',        'claude-opus-5-5')")
+   && str_contains($frischSql, "('sentence_model',      'claude-sonnet-5-5')")
+   && str_contains($frischSql, '"claude-opus-5-5":{"in":4,"out":20,"cache_read":0.4,"cache_write":5}')
+   && str_contains($frischSql, '"claude-sonnet-5-5":{"in":2,"out":10,"cache_read":0.2,"cache_write":2.5}'));
+
+$mVorher = qa("SELECT k, v FROM settings
+                WHERE k IN ('prices_json', 'vision_model', 'sentence_model',
+                            'schema_applied_settings.modelle_5_5')");
+q("UPDATE settings SET v = ? WHERE k = 'prices_json'",
+  ['{"claude-opus-5":{"in":5,"out":25,"cache_read":0.5,"cache_write":6.25},"claude-haiku-4-5":{"in":1,"out":5,"cache_read":0.1,"cache_write":1.25}}']);
+q("UPDATE settings SET v = 'claude-opus-5' WHERE k = 'vision_model'");
+q("UPDATE settings SET v = 'claude-haiku-4-5' WHERE k = 'sentence_model'");
+q("DELETE FROM settings WHERE k = 'schema_applied_settings.modelle_5_5'");
+settings_reset_cache();
+
+ok('Auf dem alten Stand steht die Umstellung aus',
+   in_array('settings.modelle_5_5', schema_pending(), true));
+ok('Ein gespeichertes Opus 5 wird bis dahin wie die Voreinstellung behandelt',
+   setting_model('vision_model') === 'claude-opus-5-5',
+   'sonst liefe still weiter, was im Admin nicht mehr zur Wahl steht');
+ensure_schema();
+settings_reset_cache();
+$mPreise = price_table();
+ok('Danach haben beide neuen Modelle ihren Preis',
+   cost_for('claude-opus-5-5', 1_000_000, 1_000_000) === 24.0
+   && cost_for('claude-sonnet-5-5', 1_000_000, 1_000_000) === 12.0,
+   json_encode($mPreise));
+ok('Opus 5 behaelt seinen - das Protokoll nennt es noch',
+   isset($mPreise['claude-opus-5']));
+ok('Die Fehlerkorrektur ist von Opus 5 auf Opus 5.5 umgestellt',
+   setting('vision_model') === 'claude-opus-5-5');
+ok('Das bewusst gewaehlte Haiku fuer die Saetze bleibt',
+   setting('sentence_model') === 'claude-haiku-4-5');
+ok('Die Umstellung laeuft nur einmal', !in_array('settings.modelle_5_5', schema_pending(), true));
+
+// Speichern der Preistabelle wirft Opus 5 nicht hinaus.
+$mFormular = ['save_prices' => '1'];
+foreach (array_keys(VISION_MODELS) as $m) {
+    foreach (['in' => 'in', 'out' => 'out', 'cr' => 'cache_read', 'cw' => 'cache_write'] as $feld => $art) {
+        $mFormular[$feld][$m] = (string) ($mPreise[$m][$art] ?? 0);
+    }
+}
+adminPost('settings.php', $mFormular);
+settings_reset_cache();
+ok('Die Preistabelle zu speichern behaelt Opus 5',
+   isset(price_table()['claude-opus-5'])
+   && (float) price_table()['claude-opus-5-5']['out'] === 20.0);
+
+$mSeite = http($base . '/admin/settings.php')['body'];
+ok('Die Einstellungen nennen die beiden Schritte in ihrer Reihenfolge',
+   preg_match('/Schritt 1: Fehlerkorrektur.*Schritt 2: Lückensätze/s', $mSeite) === 1
+   && !str_contains($mSeite, 'value="claude-opus-5"'));
+
+foreach ($mVorher as $z) {
+    q('INSERT INTO settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)',
+      [$z['k'], $z['v']]);
+}
+settings_reset_cache();
 
 $seite = http($base . '/admin/selfcheck.php')['body'];
 ok('Der Selbsttest meldet nichts Offenes',
