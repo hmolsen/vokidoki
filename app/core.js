@@ -963,6 +963,60 @@ function anschlag(zeit, grundton, staerke) {
 }
 
 /**
+ * Der Klang auch bei stummgeschaltetem iPhone.
+ *
+ * iOS spielt Web Audio in der Kategorie "ambient": Steht der Schalter an
+ * der Seite auf lautlos, bleibt das Glöckchen stumm - und auf Kindergeräten
+ * steht er fast immer dort. Lautlos meint aber den Klingelton, nicht eine
+ * App, die man gerade bedient; ein Video spielt ja auch.
+ *
+ * Seit iOS 17 sagt man es direkt: navigator.audioSession.type = 'playback'.
+ * Davor gibt es nur den Umweg über ein <audio>-Element - das spielt in der
+ * Kategorie "playback", und läuft es einmal, gilt die für die ganze Seite,
+ * auch für Web Audio. Gespielt wird dafür eine winzige stille WAV-Datei,
+ * und zwar beim ersten Antippen: Ein <audio> startet nur aus einer Geste,
+ * und babing() kommt nicht immer aus einer - mancher Anschlag folgt erst auf
+ * die Antwort des Servers.
+ *
+ * Der Preis: "playback" mischt sich nicht. Läuft nebenher Musik, hält iOS
+ * sie beim ersten Glöckchen an. Dasselbe tut jedes Lernvideo.
+ */
+function audioSitzungSetzen() {
+    try {
+        if (navigator.audioSession) navigator.audioSession.type = 'playback';
+    } catch { /* ältere Fassung, die das Feld kennt, aber nicht setzen lässt */ }
+}
+
+const IOS = /iP(hone|ad|od)/.test(navigator.userAgent)
+    || (navigator.userAgent.includes('Macintosh') && navigator.maxTouchPoints > 1);
+
+if (IOS && !navigator.audioSession) {
+    const entsperren = () => {
+        // Bei ausgeschaltetem Ton noch nicht: Sonst hielte schon das erste
+        // Antippen fremde Musik an, ohne dass je ein Glöckchen käme.
+        if (!tonAn()) return;
+        document.removeEventListener('touchend', entsperren, true);
+        try {
+            // 44 Bytes Kopf und 100 Bytes Stille, 8 Bit mono, 8000 Hz.
+            const n = 100;
+            const b = new Uint8Array(44 + n);
+            const v = new DataView(b.buffer);
+            const text = (o, s) => [...s].forEach((c, i) => { b[o + i] = c.charCodeAt(0); });
+            text(0, 'RIFF'); v.setUint32(4, 36 + n, true); text(8, 'WAVEfmt ');
+            v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+            v.setUint32(24, 8000, true); v.setUint32(28, 8000, true);
+            v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+            text(36, 'data'); v.setUint32(40, n, true);
+            b.fill(128, 44);   // 8 Bit ist vorzeichenlos: 128 ist die Nulllinie
+            const still = new Audio('data:audio/wav;base64,' + btoa(String.fromCharCode(...b)));
+            still.setAttribute('playsinline', '');
+            still.play().catch(() => {});
+        } catch { /* dann eben nur mit Klingelton */ }
+    };
+    document.addEventListener('touchend', entsperren, true);
+}
+
+/**
  * Zwei Anschläge, der zweite eine Quinte höher - das ist das „Babing".
  *
  * Der Abstand ist kurz genug, dass es ein Klang bleibt und nicht zwei: Der
@@ -977,6 +1031,8 @@ export function babing() {
         if (!Ctx) return;
 
         if (hoerer === null) {
+            // Vor dem Kontext: Er übernimmt die Kategorie beim Entstehen.
+            audioSitzungSetzen();
             hoerer = new Ctx();
             /*
              * Eine gemeinsame Summe für alle Anschläge.

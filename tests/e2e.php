@@ -9564,6 +9564,15 @@ ok('Faellt beides zusammen, gewinnt das seltenere',
    'wer bei der 25. auch fuenf in Folge hat, soll die 25 lesen');
 
 ok('Jede richtige Antwort klingt', str_contains($freiQ, 'babing()'));
+
+// Auch bei stummgeschaltetem iPhone: Web Audio ist dort sonst "ambient"
+// und schweigt, sobald der Schalter auf lautlos steht.
+$coreTon = (string) file_get_contents(__DIR__ . '/../app/core.js');
+ok('Das Glöckchen klingt auch bei lautlosem iPhone',
+   str_contains($coreTon, "navigator.audioSession.type = 'playback'")
+   && preg_match('/audioSitzungSetzen\(\);\s*hoerer = new Ctx\(\)/', $coreTon) === 1
+   && str_contains($coreTon, "new Audio('data:audio/wav;base64,'"),
+   'iOS 17: audioSession vor dem Kontext; davor eine stille WAV beim ersten Antippen');
 ok('Und die Zahlen springen mit einer Bewegung',
    str_contains($freiQ, 'zahlAktualisieren('));
 
