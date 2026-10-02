@@ -251,8 +251,10 @@ $verlust    = course_delete_preview($courseId);
  * faellt weg: "Englisch - 6B" und darunter noch einmal "Englisch" ist
  * dieselbe Auskunft zweimal.
  */
-$kursTitel = flag_html((string) $kurs['flag_emoji'] ?: FLAG_FALLBACK, 'kopfflagge')
-           . h((string) $kurs['name']);
+$kursTitel = teacher_haus_html()
+           . '<span class="kursname">'
+           . flag_html((string) $kurs['flag_emoji'] ?: FLAG_FALLBACK, 'kopfflagge')
+           . h((string) $kurs['name']) . '</span>';
 
 /*
  * Neben der Ueberschrift steht kein Knopf mehr.

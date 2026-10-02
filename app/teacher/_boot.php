@@ -712,6 +712,22 @@ function teacher_leer(string $text, string $knoepfe = ''): string
  *
  * $kursId markiert den aktuellen Kurs im Menue links.
  */
+/**
+ * Das Häuschen am Anfang des Pfads in der Überschrift: zurück zu "Meine
+ * Kurse". Auf Klasse, Kurs und Lerneinheit - den Seiten, auf denen man
+ * tiefer in einem Kurs steckt und der Weg nach oben sonst nur übers Menü
+ * ginge. Dasselbe Zeichen wie "Meine Kurse" im Menü.
+ */
+function teacher_haus_html(): string
+{
+    return sprintf(
+        '<a class="kursknopf haus" href="%s" title="Meine Kurse" aria-label="Meine Kurse">'
+        . '<span aria-hidden="true">&#127968;</span></a>'
+        . '<span class="titelsep" aria-hidden="true">&#8250;</span>',
+        h(teacher_url('index.php')),
+    );
+}
+
 function teacher_head(
     string $title,
     array $user,

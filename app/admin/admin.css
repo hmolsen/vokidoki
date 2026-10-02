@@ -116,6 +116,10 @@ body.admin { background: var(--bg); }
     white-space: nowrap;
 }
 .kursknopf:hover { background: var(--surface-2); color: var(--text); }
+/* Das Häuschen: nur das Zeichen, also rund statt in die Breite. */
+.kursknopf.haus { padding: 5px 9px; font-size: 1rem; }
+/* Fahne und Kursname bleiben beisammen, wenn die Zeile umbricht. */
+.titelzeile h1 .kursname { display: inline-flex; align-items: center; }
 .titelsep { color: var(--text-soft); font-weight: 400; }
 
 .einheitfeld {

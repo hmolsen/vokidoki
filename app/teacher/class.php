@@ -322,7 +322,8 @@ teacher_head('Klasse ' . $klasse['name'], $user,
     $ausKurs === null ? '' : sprintf(
         '<a class="btn small secondary" href="%s">&#8249; Zurück zum Kurs</a>',
         h(teacher_url('course.php') . '?id=' . (int) $ausKurs['id']),
-    ), '', $ausKurs === null ? null : (int) $ausKurs['id']);
+    ), teacher_haus_html() . h('Klasse ' . $klasse['name']),
+    $ausKurs === null ? null : (int) $ausKurs['id']);
 teacher_flash_render();
 ?>
 

@@ -8108,15 +8108,29 @@ ok('Eine Lerneinheit zum Verwalten', $lvUnit > 0);
  */
 $res = teacherGet('unit.php?id=' . $lvUnit);
 ok('Die Ueberschrift traegt den Kurs als Knopf zurueck',
-   preg_match('/<h1><a class="kursknopf" href="[^"]*course\.php\?id=' . $lvKursId . '"/',
+   preg_match('/<h1><a class="kursknopf haus" href="[^"]*index\.php"[^>]*>.*?<\/a>'
+              . '<span class="titelsep"[^>]*>&#8250;<\/span>'
+              . '<a class="kursknopf" href="[^"]*course\.php\?id=' . $lvKursId . '"/',
               $res['body']) === 1,
    'ein unterstrichenes Wort in einer Ueberschrift liest man als Ueberschrift');
 ok('Danach kommt der Name der Lerneinheit',
    preg_match('/<span class="einheitname" data-titel>Unit vorher<\/span>/', $res['body']) === 1);
 preg_match('/<div class="titelzeile">.*?<\/div>/s', $res['body'], $tz);
 ok('Und "Meine Kurse" steht nicht mehr daneben',
-   !str_contains($tz[0] ?? '', 'Meine Kurse'),
-   'dafuer gibt es das Haeuschen im Pfad - dort steht es weiterhin im Titel');
+   !str_contains($tz[0] ?? '', '>Meine Kurse<'),
+   'dafuer gibt es das Haeuschen im Pfad - "Meine Kurse" ist nur sein Titel');
+
+/*
+ * Das Haeuschen vorn im Pfad - auf Klasse, Kurs und Lerneinheit, zurueck zu
+ * "Meine Kurse". Eine Stelle dafuer: teacher_haus_html().
+ */
+$hausMuster = '/<h1><a class="kursknopf haus" href="[^"]*teacher\/index\.php" title="Meine Kurse"/';
+ok('Das Haeuschen steht vorn im Pfad der Lerneinheit',
+   preg_match($hausMuster, $res['body']) === 1);
+ok('Und im Pfad des Kurses',
+   preg_match($hausMuster, teacherGet('course.php?id=' . $lvKursId)['body']) === 1);
+ok('Und im Pfad der Klasse',
+   preg_match($hausMuster, teacherGet('class.php?id=' . (int) $lvKlasse['id'])['body']) === 1);
 
 // ---- Umbenennen, oben in der Ueberschrift.
 
@@ -8389,8 +8403,8 @@ ok('Und erbt dabei nicht den Leerzustands-Kasten',
  * Fahne davor, wo sie einen halben Zentimeter braucht statt einer Zeile.
  */
 ok('Die Fahne steht vor dem Kursnamen',
-   preg_match('/<h1><img class="kopfflagge"[^>]*>' . preg_quote(h((string) $efKurs['name']), '/')
-              . '<\/h1>/', $res['body']) === 1,
+   preg_match('/<span class="kursname"><img class="kopfflagge"[^>]*>'
+              . preg_quote(h((string) $efKurs['name']), '/') . '<\/span><\/h1>/', $res['body']) === 1,
    'und der Kursname gleich dahinter');
 ok('Die Zeile mit der Sprache darunter ist weg',
    !str_contains($res['body'], '<p class="muted">' . h((string) qv(

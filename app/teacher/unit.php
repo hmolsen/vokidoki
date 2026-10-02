@@ -520,7 +520,7 @@ $zustand = sentence_status($unitId, (int) $user['id']);
 $kursUrl   = teacher_url('course.php') . '?id=' . (int) $unit['course_id'];
 $importUrl = url('/') . '#/lang/' . (int) $unit['language_id'] . '/import';
 
-$titelHtml = sprintf(
+$titelHtml = teacher_haus_html() . sprintf(
     '<a class="kursknopf" href="%s" title="Zur&uuml;ck zum Kurs">%s%s</a>'
     . '<span class="titelsep" aria-hidden="true">&#8250;</span>'
     . '<span class="einheitname" data-titel>%s</span>'
