@@ -522,22 +522,15 @@ teacher_flash_render();
      * laesst einen suchen, wo sie hin ist.
      */
     ?>
+    <?php if ($offene === []): ?>
     <tr class="newrow">
-        <?php
-        /*
-         * Eine Zelle ueber alle Spalten: Suchfeld und Knopf gehoeren
-         * zusammen, und in Spalten zerlegt musste der Knopf in die Spalte
-         * des Hinauswurfs passen - am Telefon sechsunddreissig Pixel.
-         */
-        ?>
-        <td colspan="4" data-label="Aufnehmen">
-            <span class="anlegezeile">
-            <?php if ($offene === []): ?>
-                <span class="tiny muted">
-                    Alle Konten dieser Schule sind schon im Kurs. Neue Kinder
-                    legst du in der Klasse an.
-                </span>
-            <?php else: ?>
+        <td colspan="4" class="tiny muted">
+            Alle Konten dieser Schule sind schon im Kurs. Neue Kinder
+            legst du in der Klasse an.
+        </td>
+    </tr>
+    <?php else: ?>
+    <?php ob_start(); ?>
                 <?php
                 /*
                  * Das Feld sucht mit, waehrend getippt wird.
@@ -550,14 +543,13 @@ teacher_flash_render();
                  * ihn grau zu Ende. Zwei Wege, eine Quelle.
                  */
                 ?>
-                <span class="coursetitle suchfeld" data-suche>
-                    <span class="cflag plus">+</span>
+                <span class="suchfeld" data-suche>
                     <span class="feldbox">
                         <span class="geist" aria-hidden="true"></span>
-                        <input type="text" name="member_name" form="newmember"
+                        <input type="text" id="neuesMitglied" name="member_name" form="newmember"
                                list="kandidaten" autocomplete="off" maxlength="80" required
                                role="combobox" aria-expanded="false" aria-autocomplete="both"
-                               placeholder="Name eintippen" aria-label="Wen aufnehmen?">
+                               placeholder="Name eintippen">
                     </span>
                     <ul class="vorschlaege" role="listbox" hidden></ul>
                 </span>
@@ -580,14 +572,22 @@ teacher_flash_render();
                                 label="<?= h($zusatz) ?>"></option>
                     <?php endforeach; ?>
                 </datalist>
-                <button class="iconaction primary" form="newmember"
-                        name="add_member_by_name" value="1" title="In den Kurs aufnehmen">
-                    <span aria-hidden="true">+</span> Aufnehmen
-                </button>
-            <?php endif; ?>
-            </span>
-        </td>
-    </tr>
+    <?php
+    /*
+     * Das Suchfeld samt Vorschlagsliste ist das Feld der gemeinsamen
+     * Anlegezeile - gepuffert, weil es mehr HTML ist, als sich lesbar in
+     * einen String schreiben liesse.
+     */
+    ?>
+    <?= teacher_anlegezeile([
+        'was'     => 'In den Kurs aufnehmen',
+        'feld_id' => 'neuesMitglied',
+        'feld'    => (string) ob_get_clean(),
+        'form'    => 'newmember',
+        'name'    => 'add_member_by_name',
+        'spalten' => 3,
+    ]) ?>
+    <?php endif; ?>
 </table>
 
 <form method="post" id="neueEinheit" hidden>

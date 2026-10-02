@@ -755,12 +755,17 @@ function teacher_anlegezeile(array $z): string
 {
     $vorne = str_repeat('<td class="anlegeleer"></td>', (int) ($z['vorne'] ?? 0));
     $block = sprintf(
-        '<span class="anlegeblock"><label class="anlegewas" for="%s">%s</label>%s%s</span>',
+        '<span class="anlegeblock"><label class="anlegewas" for="%s">%s</label>%s</span>',
         h($z['feld_id']),
         h($z['was']),
         $z['feld'],
-        isset($z['hinweis']) ? '<span class="tiny muted">' . $z['hinweis'] . '</span>' : '',
     );
+    // Der Hinweis steht unter der ganzen Zeile, nicht unter dem Feld: Dort
+    // schob er das "+" nach unten, und es stand nicht mehr neben dem Feld.
+    $hinweis = isset($z['hinweis'])
+        ? '<span class="tiny muted anlegehinweis' . (($z['einzug'] ?? false) ? ' eingerueckt' : '')
+          . '">' . $z['hinweis'] . '</span>'
+        : '';
     if ($z['einzug'] ?? false) {
         // Unsichtbar, aber so breit wie die Fahne oder das Bildchen in den
         // Zeilen darüber - sonst stünde das Feld links neben den Namen.
@@ -778,7 +783,7 @@ function teacher_anlegezeile(array $z): string
         '<tr class="newrow anlegen"%s>%s<td class="anlegefeld" colspan="%d">'
         . '<span class="anlegeinnen">%s<button class="iconaction primary anlegeplus" form="%s"'
         . ' name="%s" value="1" title="%s" aria-label="%s"><span aria-hidden="true">+</span>'
-        . '</button></span></td></tr>',
+        . '</button></span>%s</td></tr>',
         isset($z['id']) ? ' id="' . h($z['id']) . '"' : '',
         $vorne,
         (int) $z['spalten'] + 1,
@@ -787,6 +792,7 @@ function teacher_anlegezeile(array $z): string
         h($z['name']),
         h($z['was']),
         h($z['was']),
+        $hinweis,
     );
 }
 

@@ -507,26 +507,18 @@ teacher_flash_render();
      * Seite laedt neu; das Ergebnis ist dasselbe, nur langsamer.
      */
     ?>
-    <tr class="newrow" id="neuesKind">
-        <td data-label="Neues Kind">
-            <span class="coursetitle">
-                <span class="cflag plus">+</span>
-                <input type="text" name="student" form="newstudent"
-                       placeholder="Fritz Brinkmann" maxlength="80" required
-                       aria-label="Name des Kindes">
-            </span>
-        </td>
-        <td colspan="2" class="tiny muted">
-            Name eintippen und Enter &ndash; Benutzername und Passwort
-            entstehen von selbst.
-        </td>
-        <td class="actions">
-            <button class="iconaction primary" form="newstudent"
-                    name="add_student" value="1" title="Kind hinzufügen">
-                <span aria-hidden="true">+</span> Kind hinzufügen
-            </button>
-        </td>
-    </tr>
+    <?= teacher_anlegezeile([
+        'id'      => 'neuesKind',
+        'was'     => 'Kind hinzufügen',
+        'feld_id' => 'neuesKindName',
+        'feld'    => '<input type="text" id="neuesKindName" name="student" form="newstudent"'
+                   . ' placeholder="Fritz Brinkmann" maxlength="80" required autocomplete="off">',
+        'hinweis' => 'Name eintippen und Enter &ndash; Benutzername und Passwort entstehen von selbst.',
+        'form'    => 'newstudent',
+        'name'    => 'add_student',
+        'spalten' => 3,
+        'einzug'  => true,
+    ]) ?>
 </table>
 
 <?php

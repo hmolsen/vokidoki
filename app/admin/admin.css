@@ -2280,6 +2280,9 @@ tr.newrow.anlegen .cflag.anlegeplatz { visibility: hidden; height: 38px; }
     min-width: 0;
     line-height: 1.3;
 }
+.anlegehinweis { display: block; margin-top: 6px; }
+/* Unter dem Feld, nicht unter dem unsichtbaren Platzhalter davor. */
+.anlegehinweis.eingerueckt { padding-left: 40px; }
 .anlegewas {
     margin: 0;
     font-size: .78rem;
@@ -2316,4 +2319,11 @@ table.data tr.newrow.anlegen .iconaction.anlegeplus {
     table.data tr.newrow.anlegen .anlegeblock input[type=text] { max-width: none; min-height: 40px; }
     table.data tr.newrow.anlegen .iconaction.anlegeplus { min-height: 40px; }
     tr.newrow.anlegen .cflag.anlegeplatz { display: none; }
+    .anlegehinweis.eingerueckt { padding-left: 0; }
+    /*
+     * Die Zeile von Hand unter den Vokabeln bleibt Teil der Tabelle: Die
+     * aeltere Regel macht Zellen von Anlegezeilen am Telefon zu Bloecken,
+     * und dann standen die beiden Felder nicht mehr unter ihren Spalten.
+     */
+    table.data.release tr.newrow.anlegen td { display: table-cell; padding: 8px 6px; }
 }

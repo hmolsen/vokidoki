@@ -861,21 +861,34 @@ $zuPruefen = count(array_filter($vokabeln, static fn (array $v): bool =>
      * Zeile hinkommt.
      */
     ?>
-    <tr class="newrow" id="handzeile"<?= $vonHand ? '' : ' hidden' ?>>
+    <?php
+    /*
+     * Wie die übrigen Anlegezeilen (teacher_anlegezeile()): klein und fett
+     * darüber, was entsteht, und rechts das "+". Nur mit zwei Feldern, je
+     * eines unter seiner Spalte - deshalb von Hand gebaut. Über dem zweiten
+     * steht die Sprache, damit klar ist, welches Feld welches ist.
+     */
+    ?>
+    <tr class="newrow anlegen" id="handzeile"<?= $vonHand ? '' : ' hidden' ?>>
         <td>
-            <input type="text" name="new_f" form="neueVokabel" maxlength="255"
-                   placeholder="apple" autocomplete="off"
-                   aria-label="<?= h((string) $unit['language_name']) ?>">
+            <span class="anlegeblock">
+                <label class="anlegewas" for="neueVokabelF">Vokabel hinzufügen: <?= h((string) $unit['language_name']) ?></label>
+                <input type="text" id="neueVokabelF" name="new_f" form="neueVokabel" maxlength="255"
+                       placeholder="apple" autocomplete="off">
+            </span>
         </td>
-        <td>
-            <input type="text" name="new_n" form="neueVokabel" maxlength="255"
-                   placeholder="Apfel" autocomplete="off" aria-label="Deutsch">
-        </td>
-        <td class="actions">
-            <button class="iconaction primary nurbild" form="neueVokabel"
-                    name="add_vocab" value="1" title="Vokabel hinzufügen">
-                <span aria-hidden="true">+</span><span class="nurvorlesen">Hinzufügen</span>
-            </button>
+        <td colspan="2">
+            <span class="anlegeinnen">
+                <span class="anlegeblock">
+                    <label class="anlegewas" for="neueVokabelN">Deutsch</label>
+                    <input type="text" id="neueVokabelN" name="new_n" form="neueVokabel" maxlength="255"
+                           placeholder="Apfel" autocomplete="off">
+                </span>
+                <button class="iconaction primary anlegeplus" form="neueVokabel"
+                        name="add_vocab" value="1" title="Vokabel hinzufügen" aria-label="Vokabel hinzufügen">
+                    <span aria-hidden="true">+</span>
+                </button>
+            </span>
         </td>
     </tr>
     <?php

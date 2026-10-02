@@ -3264,7 +3264,7 @@ ok('Die Anlegezeile steht am Fuss der Tabelle',
    && str_contains($tm[0] ?? '', 'name="new_f"'),
    'dort, wo die neue Vokabel gleich stehen wird');
 ok('Und zaehlt fuer den Balken nicht mit',
-   preg_match('/<tr class="newrow" id="handzeile"[^>]*>/', $tm[0] ?? '') === 1
+   preg_match('/<tr class="newrow anlegen" id="handzeile"[^>]*>/', $tm[0] ?? '') === 1
    && !preg_match('/id="handzeile"[^>]*data-pos/', $tm[0] ?? ''));
 ok('Zugeklappt, bis jemand sie will',
    preg_match('/id="handzeile"[^>]*hidden/', $tm[0] ?? '') === 1);
@@ -3441,7 +3441,7 @@ ok('Und eine negative macht gar keine frischen Zeilen',
 q('DELETE FROM vocab WHERE unit_id = ? AND term_foreign LIKE ?', [$freiUnit, 'gescannt-%']);
 
 ok('Das Feld heisst nach der Sprache, nicht "Fremdsprache"',
-   str_contains($res['body'], 'aria-label="' . h($kopfSprache) . '"'),
+   str_contains($res['body'], 'for="neueVokabelF">Vokabel hinzufügen: ' . h($kopfSprache) . '</label>'),
    $kopfSprache);
 
 /*
@@ -5125,11 +5125,28 @@ ok('Und legt selbst keinen Kurs mehr an',
  * diese Klasse" ein grauer Textknopf, "+ Hinzufuegen" ein farbiger. Jetzt
  * sind alle derselbe, und sagen, was sie anlegen.
  */
-ok('Die Knoepfe unter den Tabellen sehen gleich aus und sagen, was sie anlegen',
+ok('"Sprachkurs anlegen" bleibt ein Knopf mit Text - er fuehrt in den Assistenten',
    preg_match('/<a class="iconaction primary" href="[^"]*neu\.php\?klasse=\d+">\s*'
-              . '<span aria-hidden="true">\+<\/span> Sprachkurs anlegen/', $res['body']) === 1
-   && preg_match('/class="iconaction primary" form="newstudent"[^>]*>\s*'
-                 . '<span aria-hidden="true">\+<\/span> Kind hinzufügen/', $res['body']) === 1);
+              . '<span aria-hidden="true">\+<\/span> Sprachkurs anlegen/', $res['body']) === 1);
+
+/*
+ * Die Anlegezeilen sind eine: was entsteht, klein und fett ueber dem Feld,
+ * und rechts ein Knopf mit nur "+" - teacher_anlegezeile(). Die Ausnahme
+ * ist "Sprachkurs anlegen" oben.
+ */
+$anlegeMuster = static fn (string $was, string $form, string $name): string =>
+    '/<tr class="newrow anlegen"[^>]*>.*?<label class="anlegewas" for="[^"]+">'
+    . preg_quote($was, '/') . '<\/label>.*?<button class="iconaction primary anlegeplus"'
+    . ' form="' . $form . '" name="' . $name . '" value="1"[^>]*>'
+    . '<span aria-hidden="true">\+<\/span><\/button>/s';
+ok('Die Kinder: "Kind hinzufuegen" ueber dem Feld, rechts nur "+"',
+   preg_match($anlegeMuster('Kind hinzufügen', 'newstudent', 'add_student'), $res['body']) === 1
+   && str_contains($res['body'], '<tr class="newrow anlegen" id="neuesKind">'),
+   'die id bleibt - an ihr haengt das Skript, das Kind um Kind einhaengt');
+ok('Die Klassen genauso',
+   preg_match($anlegeMuster('Klasse anlegen', 'newclass', 'create_class'),
+              teacherGet('classes.php')['body']) === 1);
+ok('Kein "+" mehr vorn in der Anlegezeile der Kinder', !str_contains($res['body'], 'cflag plus'));
 $einheitenKnopf = (string) file_get_contents(__DIR__ . '/../app/teacher/course.php');
 ok('Auch "Lerneinheit anlegen" - als Anlegezeile, die auch im leeren Kurs steht',
    substr_count($einheitenKnopf, "'was'     => 'Lerneinheit anlegen'") === 1
@@ -5751,7 +5768,7 @@ ok('Und der Name darin ist ein echter Link',
  * spannen, deshalb liegt es daneben und die Felder verweisen darauf.
  */
 ok('Das Anlegen steckt in der Klassentabelle',
-   preg_match('/<tr class="newrow">/', $res['body']) === 1);
+   preg_match('/<tr class="newrow anlegen">/', $res['body']) === 1);
 ok('Das Namensfeld gehoert ueber form= dazu',
    str_contains($res['body'], 'form="newclass"'));
 ok('Es gibt keine eigene Karte mehr dafuer',
@@ -7822,6 +7839,16 @@ $res = teacherGet('course.php?id=' . $fsKursId);
 ok('Die Lerneinheiten haben die gemeinsame Anlegezeile',
    preg_match('/<tr class="newrow anlegen">/', $res['body']) === 1,
    'teacher_anlegezeile() - "Sprachkurs anlegen" auf der Klassenseite ist die Ausnahme');
+$anlegeZeile = static fn (string $was, string $form, string $name): string =>
+    '/<tr class="newrow anlegen"[^>]*>.*?<label class="anlegewas" for="[^"]+">'
+    . preg_quote($was, '/') . '<\/label>.*?<button class="iconaction primary anlegeplus"'
+    . ' form="' . $form . '" name="' . $name . '" value="1"[^>]*>'
+    . '<span aria-hidden="true">\+<\/span><\/button>/s';
+ok('Lerneinheiten und Kursliste: was entsteht ueber dem Feld, rechts nur "+"',
+   preg_match($anlegeZeile('Lerneinheit anlegen', 'neueEinheit', 'add_unit'), $res['body']) === 1
+   && (preg_match($anlegeZeile('In den Kurs aufnehmen', 'newmember', 'add_member_by_name'), $res['body']) === 1
+       || str_contains($res['body'], 'Alle Konten dieser Schule sind schon im Kurs'))
+   && !str_contains($res['body'], 'cflag plus'));
 $cssF = (string) file_get_contents(__DIR__ . '/../app/admin/admin.css');
 ok('Und die Reihe ist waagerecht',
    preg_match('/\.coursetitle\.addbuttons\s*\{[^}]*display:\s*flex/s', $cssF) === 1,

@@ -96,7 +96,6 @@ teacher_flash_render();
      * ueber form= darauf.
      */
     ?>
-    <tr class="newrow">
         <?php
         /*
          * Eine Zelle ueber alle Spalten, nicht drei nebeneinander.
@@ -107,20 +106,16 @@ teacher_flash_render();
          * "Anlegen" dann senkrecht.
          */
         ?>
-        <td colspan="4" data-label="Neue Klasse">
-            <span class="anlegezeile">
-                <span class="coursetitle">
-                    <span class="cflag plus">+</span>
-                    <input type="text" name="name" form="newclass" placeholder="5B"
-                           maxlength="32" required aria-label="Name der neuen Klasse">
-                </span>
-                <button class="iconaction primary" form="newclass"
-                        name="create_class" value="1" title="Klasse anlegen">
-                    <span aria-hidden="true">+</span> Anlegen
-                </button>
-            </span>
-        </td>
-    </tr>
+    <?= teacher_anlegezeile([
+        'was'     => 'Klasse anlegen',
+        'feld_id' => 'neueKlasseName',
+        'feld'    => '<input type="text" id="neueKlasseName" name="name" form="newclass"'
+                   . ' placeholder="5B" maxlength="32" required autocomplete="off">',
+        'form'    => 'newclass',
+        'name'    => 'create_class',
+        'spalten' => 3,
+        'einzug'  => true,
+    ]) ?>
 </table>
 
 <form method="post" id="newclass" hidden>
