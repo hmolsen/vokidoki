@@ -7008,24 +7008,47 @@ q('DELETE FROM course_members WHERE course_id = ? AND user_id = ?',
   [$fremderKursId, $lehrerId]);
 
 /*
- * Die neueste Lerneinheit reist mit - sie ist das Ziel des Freigeben-Knopfes
- * auf der Karte. Ohne sie muesste die Karte je Kurs nachfragen.
+ * Das Ziel des Freigeben-Knopfes reist mit: die erste Lerneinheit, in der
+ * noch etwas zurueckgehalten ist - ist alles frei, die neueste. Ohne das
+ * muesste die Karte je Kurs nachfragen.
  */
-$eigene = null;
-foreach ($meine as $k) {
-    if ((int) $k['id'] === $startKursId) { $eigene = $k; }
-}
-ok('Ohne Lerneinheit ist die neueste leer',
-   $eigene !== null && $eigene['latest_unit'] === null);
+$freigabeZiel = static function () use ($lehrerId, $startSchule, $startKursId): ?int {
+    foreach (courses_for_teacher($lehrerId, $startSchule) as $k) {
+        if ((int) $k['id'] === $startKursId) {
+            return $k['release_unit'] === null ? null : (int) $k['release_unit'];
+        }
+    }
+    return -1;
+};
+ok('Ohne Lerneinheit fuehrt "Freigeben" nirgends hin', $freigabeZiel() === null);
 
 $startUnit = makeUnit($lehrerId, (int) $startKurs['language_id'], 'Start-Unit');
-$meine = courses_for_teacher($lehrerId, $startSchule);
-foreach ($meine as $k) {
-    if ((int) $k['id'] === $startKursId) { $eigene = $k; }
+ok('Mit einer fuehrt es zu ihr', $freigabeZiel() === $startUnit, (string) $freigabeZiel());
+
+// Zwei weitere: die erste ganz frei, die zweite halb, die dritte gar nicht.
+$fzUnits = [];
+foreach (['Frei-A', 'Frei-B', 'Frei-C'] as $i => $titel) {
+    $fzUnits[$i] = makeUnit($lehrerId, (int) $startKurs['language_id'], $titel);
+    q('UPDATE units SET course_id = ?, position = ? WHERE id = ?', [$startKursId, 100 + $i, $fzUnits[$i]]);
+    foreach ([0, 1] as $p) {
+        q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, ?)',
+          [$fzUnits[$i], 'w' . $p, 'w' . $p, $p]);
+    }
 }
-ok('Mit einer ist sie die neueste',
-   (int) ($eigene['latest_unit'] ?? 0) === $startUnit,
-   (string) ($eigene['latest_unit'] ?? 'null'));
+// Die Start-Unit hat keine Vokabeln und haelt deshalb nichts zurueck.
+q('UPDATE units SET position = 99 WHERE id = ?', [$startUnit]);
+q('UPDATE units SET released_position = 2 WHERE id = ?', [$fzUnits[0]]);
+q('UPDATE units SET released_position = 1 WHERE id = ?', [$fzUnits[1]]);
+ok('"Freigeben" fuehrt zur ersten Lerneinheit, die nicht ganz frei ist',
+   $freigabeZiel() === $fzUnits[1], 'erwartet ' . $fzUnits[1] . ', bekommen ' . $freigabeZiel());
+$karte = teacherGet('index.php')['body'];
+ok('Und genau dorthin zeigt der Knopf auf der Karte',
+   str_contains($karte, 'unit.php?id=' . $fzUnits[1] . '">Freigeben</a>'));
+q('UPDATE units SET released_position = 2 WHERE id IN (?, ?)', [$fzUnits[1], $fzUnits[2]]);
+ok('Ist alles frei, fuehrt es zur neuesten', $freigabeZiel() === $fzUnits[2]);
+foreach ($fzUnits as $u) {
+    q('DELETE FROM units WHERE id = ?', [$u]);
+}
 
 // ---- Die Seite.
 

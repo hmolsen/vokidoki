@@ -513,9 +513,23 @@ function courses_for_teacher(int $userId, int $schoolId): array
                    JOIN units t ON t.id = v.unit_id
                   WHERE t.course_id = co.id
                     AND v.position < t.released_position) AS released,
-                (SELECT t.id FROM units t
-                  WHERE t.course_id = co.id
-                  ORDER BY t.position DESC, t.id DESC LIMIT 1) AS latest_unit
+                /*
+                 * Das Ziel von Freigeben auf der Karte: die erste Lerneinheit,
+                 * in der noch etwas zurueckgehalten ist - dort geht es weiter.
+                 * Vorher war es die neueste, und die ist beim Freigeben selten
+                 * dran: Eingelesen wird vorab, freigegeben Woche fuer Woche.
+                 * Ist alles frei, bleibt es die neueste.
+                 */
+                COALESCE(
+                    (SELECT t.id FROM units t
+                      WHERE t.course_id = co.id
+                        AND EXISTS (SELECT 1 FROM vocab v
+                                     WHERE v.unit_id = t.id AND v.position >= t.released_position)
+                      ORDER BY t.position, t.id LIMIT 1),
+                    (SELECT t.id FROM units t
+                      WHERE t.course_id = co.id
+                      ORDER BY t.position DESC, t.id DESC LIMIT 1)
+                ) AS release_unit
            FROM courses co
            JOIN course_members mine ON mine.course_id = co.id
                                    AND mine.user_id = ?

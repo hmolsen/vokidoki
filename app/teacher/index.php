@@ -59,7 +59,7 @@ function kurskarte(array $c, bool $eigener): string
 
     $knoepfe = '';
     if ($eigener) {
-        $neueste = (int) ($c['latest_unit'] ?? 0);
+        $freigabeEinheit = (int) ($c['release_unit'] ?? 0);
 
         /*
          * "+ Lerneinheit" legt eine leere an und fuehrt auf ihre Seite.
@@ -80,10 +80,10 @@ function kurskarte(array $c, bool $eigener): string
                 teacher_csrf_field(),
                 (int) $c['id'],
             )
-            . ($neueste > 0
+            . ($freigabeEinheit > 0
                 ? sprintf(
                     '<a class="btn small secondary" href="%s">Freigeben</a>',
-                    h(teacher_url('unit.php') . '?id=' . $neueste),
+                    h(teacher_url('unit.php') . '?id=' . $freigabeEinheit),
                 )
                 : '<span class="btn small secondary aus" aria-disabled="true"'
                   . ' title="Erst eine Lerneinheit einlesen">Freigeben</span>')
