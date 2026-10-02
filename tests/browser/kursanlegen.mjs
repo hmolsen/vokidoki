@@ -112,7 +112,8 @@ export async function pruefe(f, aus) {
 
         const kurs = await b.js(`({
             ort:     location.pathname + location.search,
-            titel:   document.querySelector('h1')?.textContent ?? '',
+            // Ohne das Haeuschen vorn im Pfad - gefragt ist der Name.
+            titel:   (() => { const h = document.querySelector('h1')?.cloneNode(true); h?.querySelectorAll('.haus, .titelsep').forEach((e) => e.remove()); return h?.textContent?.trim() ?? ''; })(),
             meldung: document.querySelector('.notice')?.textContent?.trim()
                         .replace(/\\s+/g, ' ') ?? '',
             pfad:    !!document.querySelector('.crumbs'),
@@ -162,7 +163,7 @@ export async function pruefe(f, aus) {
             const zurueck = [...document.querySelectorAll('a.btn')]
                 .find((a) => a.textContent.includes('Zurück zum Kurs'));
             return {
-                titel:   document.querySelector('h1')?.textContent ?? '',
+                titel:   (() => { const h = document.querySelector('h1')?.cloneNode(true); h?.querySelectorAll('.haus, .titelsep').forEach((e) => e.remove()); return h?.textContent?.trim() ?? ''; })(),
                 zurueck: zurueck?.getAttribute('href') ?? '',
                 imMenue: [...document.querySelectorAll('#menuLinks .mitem')]
                             .some((e) => e.textContent.includes('Latein - ')),
@@ -178,7 +179,7 @@ export async function pruefe(f, aus) {
 
         await b.geh(f.basis + inKlasse.zurueck.replace(/^.*\/teacher\//, '/teacher/'), 1300);
         ok('Der Weg zurück führt wirklich dorthin',
-           (await b.js(`document.querySelector('h1')?.textContent ?? ''`))
+           (await b.js(`(() => { const h = document.querySelector('h1')?.cloneNode(true); h?.querySelectorAll('.haus, .titelsep').forEach((e) => e.remove()); return h?.textContent?.trim() ?? ''; })()`))
                .startsWith('Latein - '));
 
         // ---- Und die Startseite kennt ihn.
