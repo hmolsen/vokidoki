@@ -143,7 +143,7 @@ export async function pruefe(f, aus) {
          * nach oben fuehrt das Haeuschen im Pfad.
          */
         const kopf = await b.js(`(() => {
-            const a = document.querySelector('h1 a.kursknopf');
+            const a = document.querySelector('h1 a.kursknopf:not(.haus)');
             return {
                 ziel: a?.getAttribute('href') ?? '',
                 text: a?.textContent?.trim() ?? '',
@@ -161,7 +161,7 @@ export async function pruefe(f, aus) {
         ok('„Meine Kurse" steht nicht mehr daneben', !kopf.meineKurse,
            'dafür gibt es das Häuschen im Pfad');
 
-        await b.js(`document.querySelector('h1 a.kursknopf').click()`);
+        await b.js(`document.querySelector('h1 a.kursknopf:not(.haus)').click()`);
         await schlafe(1400);
         ok('Und ein Druck darauf führt in den Kurs',
            (await b.js(`location.search`)).includes('id=' + f.kurs));
