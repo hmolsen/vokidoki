@@ -6475,6 +6475,56 @@ ok('Eine bekannte wird gespeichert, samt Preis',
 adminPost('settings.php', ['save_tts' => '1', 'tts_enabled' => '1', 'tts_region' => 'germanywestcentral', 'tts_price' => '16']);
 settings_reset_cache();
 
+// ---- Freigeben: Fehlen Aufnahmen, entstehen sie im Hintergrund.
+// Bisher nur, wenn auch Sätze fehlten - waren alle Sätze schon da, blieb
+// es beim Fehlen, bis jemand im Admin nachtrug.
+$fgKurs = course_create(q1('SELECT * FROM users WHERE id = ?', [$lehrerId]),
+                        'Französisch', "\u{1F1EB}\u{1F1F7}", null, 'Freigabe-Hör ' . bin2hex(random_bytes(2)));
+$fgKursId = is_string($fgKurs) ? 0 : (int) $fgKurs['id'];
+q("UPDATE languages SET code = 'fr' WHERE id = ?", [(int) ($fgKurs['language_id'] ?? 0)]);
+q('INSERT INTO units (language_id, course_id, title, released_position, position) VALUES (?, ?, ?, 0, 1)',
+  [(int) ($fgKurs['language_id'] ?? 0), $fgKursId, 'Freigabe-Hör-Unit']);
+$fgUnit = (int) db()->lastInsertId();
+foreach (['chat' => 'Le {} dort.', 'chien' => 'Le {} joue.'] as $i => $satz) {
+    q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, ?)',
+      [$fgUnit, $i, 'de-' . $i, $i === 'chat' ? 0 : 1]);
+    q('INSERT INTO sentences (vocab_id, native_text, foreign_text, answer) VALUES (?, ?, ?, ?)',
+      [(int) db()->lastInsertId(), 'Satz', $satz, $i]);
+}
+ok('Vor der Freigabe: Sätze da, Aufnahmen nicht', vocab_without_sentences($fgUnit) === 0 && tts_fehlend($fgUnit) === 2);
+
+$fgRes = teacherRequest($base . '/teacher/unit.php?id=' . $fgUnit, [
+    'release' => 2, 'unit_id' => $fgUnit, 'csrf' => $lehrerCsrf,
+]);
+$fgBis = microtime(true) + 20;
+while (tts_fehlend($fgUnit) > 0 && microtime(true) < $fgBis) {
+    usleep(300_000);
+}
+ok('Freigeben trägt fehlende Aufnahmen im Hintergrund nach - auch wenn kein Satz fehlt',
+   tts_fehlend($fgUnit) === 0, tts_fehlend($fgUnit) . ' fehlen noch');
+ok('Und die Meldung sagt es',
+   str_contains($fgRes['body'], 'Die Aufnahmen zum Hören entstehen gerade'));
+
+// Zwei Läufe zugleich schicken dieselben Sätze nicht zweimal: eine Sperre je Lerneinheit.
+$fgDb = cfg('db');
+$fgAndere = new PDO(sprintf('mysql:host=%s;port=%d;dbname=%s', $fgDb['host'], (int) $fgDb['port'], $fgDb['name']),
+                    $fgDb['user'], $fgDb['pass']);
+$fgAndere->query("SELECT GET_LOCK('vt-tts-" . $fgUnit . "', 0)");
+q('DELETE FROM sentence_audio WHERE sentence_id = (SELECT MIN(s.id) FROM sentences s JOIN vocab v ON v.id = s.vocab_id WHERE v.unit_id = ?)',
+  [$fgUnit]);
+$fgGesperrt = tts_nachtragen($fgUnit, q1('SELECT * FROM users WHERE id = ?', [$lehrerId]));
+ok('Läuft schon ein Lauf für die Lerneinheit, wartet der zweite nicht - er lässt es',
+   $fgGesperrt['erzeugt'] === 0 && str_contains((string) $fgGesperrt['fehler'], 'gerade schon'),
+   json_encode($fgGesperrt, JSON_UNESCAPED_UNICODE));
+$fgAndere->query("SELECT RELEASE_LOCK('vt-tts-" . $fgUnit . "')");
+$fgAndere = null;
+ok('Ist er fertig, geht der nächste durch',
+   tts_nachtragen($fgUnit, q1('SELECT * FROM users WHERE id = ?', [$lehrerId]))['erzeugt'] === 1);
+
+q('DELETE FROM units WHERE id = ?', [$fgUnit]);
+q('DELETE FROM courses WHERE id = ?', [$fgKursId]);
+q('DELETE FROM languages WHERE id = ?', [(int) ($fgKurs['language_id'] ?? 0)]);
+
 // ---- Der kostenlose Tarif (F0): kein Preis, aber ein Freikontingent.
 setting_set('tts_tarif', 'F0');
 ok('Im kostenlosen Tarif kostet eine Aufnahme nichts', tts_kosten(100000) === 0.0);

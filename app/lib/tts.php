@@ -176,6 +176,32 @@ function tts_nachtragen(int $unitId, array $user): array
         return ['erzeugt' => 0, 'offen' => 0, 'fehler' => null];
     }
 
+    /*
+     * Ein Lauf je Lerneinheit zur Zeit. Zwei Freigaben kurz nacheinander,
+     * oder eine Freigabe und der Knopf im Admin, schickten sonst dieselben
+     * Sätze zweimal an Azure - doppelt bezahlt oder doppelt vom
+     * Freikontingent. Die Sperre hält die Datenbank (GET_LOCK), sie fällt mit
+     * der Verbindung, auch wenn ein Lauf abbricht.
+     */
+    $sperre = 'vt-tts-' . $unitId;
+    if ((int) qv('SELECT GET_LOCK(?, 0)', [$sperre]) !== 1) {
+        return ['erzeugt' => 0, 'offen' => count($offen),
+                'fehler' => 'Für diese Lerneinheit entstehen die Aufnahmen gerade schon.'];
+    }
+    try {
+        return tts_nachtragen_gesperrt($unitId, $user, $stimme, $offen);
+    } finally {
+        try {
+            qv('SELECT RELEASE_LOCK(?)', [$sperre]);
+        } catch (Throwable) {
+            // Die Verbindung kann nach einem langen Lauf neu sein - dann ist die Sperre ohnehin weg.
+        }
+    }
+}
+
+/** Der Lauf selbst - unter der Sperre aus tts_nachtragen(). */
+function tts_nachtragen_gesperrt(int $unitId, array $user, array $stimme, array $offen): array
+{
     $blockiert = budget_block_reason((int) $user['id']);
     if ($blockiert !== null) {
         return ['erzeugt' => 0, 'offen' => count($offen), 'fehler' => $blockiert];
