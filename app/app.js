@@ -14,6 +14,7 @@ import { unitView } from './views/unit.js';
 import { quizView } from './views/quiz.js';
 import { clozeView } from './views/cloze.js';
 import { einsetzenView } from './views/einsetzen.js';
+import { hoerenView } from './views/hoeren.js';
 import { profileView } from './views/profile.js';
 import { freiView, freiWahlView } from './views/frei.js';
 import { einwilligungView } from './views/einwilligung.js';
@@ -58,7 +59,7 @@ function aktiverKurs() {
     const direkt = pfad.match(/^\/lang\/(\d+)/);
     if (direkt) return Number(direkt[1]);
 
-    const ueber = pfad.match(/^\/(?:unit|quiz|einsetzen|cloze)\/(\d+)/);
+    const ueber = pfad.match(/^\/(?:unit|quiz|einsetzen|cloze|hoeren)\/(\d+)/);
     if (ueber) return einheit(ueber[1])?.l ?? null;
 
     return null;
@@ -81,6 +82,7 @@ const ROUTES = [
     [/^\/quiz\/(\d+)$/,           quizView],
     [/^\/einsetzen\/(\d+)$/,      einsetzenView],
     [/^\/cloze\/(\d+)$/,          clozeView],
+    [/^\/hoeren\/(\d+)$/,         hoerenView],
     /*
      * Freies Ueben. Zwei Wege hinein: von einer Lerneinheit direkt
      * (#/unit/12/frei, oben) und vom Kurs ueber die Auswahl, die dann eine

@@ -1841,7 +1841,7 @@ section('Einsetzen - die dritte Übungsart');
  * verworfen worden.
  */
 require_once __DIR__ . '/../app/lib/progress.php';
-ok('Die Übungsarten stehen an einer Stelle', MODES === ['mc', 'pick', 'cloze']);
+ok('Die Übungsarten stehen an einer Stelle', MODES === ['mc', 'pick', 'cloze', 'listen']);
 foreach (['app/api/bundle.php', 'app/api/units.php'] as $datei) {
     ok("$datei prüft gegen diese Liste",
        !str_contains((string) file_get_contents(__DIR__ . '/../' . $datei), '[MODE_CHOICE, MODE_CLOZE]'));
@@ -6084,7 +6084,8 @@ ok('Waehrend der Erzeugung dreht sich ein Spinner',
    str_contains($unitQuelle, "info.status === 'running'")
    && str_contains($unitQuelle, 'spinner inline'));
 ok('Und die Zeile ist solange nicht anklickbar',
-   preg_match('/const zu\s*=\s*wartet \|\| fertig;/', $unitQuelle) === 1
+   // Dazu kommt bei Hören: die Sätze da, die Aufnahmen noch nicht ("aufnahmen").
+   preg_match('/const zu\s*=\s*wartet \|\| fertig( \|\| aufnahmen)?;/', $unitQuelle) === 1
    && preg_match('/\$\{zu \? .disabled./', $unitQuelle) === 1);
 // Eine geschaffte Uebung ebenso - aber gruen statt grau, und mit ihrem Symbol.
 ok('Eine geschaffte Uebung ist ebenfalls nicht anklickbar',
@@ -6395,6 +6396,22 @@ $hFremdStatus = apiAls($hTopf, function () use ($hUrl) {
 });
 ok('Wer nicht im Kurs ist, bekommt sie nicht', $hFremdStatus === 404, (string) $hFremdStatus);
 ok('Ohne Anmeldung auch nicht', apiAls(tempnam(sys_get_temp_dir(), 'vt'), fn () => http($hUrl)['status']) === 401);
+// ---- Die Übung: eine Antwort "Hören" wird gebucht wie jede andere.
+ok('Hören hat einen eigenen Lernstand', in_array('listen', MODES, true) && MODE_LISTEN === 'listen');
+$hVokabel = (int) qv('SELECT vocab_id FROM sentences WHERE id = ?', [$hSaetze[0]]);
+[$hPush] = apiCall('bundle', 'push', ['ereignisse' => [
+    ['e' => 'hoer-' . bin2hex(random_bytes(6)), 'v' => $hVokabel, 'm' => 'listen', 'r' => true],
+]]);
+ok('Eine Antwort "Hören" wird angenommen und gebucht',
+   ($hPush['genommen'] ?? 0) === 1
+   && (int) qv("SELECT correct_count FROM progress WHERE user_id = ? AND vocab_id = ? AND mode = 'listen'",
+               [$userId, $hVokabel]) === 1, json_encode($hPush));
+[$hEinheit] = apiCall('units', 'get', null, ['id' => $hUnit]);
+$hErste = array_values(array_filter($hEinheit['vocab'] ?? [], fn ($v) => (int) $v['id'] === $hVokabel))[0] ?? [];
+ok('Und die Lerneinheit nennt den Stand je Vokabel - übbar, weil es eine Aufnahme gibt',
+   ($hErste['modes']['listen']['possible'] ?? null) === true
+   && ($hErste['modes']['listen']['correct'] ?? null) === 1, json_encode($hErste['modes']['listen'] ?? null));
+
 q('UPDATE units SET released_position = 0 WHERE id = ?', [$hUnit]);
 ok('Und ein noch nicht freigegebener Satz bleibt zu', http($hUrl)['status'] === 404);
 

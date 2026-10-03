@@ -2719,3 +2719,76 @@ dialog.rueckfrage:has(.titelwahl) { width: min(100% - 32px, 420px); }
     .seriefeier, .seriefeier-titel, .seriefeier-voki, .seriefeier-zahl { animation: none; }
     .seriefeier-band { animation: none; transform: translateY(calc(var(--schritte) * -1em)); }
 }
+
+/* ------------------------------------------------------------------ Hören */
+
+/*
+ * Hören (views/hoeren.js): oben die beiden Knöpfe zum Abspielen, darunter
+ * die Zeile, in die der Satz gelegt wird, unten die Wortknöpfe.
+ */
+.hoerknoepfe {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+    margin: 6px 0 18px;
+}
+.hoerknopf {
+    width: 76px;
+    height: 76px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    background: var(--surface);
+    color: var(--accent);
+    font-size: 2rem;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+}
+.hoerknopf.langsam { width: 54px; height: 54px; font-size: 1.4rem; border-color: var(--border); }
+.hoerknopf.laeuft  { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.hoerknopf:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+/*
+ * Die Zeile für den Satz: Ziel zum Hineinziehen, und so hoch wie ein
+ * Wortknopf, auch leer - sonst sprang alles darunter, sobald das erste Wort
+ * lag.
+ */
+.satzlinie {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    min-height: calc(var(--tap) + 16px);
+    padding: 8px 4px;
+    border-bottom: 3px solid var(--accent);
+    transition: background .15s ease;
+}
+.satzlinie.ueber { background: var(--surface-2); border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+
+/* Gelegt und unten: dieselben Knöpfe, aber nur so breit wie ihr Wort. */
+.hoerwoerter .wort,
+.satzlinie .wort { flex: 0 1 auto; min-width: 3ch; }
+.satzlinie .wort { min-height: 46px; padding: 6px 12px; }
+/* Ein gelegtes Wort lässt unten eine Lücke, damit die übrigen nicht springen. */
+.hoerwoerter .wort.benutzt { visibility: hidden; }
+
+/* Wo das gezogene Wort landen würde. */
+.einfueger {
+    flex: none;
+    width: 3px;
+    height: 40px;
+    border-radius: 2px;
+    background: var(--accent);
+}
+
+/* Die Übersetzung erst nach dem Prüfen - vorher verriete sie den Satz. */
+.hoer-native {
+    margin: 10px 0 0;
+    color: var(--text-soft);
+    text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .satzlinie { transition: none; }
+}

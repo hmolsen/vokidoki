@@ -33,6 +33,9 @@ export async function pruefe(f, aus, wurzel) {
         + "if ((int) qv('SELECT COUNT(*) FROM sentences WHERE vocab_id = ?', [$v]) === 0) {"
         + "  q(\"INSERT INTO sentences (vocab_id, native_text, foreign_text, answer)"
         + "     VALUES (?, 'Ein Satz.', 'Hier {} fehlt.', 'x')\", [$v]); }"
+        // Und die Aufnahmen dazu - sonst gaebe es kein Hören, zu dem es ginge.
+        + "require_once 'lib/tts.php'; require_once 'lib/courses.php';"
+        + "tts_nachtragen(" + f.unit + ", course_billing_user((int) qv('SELECT course_id FROM units WHERE id = ?', [" + f.unit + "])));"
         + "echo $v;"));
 
     /** Den Lernstand setzen: welche Übungsarten die Vokabel schon kann. */
@@ -96,24 +99,32 @@ export async function pruefe(f, aus, wurzel) {
            e.text === 'Mit \u{270F}\u{FE0F} Lückentext weitermachen', e.text);
         ok('Ein Druck öffnet den Lückentext', (await klick()) === `#/cloze/${f.unit}`);
 
-        // ---- Nur der Lückentext geschafft: wieder von vorn, beim Auswählen.
-        lernstand(['cloze']);
+        // ---- Die drei ersten geschafft: weiter zum Hören, der letzten Stufe.
+        lernstand(['mc', 'pick', 'cloze']);
         e = await endeVon('cloze');
-        ok('Nach dem Lückentext der Knopf zum Auswählen',
+        ok('Nach dem Lückentext führt der Knopf zum Hören',
+           e.text === 'Mit \u{1F3A7} Hören weitermachen', e.text);
+        ok('Ein Druck öffnet das Hören', (await klick()) === `#/hoeren/${f.unit}`);
+
+        // ---- Lückentext und Hören geschafft: wieder von vorn, beim Auswählen.
+        lernstand(['cloze', 'listen']);
+        e = await endeVon('hoeren');
+        ok('Nach dem Hören steht die Geschafft-Seite', e.ende === 'Hören geschafft!', e.ende);
+        ok('Und der Knopf führt wieder von vorn, zum Auswählen',
            e.text === 'Mit \u{1F3AF} Auswählen weitermachen', e.text);
         ok('Ein Druck öffnet das Auswählen', (await klick()) === `#/quiz/${f.unit}`);
 
-        // ---- Lückentext und Auswählen geschafft, Einsetzen offen.
-        lernstand(['mc', 'cloze']);
+        // ---- Alles ausser Einsetzen geschafft.
+        lernstand(['mc', 'cloze', 'listen']);
         e = await endeVon('cloze');
         ok('Ist nur noch das Einsetzen offen, führt der Lückentext dorthin',
            e.text === 'Mit \u{1F9E9} Einsetzen weitermachen', e.text);
 
-        // ---- Alle drei geschafft.
-        lernstand(['mc', 'pick', 'cloze']);
-        for (const uebung of ['quiz', 'einsetzen', 'cloze']) {
+        // ---- Alle vier geschafft.
+        lernstand(['mc', 'pick', 'cloze', 'listen']);
+        for (const uebung of ['quiz', 'einsetzen', 'cloze', 'hoeren']) {
             e = await endeVon(uebung);
-            ok(`Sind alle drei geschafft, führt ${uebung} ins Freie Üben`,
+            ok(`Sind alle vier geschafft, führt ${uebung} ins Freie Üben`,
                e.text === 'Freies Üben' && e.hantel, JSON.stringify(e));
         }
         if (aus) await b.bild('weiter-frei');

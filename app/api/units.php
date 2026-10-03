@@ -170,6 +170,13 @@ switch (action()) {
                     COALESCE(pp.correct_count, 0) AS pk_correct,
                     COALESCE(pp.wrong_count, 0)   AS pk_wrong,
                     pp.known_at                   AS pk_known,
+                    COALESCE(pl.streak, 0)        AS li_streak,
+                    COALESCE(pl.correct_count, 0) AS li_correct,
+                    COALESCE(pl.wrong_count, 0)   AS li_wrong,
+                    pl.known_at                   AS li_known,
+                    EXISTS (SELECT 1 FROM sentences s2
+                              JOIN sentence_audio a ON a.sentence_id = s2.id
+                             WHERE s2.vocab_id = v.id) AS has_audio,
                     COALESCE(pc.streak, 0)        AS cl_streak,
                     COALESCE(pc.correct_count, 0) AS cl_correct,
                     COALESCE(pc.wrong_count, 0)   AS cl_wrong,
@@ -182,10 +189,12 @@ switch (action()) {
                       ON pp.vocab_id = v.id AND pp.mode = ? AND pp.user_id = ?
                LEFT JOIN progress pc
                       ON pc.vocab_id = v.id AND pc.mode = ? AND pc.user_id = ?
+               LEFT JOIN progress pl
+                      ON pl.vocab_id = v.id AND pl.mode = ? AND pl.user_id = ?
               WHERE v.unit_id = ? AND v.position < ?
               ORDER BY v.position, v.id",
-            [MODE_CHOICE, $uid, MODE_PICK, $uid, MODE_CLOZE, $uid, (int) $unit['id'],
-             visible_position($user, $unit)],
+            [MODE_CHOICE, $uid, MODE_PICK, $uid, MODE_CLOZE, $uid, MODE_LISTEN, $uid,
+             (int) $unit['id'], visible_position($user, $unit)],
         );
 
         $liste = [];
@@ -219,6 +228,14 @@ switch (action()) {
                         'known'    => $v['cl_known'] !== null,
                         // Ohne Satz lässt sich diese Vokabel hier nicht üben.
                         'possible' => (int) $v['has_sentences'] === 1,
+                    ],
+                    // Hören braucht einen Satz mit Aufnahme - und eine Stimme (lib/tts.php).
+                    'listen' => [
+                        'streak'   => (int) $v['li_streak'],
+                        'correct'  => (int) $v['li_correct'],
+                        'wrong'    => (int) $v['li_wrong'],
+                        'known'    => $v['li_known'] !== null,
+                        'possible' => (int) $v['has_audio'] === 1,
                     ],
                 ],
             ];
