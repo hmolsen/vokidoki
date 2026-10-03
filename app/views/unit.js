@@ -24,14 +24,15 @@ const UEBUNGEN = [
 ];
 
 /*
- * Die Übungsarten mit einem Zeichen neben jeder Vokabel.
+ * Die Übungsarten neben jeder Vokabel - alle, auch Einsetzen.
  *
- * Einsetzen fehlt hier mit Absicht: Neben jeder Vokabel stehen zwei
- * Zellen - Zeichen und drei Punkte oder Haken -, und für eine dritte ist
- * auf dem Telefon kein Platz. Solange die Liste nicht neu gezeichnet ist,
- * zählt sie auch nicht zu "in allen Übungen geschafft".
+ * Einsetzen fehlte hier eine Weile: Je Übung standen Zeichen und drei
+ * Punkte nebeneinander, rund 50 px, und für eine dritte war am Telefon kein
+ * Platz. Jetzt stehen die Zeichen einmal oben über der Liste und je Zeile
+ * nur ein Ring aus drei Teilen - 22 px je Übung, auch für weitere, die noch
+ * kommen. Die Namen stehen in der aufgeklappten Zeile.
  */
-const EXERCISES = UEBUNGEN.filter((u) => u.mode !== 'pick');
+const EXERCISES = UEBUNGEN;
 
 const uebung = (mode) => UEBUNGEN.find((u) => u.mode === mode);
 
@@ -70,11 +71,12 @@ export async function unitView(unitId) {
     const vocab = vokabelListe(unitId);
     const modes = modusStand(unitId);
 
-    // Beide Übungsarten zusammen - eine Vokabel ist erst durch, wenn sie in
+    // Alle Übungsarten zusammen - eine Vokabel ist erst durch, wenn sie in
     // jeder Form sitzt, in der sie überhaupt geübt werden kann.
-    const summe = (mode, feld) => vocab.reduce((s, v) => s + v.modes[mode][feld], 0);
-    const correct = summe('mc', 'correct') + summe('cloze', 'correct');
-    const wrong   = summe('mc', 'wrong')   + summe('cloze', 'wrong');
+    const summe = (feld) => vocab.reduce(
+        (s, v) => s + EXERCISES.reduce((t, e) => t + v.modes[e.mode][feld], 0), 0);
+    const correct = summe('correct');
+    const wrong   = summe('wrong');
     const asked   = correct + wrong;
     const quota   = asked > 0 ? Math.round((correct / asked) * 100) : null;
 
@@ -82,18 +84,29 @@ export async function unitView(unitId) {
         (v) => EXERCISES.every((e) => !v.modes[e.mode].possible || v.modes[e.mode].known),
     );
 
+    /*
+     * Je Vokabel eine Zeile mit einem Ring je Übung; ein Druck klappt sie
+     * auf und zeigt die Übungen mit Namen und den drei Punkten. Als
+     * <details>, damit das ohne eine Zeile Skript geht - und mit der
+     * Tastatur.
+     */
     const list = vocab.map((v) => `
-        <div class="row vocab">
-            <span class="body">
-                <span class="title">${esc(v.term_foreign)}</span>
-                <span class="tiny muted">${esc(v.term_native)}${
-                    v.note ? ` &middot; ${esc(v.note)}` : ''
-                }</span>
-            </span>
-            <span class="marks">
+        <details class="vocabzeile">
+            <summary class="row vocab">
+                <span class="body">
+                    <span class="title">${esc(v.term_foreign)}</span>
+                    <span class="tiny muted">${esc(v.term_native)}${
+                        v.note ? ` &middot; ${esc(v.note)}` : ''
+                    }</span>
+                </span>
+                <span class="ringe">
+                    ${EXERCISES.map((e) => ring(e, v.modes[e.mode])).join('')}
+                </span>
+            </summary>
+            <div class="vocabdetail">
                 ${EXERCISES.map((e) => mark(e, v.modes[e.mode])).join('')}
-            </span>
-        </div>
+            </div>
+        </details>
     `).join('');
 
     render(`
@@ -101,7 +114,7 @@ export async function unitView(unitId) {
         ${topbar(unit.title, { backTo: `/lang/${unit.language_id}` })}
         <div id="msg"></div>
 
-        ${komplett ? '<div class="notice good">Diese Lerneinheit hast du in beiden Übungen geschafft!</div>' : ''}
+        ${komplett ? '<div class="notice good">Diese Lerneinheit hast du in allen Übungen geschafft!</div>' : ''}
 
         <h2>Üben</h2>
         <div id="exercises">
@@ -129,10 +142,16 @@ export async function unitView(unitId) {
             </p>`}
 
         <h2>Alle Vokabeln (${vocab.length})</h2>
-        <p class="legend tiny muted">
-            ${EXERCISES.map((e) => `${e.icon} ${esc(e.title)}`).join(' &nbsp;&middot;&nbsp; ')}
-        </p>
-        ${list}
+        <div class="vocabliste">
+            <div class="vocabkopf">
+                <span class="tiny muted">Antippen für Einzelheiten</span>
+                <span class="ringe">
+                    ${EXERCISES.map((e) => `<span class="ringzeichen" title="${esc(e.title)}"
+                        aria-label="${esc(e.title)}">${e.icon}</span>`).join('')}
+                </span>
+            </div>
+            ${list}
+        </div>
 
         <h2>Verwalten</h2>
         <div class="btn-row" style="margin-bottom:10px">
@@ -146,6 +165,7 @@ export async function unitView(unitId) {
 
     wireBack();
 
+    kopfUnterLeiste();
     wireExercises(unit.id);
     watchSentences(unit.id, modes);
     nachFreigabeSehen(unit.id, modes);
@@ -378,7 +398,49 @@ function exerciseRow(mode, icon, title, hint, info) {
 }
 
 /**
+ * Die Kopfzeile der Vokabelliste hängt beim Rollen unter der Leiste oben.
+ *
+ * Wo die Leiste endet, hängt davon ab, ob der Streifen "Lernansicht" über
+ * ihr steht und wie hoch der Sicherheitsabstand des Geräts ist - also
+ * gemessen statt geschätzt: ihr eigenes top (sticky) plus ihre Höhe. Neu
+ * bei jeder Größenänderung, weil der Titel darin umbrechen kann.
+ */
+function kopfUnterLeiste() {
+    const leiste = document.querySelector('.topbar');
+    const liste  = document.querySelector('.vocabliste');
+    if (!leiste || !liste) return;
+    const messen = () => {
+        const oben = parseFloat(getComputedStyle(leiste).top) || 0;
+        liste.style.setProperty('--leiste', `${Math.round(oben + leiste.offsetHeight)}px`);
+    };
+    messen();
+    new ResizeObserver(messen).observe(leiste);
+}
+
+/**
+ * Der Stand einer Vokabel in einer Übungsart als Ring aus drei Teilen.
+ *
+ * Jeder Teil ist ein Treffer in Folge - dasselbe wie die drei Punkte, nur
+ * rund und schmal. Gekonnt ist eine volle grüne Scheibe mit Haken; was noch
+ * fehlt, springt so ins Auge. Ein Strich heißt: noch kein Lückensatz.
+ */
+function ring(exercise, info) {
+    if (!info.possible) {
+        return `<span class="ring aus" title="${esc(exercise.title)}: noch kein Lückensatz"
+                      aria-label="${esc(exercise.title)}: noch kein Lückensatz">&ndash;</span>`;
+    }
+    if (info.known) {
+        return `<span class="ring fertig" title="${esc(exercise.title)}: gekonnt"
+                      aria-label="${esc(exercise.title)}: gekonnt">\u{2713}</span>`;
+    }
+    const n = Math.min(3, Math.max(0, info.streak));
+    return `<span class="ring" style="--n:${n}" title="${esc(exercise.title)}: ${n} von 3 hintereinander"
+                  aria-label="${esc(exercise.title)}: ${n} von 3 hintereinander"></span>`;
+}
+
+/**
  * Der Stand einer Vokabel in einer Übungsart: Haken, drei Punkte oder Strich.
+ * Steht in der aufgeklappten Zeile, mit dem Namen der Übung davor.
  * Der Strich heißt "noch kein Lückensatz" - etwa weil das Modell für diese
  * Vokabel keinen brauchbaren erzeugen konnte. Im Admin lässt sich nachtragen.
  */
@@ -387,7 +449,8 @@ function mark(exercise, info) {
     // breiter als ein Haken, sonst tanzten die Symbole von Zeile zu Zeile.
     const zelle = (inhalt, titel) => `
         <span class="mark" title="${esc(titel)}">
-            <span class="mark-icon">${exercise.icon}</span>
+            <span class="mark-name"><span class="mark-icon">${exercise.icon}</span>
+                ${esc(exercise.title)}</span>
             <span class="mark-state">${inhalt}</span>
         </span>`;
 

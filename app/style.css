@@ -1330,95 +1330,136 @@ dialog.rueckfrage::backdrop { background: rgba(10, 14, 22, .45); }
 
 /* ------------------------------------------------- Vokabelliste mit Ständen */
 
-/* Legende über der Liste - erklärt die Symbole rechts an jeder Zeile. */
-.legend {
-    margin: -4px 0 10px;
-    text-align: right;
+/*
+ * Je Übung ein Ring, die Zeichen einmal oben darüber.
+ *
+ * Vorher standen je Übung Zeichen und drei Punkte nebeneinander, rund 50 px -
+ * für eine dritte Übung war am Telefon kein Platz, und Einsetzen fehlte
+ * deshalb ganz. Ein Ring braucht --ring, und das Zeichen darüber steht in
+ * einer Spalte genau dieser Breite. Ein Druck auf die Zeile klappt die
+ * Übungen mit Namen und Punkten auf.
+ */
+.vocabliste {
+    --ring: 22px;
+    --ring-abstand: 10px;
 }
 
-.row.vocab {
-    cursor: default;
+/*
+ * Die Kopfzeile mit den Zeichen läuft beim Rollen mit - weit unten in einer
+ * langen Liste wüsste sonst niemand mehr, welcher Ring welche Übung ist.
+ * Sie hängt unter der Leiste oben; deren Höhe setzt unit.js als --leiste.
+ */
+.vocabkopf {
+    position: sticky;
+    top: var(--leiste, 0px);
+    z-index: 20;
+    display: flex;
     align-items: center;
     gap: 10px;
+    /* Wie die Karten darunter: 16 px Polster und 1 px Rand. */
+    padding: 6px 17px;
+    margin: 0 0 6px;
+    background: var(--bg);
 }
-.row.vocab:active { transform: none; }
+.vocabkopf .tiny { flex: 1; min-width: 0; }
 
-.marks {
-    /* Drei Punkte à 9px mit zwei Abständen à 5px - daran richtet sich der
-       Haken aus, damit er nicht schmaler ausfällt und nach rechts rutscht. */
-    --state-w: 37px;
-
+.ringe {
     display: flex;
     flex: none;
-    gap: 12px;
+    gap: var(--ring-abstand);
     align-items: center;
 }
-
-/*
- * Jede Übungsart bekommt zwei Zellen fester Breite: Symbol und Stand. Drei
- * Punkte sind breiter als ein Haken und der wiederum breiter als ein Strich -
- * ohne feste Breiten tanzten die Symbole von Zeile zu Zeile, weil der Block
- * rechtsbündig steht.
- */
-.mark {
-    display: flex;
-    align-items: center;
-    gap: 4px;
+.ringzeichen {
+    width: var(--ring);
+    text-align: center;
+    font-size: 1rem;
     line-height: 1;
-    flex: none;
-}
-
-.mark-icon {
-    width: 17px;
-    flex: none;
-    text-align: center;
-    font-size: .95rem;
-}
-
-.mark-state {
-    width: var(--state-w);
-    flex: none;
-    display: flex;
-    align-items: center;
 }
 
 /*
- * Alle drei Zustände - Punkte, Haken, Strich - füllen dieselbe Breite. Sonst
- * spannt die Punktreihe über die ganze Zelle, während der schmale Haken
- * mittig darin sitzt, und die Spalte wirkt verschoben.
+ * Der Ring: drei Teile mit schmalen Fugen, gefüllt so viele, wie Treffer in
+ * Folge da sind (--n). Gezeichnet als zwei Kegelverläufe - der grüne Anteil
+ * über dem grauen Grund -, ausgestanzt zur Mitte hin.
  */
-.marks .dots,
-.mark-done,
-.mark-off {
-    width: var(--state-w);
+.ring {
+    --n: 0;
+    position: relative;
     flex: none;
+    width: var(--ring);
+    height: var(--ring);
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background:
+        conic-gradient(var(--good) calc(var(--n) * 120deg), transparent 0),
+        conic-gradient(var(--border) 0 114deg, transparent 0 120deg,
+                       var(--border) 0 234deg, transparent 0 240deg,
+                       var(--border) 0 354deg, transparent 0);
+    -webkit-mask: radial-gradient(circle, transparent 6.5px, #000 7px);
+            mask: radial-gradient(circle, transparent 6.5px, #000 7px);
 }
-
-/* Über die feste Breite verteilt - unabhängig von Rundungen beim Abstand. */
-.marks .dots { justify-content: space-between; }
-
-.mark-done,
-.mark-off {
-    text-align: center;
+/* Gekonnt: eine volle Scheibe - was noch fehlt, springt daneben ins Auge. */
+.ring.fertig {
+    -webkit-mask: none;
+            mask: none;
+    background: var(--good);
+    color: #fff;
+    font-size: .72rem;
+    font-weight: 900;
+    line-height: 1;
 }
-
-.mark-done {
-    color: var(--good);
-    font-weight: 700;
-    font-size: 1.05rem;
-}
-
-.mark-off {
+/* Kein Lückensatz: nichts zu füllen, nur ein Strich. */
+.ring.aus {
+    -webkit-mask: none;
+            mask: none;
+    background: none;
     color: var(--text-soft);
     opacity: .55;
 }
 
-/* Auf sehr schmalen Geräten rücken die beiden Spalten zusammen, statt
-   untereinander zu rutschen - so bleiben die Symbole in einer Linie. */
-@media (max-width: 360px) {
-    .marks { gap: 8px; --state-w: 31px; }
-    .marks .dots i { width: 7px; height: 7px; }
+/* Die Zeile selbst: eine Karte wie die übrigen, aufklappbar. */
+.vocabzeile > summary { list-style: none; }
+.vocabzeile > summary::-webkit-details-marker { display: none; }
+.row.vocab {
+    align-items: center;
+    gap: 10px;
 }
+.row.vocab:active { transform: none; }
+.vocabzeile > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Aufgeklappt hängen die Einzelheiten unten an derselben Karte. */
+.vocabzeile[open] > summary.row {
+    margin-bottom: 0;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    box-shadow: none;
+}
+.vocabdetail {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px 18px;
+    margin-bottom: 10px;
+    padding: 10px 16px 12px;
+    border: 1px solid var(--border);
+    border-top: 0;
+    border-radius: 0 0 var(--radius) var(--radius);
+    background: var(--surface-2);
+    font-size: .9rem;
+}
+
+/* Je Übung: Zeichen und Name links, drei Punkte, Haken oder Strich rechts. */
+.mark {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+.mark-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.mark-icon { flex: none; width: 18px; text-align: center; }
+.mark-state { flex: none; display: flex; align-items: center; }
+.mark-done { color: var(--good); font-weight: 700; font-size: 1.05rem; }
+.mark-off  { color: var(--text-soft); opacity: .55; }
 
 /* ---------------------------------------------------------------- Aktualisierung */
 

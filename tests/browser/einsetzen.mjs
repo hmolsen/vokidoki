@@ -58,16 +58,38 @@ export async function pruefe(f, aus, wurzel) {
         const ansicht = await b.js(`({
             reihen: [...document.querySelectorAll('#exercises [data-mode-row]')].map((r) => r.dataset.modeRow),
             titel:  document.querySelector('[data-mode-row="pick"] .title')?.textContent,
-            legende: document.querySelector('.legend')?.textContent ?? '',
-            zeichen: document.querySelector('.row.vocab .marks')?.querySelectorAll('.mark').length,
+            kopf:    [...document.querySelectorAll('.vocabkopf .ringzeichen')].map((z) => z.getAttribute('title')),
+            ringe:   document.querySelector('.vocabzeile .ringe')?.querySelectorAll('.ring').length,
         })`);
         ok('"Einsetzen" steht zwischen Auswählen und Lückentext',
            JSON.stringify(ansicht.reihen) === JSON.stringify(['mc', 'pick', 'cloze']),
            JSON.stringify(ansicht.reihen));
         ok('Und heisst so', ansicht.titel === 'Einsetzen', ansicht.titel);
-        ok('Neben den Vokabeln steht es nicht - dort ist nur Platz für zwei',
-           ansicht.zeichen === 2 && !ansicht.legende.includes('Einsetzen'),
-           `${ansicht.zeichen} Zeichen, Legende: ${ansicht.legende}`);
+        ok('Neben den Vokabeln steht es auch - je Übung ein Ring, die Zeichen oben',
+           ansicht.ringe === 3
+           && JSON.stringify(ansicht.kopf) === JSON.stringify(['Auswählen', 'Einsetzen', 'Lückentext']),
+           `${ansicht.ringe} Ringe, Kopf: ${JSON.stringify(ansicht.kopf)}`);
+
+        // Jedes Zeichen steht genau über seinem Ring - auch zwei Zeilen tiefer.
+        const spalten = await b.js(`(() => {
+            const mitte = (el) => { const r = el.getBoundingClientRect(); return Math.round(r.left + r.width / 2); };
+            const kopf = [...document.querySelectorAll('.vocabkopf .ringzeichen')].map(mitte);
+            const zeile = [...document.querySelectorAll('.vocabzeile')].at(-1);
+            return { kopf, ringe: [...zeile.querySelectorAll('.ring')].map(mitte) };
+        })()`);
+        ok('Jedes Zeichen steht über seinem Ring',
+           spalten.kopf.length === 3 && spalten.kopf.every((x, i) => Math.abs(x - spalten.ringe[i]) <= 1),
+           JSON.stringify(spalten));
+
+        // Ein Druck klappt die Zeile auf und nennt die Übungen beim Namen.
+        const detail = await b.js(`(() => {
+            const z = document.querySelector('.vocabzeile');
+            z.querySelector('summary').click();
+            return { offen: z.open, namen: [...z.querySelectorAll('.vocabdetail .mark-name')].map((n) => n.textContent.trim()) };
+        })()`);
+        ok('Ein Druck auf die Zeile zeigt die Übungen mit Namen',
+           detail.offen && detail.namen.length === 3 && detail.namen.some((n) => n.includes('Einsetzen')),
+           JSON.stringify(detail));
 
         // Die Leiste bleibt stehen, wenn die Seite rollt - wie im Lehrkraft-Bereich.
         await b.groesse(390, 480);

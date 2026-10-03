@@ -2101,8 +2101,11 @@ section('Übersicht der Lerneinheit');
 ok('Die Lerneinheit liefert ihre Vokabeln', $code === 200 && count($u['vocab'] ?? []) > 0);
 
 $erste = $u['vocab'][0] ?? [];
-ok('Jede Vokabel bringt beide Übungsarten mit',
-   isset($erste['modes']['mc'], $erste['modes']['cloze']), json_encode(array_keys($erste)));
+ok('Jede Vokabel bringt alle drei Übungsarten mit - auch Einsetzen',
+   isset($erste['modes']['mc'], $erste['modes']['pick'], $erste['modes']['cloze']),
+   json_encode(array_keys($erste['modes'] ?? [])));
+ok('Einsetzen haengt am selben Satz wie der Lueckentext',
+   ($erste['modes']['pick']['possible'] ?? null) === ($erste['modes']['cloze']['possible'] ?? 'x'));
 ok('Mit Serie, Treffern und Stand je Übungsart',
    isset($erste['modes']['mc']['streak'], $erste['modes']['mc']['known'],
          $erste['modes']['cloze']['correct'], $erste['modes']['cloze']['possible']));
@@ -2124,6 +2127,8 @@ foreach ($u2['vocab'] as $v) {
 ok('Die Grußformel steht in der Liste', $gruss !== null);
 ok('Ohne Satz zeigt der Lückentext einen Strich',
    $gruss !== null && $gruss['modes']['cloze']['possible'] === false);
+ok('Und Einsetzen auch',
+   $gruss !== null && $gruss['modes']['pick']['possible'] === false);
 ok('Beim Auswählen ist sie sofort übbar',
    $gruss !== null && $gruss['modes']['mc']['possible'] === true);
 
@@ -2151,38 +2156,29 @@ ok('Die Stände beider Übungsarten werden getrennt geführt',
    is_int($mcGekonnt) && is_int($clozeGekonnt),
    "Auswählen $mcGekonnt, Lückentext $clozeGekonnt");
 
-// Der Haken ist ein schmales Zeichen, die Punktreihe fuellt ihre Zelle ganz
-// aus. Sitzen beide in verschieden breiten Zellen, springt die Spalte von
-// Zeile zu Zeile. Geprueft wird deshalb die Rechnung selbst, nicht nur, dass
-// die Regeln dastehen.
+/*
+ * Die Liste: je Übung ein Ring, die Zeichen einmal oben darüber. Damit
+ * jedes Zeichen über seinem Ring steht, teilen sich beide dieselbe Breite
+ * (--ring) und denselben Abstand, und die Kopfzeile ist so eingerückt wie
+ * die Karten darunter (16 px Polster und 1 px Rand).
+ */
 $css = (string) file_get_contents(__DIR__ . '/../app/style.css');
-
-$zahl = static function (string $muster) use ($css): int {
-    return preg_match($muster, $css, $m) === 1 ? (int) $m[1] : 0;
-};
-
-$stateW = $zahl('/\.marks\s*\{[^}]*--state-w:\s*(\d+)px/s');
-$punkt  = $zahl('/\.dots i\s*\{\s*width:\s*(\d+)px/s');
-$luecke = $zahl('/\.dots\s*\{[^}]*gap:\s*(\d+)px/s');
-
-ok('Die Zellenbreite steht als eine Zahl in der Datei', $stateW > 0, (string) $stateW);
-ok('Punkte, Haken und Strich teilen sich dieselbe Breite',
-   preg_match('/\.marks \.dots,\s*\.mark-done,\s*\.mark-off\s*\{[^}]*width:\s*var\(--state-w\)/s', $css) === 1);
-ok('Drei Punkte fuellen die Zelle genau aus',
-   $punkt > 0 && $luecke > 0 && 3 * $punkt + 2 * $luecke === $stateW,
-   "3x{$punkt}px + 2x{$luecke}px = " . (3 * $punkt + 2 * $luecke) . "px, Zelle {$stateW}px");
-ok('Die Punkte verteilen sich ueber die volle Breite',
-   preg_match('/\.marks \.dots\s*\{[^}]*justify-content:\s*space-between/s', $css) === 1);
-ok('Haken und Strich stehen mittig darin - also ueber dem mittleren Punkt',
-   preg_match('/\.mark-done,\s*\.mark-off\s*\{[^}]*text-align:\s*center/s', $css) === 1);
-
-// Auf schmalen Geraeten schrumpfen Zelle und Punkte gemeinsam; sonst waere die
-// Ausrichtung genau dort dahin, wo der Platz am knappsten ist.
-$engW     = $zahl('/@media[^{]*360px[^}]*\.marks\s*\{[^}]*--state-w:\s*(\d+)px/s');
-$engPunkt = $zahl('/\.marks \.dots i\s*\{\s*width:\s*(\d+)px/s');
-ok('Auch auf schmalen Geraeten geht die Rechnung auf',
-   $engW > 0 && $engPunkt > 0 && 3 * $engPunkt + 2 * $luecke === $engW,
-   "3x{$engPunkt}px + 2x{$luecke}px = " . (3 * $engPunkt + 2 * $luecke) . "px, Zelle {$engW}px");
+$unitJs = (string) file_get_contents(__DIR__ . '/../app/views/unit.js');
+ok('Neben den Vokabeln stehen alle Übungen, auch Einsetzen',
+   str_contains($unitJs, 'const EXERCISES = UEBUNGEN;'),
+   'vorher fehlte Einsetzen - fuer eine dritte Zelle war kein Platz');
+ok('Ring und Zeichen darüber teilen sich eine Breite',
+   preg_match('/\.ring\s*\{[^}]*width:\s*var\(--ring\)/s', $css) === 1
+   && preg_match('/\.ringzeichen\s*\{[^}]*width:\s*var\(--ring\)/s', $css) === 1);
+ok('Die Kopfzeile ist eingerückt wie die Karten',
+   preg_match('/\.vocabkopf\s*\{[^}]*padding:\s*\d+px 17px/s', $css) === 1
+   && preg_match('/\.row\s*\{[^}]*padding:\s*15px 16px;[^}]*border:\s*1px/s', $css) === 1);
+ok('Und läuft beim Rollen unter der Leiste mit',
+   preg_match('/\.vocabkopf\s*\{[^}]*position:\s*sticky;[^}]*top:\s*var\(--leiste/s', $css) === 1
+   && str_contains($unitJs, "setProperty('--leiste'"));
+ok('Ein Druck auf die Zeile klappt die Übungen mit Namen auf - ohne Skript',
+   str_contains($unitJs, '<details class="vocabzeile">')
+   && str_contains($unitJs, '<div class="vocabdetail">'));
 
 section('Filter im Admin');
 

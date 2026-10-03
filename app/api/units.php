@@ -166,6 +166,10 @@ switch (action()) {
                     COALESCE(pm.correct_count, 0) AS mc_correct,
                     COALESCE(pm.wrong_count, 0)   AS mc_wrong,
                     pm.known_at                   AS mc_known,
+                    COALESCE(pp.streak, 0)        AS pk_streak,
+                    COALESCE(pp.correct_count, 0) AS pk_correct,
+                    COALESCE(pp.wrong_count, 0)   AS pk_wrong,
+                    pp.known_at                   AS pk_known,
                     COALESCE(pc.streak, 0)        AS cl_streak,
                     COALESCE(pc.correct_count, 0) AS cl_correct,
                     COALESCE(pc.wrong_count, 0)   AS cl_wrong,
@@ -174,11 +178,13 @@ switch (action()) {
                FROM vocab v
                LEFT JOIN progress pm
                       ON pm.vocab_id = v.id AND pm.mode = ? AND pm.user_id = ?
+               LEFT JOIN progress pp
+                      ON pp.vocab_id = v.id AND pp.mode = ? AND pp.user_id = ?
                LEFT JOIN progress pc
                       ON pc.vocab_id = v.id AND pc.mode = ? AND pc.user_id = ?
               WHERE v.unit_id = ? AND v.position < ?
               ORDER BY v.position, v.id",
-            [MODE_CHOICE, $uid, MODE_CLOZE, $uid, (int) $unit['id'],
+            [MODE_CHOICE, $uid, MODE_PICK, $uid, MODE_CLOZE, $uid, (int) $unit['id'],
              visible_position($user, $unit)],
         );
 
@@ -197,6 +203,14 @@ switch (action()) {
                         'wrong'    => (int) $v['mc_wrong'],
                         'known'    => $v['mc_known'] !== null,
                         'possible' => true,
+                    ],
+                    // Einsetzen braucht denselben Satz wie der Lückentext.
+                    'pick' => [
+                        'streak'   => (int) $v['pk_streak'],
+                        'correct'  => (int) $v['pk_correct'],
+                        'wrong'    => (int) $v['pk_wrong'],
+                        'known'    => $v['pk_known'] !== null,
+                        'possible' => (int) $v['has_sentences'] === 1,
                     ],
                     'cloze' => [
                         'streak'   => (int) $v['cl_streak'],

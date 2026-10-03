@@ -300,8 +300,11 @@ export function vokabelListe(unitId) {
     if (v === null) return [];
 
     return vokabelnDerEinheit(unitId).map((w) => {
-        const wahl   = standVon(w.i, MODUS_WAHL);
-        const luecke = standVon(w.i, MODUS_LUECKE);
+        const wahl      = standVon(w.i, MODUS_WAHL);
+        const einsetzen = standVon(w.i, MODUS_EINSETZEN);
+        const luecke    = standVon(w.i, MODUS_LUECKE);
+        // Einsetzen und Lückentext brauchen einen Satz (MIT_SATZ).
+        const mitSatz   = (v.saetze.get(w.i)?.length ?? 0) > 0;
         return {
             id: w.i,
             term_foreign: w.f,
@@ -312,10 +315,13 @@ export function vokabelListe(unitId) {
                     streak: wahl.s, correct: wahl.c, wrong: wahl.w,
                     known: wahl.k === 1, possible: true,
                 },
+                pick: {
+                    streak: einsetzen.s, correct: einsetzen.c, wrong: einsetzen.w,
+                    known: einsetzen.k === 1, possible: mitSatz,
+                },
                 cloze: {
                     streak: luecke.s, correct: luecke.c, wrong: luecke.w,
-                    known: luecke.k === 1,
-                    possible: (v.saetze.get(w.i)?.length ?? 0) > 0,
+                    known: luecke.k === 1, possible: mitSatz,
                 },
             },
         };
