@@ -6350,6 +6350,25 @@ $hAlteDatei = (string) qv('SELECT file FROM sentence_audio WHERE sentence_id = ?
 q('UPDATE sentences SET foreign_text = ? WHERE id = ?', ['Le {} dort bien.', $hSaetze[0]]);
 ok('Ein verbesserter Satz gilt als ohne Aufnahme', tts_fehlend($hUnit) === 1);
 
+// ---- Wenn Azure bremst (HTTP 429): warten und noch einmal, nicht aufgeben.
+// Beim ersten Nachtragen auf vokidoki.de standen 55 Sätze als Fehler da,
+// weil der kostenlose Tarif nur rund zwanzig Anfragen je Minute nimmt.
+$h429 = bin2hex(random_bytes(3));
+$hStart = microtime(true);
+$hBremse = tts_anfragen(keyvault_tts_key(), [
+    ['id' => 1, 'text' => 'Erst gebremst RATE-429 ' . $h429],
+    ['id' => 2, 'text' => 'Immer gebremst IMMER-429 ' . $h429],
+    ['id' => 3, 'text' => 'Gar nicht gebremst ' . $h429],
+], tts_stimme('fr'));
+$hDauer = microtime(true) - $hStart;
+ok('Gebremst, gewartet, beim zweiten Mal durch', is_string($hBremse[1] ?? null));
+ok('Was immer gebremst wird, gibt nach ein paar Versuchen auf - mit Grund',
+   is_array($hBremse[2] ?? null) && str_contains($hBremse[2]['fehler'], '429'),
+   json_encode($hBremse[2] ?? null));
+ok('Und reisst die übrigen nicht mit', is_string($hBremse[3] ?? null));
+ok('Gewartet wird so lange, wie Azure sagt (Retry-After)',
+   $hDauer >= (TTS_VERSUCHE - 1) * 0.9 && $hDauer < 20, sprintf('%.1f s', $hDauer));
+
 // ---- Das Bündel sagt dem Gerät, welche Sätze eine Aufnahme haben.
 
 [$hBundle] = apiCall('bundle', 'get');

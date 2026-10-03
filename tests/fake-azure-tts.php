@@ -48,6 +48,27 @@ if (str_contains($m[2], 'FEHLER-TTS')) {
 }
 
 /*
+ * Die Bremse von Azure (HTTP 429, mit Retry-After): IMMER-429 bekommt sie
+ * jedesmal, RATE-429 nur beim ersten Mal je Text - gemerkt in einer Datei,
+ * weil jede Anfrage hier ein frischer Lauf ist.
+ */
+if (str_contains($m[2], 'IMMER-429')) {
+    http_response_code(429);
+    header('Retry-After: 1');
+    exit;
+}
+if (str_contains($m[2], 'RATE-429')) {
+    $merker = sys_get_temp_dir() . '/fake-tts-' . md5($m[2]);
+    if (!is_file($merker)) {
+        touch($merker);
+        http_response_code(429);
+        header('Retry-After: 1');
+        exit;
+    }
+    unlink($merker);
+}
+
+/*
  * Stille als MP3: MPEG-1 Layer III, 128 kbit/s, 44,1 kHz, mono. Ein Rahmen
  * ist 417 Bytes lang - Kopf, Seiteninformation aus Nullen (also kein Ton),
  * Rest Nullen. Achtunddreissig Rahmen sind knapp eine Sekunde.

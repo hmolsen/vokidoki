@@ -67,6 +67,15 @@ const TTS_REGIONEN = [
 /** So viele Sätze gehen gleichzeitig an Azure - genug für Tempo, wenig genug für das Ratenlimit. */
 const TTS_PARALLEL = 4;
 
+/** So oft wird ein Satz versucht, wenn Azure bremst (HTTP 429). */
+const TTS_VERSUCHE = 4;
+
+/**
+ * So lange darf ein Lauf auf Azure warten, in Sekunden. Der Knopf im Admin
+ * hat fünf Minuten; was danach fehlt, holt der nächste Lauf nach.
+ */
+const TTS_ZEITRAHMEN = 240;
+
 /** MP3, mono, 48 kbit/s: rund 15 KB je Satz und für Sprache mehr als genug. */
 const TTS_FORMAT = 'audio-24khz-48kbitrate-mono-mp3';
 
@@ -262,6 +271,14 @@ function tts_endpunkt(): string
  * Sätzen gut zwei Minuten - im Hintergrund zwar, aber so lange stünde
  * "Hören" für die Klasse leer da.
  *
+ * DRÜCKT AZURE AUF DIE BREMSE (HTTP 429), WIRD GEWARTET, NICHT AUFGEGEBEN.
+ * Im kostenlosen Tarif sind es nur rund zwanzig Anfragen je Minute; beim
+ * ersten Nachtragen auf vokidoki.de kamen 206 Aufnahmen durch, dann lehnte
+ * Azure ab, und die übrigen 55 standen als Fehler da. Jetzt: so lange
+ * warten, wie Azure im Kopf Retry-After sagt, denselben Satz noch einmal
+ * schicken - und ab da nur noch einen zur Zeit. Was nach TTS_ZEITRAHMEN
+ * nicht durch ist, fehlt eben und kommt beim nächsten Lauf.
+ *
  * @param list<array{id:int, text:string}> $saetze
  * @return array<int, string|array{fehler:string}> MP3 je Satz, oder der Fehler
  */
@@ -271,6 +288,10 @@ function tts_anfragen(string $schluessel, array $saetze, array $stimme): array
     $multi    = curl_multi_init();
     $laufend  = [];
     $warte    = $saetze;
+    $versuche = [];
+    $parallel = TTS_PARALLEL;
+    $nichtVor = 0.0;                                   // Pause, die Azure verlangt hat
+    $schluss  = microtime(true) + TTS_ZEITRAHMEN;
 
     $starten = static function (array $s) use ($multi, &$laufend, $schluessel, $stimme): void {
         $ssml = sprintf(
@@ -279,6 +300,8 @@ function tts_anfragen(string $schluessel, array $saetze, array $stimme): array
             htmlspecialchars($s['text'], ENT_XML1 | ENT_QUOTES, 'UTF-8'),
         );
         $ch = curl_init(tts_endpunkt());
+        $eintrag = ['ch' => $ch, 'satz' => $s, 'warten' => null];
+        $laufend[(int) $ch] = &$eintrag;
         curl_setopt_array($ch, [
             CURLOPT_POST           => true,
             CURLOPT_POSTFIELDS     => $ssml,
@@ -291,40 +314,70 @@ function tts_anfragen(string $schluessel, array $saetze, array $stimme): array
             ],
             CURLOPT_CONNECTTIMEOUT => 5,
             CURLOPT_TIMEOUT        => 30,
+            // Retry-After mitlesen - wie lange Azure Ruhe haben will.
+            CURLOPT_HEADERFUNCTION => static function ($ch, string $zeile) use (&$eintrag): int {
+                if (preg_match('/^Retry-After:\s*(\d+)/i', $zeile, $m) === 1) {
+                    $eintrag['warten'] = (int) $m[1];
+                }
+                return strlen($zeile);
+            },
         ]);
         curl_multi_add_handle($multi, $ch);
-        $laufend[(int) $ch] = [$ch, $s['id']];
+        unset($eintrag);
     };
 
-    while ($warte !== [] && count($laufend) < TTS_PARALLEL) {
-        $starten(array_shift($warte));
-    }
+    while (true) {
+        while ($warte !== [] && count($laufend) < $parallel && microtime(true) >= $nichtVor) {
+            $starten(array_shift($warte));
+        }
 
-    do {
+        if ($laufend === []) {
+            if ($warte === []) {
+                break;
+            }
+            // Alle warten auf das Ende der Pause - oder die Zeit ist um.
+            if ($nichtVor >= $schluss) {
+                foreach ($warte as $s) {
+                    $ergebnis[$s['id']] = ['fehler' => 'Azure antwortet mit HTTP 429 (zu viele Anfragen).'];
+                }
+                break;
+            }
+            usleep((int) (max(0.05, $nichtVor - microtime(true)) * 1_000_000));
+            continue;
+        }
+
         curl_multi_exec($multi, $aktiv);
         curl_multi_select($multi, 0.2);
         while (($info = curl_multi_info_read($multi)) !== false) {
-            $ch = $info['handle'];
-            [, $id] = $laufend[(int) $ch];
+            $ch      = $info['handle'];
+            $eintrag = $laufend[(int) $ch];
             unset($laufend[(int) $ch]);
+            $s = $eintrag['satz'];
+            $id = $s['id'];
 
             $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $body   = curl_multi_getcontent($ch);
+            $versuche[$id] = ($versuche[$id] ?? 0) + 1;
+
             if ($info['result'] !== CURLE_OK) {
                 $ergebnis[$id] = ['fehler' => 'Azure nicht erreichbar: ' . curl_error($ch)];
+            } elseif (($status === 429 || $status === 503) && $versuche[$id] < TTS_VERSUCHE
+                      && microtime(true) < $schluss) {
+                // Bremse: warten, wie verlangt (sonst wachsend), und einzeln weiter.
+                $warten   = $eintrag['warten'] ?? 2 ** $versuche[$id];
+                $nichtVor = max($nichtVor, microtime(true) + min(30, max(1, $warten)));
+                $parallel = 1;
+                array_unshift($warte, $s);
             } elseif ($status !== 200 || !is_string($body) || strlen($body) < 100) {
-                $ergebnis[$id] = ['fehler' => 'Azure antwortet mit HTTP ' . $status . '.'];
+                $ergebnis[$id] = ['fehler' => 'Azure antwortet mit HTTP ' . $status
+                    . ($status === 429 ? ' (zu viele Anfragen).' : '.')];
             } else {
                 $ergebnis[$id] = $body;
             }
             curl_multi_remove_handle($multi, $ch);
             curl_close($ch);
-
-            if ($warte !== []) {
-                $starten(array_shift($warte));
-            }
         }
-    } while ($laufend !== []);
+    }
 
     curl_multi_close($multi);
     return $ergebnis;
