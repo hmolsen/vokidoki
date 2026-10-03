@@ -175,7 +175,10 @@ function budget_block_reason(int $userId): ?string
 /** Schreibt einen Eintrag ins Kostenprotokoll und liefert die Kosten in USD. */
 function ai_log(array $row): float
 {
-    $cost = cost_for(
+    // Wer anders abrechnet als nach Token - die Aufnahmen nach Zeichen
+    // (lib/tts.php) -, bringt den Betrag selbst mit. Durch cost_for() ginge
+    // die Stimme als unbekanntes Modell zum teuersten Tokenpreis durch.
+    $cost = isset($row['cost_usd']) ? (float) $row['cost_usd'] : cost_for(
         (string) $row['model'],
         (int) ($row['input_tokens'] ?? 0),
         (int) ($row['output_tokens'] ?? 0),

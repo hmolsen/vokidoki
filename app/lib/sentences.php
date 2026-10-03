@@ -6,6 +6,7 @@ require_once __DIR__ . '/ai.php';
 require_once __DIR__ . '/wordtypes.php';
 require_once __DIR__ . '/progress.php';
 require_once __DIR__ . '/courses.php';
+require_once __DIR__ . '/tts.php';
 
 // use gilt je Datei - die Anweisungen aus lib/ai.php reichen hier nicht.
 use Anthropic\Messages\JSONOutputFormat;
@@ -775,6 +776,8 @@ function generate_sentences_tracked(int $unitId): void
             $unitId,
             cloze_sentence_count($unitId) > 0 ? SENTENCE_DONE : SENTENCE_PENDING,
         );
+        // Die Sätze sind da - fehlen noch Aufnahmen, kommen sie jetzt.
+        sentence_audio_nachtragen($unitId, $user);
         return;
     }
 
@@ -809,4 +812,25 @@ function generate_sentences_tracked(int $unitId): void
     // im Admin nachtragen.
     sentence_status_set($unitId, SENTENCE_DONE,
         $res['failed'] !== null ? 'Teilweise: ' . $res['failed'] : null);
+
+    sentence_audio_nachtragen($unitId, $user);
+}
+
+/**
+ * Die Aufnahmen für "Hören" - im selben Lauf, gleich nach den Sätzen.
+ *
+ * Erst nachdem der Zustand der Sätze steht: Die Klasse kann den Lückentext
+ * schon üben, während gesprochen wird. Ein Fehler hier kostet nur die
+ * Aufnahmen, nie die Sätze - deshalb abgefangen und nur protokolliert.
+ */
+function sentence_audio_nachtragen(int $unitId, array $user): void
+{
+    try {
+        $res = tts_nachtragen($unitId, $user);
+        if ($res['fehler'] !== null) {
+            error_log('[vokabeltrainer] Aufnahmen, Lerneinheit ' . $unitId . ': ' . $res['fehler']);
+        }
+    } catch (Throwable $e) {
+        error_log('[vokabeltrainer] Aufnahmen: ' . scrub_secrets($e->getMessage()));
+    }
 }

@@ -18,6 +18,12 @@ const SETTING_DEFAULTS = [
     // Berichtigen von Lesefehlern, und hier bestimmt die Ausgabemenge den Preis.
     'sentence_model'       => 'claude-sonnet-5-5',
     'sentences_per_vocab'  => '3',
+    // Schritt 3, die Aufnahmen für "Hören" (lib/tts.php): Azure Speech,
+    // abgerechnet nach Zeichen. Die Region bestimmt, wo gesprochen wird -
+    // Frankfurt hält die Sätze in der EU.
+    'tts_enabled'          => '1',
+    'tts_region'           => 'germanywestcentral',
+    'tts_price_per_million' => '16.00',
     'usd_eur'              => '0.92',
     'monthly_cost_cap_usd' => '10.00',
     'imports_per_hour'     => '20',

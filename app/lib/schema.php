@@ -109,6 +109,21 @@ function schema_migrations(): array
                ('adjective', 'schön', NULL, 1), ('adjective', 'froh', NULL, 1), ('adjective', 'fein', NULL, 1), ('adjective', 'kühn', NULL, 1), ('adjective', 'toll', NULL, 1), ('adjective', 'flott', NULL, 1), ('adjective', 'hübsch', NULL, 1), ('adjective', 'lässig', NULL, 1), ('adjective', 'schick', NULL, 1), ('adjective', 'clever', NULL, 1), ('adjective', 'genial', NULL, 1), ('adjective', 'wunderbar', NULL, 1), ('adjective', 'friedlich', NULL, 1), ('adjective', 'kreativ', NULL, 1), ('adjective', 'zauberhaft', NULL, 1), ('adjective', 'fantastisch', NULL, 1), ('adjective', 'elegant', NULL, 1), ('adjective', 'frisch', NULL, 1), ('adjective', 'strahlend', NULL, 1), ('adjective', 'glänzend', NULL, 1)
              ON DUPLICATE KEY UPDATE active = VALUES(active)",
         ],
+        // Die Aufnahmen der Lückensätze für "Hören" - siehe lib/tts.php.
+        'sentence_audio' => [
+            static fn (): bool => !table_exists('sentence_audio'),
+            <<<'SQL'
+CREATE TABLE IF NOT EXISTS sentence_audio (
+  sentence_id  INT UNSIGNED PRIMARY KEY,
+  voice        VARCHAR(64)  NOT NULL,
+  hash         CHAR(12)     NOT NULL,
+  file         VARCHAR(128) NOT NULL,
+  bytes        INT UNSIGNED NOT NULL DEFAULT 0,
+  created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_audio_sentence FOREIGN KEY (sentence_id) REFERENCES sentences(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL,
+        ],
         /*
          * Opus 5.5 und Sonnet 5.5: ihre Preise, und die Voreinstellungen.
          *

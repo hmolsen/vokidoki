@@ -73,6 +73,7 @@ const ZWECK = [
     'vocab_ocr'  => 'Fehlerkorrektur',
     'sentences'  => 'Lückensätze',
     'word_types' => 'Kategorien',
+    'tts'        => 'Aufnahmen',
 ];
 
 $perModel = qa(

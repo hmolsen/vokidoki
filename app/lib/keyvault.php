@@ -20,9 +20,24 @@ final class KeyvaultException extends RuntimeException
  */
 function keyvault_anthropic_key(?string $keyName = null): string
 {
+    return keyvault_geheimnis($keyName ?? (string) cfg('keyvault_key', 'vokabeltrainer'));
+}
+
+/**
+ * Der Schlüssel für die Sprachausgabe (Azure Speech, lib/tts.php) - ein
+ * eigener Eintrag im selben Keyvault, aus demselben Grund: rotierbar, ohne
+ * config.php anzufassen.
+ */
+function keyvault_tts_key(): string
+{
+    return keyvault_geheimnis((string) cfg('keyvault_tts_key', 'vokabeltrainer-tts'));
+}
+
+/** Einen Eintrag aus dem Keyvault holen - roh, geprüft, nie zwischengespeichert. */
+function keyvault_geheimnis(string $name): string
+{
     $url   = rtrim((string) cfg('keyvault_url', ''), '?&');
     $token = (string) cfg('keyvault_token', '');
-    $name  = $keyName ?? (string) cfg('keyvault_key', 'vokabeltrainer');
 
     if ($url === '' || $token === '') {
         throw new KeyvaultException(

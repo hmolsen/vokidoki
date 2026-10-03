@@ -37,8 +37,15 @@ php tests/keyvault.php
 node tests/browser/lauf.mjs --fixture
 ```
 
-`tests/fake-keyvault.php` und `tests/fake-anthropic.php` stehen für die
-KI-Aufrufe bereit; `daten/config.php` zeigt lokal bereits auf sie (Port 8124/8125).
+`tests/fake-keyvault.php`, `tests/fake-anthropic.php` und `tests/fake-azure-tts.php`
+stehen für die KI-Aufrufe und die Aufnahmen ("Hören") bereit; `daten/config.php`
+zeigt lokal bereits auf sie (Port 8124/8125/8126):
+
+```
+php -S 127.0.0.1:8124 tests/fake-keyvault.php
+php -S 127.0.0.1:8125 tests/fake-anthropic.php
+php -S 127.0.0.1:8126 tests/fake-azure-tts.php
+```
 
 ## Aufbau
 

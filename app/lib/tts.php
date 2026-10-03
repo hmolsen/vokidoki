@@ -1,0 +1,344 @@
+<?php
+declare(strict_types=1);
+
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/settings.php';
+require_once __DIR__ . '/cost.php';
+require_once __DIR__ . '/keyvault.php';
+
+/*
+ * Die Aufnahmen für "Hören": jeder Lückensatz einmal ganz gesprochen.
+ *
+ * Gesprochen wird einmal, gleich nachdem die Sätze entstanden sind, und
+ * dann als Datei abgelegt - nicht bei jedem Anhören. So bezahlt man einen
+ * Satz einmal, und das Gerät kann ihn ohne Netz abspielen.
+ *
+ * Die Stimmen kommen von Microsoft (Azure Speech). Im Vergleich mit Piper,
+ * Kokoro und der Stimme des Geräts klangen sie mit Abstand am natürlichsten,
+ * und sie klingen auf jedem Gerät gleich. Was dorthin geht, ist nur der
+ * Satz, den das Modell geschrieben hat - nichts über ein Kind.
+ *
+ * Der Schlüssel steht im Keyvault (keyvault_tts_key()), wie der für
+ * Anthropic. Fehlt er oder antwortet Azure nicht, fehlen eben Aufnahmen:
+ * Geübt wird "Hören" nur mit Sätzen, die eine haben, und alles andere läuft
+ * weiter wie bisher.
+ */
+
+/**
+ * Die Stimme je Sprache: [xml:lang, Name bei Azure].
+ *
+ * Latein fehlt mit Absicht - dafür gibt es keine Stimme, und damit keine
+ * Übung "Hören" in Lateinkursen. Dasselbe gilt für jede Sprache, die hier
+ * nicht steht.
+ */
+const TTS_STIMMEN = [
+    'en' => ['en-GB', 'en-GB-SoniaNeural'],
+    'fr' => ['fr-FR', 'fr-FR-DeniseNeural'],
+    'es' => ['es-ES', 'es-ES-ElviraNeural'],
+    'it' => ['it-IT', 'it-IT-ElsaNeural'],
+    'pt' => ['pt-PT', 'pt-PT-RaquelNeural'],
+    'nl' => ['nl-NL', 'nl-NL-ColetteNeural'],
+    'da' => ['da-DK', 'da-DK-ChristelNeural'],
+    'sv' => ['sv-SE', 'sv-SE-SofieNeural'],
+    'nb' => ['nb-NO', 'nb-NO-PernilleNeural'],
+    'no' => ['nb-NO', 'nb-NO-PernilleNeural'],
+    'pl' => ['pl-PL', 'pl-PL-ZofiaNeural'],
+    'cs' => ['cs-CZ', 'cs-CZ-VlastaNeural'],
+    'ru' => ['ru-RU', 'ru-RU-SvetlanaNeural'],
+    'tr' => ['tr-TR', 'tr-TR-EmelNeural'],
+    'el' => ['el-GR', 'el-GR-AthinaNeural'],
+    'de' => ['de-DE', 'de-DE-KatjaNeural'],
+    'zh' => ['zh-CN', 'zh-CN-XiaoxiaoNeural'],
+    'ja' => ['ja-JP', 'ja-JP-NanamiNeural'],
+    'ar' => ['ar-SA', 'ar-SA-ZariyahNeural'],
+];
+
+/** Die Regionen, die im Admin zur Wahl stehen - alle in Europa. */
+const TTS_REGIONEN = [
+    'germanywestcentral' => 'Deutschland, Frankfurt',
+    'westeurope'         => 'Westeuropa, Niederlande',
+    'northeurope'        => 'Nordeuropa, Irland',
+    'francecentral'      => 'Frankreich, Paris',
+    'swedencentral'      => 'Schweden',
+    'switzerlandnorth'   => 'Schweiz, Zürich',
+];
+
+/** So viele Sätze gehen gleichzeitig an Azure - genug für Tempo, wenig genug für das Ratenlimit. */
+const TTS_PARALLEL = 4;
+
+/** MP3, mono, 48 kbit/s: rund 15 KB je Satz und für Sprache mehr als genug. */
+const TTS_FORMAT = 'audio-24khz-48kbitrate-mono-mp3';
+
+/** Die Stimme für einen Sprachcode, oder null - dann gibt es kein "Hören". */
+function tts_stimme(?string $code): ?array
+{
+    $stimme = TTS_STIMMEN[strtolower(trim((string) $code))] ?? null;
+    return $stimme === null ? null : ['lang' => $stimme[0], 'name' => $stimme[1]];
+}
+
+/** Der ganze Satz, wie er gesprochen wird: die Lücke mit der Lösung gefüllt. */
+function tts_satztext(string $foreign, string $answer): string
+{
+    return trim(str_replace('{}', $answer, $foreign));
+}
+
+/**
+ * Kurzzeichen für Text und Stimme. Ändert sich eines davon, passt die
+ * Aufnahme nicht mehr - etwa wenn im Admin ein Satz verbessert wird.
+ */
+function tts_hash(string $text, string $voice): string
+{
+    return substr(sha1($voice . "\n" . $text), 0, 12);
+}
+
+/** Der Pfad der Datei unter daten/storage - mit dem Kurzzeichen im Namen. */
+function tts_datei(int $sentenceId, string $hash): string
+{
+    return 'audio/' . $sentenceId . '-' . $hash . '.mp3';
+}
+
+function tts_aktiv(): bool
+{
+    return setting('tts_enabled') === '1';
+}
+
+/**
+ * Die Sätze einer Lerneinheit, denen eine passende Aufnahme fehlt.
+ *
+ * @return list<array{id:int, text:string, hash:string, alte_datei:?string}>
+ */
+function tts_offen(int $unitId, array $stimme): array
+{
+    $offen = [];
+    foreach (qa(
+        'SELECT s.id, s.foreign_text, s.answer, a.hash AS alt, a.file AS alte_datei
+           FROM sentences s
+           JOIN vocab v ON v.id = s.vocab_id
+           LEFT JOIN sentence_audio a ON a.sentence_id = s.id
+          WHERE v.unit_id = ?
+          ORDER BY s.id',
+        [$unitId],
+    ) as $s) {
+        $text = tts_satztext((string) $s['foreign_text'], (string) $s['answer']);
+        $hash = tts_hash($text, $stimme['name']);
+        if ($text === '' || $s['alt'] === $hash) {
+            continue;
+        }
+        $offen[] = ['id' => (int) $s['id'], 'text' => $text, 'hash' => $hash,
+                    'alte_datei' => $s['alte_datei']];
+    }
+    return $offen;
+}
+
+/** Wie viele Sätze einer Lerneinheit noch keine passende Aufnahme haben. */
+function tts_fehlend(int $unitId): int
+{
+    $stimme = tts_stimme(tts_sprachcode($unitId));
+    return $stimme === null ? 0 : count(tts_offen($unitId, $stimme));
+}
+
+function tts_sprachcode(int $unitId): ?string
+{
+    $code = qv('SELECT l.code FROM units u JOIN languages l ON l.id = u.language_id WHERE u.id = ?',
+               [$unitId]);
+    return $code === null ? null : (string) $code;
+}
+
+/**
+ * Die fehlenden Aufnahmen einer Lerneinheit erzeugen.
+ *
+ * Auf Rechnung von $user (course_billing_user()), wie die Sätze. Im
+ * Kostenprotokoll steht ein Eintrag je Lauf, nicht je Satz: Hundert Zeilen
+ * für eine Lerneinheit sagten nichts, und sie liefen in das Stundenlimit
+ * fürs Einlesen.
+ *
+ * @return array{erzeugt:int, offen:int, fehler:?string}
+ */
+function tts_nachtragen(int $unitId, array $user): array
+{
+    $stimme = tts_stimme(tts_sprachcode($unitId));
+    if ($stimme === null || !tts_aktiv()) {
+        return ['erzeugt' => 0, 'offen' => 0, 'fehler' => null];
+    }
+
+    $offen = tts_offen($unitId, $stimme);
+    if ($offen === []) {
+        return ['erzeugt' => 0, 'offen' => 0, 'fehler' => null];
+    }
+
+    $blockiert = budget_block_reason((int) $user['id']);
+    if ($blockiert !== null) {
+        return ['erzeugt' => 0, 'offen' => count($offen), 'fehler' => $blockiert];
+    }
+
+    try {
+        $schluessel = keyvault_tts_key();
+    } catch (KeyvaultException $e) {
+        error_log('[vokabeltrainer] Aufnahmen: ' . $e->getMessage());
+        return ['erzeugt' => 0, 'offen' => count($offen),
+                'fehler' => 'Für die Aufnahmen fehlt der Schlüssel im Keyvault.'];
+    }
+
+    $start     = microtime(true);
+    $antworten = tts_anfragen($schluessel, $offen, $stimme);
+    db_ensure();
+
+    $erzeugt = 0;
+    $zeichen = 0;
+    $fehler  = null;
+    foreach ($offen as $s) {
+        $mp3 = $antworten[$s['id']] ?? null;
+        if (!is_string($mp3)) {
+            $fehler ??= is_array($mp3) ? $mp3['fehler'] : 'keine Antwort';
+            continue;
+        }
+        $datei = tts_datei($s['id'], $s['hash']);
+        $pfad  = storage_path($datei);
+        if (!is_dir(dirname($pfad))) {
+            @mkdir(dirname($pfad), 0775, true);
+        }
+        if (@file_put_contents($pfad, $mp3) === false) {
+            $fehler ??= 'Die Aufnahme liess sich nicht speichern.';
+            continue;
+        }
+        q('INSERT INTO sentence_audio (sentence_id, voice, hash, file, bytes)
+           VALUES (?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE voice = VALUES(voice), hash = VALUES(hash),
+                                   file = VALUES(file), bytes = VALUES(bytes),
+                                   created_at = NOW()',
+          [$s['id'], $stimme['name'], $s['hash'], $datei, strlen($mp3)]);
+        // Die alte Fassung dieses Satzes wird nicht mehr gebraucht.
+        if (($s['alte_datei'] ?? null) !== null && $s['alte_datei'] !== $datei) {
+            @unlink(storage_path((string) $s['alte_datei']));
+        }
+        $erzeugt++;
+        $zeichen += mb_strlen($s['text']);
+    }
+
+    ai_log([
+        'user_id'      => (int) $user['id'],
+        'user_label'   => (string) ($user['display_name'] ?? ''),
+        'model'        => $stimme['name'],
+        'purpose'      => 'tts',
+        // Azure rechnet nach Zeichen; sie stehen dort, wo sonst die Token stehen.
+        'input_tokens' => $zeichen,
+        'entry_count'  => $erzeugt,
+        'cost_usd'     => tts_kosten($zeichen),
+        'duration_ms'  => (int) ((microtime(true) - $start) * 1000),
+        'status'       => $erzeugt === 0 ? 'error' : 'ok',
+        'error'        => $fehler === null ? null : mb_substr($fehler, 0, 2000),
+    ]);
+
+    // Ab und zu die Dateien gelöschter Sätze wegräumen.
+    if (random_int(1, 20) === 1) {
+        tts_waisen_entfernen();
+    }
+
+    return ['erzeugt' => $erzeugt, 'offen' => count($offen) - $erzeugt, 'fehler' => $fehler];
+}
+
+/** Was so viele Zeichen kosten - der Preis steht im Admin (Einstellungen). */
+function tts_kosten(int $zeichen): float
+{
+    return $zeichen * (float) setting('tts_price_per_million') / 1_000_000;
+}
+
+/** Wohin die Anfragen gehen. Für die Tests lässt sich ein Ersatz eintragen. */
+function tts_endpunkt(): string
+{
+    $basis = rtrim((string) cfg('azure_tts_base_url', ''), '/');
+    if ($basis === '') {
+        $region = preg_replace('/[^a-z0-9]/', '', strtolower(setting('tts_region'))) ?: 'germanywestcentral';
+        $basis  = 'https://' . $region . '.tts.speech.microsoft.com';
+    }
+    return $basis . '/cognitiveservices/v1';
+}
+
+/**
+ * Die Sätze an Azure schicken, ein paar gleichzeitig.
+ *
+ * Nacheinander dauerte eine Lerneinheit mit sechzig Vokabeln und drei
+ * Sätzen gut zwei Minuten - im Hintergrund zwar, aber so lange stünde
+ * "Hören" für die Klasse leer da.
+ *
+ * @param list<array{id:int, text:string}> $saetze
+ * @return array<int, string|array{fehler:string}> MP3 je Satz, oder der Fehler
+ */
+function tts_anfragen(string $schluessel, array $saetze, array $stimme): array
+{
+    $ergebnis = [];
+    $multi    = curl_multi_init();
+    $laufend  = [];
+    $warte    = $saetze;
+
+    $starten = static function (array $s) use ($multi, &$laufend, $schluessel, $stimme): void {
+        $ssml = sprintf(
+            "<speak version='1.0' xml:lang='%s'><voice name='%s'>%s</voice></speak>",
+            $stimme['lang'], $stimme['name'],
+            htmlspecialchars($s['text'], ENT_XML1 | ENT_QUOTES, 'UTF-8'),
+        );
+        $ch = curl_init(tts_endpunkt());
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $ssml,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => [
+                'Ocp-Apim-Subscription-Key: ' . $schluessel,
+                'Content-Type: application/ssml+xml',
+                'X-Microsoft-OutputFormat: ' . TTS_FORMAT,
+                'User-Agent: vokidoki',
+            ],
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_TIMEOUT        => 30,
+        ]);
+        curl_multi_add_handle($multi, $ch);
+        $laufend[(int) $ch] = [$ch, $s['id']];
+    };
+
+    while ($warte !== [] && count($laufend) < TTS_PARALLEL) {
+        $starten(array_shift($warte));
+    }
+
+    do {
+        curl_multi_exec($multi, $aktiv);
+        curl_multi_select($multi, 0.2);
+        while (($info = curl_multi_info_read($multi)) !== false) {
+            $ch = $info['handle'];
+            [, $id] = $laufend[(int) $ch];
+            unset($laufend[(int) $ch]);
+
+            $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $body   = curl_multi_getcontent($ch);
+            if ($info['result'] !== CURLE_OK) {
+                $ergebnis[$id] = ['fehler' => 'Azure nicht erreichbar: ' . curl_error($ch)];
+            } elseif ($status !== 200 || !is_string($body) || strlen($body) < 100) {
+                $ergebnis[$id] = ['fehler' => 'Azure antwortet mit HTTP ' . $status . '.'];
+            } else {
+                $ergebnis[$id] = $body;
+            }
+            curl_multi_remove_handle($multi, $ch);
+            curl_close($ch);
+
+            if ($warte !== []) {
+                $starten(array_shift($warte));
+            }
+        }
+    } while ($laufend !== []);
+
+    curl_multi_close($multi);
+    return $ergebnis;
+}
+
+/** Dateien, zu denen kein Satz mehr gehört - etwa nach dem Löschen eines Kurses. */
+function tts_waisen_entfernen(): int
+{
+    $bekannt = array_flip(array_column(qa('SELECT file FROM sentence_audio'), 'file'));
+    $weg = 0;
+    foreach (glob(storage_path('audio/*.mp3')) ?: [] as $pfad) {
+        if (!isset($bekannt['audio/' . basename($pfad)]) && @unlink($pfad)) {
+            $weg++;
+        }
+    }
+    return $weg;
+}

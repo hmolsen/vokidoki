@@ -6281,6 +6281,163 @@ ok('Die Meldung sagt, was mitgegangen ist',
 q('DELETE FROM users WHERE id = ?', [(int) $klKind2['id']]);
 q('DELETE FROM classes WHERE id = ?', [$klAndereId]);
 
+section('Hören: die Aufnahmen');
+
+/*
+ * Jeder Lückensatz wird einmal gesprochen (lib/tts.php, Azure Speech) und
+ * als Datei abgelegt; die App spielt sie in der Übung "Hören" ab. Gegen
+ * tests/fake-azure-tts.php - der Schlüssel kommt wie bei Anthropic aus dem
+ * Keyvault.
+ */
+require_once __DIR__ . '/../app/lib/tts.php';
+
+$hSql = (string) file_get_contents(__DIR__ . '/../app/schema.sql');
+ok('Die Tabelle steht in schema.sql und in den Änderungen',
+   str_contains($hSql, 'CREATE TABLE IF NOT EXISTS sentence_audio')
+   && isset(schema_migrations()['sentence_audio']) && table_exists('sentence_audio'));
+ok('Französisch spricht Denise, Englisch Sonia',
+   (tts_stimme('fr')['name'] ?? '') === 'fr-FR-DeniseNeural'
+   && (tts_stimme('en')['name'] ?? '') === 'en-GB-SoniaNeural');
+ok('Latein hat keine Stimme - also kein "Hören"', tts_stimme('la') === null);
+
+$hLang = makeLanguage($userId, 'Hörfranzösisch', 'fr');
+$hUnit = makeUnit($userId, $hLang, 'Hör-Unit');
+$hSaetze = [];
+foreach ([['chat', 'Le {} dort.', 'chat'], ['chien', 'Le {} aboie FEHLER-TTS.', 'chien']] as $i => [$w, $satz, $loesung]) {
+    q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, ?)',
+      [$hUnit, $w, 'de-' . $w, $i]);
+    $vid = (int) db()->lastInsertId();
+    q('INSERT INTO sentences (vocab_id, native_text, foreign_text, answer) VALUES (?, ?, ?, ?)',
+      [$vid, 'Satz ' . $i, $satz, $loesung]);
+    $hSaetze[$i] = (int) db()->lastInsertId();
+}
+$hKind = q1('SELECT * FROM users WHERE id = ?', [$userId]);
+$hVorher = (int) qv("SELECT COUNT(*) FROM ai_requests WHERE purpose = 'tts'");
+
+ok('Zwei Sätze ohne Aufnahme', tts_fehlend($hUnit) === 2);
+$hRes = tts_nachtragen($hUnit, $hKind);
+ok('Der eine wird gesprochen, der andere scheitert - ohne den ersten mitzureissen',
+   $hRes['erzeugt'] === 1 && $hRes['offen'] === 1 && $hRes['fehler'] !== null, json_encode($hRes));
+
+$hZeile = q1('SELECT * FROM sentence_audio WHERE sentence_id = ?', [$hSaetze[0]]);
+ok('Die Aufnahme liegt als Datei unter daten/storage',
+   $hZeile !== null && is_file(storage_path((string) $hZeile['file']))
+   && str_starts_with((string) file_get_contents(storage_path((string) $hZeile['file'])), "\xFF\xFB"));
+ok('Mit Stimme und Kurzzeichen aus Text und Stimme',
+   ($hZeile['voice'] ?? '') === 'fr-FR-DeniseNeural'
+   && ($hZeile['hash'] ?? '') === tts_hash('Le chat dort.', 'fr-FR-DeniseNeural'));
+
+$hLog = q1("SELECT * FROM ai_requests WHERE purpose = 'tts' ORDER BY id DESC LIMIT 1");
+ok('Ein Eintrag im Kostenprotokoll je Lauf, nicht je Satz',
+   (int) qv("SELECT COUNT(*) FROM ai_requests WHERE purpose = 'tts'") === $hVorher + 1);
+ok('Abgerechnet nach Zeichen, zum Preis aus den Einstellungen',
+   (int) $hLog['input_tokens'] === mb_strlen('Le chat dort.')
+   && abs((float) $hLog['cost_usd'] - mb_strlen('Le chat dort.') * 16 / 1_000_000) < 0.000001
+   && $hLog['model'] === 'fr-FR-DeniseNeural',
+   json_encode([$hLog['input_tokens'], $hLog['cost_usd'], $hLog['model']]));
+
+// Der gescheiterte Satz wird beim naechsten Lauf noch einmal versucht - und
+// nur er.
+q('UPDATE sentences SET foreign_text = ? WHERE id = ?', ['Le {} aboie.', $hSaetze[1]]);
+$hRes2 = tts_nachtragen($hUnit, $hKind);
+ok('Der nächste Lauf holt nur nach, was fehlt', $hRes2['erzeugt'] === 1 && $hRes2['offen'] === 0,
+   json_encode($hRes2));
+ok('Danach hat jeder Satz seine Aufnahme', tts_fehlend($hUnit) === 0);
+
+// Wird ein Satz verbessert, passt die Aufnahme nicht mehr.
+$hAlteDatei = (string) qv('SELECT file FROM sentence_audio WHERE sentence_id = ?', [$hSaetze[0]]);
+q('UPDATE sentences SET foreign_text = ? WHERE id = ?', ['Le {} dort bien.', $hSaetze[0]]);
+ok('Ein verbesserter Satz gilt als ohne Aufnahme', tts_fehlend($hUnit) === 1);
+
+// ---- Das Bündel sagt dem Gerät, welche Sätze eine Aufnahme haben.
+
+[$hBundle] = apiCall('bundle', 'get');
+$hInBundle = [];
+foreach ($hBundle['saetze'] ?? [] as $hs) {
+    $hInBundle[(int) $hs['i']] = $hs['h'] ?? null;
+}
+$hSprache = array_values(array_filter($hBundle['sprachen'] ?? [], fn ($l) => (int) $l['id'] === $hLang))[0] ?? [];
+ok('Die Sprache trägt, ob es eine Stimme gibt', ($hSprache['h'] ?? null) === 1);
+ok('Ein Satz mit passender Aufnahme trägt ihr Kurzzeichen',
+   ($hInBundle[$hSaetze[1]] ?? null) === tts_hash('Le chien aboie.', 'fr-FR-DeniseNeural'));
+ok('Ein verbesserter Satz ohne neue Aufnahme trägt keines',
+   array_key_exists($hSaetze[0], $hInBundle) && $hInBundle[$hSaetze[0]] === null,
+   'sonst spielte die App den alten Satz zum neuen Text');
+
+tts_nachtragen($hUnit, $hKind);
+ok('Die neue Aufnahme ersetzt die alte Datei',
+   !is_file(storage_path($hAlteDatei))
+   && is_file(storage_path((string) qv('SELECT file FROM sentence_audio WHERE sentence_id = ?', [$hSaetze[0]]))));
+
+// Und ohne Zutun: Der Lauf nach den Sätzen spricht, was fehlt - auch wenn
+// er selbst keinen neuen Satz schreiben muss.
+q('UPDATE sentences SET foreign_text = ? WHERE id = ?', ['Le {} dort toujours.', $hSaetze[0]]);
+generate_sentences_tracked($hUnit);
+ok('Der Lauf nach den Sätzen trägt die Aufnahmen gleich mit nach', tts_fehlend($hUnit) === 0);
+
+// ---- Ausgeliefert nur an den Kurs.
+
+$hUrl = $base . '/api/audio.php?s=' . $hSaetze[0] . '&h=x';
+$hRes = http($hUrl);
+ok('Die Aufnahme kommt als MP3, lange zwischenspeicherbar',
+   $hRes['status'] === 200 && str_contains($hRes['headers'], 'audio/mpeg')
+   && str_contains($hRes['headers'], 'immutable') && str_starts_with($hRes['body'], "\xFF\xFB"),
+   (string) $hRes['status']);
+$hEtag = preg_match('/ETag: ("[0-9a-f]+")/i', $hRes['headers'], $hm) === 1 ? $hm[1] : '';
+ok('Ein zweites Mal genügt "unverändert"',
+   $hEtag !== '' && http($hUrl, null, ['If-None-Match: ' . $hEtag])['status'] === 304);
+
+$hFremd = makeUser('e2e_hoer_fremd', 'Fremdes Kind');
+$hTopf  = tempnam(sys_get_temp_dir(), 'vt');
+$hFremdStatus = apiAls($hTopf, function () use ($hUrl) {
+    apiCall('auth', 'login', ['username' => 'e2e_hoer_fremd', 'password' => 'geheim123']);
+    return http($hUrl)['status'];
+});
+ok('Wer nicht im Kurs ist, bekommt sie nicht', $hFremdStatus === 404, (string) $hFremdStatus);
+ok('Ohne Anmeldung auch nicht', apiAls(tempnam(sys_get_temp_dir(), 'vt'), fn () => http($hUrl)['status']) === 401);
+q('UPDATE units SET released_position = 0 WHERE id = ?', [$hUnit]);
+ok('Und ein noch nicht freigegebener Satz bleibt zu', http($hUrl)['status'] === 404);
+
+// ---- Latein: keine Stimme, keine Aufnahmen.
+
+$hLatein = makeLanguage($userId, 'Hörlatein', 'la');
+$hLUnit  = makeUnit($userId, $hLatein, 'Latein-Unit');
+q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, 0)',
+  [$hLUnit, 'puella', 'Mädchen']);
+q('INSERT INTO sentences (vocab_id, native_text, foreign_text, answer) VALUES (?, ?, ?, ?)',
+  [(int) db()->lastInsertId(), 'Das Mädchen singt.', '{} cantat.', 'Puella']);
+ok('Für Latein entsteht nichts und kostet nichts',
+   tts_nachtragen($hLUnit, $hKind)['erzeugt'] === 0 && tts_fehlend($hLUnit) === 0);
+[$hBundle2] = apiCall('bundle', 'get');
+$hLSprache = array_values(array_filter($hBundle2['sprachen'] ?? [], fn ($l) => (int) $l['id'] === $hLatein))[0] ?? [];
+ok('Und das Bündel sagt: keine Stimme', ($hLSprache['h'] ?? null) === 0);
+
+// ---- Im Admin.
+
+$hSeite = http($base . '/admin/settings.php')['body'];
+ok('Die Einstellungen haben einen dritten Schritt für die Aufnahmen',
+   str_contains($hSeite, 'Schritt 3: Aufnahmen (Hören)') && str_contains($hSeite, 'name="tts_region"'));
+adminPost('settings.php', ['save_tts' => '1', 'tts_enabled' => '1', 'tts_region' => 'erde', 'tts_price' => '16']);
+settings_reset_cache();
+ok('Eine unbekannte Region wird abgelehnt', setting('tts_region') === 'germanywestcentral');
+adminPost('settings.php', ['save_tts' => '1', 'tts_enabled' => '1', 'tts_region' => 'westeurope', 'tts_price' => '15,5']);
+settings_reset_cache();
+ok('Eine bekannte wird gespeichert, samt Preis',
+   setting('tts_region') === 'westeurope' && setting('tts_price_per_million') === '15.50');
+adminPost('settings.php', ['save_tts' => '1', 'tts_enabled' => '1', 'tts_region' => 'germanywestcentral', 'tts_price' => '16']);
+settings_reset_cache();
+
+foreach ([$hUnit, $hLUnit] as $hu) {
+    q('DELETE FROM units WHERE id = ?', [$hu]);
+}
+q('DELETE FROM courses WHERE language_id IN (?, ?)', [$hLang, $hLatein]);
+q('DELETE FROM languages WHERE id IN (?, ?)', [$hLang, $hLatein]);
+q('DELETE FROM users WHERE id = ?', [$hFremd]);
+ok('Gelöschte Sätze lassen keine Dateien liegen',
+   tts_waisen_entfernen() >= 0
+   && (int) qv('SELECT COUNT(*) FROM sentence_audio WHERE sentence_id IN (?, ?)', $hSaetze) === 0
+   && !is_file(storage_path((string) $hZeile['file'])));
+
 section('Zettel mit den Zugangsdaten');
 
 require_once __DIR__ . '/../app/lib/letter.php';
