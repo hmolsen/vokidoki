@@ -181,6 +181,33 @@ function tts_nachtragen(int $unitId, array $user): array
         return ['erzeugt' => 0, 'offen' => count($offen), 'fehler' => $blockiert];
     }
 
+    /*
+     * Im kostenlosen Tarif nur so viel, wie vom Freikontingent übrig ist.
+     *
+     * Ist es aufgebraucht, lehnt Azure jede Anfrage ab - lieber vorher
+     * aufhören und es sagen, als hundertmal anzufragen und hundert Fehler
+     * ins Protokoll zu schreiben. Was nicht mehr passt, kommt im nächsten
+     * Monat, beim nächsten Lauf.
+     */
+    $alleOffen = count($offen);
+    if (tts_tarif_frei()) {
+        $rest = (int) floor(tts_freikontingent() * TTS_KONTINGENT_RAND) - tts_zeichen_monat();
+        $passt = [];
+        foreach ($offen as $s) {
+            $rest -= mb_strlen($s['text']);
+            if ($rest < 0) {
+                break;
+            }
+            $passt[] = $s;
+        }
+        if ($passt === []) {
+            return ['erzeugt' => 0, 'offen' => $alleOffen,
+                    'fehler' => sprintf('Das Freikontingent dieses Monats (%s Zeichen) ist aufgebraucht '
+                        . '- weiter ab dem 1.', number_format(tts_freikontingent(), 0, ',', '.'))];
+        }
+        $offen = $passt;
+    }
+
     try {
         $schluessel = keyvault_tts_key();
     } catch (KeyvaultException $e) {
@@ -244,14 +271,87 @@ function tts_nachtragen(int $unitId, array $user): array
         tts_waisen_entfernen();
     }
 
-    return ['erzeugt' => $erzeugt, 'offen' => count($offen) - $erzeugt, 'fehler' => $fehler];
+    if ($fehler === null && count($offen) < $alleOffen) {
+        $fehler = 'Das Freikontingent dieses Monats reicht nicht für alle - der Rest kommt ab dem 1.';
+    }
+
+    return ['erzeugt' => $erzeugt, 'offen' => $alleOffen - $erzeugt, 'fehler' => $fehler];
 }
 
-/** Was so viele Zeichen kosten - der Preis steht im Admin (Einstellungen). */
+/**
+ * Was so viele Zeichen kosten - im kostenlosen Tarif nichts, sonst zum
+ * Preis aus dem Admin (Einstellungen). Stünde hier im Tarif F0 der Preis
+ * von S0, zählten die Aufnahmen gegen das Monatsbudget, ohne je etwas zu
+ * kosten, und sperrten am Ende das Einlesen.
+ */
 function tts_kosten(int $zeichen): float
 {
-    return $zeichen * (float) setting('tts_price_per_million') / 1_000_000;
+    return tts_tarif_frei() ? 0.0 : $zeichen * (float) setting('tts_price_per_million') / 1_000_000;
 }
+
+/** Der kostenlose Tarif F0 - mit Freikontingent statt Preis. */
+function tts_tarif_frei(): bool
+{
+    return setting('tts_tarif') !== 'S0';
+}
+
+/** So viele Zeichen sind im Tarif F0 je Monat frei. */
+function tts_freikontingent(): int
+{
+    return max(0, (int) setting('tts_free_chars'));
+}
+
+/**
+ * Zeichen dieses Kalendermonats - wie das Kostenprotokoll sie zählt.
+ *
+ * Azure rechnet das Kontingent selbst nach; das hier ist eine Schätzung von
+ * unserer Seite (gezählt wird der gesprochene Satz, ohne die SSML darum).
+ * Sie liegt eher knapp darunter - deshalb hält ein Lauf etwas Abstand.
+ */
+function tts_zeichen_monat(): int
+{
+    return (int) qv(
+        "SELECT COALESCE(SUM(input_tokens), 0) FROM ai_requests
+          WHERE purpose = 'tts' AND created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')",
+    );
+}
+
+/** Zeichen je Tag dieses Monats: [Tag => Zeichen], Tage ohne fehlen. */
+function tts_zeichen_je_tag(): array
+{
+    $tage = [];
+    foreach (qa(
+        "SELECT DAY(created_at) AS t, SUM(input_tokens) AS z FROM ai_requests
+          WHERE purpose = 'tts' AND created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')
+          GROUP BY DAY(created_at)",
+    ) as $r) {
+        $tage[(int) $r['t']] = (int) $r['z'];
+    }
+    return $tage;
+}
+
+/** Zeichen der letzten Monate: ['2026-10' => Zeichen], ältester zuerst. */
+function tts_zeichen_je_monat(int $monate = 6): array
+{
+    $liste = [];
+    for ($i = $monate - 1; $i >= 0; $i--) {
+        $liste[date('Y-m', strtotime(date('Y-m-01') . " -$i month"))] = 0;
+    }
+    foreach (qa(
+        "SELECT DATE_FORMAT(created_at, '%Y-%m') AS m, SUM(input_tokens) AS z FROM ai_requests
+          WHERE purpose = 'tts' AND created_at >= DATE_FORMAT(NOW(), '%Y-%m-01') - INTERVAL ? MONTH
+          GROUP BY m",
+        [$monate - 1],
+    ) as $r) {
+        if (array_key_exists($r['m'], $liste)) {
+            $liste[$r['m']] = (int) $r['z'];
+        }
+    }
+    return $liste;
+}
+
+/** Ein Rand unter dem Freikontingent - unsere Zählung ist nur eine Schätzung. */
+const TTS_KONTINGENT_RAND = 0.98;
 
 /** Wohin die Anfragen gehen. Für die Tests lässt sich ein Ersatz eintragen. */
 function tts_endpunkt(): string

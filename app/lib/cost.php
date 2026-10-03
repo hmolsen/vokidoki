@@ -75,9 +75,12 @@ function models_without_price(): array
 {
     $bekannt = array_keys(price_table());
 
+    // Ohne die Aufnahmen: Dort steht die Stimme, und ihr Preis kommt aus dem
+    // Tarif (lib/tts.php), nicht aus dieser Tabelle - sonst stünde jede
+    // Stimme hier als "ohne Preis".
     $gesehen = array_column(qa(
         "SELECT DISTINCT model FROM ai_requests
-          WHERE created_at >= NOW() - INTERVAL 90 DAY"
+          WHERE created_at >= NOW() - INTERVAL 90 DAY AND purpose <> 'tts'"
     ), 'model');
 
     return array_values(array_diff($gesehen, $bekannt));

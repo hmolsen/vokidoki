@@ -95,7 +95,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             redirect('settings.php');
         }
         $preis = max(0.0, (float) str_replace(',', '.', (string) ($_POST['tts_price'] ?? '16')));
+        $tarif = (string) ($_POST['tts_tarif'] ?? 'F0') === 'S0' ? 'S0' : 'F0';
+        $frei  = max(0, (int) str_replace(['.', ' '], '', (string) ($_POST['tts_free_chars'] ?? '500000')));
 
+        setting_set('tts_tarif', $tarif);
+        setting_set('tts_free_chars', (string) $frei);
         setting_set('tts_enabled', isset($_POST['tts_enabled']) ? '1' : '0');
         setting_set('tts_region', $region);
         setting_set('tts_price_per_million', number_format($preis, 2, '.', ''));
@@ -256,7 +260,19 @@ flash_render();
             </select>
         </div>
         <div>
-            <label for="tts_price">Preis in USD je 1 Mio. Zeichen</label>
+            <label for="tts_tarif">Tarif</label>
+            <select name="tts_tarif" id="tts_tarif">
+                <option value="F0"<?= tts_tarif_frei() ? ' selected' : '' ?>>Kostenlos (F0)</option>
+                <option value="S0"<?= tts_tarif_frei() ? '' : ' selected' ?>>Standard (S0)</option>
+            </select>
+        </div>
+        <div>
+            <label for="tts_free_chars">Freikontingent je Monat (F0), Zeichen</label>
+            <input type="text" id="tts_free_chars" name="tts_free_chars" inputmode="numeric"
+                   value="<?= h((string) tts_freikontingent()) ?>">
+        </div>
+        <div>
+            <label for="tts_price">Preis im Standardtarif (S0), USD je 1 Mio. Zeichen</label>
             <input type="text" id="tts_price" name="tts_price" inputmode="decimal"
                    value="<?= h(setting('tts_price_per_million')) ?>">
         </div>
@@ -264,8 +280,13 @@ flash_render();
     <p class="tiny muted">
         Jeder Lückensatz wird einmal ganz gesprochen, gleich nachdem die Sätze
         entstanden sind, und als Datei abgelegt &ndash; für die Übung
-        &bdquo;Hören&ldquo;. Bei drei Sätzen je Vokabel kosten 100 Vokabeln rund
-        <?= h(number_format(tts_kosten(100 * 3 * 60), 2, ',', '.')) ?>&nbsp;$.
+        &bdquo;Hören&ldquo;. Bei drei Sätzen je Vokabel brauchen 100 Vokabeln rund
+        18.000 Zeichen &ndash; im kostenlosen Tarif reicht das Freikontingent also für
+        gut <?= h(number_format(intdiv(tts_freikontingent(), 18000) * 100, 0, ',', '.')) ?>
+        Vokabeln im Monat, ist es aufgebraucht, hören die Läufe auf und machen ab dem
+        1. weiter. Im Standardtarif kosten 100 Vokabeln rund
+        <?= h(number_format(18000 * (float) setting('tts_price_per_million') / 1_000_000, 2, ',', '.')) ?>&nbsp;$.
+        Den Verbrauch zeigt die Seite <em>Kosten</em>.
         Der Schlüssel steht im Keyvault unter
         <code><?= h((string) cfg('keyvault_tts_key', 'vokabeltrainer-tts')) ?></code>.
         Für bestehende Lerneinheiten trägt <em>Unterlagen</em> die fehlenden nach.

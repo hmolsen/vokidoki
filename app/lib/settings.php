@@ -24,6 +24,11 @@ const SETTING_DEFAULTS = [
     'tts_enabled'          => '1',
     'tts_region'           => 'germanywestcentral',
     'tts_price_per_million' => '16.00',
+    // Der Tarif bei Azure. F0 kostet nichts und hat ein Freikontingent je
+    // Monat - ist es aufgebraucht, nimmt Azure bis zum Monatsende nichts
+    // mehr an. S0 rechnet je Zeichen ab, zum Preis darüber.
+    'tts_tarif'            => 'F0',
+    'tts_free_chars'       => '500000',
     'usd_eur'              => '0.92',
     'monthly_cost_cap_usd' => '10.00',
     'imports_per_hour'     => '20',

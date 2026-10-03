@@ -6292,6 +6292,11 @@ section('Hören: die Aufnahmen');
  */
 require_once __DIR__ . '/../app/lib/tts.php';
 
+// Erst im Standardtarif - dort kostet ein Zeichen etwas, und das lässt sich prüfen.
+$hTarifVorher = setting('tts_tarif');
+$hFreiVorher  = setting('tts_free_chars');
+setting_set('tts_tarif', 'S0');
+
 $hSql = (string) file_get_contents(__DIR__ . '/../app/schema.sql');
 ok('Die Tabelle steht in schema.sql und in den Änderungen',
    str_contains($hSql, 'CREATE TABLE IF NOT EXISTS sentence_audio')
@@ -6469,6 +6474,39 @@ ok('Eine bekannte wird gespeichert, samt Preis',
    setting('tts_region') === 'westeurope' && setting('tts_price_per_million') === '15.50');
 adminPost('settings.php', ['save_tts' => '1', 'tts_enabled' => '1', 'tts_region' => 'germanywestcentral', 'tts_price' => '16']);
 settings_reset_cache();
+
+// ---- Der kostenlose Tarif (F0): kein Preis, aber ein Freikontingent.
+setting_set('tts_tarif', 'F0');
+ok('Im kostenlosen Tarif kostet eine Aufnahme nichts', tts_kosten(100000) === 0.0);
+ok('Eine Stimme gilt nicht als Modell ohne Preis - sie hat einen Tarif',
+   !array_filter(models_without_price(), fn ($m) => str_ends_with($m, 'Neural')),
+   implode(', ', models_without_price()));
+
+// Kontingent knapp über dem schon Verbrauchten: Es passt genau ein Satz.
+q('UPDATE units SET released_position = 99 WHERE id = ?', [$hUnit]);
+q('DELETE FROM sentence_audio WHERE sentence_id IN (?, ?)', $hSaetze);
+$hEiner = mb_strlen(tts_satztext(...array_values(q1('SELECT foreign_text, answer FROM sentences WHERE id = ?', [$hSaetze[0]]))));
+setting_set('tts_free_chars', (string) (int) ceil((tts_zeichen_monat() + $hEiner + 3) / TTS_KONTINGENT_RAND));
+$hKnapp = tts_nachtragen($hUnit, $hKind);
+ok('Ist das Freikontingent fast aufgebraucht, wird nur gesprochen, was noch passt',
+   $hKnapp['erzeugt'] === 1 && $hKnapp['offen'] === 1
+   && str_contains((string) $hKnapp['fehler'], 'Freikontingent'), json_encode($hKnapp, JSON_UNESCAPED_UNICODE));
+$hVoll = tts_nachtragen($hUnit, $hKind);
+ok('Und ist es aufgebraucht, fragt der nächste Lauf gar nicht erst an',
+   $hVoll['erzeugt'] === 0 && str_contains((string) $hVoll['fehler'], 'aufgebraucht'),
+   json_encode($hVoll, JSON_UNESCAPED_UNICODE));
+
+$hKosten = http($base . '/admin/index.php')['body'];
+ok('Die Kostenseite zeigt die Zeichen des Monats gegen das Freikontingent',
+   str_contains($hKosten, 'id="aufnahmen"') && str_contains($hKosten, 'class="zeichenkurve"')
+   && str_contains($hKosten, 'Freikontingent'));
+ok('Und zählt sie nicht als Token mit',
+   preg_match('/Token diesen Monat/', $hKosten) === 1
+   && !str_contains(substr($hKosten, (int) strpos($hKosten, 'Nach Modell'),
+       (int) strpos($hKosten, 'Letzte Anfragen') - (int) strpos($hKosten, 'Nach Modell')), 'Neural</td>'));
+
+setting_set('tts_tarif', $hTarifVorher);
+setting_set('tts_free_chars', $hFreiVorher);
 
 foreach ([$hUnit, $hLUnit] as $hu) {
     q('DELETE FROM units WHERE id = ?', [$hu]);
