@@ -198,6 +198,32 @@ export async function pruefe(f, aus, wurzel) {
            && stand.reduce((s, p) => s + Number(p.wrong_count), 0) === 1,
            JSON.stringify(stand));
 
+        // ---- Freies Üben: alle Übungsarten, und ein Schalter für Hören.
+        await b.hash(`/unit/${einheit}/frei`, 1200);
+        const frei = await b.js(`(async () => {
+            const v = await import('${f.basis}/vorrat.js');
+            const zaehle = (mitHoeren) => {
+                const n = {};
+                for (let i = 0; i < 300; i++) { const a = v.frageFrei([${einheit}], mitHoeren); n[a.art] = (n[a.art] ?? 0) + 1; }
+                return n;
+            };
+            const s = document.getElementById('hoerSchalter');
+            return { schalter: !!s, an: s?.checked ?? null, mit: zaehle(true), ohne: zaehle(false) };
+        })()`);
+        ok('Freies Üben zieht aus allen vier Übungsarten',
+           ['mc', 'pick', 'cloze', 'listen'].every((m) => (frei.mit[m] ?? 0) > 30), JSON.stringify(frei.mit));
+        ok('Im Kopf steht ein Schalter für Hören, eingeschaltet', frei.schalter && frei.an === true,
+           JSON.stringify(frei));
+        ok('Abgeschaltet kommt kein Hören mehr', !('listen' in frei.ohne), JSON.stringify(frei.ohne));
+        await b.js(`document.getElementById('hoerSchalter').click()`);
+        await schlafe(300);
+        await b.hash('/', 300);
+        await b.hash(`/unit/${einheit}/frei`, 1000);
+        ok('Der Schalter merkt sich, wie er stand',
+           (await b.js(`document.getElementById('hoerSchalter')?.checked`)) === false
+           && (await b.js(`!document.getElementById('satzlinie')`)) === true);
+        await b.js(`document.getElementById('hoerSchalter').click()`);   // wieder an, für später
+
         // ---- Eine Sprache ohne Stimme: keine Übung, kein Ring.
         php(wurzel, `require 'lib/db.php'; q("UPDATE languages SET code = 'la' WHERE id = ?", [${sprache}]);`);
         await auffrischen();

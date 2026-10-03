@@ -39,9 +39,6 @@ let zustand = null;
 export async function hoerenView(unitId) {
     zustand?.ton?.pause();
     zustand = null;
-    // Wer die Übung verlässt, nimmt den Satz nicht mit - sonst spräche er
-    // auf der nächsten Seite weiter.
-    window.addEventListener('hashchange', () => zustand?.ton?.pause(), { once: true });
     naechste(unitId);
     // Wer direkt hierher kommt, ohne die Lerneinheit: die übrigen Sätze nachholen.
     hoerenVorladen(unitId);
@@ -84,10 +81,64 @@ function naechste(unitId) {
         return;
     }
 
-    if (zustand === null || !document.getElementById('satzlinie')) {
-        aufbauen(unitId);
+    hoerenZeigen(hoerenArt(unitId), data);
+}
+
+/*
+ * Was an einer Höraufgabe von aussen kommt - wie beim Lückentext
+ * (cloze.js, lueckeArt()) und beim Einsetzen: Derselbe Bildschirm dient
+ * der Übung und dem Freien Üben.
+ */
+function hoerenArt(unitId) {
+    return {
+        schluessel: `hoeren:${unitId}`,
+        kopf: () => topbar('Hören', {
+            backTo: `/unit/${unitId}`,
+            action: '<div class="topbar-progress" id="progress"></div>',
+        }),
+        punkte: true,
+        zeigen(data) {
+            $('#dots').innerHTML = [0, 1, 2]
+                .map((i) => `<i class="${i < Math.min(3, data.streak) ? 'on' : ''}"></i>`).join('');
+            const fortschritt = $('#progress');
+            fortschritt.innerHTML = `
+                ${progressBar(data.known, data.total)}
+                <span class="tiny muted">${data.known}/${data.total}</span>`;
+            fortschritt.title = `${data.known} von ${data.total} gelernt`;
+        },
+        merken(data, richtig) {
+            const result = antwortMerken(data.vocabId, MODUS_HOEREN, richtig);
+            if (richtig) {
+                babing();
+                punkteAktualisieren(document, result.streak);
+                if (result.newly_learned) konfetti();
+                serieAktualisieren(result.tag_geschafft);
+            } else {
+                punkteAktualisieren(document, 0);
+            }
+            return result;
+        },
+        weiter: () => naechste(unitId),
+    };
+}
+
+/** Eine Höraufgabe zeigen - von hier und vom Freien Üben aus. */
+export function hoerenZeigen(art, data) {
+    if (zustand === null || zustand.art.schluessel !== art.schluessel
+        || !document.getElementById('satzlinie')) {
+        zustand?.ton?.pause();
+        aufbauen(art);
+        // Wer die Seite verlässt, nimmt den Satz nicht mit - sonst spräche
+        // er auf der nächsten weiter.
+        window.addEventListener('hashchange', () => zustand?.ton?.pause(), { once: true });
     }
+    zustand.art = art;
     zeigen(data);
+}
+
+/** Läuft gerade ein Satz? Dann anhalten - das Freie Üben braucht das beim Umschalten. */
+export function hoerenAnhalten() {
+    zustand?.ton?.pause();
 }
 
 function wartebild(unitId, text) {
@@ -103,14 +154,11 @@ function wartebild(unitId, text) {
 }
 
 /** Baut den Bildschirm einmal auf; danach wird nur neu befüllt. */
-function aufbauen(unitId) {
+function aufbauen(art) {
     render(`
         <div class="screen">
             <div class="screen-top">
-                ${topbar('Hören', {
-                    backTo: `/unit/${unitId}`,
-                    action: '<div class="topbar-progress" id="progress"></div>',
-                })}
+                ${art.kopf()}
             </div>
 
             <div class="screen-body">
@@ -124,7 +172,7 @@ function aufbauen(unitId) {
                     <div class="satzlinie" id="satzlinie" aria-live="polite"
                          aria-label="Deine Reihenfolge"></div>
                     <p class="hoer-native" id="native" hidden></p>
-                    <div class="cloze-dots"><span class="dots" id="dots"></span></div>
+                    ${art.punkte ? '<div class="cloze-dots"><span class="dots" id="dots"></span></div>' : ''}
                     <div class="verdict" id="verdict"></div>
                 </div>
 
@@ -143,7 +191,7 @@ function aufbauen(unitId) {
     `);
     wireBack();
 
-    zustand = { unitId, data: null, gelegt: [], beantwortet: false, weiterGeschaltet: false, ton: null };
+    zustand = { art, data: null, gelegt: [], beantwortet: false, weiterGeschaltet: false, ton: null };
 
     $('#abspielen').addEventListener('click', () => abspielen(1));
     $('#langsam').addEventListener('click', () => abspielen(LANGSAM));
@@ -186,14 +234,7 @@ function zeigen(data) {
     verdict.className = 'verdict';
     verdict.textContent = '';
 
-    $('#dots').innerHTML = [0, 1, 2]
-        .map((i) => `<i class="${i < Math.min(3, data.streak) ? 'on' : ''}"></i>`).join('');
-
-    const fortschritt = $('#progress');
-    fortschritt.innerHTML = `
-        ${progressBar(data.known, data.total)}
-        <span class="tiny muted">${data.known}/${data.total}</span>`;
-    fortschritt.title = `${data.known} von ${data.total} gelernt`;
+    z.art.zeigen(data);
 
     meldenVerdrahten(document.querySelector('[data-melden]'), () => ({
         vocabId: data.vocabId,
@@ -269,19 +310,14 @@ function pruefen() {
     $('#pruefen').hidden = true;
     $('#native').hidden = false;
 
-    const result  = antwortMerken(z.data.vocabId, MODUS_HOEREN, richtig);
+    const result  = z.art.merken(z.data, richtig);
     const verdict = $('#verdict');
 
     if (richtig) {
-        babing();
-        punkteAktualisieren(document, result.streak);
-        if (result.newly_learned) konfetti();
-        serieAktualisieren(result.tag_geschafft);
         verdict.className = 'verdict good';
         verdict.textContent = result.just_learned ? 'Diese Vokabel kannst du jetzt.' : 'Richtig!';
         setTimeout(weiterSchalten, NEXT_DELAY_CORRECT);
     } else {
-        punkteAktualisieren(document, 0);
         // Wie beim Einsetzen: kein Zeitablauf. Der richtige Satz steht da,
         // das Kind kann ihn noch einmal hören und geht selbst weiter.
         verdict.className = 'verdict bad';
@@ -297,7 +333,8 @@ function weiterSchalten() {
     const z = zustand;
     if (!z || z.weiterGeschaltet) return;
     z.weiterGeschaltet = true;
-    naechste(z.unitId);
+    z.ton?.pause();
+    z.art.weiter();
 }
 
 /**

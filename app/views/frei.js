@@ -3,11 +3,13 @@ import {
     zahlAktualisieren, VT,
 } from '../core.js';
 import {
-    frageFrei, freiMerken, freiUmfang, einheit, sprache,
-    einheitenDerSprache, MODUS_WAHL,
+    frageFrei, freiMerken, freiUmfang, freiHoerbar, einheit, sprache,
+    einheitenDerSprache, MODUS_WAHL, MODUS_EINSETZEN, MODUS_HOEREN,
 } from '../vorrat.js';
 import { meldeKnopf, meldenVerdrahten } from '../melden.js';
 import { lueckeZeigen } from './cloze.js';
+import { einsetzenZeigen } from './einsetzen.js';
+import { hoerenZeigen, hoerenAnhalten } from './hoeren.js';
 
 /*
  * Freies Üben.
@@ -38,6 +40,46 @@ const LOB_FOLGE = 5;
 
 /** Der Stand dieser Runde. Lebt nur, solange die Ansicht steht. */
 let runde = null;
+
+/*
+ * Hören an oder aus - ein Schalter im Kopf der Runde.
+ *
+ * Im Klassenzimmer ohne Kopfhörer will man keine Sätze, die laut aus dem
+ * Telefon kommen; im Bus mit Kopfhörern gerade die. Also ein Schalter, der
+ * sich merkt, wie er stand - im Gerät, nicht am Konto: Es ist eine Frage
+ * der Lage, und die ist auf dem Schul-Tablet eine andere als zu Hause.
+ */
+const HOEREN_SCHLUESSEL = 'vt-frei-hoeren';
+
+function hoerenAn() {
+    try {
+        return localStorage.getItem(HOEREN_SCHLUESSEL) !== 'aus';
+    } catch {
+        return true;
+    }
+}
+
+function hoerenSetzen(an) {
+    try {
+        if (an) localStorage.removeItem(HOEREN_SCHLUESSEL);
+        else localStorage.setItem(HOEREN_SCHLUESSEL, 'aus');
+    } catch { /* privates Fenster: dann gilt es nur für diese Runde */ }
+}
+
+/*
+ * Einmal angemeldet, für jeden Bildschirm der Runde: Der Schalter steht im
+ * Kopf, und der wird mit jeder Aufgabe neu gezeichnet. Wird Hören mitten
+ * in einer Höraufgabe abgeschaltet, kommt sofort die nächste - keine, die
+ * man nun nicht mehr hören soll.
+ */
+document.addEventListener('change', (e) => {
+    if (e.target?.id !== 'hoerSchalter' || runde === null) return;
+    hoerenSetzen(e.target.checked);
+    if (!e.target.checked && runde.art === MODUS_HOEREN) {
+        hoerenAnhalten();
+        naechste();
+    }
+});
 
 /**
  * Das Symbol: eine Hantel.
@@ -153,10 +195,19 @@ export async function freiWahlView(languageId) {
 
 /** Eine eigene Leiste statt topbar(): Hier zählt die Runde, nicht der Weg. */
 function kopf(titel, zurueck) {
+    // Der Schalter nur, wenn es in dieser Auswahl überhaupt etwas zu hören gibt.
+    const schalter = runde?.hoerbar ? `
+            <label class="hoerschalter" title="Hören an oder aus">
+                <input type="checkbox" role="switch" id="hoerSchalter"${hoerenAn() ? ' checked' : ''}>
+                <span class="hoerschalter-bahn" aria-hidden="true"></span>
+                <span aria-hidden="true">\u{1F3A7}</span>
+                <span class="nurvorlesen">Hören</span>
+            </label>` : '';
     return `
         <div class="topbar">
             <button class="iconbtn" data-back="${esc(zurueck)}" aria-label="Zurück">&#8249;</button>
             <h1 title="${esc(titel)}">${esc(titel)}</h1>
+            ${schalter}
         </div>`;
 }
 
@@ -181,7 +232,7 @@ export async function freiView(roh, zurueck = null) {
     }
 
     runde = { richtig: 0, falsch: 0, folge: 0, beste: 0, unitIds, zurueck,
-              adresse: location.hash };
+              adresse: location.hash, hoerbar: freiHoerbar(unitIds), art: null };
     naechste();
 }
 
@@ -313,7 +364,7 @@ function verbuchen(vocabId, richtig, weiter) {
 }
 
 function naechste() {
-    const a = frageFrei(runde.unitIds);
+    const a = frageFrei(runde.unitIds, runde.hoerbar && hoerenAn());
 
     if (a === null || a.leer) {
         render(`${kopf('Freies Üben', runde.zurueck)}<div id="msg"></div>`);
@@ -322,7 +373,31 @@ function naechste() {
         return;
     }
 
-    if (a.art === MODUS_WAHL) zeigeWahl(a); else zeigeLuecke(a);
+    runde.art = a.art;
+    if (a.art === MODUS_WAHL) zeigeWahl(a);
+    else if (a.art === MODUS_EINSETZEN) einsetzenZeigen(freiArt(), a);
+    else if (a.art === MODUS_HOEREN) hoerenZeigen(freiArt(), a);
+    else zeigeLuecke(a);
+}
+
+/*
+ * Einsetzen und Hören im Freien Üben: derselbe Bildschirm wie in ihrer
+ * Übung (einsetzenZeigen(), hoerenZeigen()), mit dem Kopf dieser Runde und
+ * ohne die Punkte des Lernstands - die Antwort zählt für die Runde und die
+ * Serie, nicht für "gekonnt".
+ */
+function freiArt() {
+    return {
+        schluessel: 'frei',
+        kopf: () => kopf('Freies Üben', runde.zurueck) + zaehlerLeiste(),
+        punkte: false,
+        zeigen: () => {},
+        merken: (data, richtig) => {
+            zaehlen(data.vocabId, richtig);
+            return {};
+        },
+        weiter: weiterWennNochHier,
+    };
 }
 
 // ----------------------------------------------------------- Auswählen

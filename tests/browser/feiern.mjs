@@ -312,6 +312,39 @@ export async function pruefe(f, aus, wurzel) {
         /* Richtig antworten - die Lösung steht im Vorrat, genau dafür ist er da. */
         const antworten = (richtig) => fr.js(`(async () => {
             const v = await import('${f.basis}/vorrat.js');
+            /* Der Satz zur deutschen Zeile - beim Einsetzen und beim Hören. */
+            const satzZu = (deutsch) => {
+                for (const w of v.vokabelnDerEinheiten([${f.unit}])) {
+                    for (const s of (v.vorratLaden().saetze.get(w.i) ?? [])) {
+                        if (s.n.trim() === deutsch) return s;
+                    }
+                }
+                return null;
+            };
+
+            // Einsetzen: das Lösungswort antippen (oder ein anderes).
+            if (document.getElementById('luecke')) {
+                const s = satzZu(document.getElementById('native').textContent.trim());
+                const k = [...document.querySelectorAll('#woerter .wort')];
+                const i = k.findIndex((x) => x.textContent.trim() === s?.a);
+                if (i < 0) return { art: 'einsetzen', ok: false };
+                k[${richtig} ? i : (i + 1) % k.length].click();
+                return { art: 'einsetzen', ok: true };
+            }
+
+            // Hören: die Wörter des Satzes der Reihe nach antippen, dann prüfen.
+            if (document.getElementById('satzlinie')) {
+                const s = satzZu(document.getElementById('native').textContent.trim());
+                if (!s) return { art: 'hoeren', ok: false };
+                const woerter = v.hoerWoerter(s.f.replace('{}', s.a));
+                for (const w of (${richtig} ? woerter : [...woerter].reverse())) {
+                    [...document.querySelectorAll('#woerter .wort:not(.benutzt)')]
+                        .find((x) => x.textContent.trim() === w)?.click();
+                }
+                document.getElementById('pruefen').click();
+                return { art: 'hoeren', ok: true };
+            }
+
             const feld = document.getElementById('answer');
             if (feld) {
                 const satz = document.querySelector('.cloze-native').textContent.trim();
@@ -358,9 +391,10 @@ export async function pruefe(f, aus, wurzel) {
                              grund: el?.querySelector('.feiergrund')?.textContent ?? '' };
                 })()`);
             }
-            await schlafe(1100);
+            // Lang genug für jede Übungsart - Hören schaltet erst nach 1,6 s weiter.
+            await schlafe(1800);
         }
-        ok('Beide Aufgabenarten kommen vor', arten.size === 2, [...arten].join('+'));
+        ok('Mehrere Aufgabenarten kommen vor', arten.size >= 2, [...arten].join('+'));
         ok('Bei fünf in Folge wird gelobt', lob?.da === true);
         ok('Und darunter steht, wofür', lob?.grund === '5 in Folge', lob?.grund);
         ok('Das Lob ist eines der kurzen', (lob?.wort ?? '').endsWith('!'), lob?.wort);
@@ -383,6 +417,10 @@ export async function pruefe(f, aus, wurzel) {
                (await fr.js(`document.getElementById('check').textContent`)) === 'Weiter');
             await fr.js(`document.getElementById('check').click()`);
         }
+        // Einsetzen und Hören ebenso - dort heisst der Knopf "Weiter".
+        if (falsch.art === 'einsetzen' || falsch.art === 'hoeren') {
+            await fr.js(`document.getElementById('weiter').click()`);
+        }
         await schlafe(2100);
 
         await antworten(true);
@@ -391,7 +429,7 @@ export async function pruefe(f, aus, wurzel) {
         ok('Danach zeigt der Balken, wie weit es bis zum Rekord ist: 1 von 5',
            aufholen.folge === '1' && aufholen.beste === '5'
            && aufholen.breite === '20%' && !aufholen.gruen, JSON.stringify(aufholen));
-        await schlafe(1100);
+        await schlafe(1800);
 
         /*
          * UND DAS WICHTIGSTE: Der Lernstand bleibt, wie er war. Geübt wird

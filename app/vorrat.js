@@ -520,13 +520,21 @@ export function frageEinsetzen(unitId) {
     );
     if (offen.length === 0) return { done: true, ...stand };
 
-    const karte    = wuerfel(offen);
+    const karte = wuerfel(offen);
+    return {
+        done: false,
+        ...einsetzAufgabe(v, unitId, karte),
+        streak: standVon(karte.i, MODUS_EINSETZEN).s,
+        ...stand,
+    };
+}
+
+/** Eine Einsetzaufgabe zu dieser Vokabel - für die Übung und fürs Freie Üben. */
+function einsetzAufgabe(v, unitId, karte) {
     const satz     = wuerfel(v.saetze.get(karte.i));
     const optionen = mischen([satz.a, ...einsetzAblenker(v, unitId, karte, satz.a)]);
     const spr      = sprache(einheit(unitId)?.l);
-
     return {
-        done: false,
         vocabId:  karte.i,
         satzId:   satz.i,
         native:   satz.n,
@@ -535,8 +543,6 @@ export function frageEinsetzen(unitId) {
         optionen,
         richtig:  optionen.indexOf(satz.a),
         lang:     spr?.code ?? '',
-        streak:   standVon(karte.i, MODUS_EINSETZEN).s,
-        ...stand,
     };
 }
 
@@ -600,7 +606,17 @@ export function frageHoeren(unitId) {
     );
     if (offen.length === 0) return { done: true, ...stand };
 
-    const karte   = wuerfel(offen);
+    const karte = wuerfel(offen);
+    return {
+        done: false,
+        ...hoerAufgabe(v, unitId, karte),
+        streak: standVon(karte.i, MODUS_HOEREN).s,
+        ...stand,
+    };
+}
+
+/** Eine Höraufgabe zu dieser Vokabel - für die Übung und fürs Freie Üben. */
+function hoerAufgabe(v, unitId, karte) {
     const satz    = wuerfel(hoerSaetze(v, karte.i));
     const text    = satzGanz(satz);
     const woerter = hoerWoerter(text);
@@ -608,7 +624,6 @@ export function frageHoeren(unitId) {
     const spr     = sprache(einheit(unitId)?.l);
 
     return {
-        done: false,
         vocabId:  karte.i,
         satzId:   satz.i,
         text,
@@ -619,8 +634,6 @@ export function frageHoeren(unitId) {
         knoepfe:  mischen([...woerter, ...extra]).map((w, i) => ({ i, w })),
         audio:    tonAdresse(satz),
         lang:     spr?.code ?? '',
-        streak:   standVon(karte.i, MODUS_HOEREN).s,
-        ...stand,
     };
 }
 
@@ -1096,7 +1109,7 @@ export function freiUmfang(unitIds) {
  * kein Filter auf „noch nicht gekonnt" - der liesse sie nach zwanzig
  * Antworten leerlaufen.
  */
-export function frageFrei(unitIds) {
+export function frageFrei(unitIds, mitHoeren = true) {
     const v = vorratLaden();
     if (v === null) return null;
 
@@ -1107,11 +1120,23 @@ export function frageFrei(unitIds) {
     const saetze = v.saetze.get(karte.i) ?? [];
 
     /*
-     * Drei von fünf Aufgaben als Lückentext, wenn es Sätze gibt: Er ist die
-     * schwerere Übung, und wer frei übt, hat das Auswählen meist hinter
-     * sich. Eine einzelne Vokabel ohne Satz bekommt trotzdem ihre Frage.
+     * Alle Übungsarten, die bei dieser Vokabel gehen - gleich oft.
+     *
+     * Hier waren es einmal nur Auswählen und Lückentext. Seit es Einsetzen
+     * und Hören gibt, gehören sie dazu: Wer frei übt, soll alles üben, was
+     * die Lerneinheit kann. Hören nur, wenn es eine Aufnahme gibt - und nur,
+     * wenn es nicht abgeschaltet ist (der Schalter im Freien Üben: im
+     * Klassenzimmer ohne Kopfhörer will man es nicht).
      */
-    if (saetze.length > 0 && Math.random() < 0.6) {
+    const arten = [MODUS_WAHL];
+    if (saetze.length > 0) arten.push(MODUS_EINSETZEN, MODUS_LUECKE);
+    if (mitHoeren && uebbar(v, karte, MODUS_HOEREN)) arten.push(MODUS_HOEREN);
+    const art = wuerfel(arten);
+
+    if (art === MODUS_EINSETZEN) return { art, ...einsetzAufgabe(v, karte.u, karte) };
+    if (art === MODUS_HOEREN) return { art, ...hoerAufgabe(v, karte.u, karte) };
+
+    if (art === MODUS_LUECKE) {
         const satz = wuerfel(saetze);
         const spr  = sprache(v.einheit.get(karte.u)?.l);
         return {
@@ -1160,6 +1185,12 @@ export function frageFrei(unitIds) {
         nachVorn,
         language: spr?.name ?? '',
     };
+}
+
+/** Gibt es in diesen Lerneinheiten etwas zu hören? Sonst braucht es keinen Schalter. */
+export function freiHoerbar(unitIds) {
+    const v = vorratLaden();
+    return v !== null && vokabelnDerEinheiten(unitIds).some((w) => uebbar(v, w, MODUS_HOEREN));
 }
 
 /**
