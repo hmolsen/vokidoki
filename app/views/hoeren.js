@@ -20,6 +20,7 @@ import {
 } from '../core.js';
 import {
     frageHoeren, hoerPruefen, antwortMerken, MODUS_HOEREN, einheit, vorratAuffrischen,
+    hoerenVorladen,
 } from '../vorrat.js';
 import { meldeKnopf, meldenVerdrahten } from '../melden.js';
 import { weiterKnopf, weiterVerdrahten } from './unit.js';
@@ -42,6 +43,8 @@ export async function hoerenView(unitId) {
     // auf der nächsten Seite weiter.
     window.addEventListener('hashchange', () => zustand?.ton?.pause(), { once: true });
     naechste(unitId);
+    // Wer direkt hierher kommt, ohne die Lerneinheit: die übrigen Sätze nachholen.
+    hoerenVorladen(unitId);
 }
 
 function naechste(unitId) {

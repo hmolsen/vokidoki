@@ -47,7 +47,7 @@ $etag = '"' . $zeile['hash'] . '"';
 header('Content-Type: audio/mpeg');
 header('Cache-Control: private, max-age=31536000, immutable');
 header('ETag: ' . $etag);
-header('Accept-Ranges: none');
+header('Accept-Ranges: bytes');
 
 if (($_SERVER['HTTP_IF_NONE_MATCH'] ?? '') === $etag) {
     http_response_code(304);
@@ -58,5 +58,32 @@ if (($_SERVER['HTTP_IF_NONE_MATCH'] ?? '') === $etag) {
 while (ob_get_level() > 0) {
     ob_end_clean();
 }
-header('Content-Length: ' . filesize($pfad));
+
+/*
+ * Stücke, wenn danach gefragt wird. Safari holt eine Aufnahme so (erst
+ * bytes=0-1, dann den Rest) und spielt eine Antwort, die das nicht kann,
+ * auf dem iPhone unter Umständen gar nicht ab.
+ */
+$laenge = (int) filesize($pfad);
+if (preg_match('/^bytes=(\d*)-(\d*)$/', (string) ($_SERVER['HTTP_RANGE'] ?? ''), $b) === 1) {
+    $von = $b[1] === '' ? $laenge - (int) $b[2] : (int) $b[1];
+    $bis = $b[1] !== '' && $b[2] !== '' ? (int) $b[2] : $laenge - 1;
+    $von = max(0, $von);
+    $bis = min($bis, $laenge - 1);
+    if ($von > $bis) {
+        http_response_code(416);
+        header('Content-Range: bytes */' . $laenge);
+        exit;
+    }
+    http_response_code(206);
+    header('Content-Range: bytes ' . $von . '-' . $bis . '/' . $laenge);
+    header('Content-Length: ' . ($bis - $von + 1));
+    $datei = fopen($pfad, 'rb');
+    fseek($datei, $von);
+    echo fread($datei, $bis - $von + 1);
+    fclose($datei);
+    exit;
+}
+
+header('Content-Length: ' . $laenge);
 readfile($pfad);

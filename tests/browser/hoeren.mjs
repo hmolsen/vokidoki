@@ -7,7 +7,8 @@
  * Stimme: Dort gibt es die Übung gar nicht (Latein).
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { resolve } from 'node:path';
 import { browser, alsKind, ok, abschnitt, schlafe } from './browser.mjs';
 
 const php = (wurzel, code) =>
@@ -216,3 +217,88 @@ export async function pruefe(f, aus, wurzel) {
     }
 }
 
+/*
+ * Hören ohne Netz: Die Aufnahmen kommen aus dem Speicher des Service
+ * Workers.
+ *
+ * Wie beim Kaltstart (vorrat.mjs) mit eigenem Server, der wirklich
+ * abgeschaltet wird - Network.emulateNetworkConditions schaltet den Service
+ * Worker nicht mit ab und hätte hier nichts geprüft.
+ */
+export async function pruefeOhneNetz(f, aus, wurzel) {
+    abschnitt('Hören ohne Netz');
+
+    const projekt = resolve(wurzel, '..');
+    const port    = 8132;
+    const basis   = `http://127.0.0.1:${port}` + new URL(f.basis).pathname.replace(/\/$/, '');
+
+    const einheit = Number(php(wurzel, `require 'lib/db.php'; require_once 'lib/tts.php'; require_once 'lib/courses.php';
+        $k = q1('SELECT * FROM courses WHERE id = ?', [${f.kurs}]);
+        q("INSERT INTO units (language_id, course_id, title, released_position, position)
+           VALUES (?, ?, 'Hören ohne Netz', 2, 96)", [(int) $k['language_id'], (int) $k['id']]);
+        $u = (int) db()->lastInsertId();
+        foreach ([['the train', 'der Zug', 'train', 'Der Zug ist spät.', 'The {} is late.'],
+                  ['the station', 'der Bahnhof', 'station', 'Der Bahnhof ist groß.', 'The {} is big.']] as $i => [$fr, $de, $a, $sn, $sf]) {
+            q('INSERT INTO vocab (unit_id, position, term_foreign, term_native) VALUES (?, ?, ?, ?)', [$u, $i, $fr, $de]);
+            q('INSERT INTO sentences (vocab_id, native_text, foreign_text, answer) VALUES (?, ?, ?, ?)',
+              [(int) db()->lastInsertId(), $sn, $sf, $a]);
+        }
+        tts_nachtragen($u, course_billing_user((int) $k['id']));
+        echo $u;`));
+
+    const server = spawn('php', ['-S', `127.0.0.1:${port}`, '-t', projekt, resolve(projekt, 'tests', 'router.php')],
+                         { cwd: projekt, stdio: 'ignore' });
+    let laeuft = true;
+    const serverWeg = () => { if (laeuft) { laeuft = false; server.kill(); } };
+    await schlafe(900);
+
+    const b = await browser({ port: 9424, breite: 390, hoehe: 844, handy: true, aus });
+    try {
+        await alsKind(b, basis, f.kind, f.passwort);
+        await b.geh(basis + '/', 2200);
+        await b.js(`(async () => { const v = await import('${basis}/vorrat.js'); await v.vorratAuffrischen(); })()`);
+
+        // Die Lerneinheit öffnen legt ihre Aufnahmen ab - schon beim ersten
+        // Start, bevor der Service Worker die Seite steuert.
+        await b.hash(`/unit/${einheit}`, 2500);
+        const abgelegt = await b.js(`caches.open('vokabeltrainer-hoeren')
+            .then((c) => c.keys()).then((k) => k.map((r) => new URL(r.url).searchParams.get('s')))`);
+        ok('Beim Öffnen der Lerneinheit liegen ihre Aufnahmen schon im Speicher',
+           abgelegt.length === 2, JSON.stringify(abgelegt));
+
+        // Jetzt steuert er sie: einmal neu aufrufen - gewöhnlich, nicht mit neuLaden():
+        // Das lädt hart neu, und ein hartes Neuladen geht am Service Worker vorbei.
+        await b.geh(basis + '/', 2000);
+        await b.js(`new Promise((fertig) => navigator.serviceWorker.controller ? fertig(true)
+            : navigator.serviceWorker.addEventListener('controllerchange', () => fertig(true)))`);
+
+        serverWeg();
+        await schlafe(1200);
+        ok('Der Server ist wirklich aus',
+           (await b.js(`fetch('${basis}/api/meta.php?action=version').then(() => 'da').catch(() => 'weg')`)) === 'weg');
+
+        await b.hash(`/hoeren/${einheit}`, 1500);
+        const offline = await b.js(`(async () => {
+            const src = document.getElementById('abspielen')?.dataset.src ?? '';
+            const ganz = await fetch(src);
+            const stueck = await fetch(src, { headers: { Range: 'bytes=0-1' } });
+            const dauer = await new Promise((fertig) => {
+                const t = new Audio(src);
+                t.onloadedmetadata = () => fertig(t.duration);
+                t.onerror = () => fertig(-1);
+            });
+            return { ganz: ganz.status, stueck: stueck.status, bereich: stueck.headers.get('content-range'),
+                     laenge: (await stueck.arrayBuffer()).byteLength, dauer,
+                     knoepfe: document.querySelectorAll('#woerter .wort').length };
+        })()`);
+        ok('Ohne Server kommt die Übung, mit ihren Wörtern', offline.knoepfe > 0, JSON.stringify(offline));
+        ok('Und die Aufnahme aus dem Speicher', offline.ganz === 200 && offline.dauer > 0, JSON.stringify(offline));
+        ok('Auch in Stücken, wie Safari sie holt',
+           offline.stueck === 206 && offline.laenge === 2 && /^bytes 0-1\/\d+$/.test(offline.bereich ?? ''),
+           JSON.stringify(offline));
+    } finally {
+        b.schliessen();
+        serverWeg();
+        php(wurzel, `require 'lib/db.php'; q('DELETE FROM units WHERE id = ?', [${einheit}]);`);
+    }
+}

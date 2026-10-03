@@ -5,6 +5,7 @@ import {
 import { hantel } from './frei.js';
 import {
     einheit, vokabelListe, modusStand, zuruecksetzen, vorratAuffrischen, hatStimme,
+    hoerenVorladen,
 } from '../vorrat.js';
 
 /**
@@ -181,6 +182,8 @@ export async function unitView(unitId) {
     wireBack();
 
     kopfUnterLeiste();
+    // Die Aufnahmen schon holen, solange Netz da ist - im Zug ist es zu spät.
+    if (modes.listen.stimme && modes.listen.total > 0) hoerenVorladen(unit.id);
     wireExercises(unit.id);
     watchSentences(unit.id, modes);
     nachFreigabeSehen(unit.id, modes);

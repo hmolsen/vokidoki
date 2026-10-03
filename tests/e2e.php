@@ -6388,6 +6388,13 @@ $hEtag = preg_match('/ETag: ("[0-9a-f]+")/i', $hRes['headers'], $hm) === 1 ? $hm
 ok('Ein zweites Mal genügt "unverändert"',
    $hEtag !== '' && http($hUrl, null, ['If-None-Match: ' . $hEtag])['status'] === 304);
 
+// Safari holt Aufnahmen in Stücken - erst bytes=0-1, dann den Rest.
+$hStueck = http($hUrl, null, ['Range: bytes=0-1']);
+ok('Auf Wunsch kommt ein Stück der Aufnahme (206), wie Safari es verlangt',
+   $hStueck['status'] === 206 && strlen($hStueck['body']) === 2
+   && preg_match('/Content-Range: bytes 0-1\/\d+/i', $hStueck['headers']) === 1,
+   (string) $hStueck['status']);
+
 $hFremd = makeUser('e2e_hoer_fremd', 'Fremdes Kind');
 $hTopf  = tempnam(sys_get_temp_dir(), 'vt');
 $hFremdStatus = apiAls($hTopf, function () use ($hUrl) {

@@ -617,11 +617,59 @@ export function frageHoeren(unitId) {
         // Die Knöpfe: die Wörter des Satzes und die falschen, gemischt. Je
         // Knopf eine Nummer, weil ein Wort zweimal im Satz stehen kann.
         knoepfe:  mischen([...woerter, ...extra]).map((w, i) => ({ i, w })),
-        audio:    `${VT.base}/api/audio.php?s=${satz.i}&h=${encodeURIComponent(satz.h)}`,
+        audio:    tonAdresse(satz),
         lang:     spr?.code ?? '',
         streak:   standVon(karte.i, MODUS_HOEREN).s,
         ...stand,
     };
+}
+
+/*
+ * Der Speicher der Aufnahmen - derselbe Name wie TON in sw.js. Der Service
+ * Worker liefert daraus; hier wird er von der Seite aus gefüllt.
+ */
+const TON_SPEICHER = 'vokabeltrainer-hoeren';
+
+/** Die Adresse einer Aufnahme - mit ihrem Kurzzeichen, das sich mit dem Satz ändert. */
+function tonAdresse(satz) {
+    return new URL(`${VT.base}/api/audio.php?s=${satz.i}&h=${encodeURIComponent(satz.h)}`,
+                   location.href).href;
+}
+
+/**
+ * Die Aufnahmen einer Lerneinheit vorab ablegen - für das Üben ohne Netz.
+ *
+ * Ohne das lägen offline nur die Sätze vor, die das Kind zufällig schon
+ * gehört hat. Abgelegt wird von hier aus und nicht über einen Abruf, den
+ * der Service Worker mitschneidet: Beim allerersten Start steuert er die
+ * Seite noch nicht, und genau dann - frisch eingerichtet, mit Netz - soll
+ * schon alles in den Speicher. Eine nach der anderen und nur mit Netz;
+ * was schon liegt, wird nicht noch einmal geholt.
+ */
+let vorladenLaeuft = false;
+export async function hoerenVorladen(unitId) {
+    const v = vorratLaden();
+    if (v === null || vorladenLaeuft || !navigator.onLine || typeof caches === 'undefined') return;
+    if (!hatStimme(einheit(unitId)?.l)) return;
+
+    vorladenLaeuft = true;
+    try {
+        const speicher = await caches.open(TON_SPEICHER);
+        for (const w of vokabelnDerEinheit(unitId)) {
+            for (const s of hoerSaetze(v, w.i)) {
+                const adresse = tonAdresse(s);
+                if (await speicher.match(adresse)) continue;
+                try {
+                    const antwort = await fetch(adresse, { credentials: 'same-origin' });
+                    if (antwort.status === 200) await speicher.put(adresse, antwort);
+                } catch { return; }   // Netz weg - beim nächsten Mal weiter
+            }
+        }
+    } catch {
+        // Kein Speicher (privates Fenster) - dann eben nur mit Netz.
+    } finally {
+        vorladenLaeuft = false;
+    }
 }
 
 /** Der ganze Satz - die Lücke mit der Lösung gefüllt, wie er gesprochen wird. */
