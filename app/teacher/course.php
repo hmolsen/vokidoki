@@ -621,7 +621,7 @@ teacher_flash_render();
                         <input type="text" id="neuesMitglied" name="member_name" form="newmember"
                                list="kandidaten" autocomplete="off" maxlength="80" required
                                role="combobox" aria-expanded="false" aria-autocomplete="both"
-                               placeholder="Name eintippen">
+                               placeholder="Name oder Benutzername">
                     </span>
                     <ul class="vorschlaege" role="listbox" hidden></ul>
                 </span>
@@ -641,7 +641,8 @@ teacher_flash_render();
                             : (string) ($o['class_name'] ?? 'ohne Klasse'); ?>
                         <option value="<?= h($o['display_name']) ?>"
                                 data-zusatz="<?= h($zusatz) ?>"
-                                label="<?= h($zusatz) ?>"></option>
+                                data-benutzer="<?= h($o['username']) ?>"
+                                label="<?= h($zusatz . ' · ' . $o['username']) ?>"></option>
                     <?php endforeach; ?>
                 </datalist>
     <?php

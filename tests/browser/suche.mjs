@@ -166,6 +166,20 @@ export async function pruefe(f, aus) {
            lehrkraft.eintraege.every((e) => e.includes('(Lehrkraft)')),
            lehrkraft.eintraege.join(', '));
 
+        // ---- Nach dem Benutzernamen: Er steht auf dem Zettel und ist eindeutig.
+        const benutzer = await b.js(`document.querySelector('#kandidaten option[value="Marta W."]')?.dataset.benutzer ?? ''`);
+        await tippen(b, benutzer.slice(0, -1));
+        await schlafe(250);
+        const perName = await stand(b);
+        ok('Auch der Benutzername findet - und wird zu Ende geschrieben',
+           benutzer !== '' && perName.geist.endsWith(benutzer.slice(-1)) && !perName.offen,
+           JSON.stringify({ benutzer, perName }));
+        await tippen(b, 'Mar');
+        await schlafe(250);
+        ok('In der Liste steht er hinter Name und Klasse',
+           (await stand(b)).eintraege.some((e) => e.includes(`· ${benutzer}`)),
+           (await stand(b)).eintraege.join(', '));
+
         // ---- Niemand: ein Satz statt einer leeren Liste.
 
         await tippen(b, 'Zwiebelfisch');

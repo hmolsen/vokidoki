@@ -372,10 +372,21 @@ function initMemberSearch() {
      * Klasse kennt, aber den Namen nur halb, kommt ueber sie ans Ziel.
      */
     const leute = [...daten.options].map((o) => ({
-        name:   o.value,
-        zusatz: o.dataset.zusatz ?? '',
+        name:     o.value,
+        zusatz:   o.dataset.zusatz ?? '',
+        benutzer: o.dataset.benutzer ?? '',
     }));
     const beschriftung = (l) => (l.zusatz === '' ? l.name : `${l.name} (${l.zusatz})`);
+
+    /*
+     * Auch nach dem Benutzernamen: Er steht auf dem Zettel des Kindes und
+     * ist eindeutig, wo es "Lilli M." zweimal gibt. Ins Feld kommt der
+     * Name - es sei denn, es gibt ihn mehrmals; dann der Benutzername, und
+     * der Server weiss, wer gemeint ist.
+     */
+    const findet = (l, suche) => passt(beschriftung(l), suche) || passt(l.benutzer, suche);
+    const eindeutigerName = (l) => leute.filter((x) => x.name === l.name).length === 1;
+    const eintrag = (l) => (eindeutigerName(l) || l.benutzer === '' ? l.name : l.benutzer);
 
     // Die eigene Liste ersetzt die des Browsers - beide zugleich wären zwei
     // Vorschlagslisten übereinander.
@@ -435,17 +446,19 @@ function initMemberSearch() {
             return;
         }
 
-        const treffer = leute.filter((l) => passt(beschriftung(l), suche));
+        const treffer = leute.filter((l) => findet(l, suche));
 
         /*
          * Genau einer, und er fängt mit dem Getippten an: Dann ist die
-         * Liste überflüssig - der Name steht ja schon da, nur grau.
+         * Liste überflüssig - der Name steht ja schon da, nur grau. Wer den
+         * Benutzernamen tippt, bekommt ihn zu Ende geschrieben.
          */
-        const eindeutig = treffer.length === 1
-            && ohnePunkte(treffer[0].name).startsWith(ohnePunkte(suche));
+        const ganz = treffer.length !== 1 ? ''
+            : [treffer[0].name, treffer[0].benutzer]
+                .find((w) => w !== '' && ohnePunkte(w).startsWith(ohnePunkte(suche))) ?? '';
 
-        if (eindeutig) {
-            geistSetzen(roh, roh + treffer[0].name.slice(suche.length));
+        if (ganz !== '') {
+            geistSetzen(roh, roh + ganz.slice(suche.length));
             schliessen();
             return;
         }
@@ -468,7 +481,7 @@ function initMemberSearch() {
         liste.innerHTML = gezeigt.map((l, i) => `<li role="option" data-i="${i}"
             aria-selected="false">${escapeHtml(l.name)}<span class="zusatz">${
                 l.zusatz === '' ? '' : ` (${escapeHtml(l.zusatz)})`
-            }</span></li>`).join('');
+            }${l.benutzer === '' ? '' : ` · ${escapeHtml(l.benutzer)}`}</span></li>`).join('');
         liste.hidden = false;
         platzieren();
         feld.setAttribute('aria-expanded', 'true');
@@ -516,7 +529,7 @@ function initMemberSearch() {
         // schickt das Formular ganz gewöhnlich ab.
         if (aktiv >= 0) {
             e.preventDefault();
-            nehmen(gezeigt[aktiv].name);
+            nehmen(eintrag(gezeigt[aktiv]));
             return;
         }
         if (ergaenzung !== '') {
@@ -529,7 +542,7 @@ function initMemberSearch() {
     liste.addEventListener('click', (e) => {
         const li = e.target.closest('li[role=option]');
         if (!li) return;
-        nehmen(gezeigt[Number(li.dataset.i)].name);
+        nehmen(eintrag(gezeigt[Number(li.dataset.i)]));
     });
 
     // Wer woandershin fasst, will die Liste nicht mehr sehen.
