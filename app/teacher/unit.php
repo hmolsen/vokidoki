@@ -88,30 +88,52 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['release'])) {
         teacher_redirect($zurueck);
     }
 
-    $fehlen = vocab_without_sentences($unitId);
+    /*
+     * Fehlt etwas, entsteht es jetzt - erst die Sätze, dann ihre Aufnahmen.
+     *
+     * Fehlen Sätze, macht der Satzlauf beides (generate_sentences_tracked()
+     * spricht am Ende nach). Waren alle Sätze schon da, hiess das bisher:
+     * nichts tun - und fehlende Aufnahmen blieben fehlend, bis jemand im
+     * Admin nachtrug. Jetzt gibt es dafür einen eigenen Lauf im Hintergrund.
+     */
+    $fehlen       = vocab_without_sentences($unitId);
+    $ohneAufnahme = tts_aktiv() ? tts_fehlend($unitId) : 0;
 
-    if ($fehlen === 0
-        || budget_block_reason((int) $user['id']) !== null
-        || !sentence_claim($unitId)) {
-        teacher_flash(sprintf('%d Vokabeln freigegeben.', $bis));
-        teacher_redirect($zurueck);
+    if ($fehlen > 0
+        && budget_block_reason((int) $user['id']) === null
+        && sentence_claim($unitId)) {
+        /*
+         * Antworten, dann weiterarbeiten.
+         *
+         * Die Saetze zu zwanzig Vokabeln dauern eine halbe Minute, und solange
+         * soll niemand auf eine leere Seite sehen. Die Seite, auf der die
+         * Lehrkraft landet, sagt "entsteht gerade" und laedt sich von selbst
+         * nach.
+         */
+        teacher_flash(sprintf(
+            '%d Vokabeln freigegeben. Die Lückensätze dazu entstehen gerade.', $bis));
+        teacher_redirect_and_continue($zurueck);
+
+        set_time_limit(900);
+        generate_sentences_tracked($unitId);
+        exit;
     }
 
-    /*
-     * Antworten, dann weiterarbeiten.
-     *
-     * Die Saetze zu zwanzig Vokabeln dauern eine halbe Minute, und solange
-     * soll niemand auf eine leere Seite sehen. Die Seite, auf der die
-     * Lehrkraft landet, sagt "entsteht gerade" und laedt sich von selbst
-     * nach.
-     */
-    teacher_flash(sprintf(
-        '%d Vokabeln freigegeben. Die Lückensätze dazu entstehen gerade.', $bis));
-    teacher_redirect_and_continue($zurueck);
+    if ($ohneAufnahme > 0) {
+        $zahler = course_billing_user((int) $unit['course_id']);
+        if ($zahler !== null) {
+            teacher_flash(sprintf(
+                '%d Vokabeln freigegeben. Die Aufnahmen zum Hören entstehen gerade.', $bis));
+            teacher_redirect_and_continue($zurueck);
 
-    set_time_limit(900);
-    generate_sentences_tracked($unitId);
-    exit;
+            set_time_limit(900);
+            sentence_audio_nachtragen($unitId, $zahler);
+            exit;
+        }
+    }
+
+    teacher_flash(sprintf('%d Vokabeln freigegeben.', $bis));
+    teacher_redirect($zurueck);
 }
 
 /*

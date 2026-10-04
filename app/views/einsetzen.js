@@ -86,9 +86,62 @@ function naechste(unitId) {
         return;
     }
 
-    if (zustand === null || !document.getElementById('luecke')) {
-        aufbauen(unitId);
+    einsetzenZeigen(einsetzenArt(unitId), data);
+}
+
+/*
+ * Was an einer Einsetzaufgabe von aussen kommt - wie beim Lückentext
+ * (cloze.js, lueckeArt()): Der Bildschirm ist derselbe für die Übung und
+ * fürs Freie Üben, anders ist nur, was darüber steht und wohin die Antwort
+ * geht.
+ *
+ *   schluessel  wann der stehende Bildschirm weiterbenutzt werden darf
+ *   kopf()      was über dem Satz steht
+ *   punkte      ob die drei Punkte des Lernstands darunter stehen
+ *   zeigen()    was bei jeder neuen Aufgabe sonst noch nachzuziehen ist
+ *   merken()    die Antwort verbuchen - liefert just_learned
+ *   weiter()    die nächste Aufgabe
+ */
+function einsetzenArt(unitId) {
+    return {
+        schluessel: `einsetzen:${unitId}`,
+        kopf: () => topbar('Einsetzen', {
+            backTo: `/unit/${unitId}`,
+            action: '<div class="topbar-progress" id="progress"></div>',
+        }),
+        punkte: true,
+        zeigen(data) {
+            $('#dots').innerHTML = [0, 1, 2]
+                .map((i) => `<i class="${i < Math.min(3, data.streak) ? 'on' : ''}"></i>`).join('');
+            const fortschritt = $('#progress');
+            fortschritt.innerHTML = `
+                ${progressBar(data.known, data.total)}
+                <span class="tiny muted">${data.known}/${data.total}</span>`;
+            fortschritt.title = `${data.known} von ${data.total} gelernt`;
+        },
+        merken(data, richtig) {
+            const result = antwortMerken(data.vocabId, MODUS_EINSETZEN, richtig);
+            if (richtig) {
+                babing();
+                punkteAktualisieren(document, result.streak);
+                if (result.newly_learned) konfetti();
+                serieAktualisieren(result.tag_geschafft);
+            } else {
+                punkteAktualisieren(document, 0);
+            }
+            return result;
+        },
+        weiter: () => naechste(unitId),
+    };
+}
+
+/** Eine Einsetzaufgabe zeigen - von hier und vom Freien Üben aus. */
+export function einsetzenZeigen(art, data) {
+    if (zustand === null || zustand.art.schluessel !== art.schluessel
+        || !document.getElementById('luecke')) {
+        aufbauen(art);
     }
+    zustand.art = art;
     zeigen(data);
 }
 
@@ -105,14 +158,11 @@ function wartebild(unitId) {
 }
 
 /** Baut den Bildschirm einmal auf; danach werden nur Texte getauscht. */
-function aufbauen(unitId) {
+function aufbauen(art) {
     render(`
         <div class="screen">
             <div class="screen-top">
-                ${topbar('Einsetzen', {
-                    backTo: `/unit/${unitId}`,
-                    action: '<div class="topbar-progress" id="progress"></div>',
-                })}
+                ${art.kopf()}
             </div>
 
             <div class="screen-body">
@@ -123,7 +173,7 @@ function aufbauen(unitId) {
                         ><span class="luecke" id="luecke" aria-live="polite"></span
                         ><span id="gap-after"></span>
                     </p>
-                    <div class="cloze-dots"><span class="dots" id="dots"></span></div>
+                    ${art.punkte ? '<div class="cloze-dots"><span class="dots" id="dots"></span></div>' : ''}
                     <div class="verdict" id="verdict"></div>
                 </div>
 
@@ -141,7 +191,7 @@ function aufbauen(unitId) {
     `);
     wireBack();
 
-    zustand = { unitId, data: null, beantwortet: false, weiterGeschaltet: false };
+    zustand = { art, data: null, beantwortet: false, weiterGeschaltet: false };
 
     $('#weiter').addEventListener('click', () => weiterSchalten());
     ziehenVerdrahten();
@@ -173,14 +223,7 @@ function zeigen(data) {
     verdict.className = 'verdict';
     verdict.textContent = '';
 
-    $('#dots').innerHTML = [0, 1, 2]
-        .map((i) => `<i class="${i < Math.min(3, data.streak) ? 'on' : ''}"></i>`).join('');
-
-    const fortschritt = $('#progress');
-    fortschritt.innerHTML = `
-        ${progressBar(data.known, data.total)}
-        <span class="tiny muted">${data.known}/${data.total}</span>`;
-    fortschritt.title = `${data.known} von ${data.total} gelernt`;
+    zustand.art.zeigen(data);
 
     meldenVerdrahten(document.querySelector('[data-melden]'), () => ({
         vocabId: data.vocabId,
@@ -209,20 +252,14 @@ function waehlen(knopf) {
     });
     if (!richtig) knopf.classList.add('bad');
 
-    const result  = antwortMerken(z.data.vocabId, MODUS_EINSETZEN, richtig);
+    const result  = z.art.merken(z.data, richtig);
     const verdict = $('#verdict');
 
     if (richtig) {
-        babing();
-        punkteAktualisieren(document, result.streak);
-        if (result.newly_learned) konfetti();
-        serieAktualisieren(result.tag_geschafft);
-
         verdict.className = 'verdict good';
         verdict.textContent = result.just_learned ? 'Diese Vokabel kannst du jetzt.' : 'Richtig!';
         setTimeout(weiterSchalten, NEXT_DELAY_CORRECT);
     } else {
-        punkteAktualisieren(document, 0);
         /*
          * Falsch: kein Zeitablauf, wie im Lückentext. Das richtige Wort
          * leuchtet unten grün, und das Kind geht selbst weiter, wenn es
@@ -240,7 +277,7 @@ function weiterSchalten() {
     const z = zustand;
     if (!z || z.weiterGeschaltet) return;
     z.weiterGeschaltet = true;
-    naechste(z.unitId);
+    z.art.weiter();
 }
 
 /**

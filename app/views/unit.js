@@ -4,7 +4,8 @@ import {
 } from '../core.js';
 import { hantel } from './frei.js';
 import {
-    einheit, vokabelListe, modusStand, zuruecksetzen, vorratAuffrischen,
+    einheit, vokabelListe, modusStand, zuruecksetzen, vorratAuffrischen, hatStimme,
+    hoerenVorladen,
 } from '../vorrat.js';
 
 /**
@@ -21,6 +22,9 @@ const UEBUNGEN = [
       hint: 'Das passende Wort in die Lücke ziehen' },
     { mode: 'cloze', icon: '\u{270F}\u{FE0F}', title: 'Lückentext', ziel: '/cloze',
       hint: 'Das fehlende Wort in den Satz eintippen' },
+    // Zuletzt: Hier steht nichts mehr auf dem Bildschirm, was hilft - nur der Klang.
+    { mode: 'listen', icon: '\u{1F3A7}', title: 'Hören', ziel: '/hoeren',
+      hint: 'Den Satz anhören und die Wörter in die richtige Reihenfolge legen' },
 ];
 
 /*
@@ -33,6 +37,16 @@ const UEBUNGEN = [
  * kommen. Die Namen stehen in der aufgeklappten Zeile.
  */
 const EXERCISES = UEBUNGEN;
+
+/**
+ * Die Übungen dieser Lerneinheit: Hören nur, wenn es für die Sprache eine
+ * Stimme gibt. In Lateinkursen gibt es die Übung nicht - keine Zeile, kein
+ * Ring, und sie zählt nicht zu "in allen Übungen geschafft".
+ */
+function uebungenFuer(unitId) {
+    const mitStimme = hatStimme(einheit(unitId)?.l);
+    return EXERCISES.filter((u) => u.mode !== 'listen' || mitStimme);
+}
 
 const uebung = (mode) => UEBUNGEN.find((u) => u.mode === mode);
 
@@ -70,18 +84,19 @@ export async function unitView(unitId) {
     const unit  = { id: roh.i, title: roh.t, language_id: roh.l };
     const vocab = vokabelListe(unitId);
     const modes = modusStand(unitId);
+    const uebungen = uebungenFuer(unitId);
 
     // Alle Übungsarten zusammen - eine Vokabel ist erst durch, wenn sie in
     // jeder Form sitzt, in der sie überhaupt geübt werden kann.
     const summe = (feld) => vocab.reduce(
-        (s, v) => s + EXERCISES.reduce((t, e) => t + v.modes[e.mode][feld], 0), 0);
+        (s, v) => s + uebungen.reduce((t, e) => t + v.modes[e.mode][feld], 0), 0);
     const correct = summe('correct');
     const wrong   = summe('wrong');
     const asked   = correct + wrong;
     const quota   = asked > 0 ? Math.round((correct / asked) * 100) : null;
 
     const komplett = vocab.length > 0 && vocab.every(
-        (v) => EXERCISES.every((e) => !v.modes[e.mode].possible || v.modes[e.mode].known),
+        (v) => uebungen.every((e) => !v.modes[e.mode].possible || v.modes[e.mode].known),
     );
 
     /*
@@ -100,11 +115,11 @@ export async function unitView(unitId) {
                     }</span>
                 </span>
                 <span class="ringe">
-                    ${EXERCISES.map((e) => ring(e, v.modes[e.mode])).join('')}
+                    ${uebungen.map((e) => ring(e, v.modes[e.mode])).join('')}
                 </span>
             </summary>
             <div class="vocabdetail">
-                ${EXERCISES.map((e) => mark(e, v.modes[e.mode])).join('')}
+                ${uebungen.map((e) => mark(e, v.modes[e.mode])).join('')}
             </div>
         </details>
     `).join('');
@@ -121,6 +136,7 @@ export async function unitView(unitId) {
             ${uebungRow('mc', modes.mc)}
             ${uebungRow('pick', modes.pick)}
             ${uebungRow('cloze', modes.cloze)}
+            ${modes.listen.stimme ? uebungRow('listen', modes.listen) : ''}
             <!--
                 Freies Ueben: alles, was freigegeben ist, ohne Ziel und ohne
                 Ende. Es ruehrt den Lernstand nicht an - deshalb steht hier
@@ -146,7 +162,7 @@ export async function unitView(unitId) {
             <div class="vocabkopf">
                 <span class="tiny muted">Antippen für Einzelheiten</span>
                 <span class="ringe">
-                    ${EXERCISES.map((e) => `<span class="ringzeichen" title="${esc(e.title)}"
+                    ${uebungen.map((e) => `<span class="ringzeichen" title="${esc(e.title)}"
                         aria-label="${esc(e.title)}">${e.icon}</span>`).join('')}
                 </span>
             </div>
@@ -166,6 +182,8 @@ export async function unitView(unitId) {
     wireBack();
 
     kopfUnterLeiste();
+    // Die Aufnahmen schon holen, solange Netz da ist - im Zug ist es zu spät.
+    if (modes.listen.stimme && modes.listen.total > 0) hoerenVorladen(unit.id);
     wireExercises(unit.id);
     watchSentences(unit.id, modes);
     nachFreigabeSehen(unit.id, modes);
@@ -272,10 +290,11 @@ function geschafft(info) {
  */
 export function weiterKnopf(unitId, fertig) {
     const stand = modusStand(unitId);
-    const ab    = UEBUNGEN.findIndex((u) => u.mode === fertig);
+    const reihe = uebungenFuer(unitId);
+    const ab    = reihe.findIndex((u) => u.mode === fertig);
 
-    for (let schritt = 1; schritt < UEBUNGEN.length; schritt++) {
-        const andere   = UEBUNGEN[(ab + schritt) % UEBUNGEN.length];
+    for (let schritt = 1; schritt < reihe.length; schritt++) {
+        const andere   = reihe[(ab + schritt) % reihe.length];
         const info     = stand[andere.mode];
         const moeglich = info.total > 0 || info.status === 'running';
         if (moeglich && !geschafft(info)) {
@@ -306,7 +325,7 @@ export function weiterVerdrahten() {
  * beim Stand im Gerät.
  */
 function nachFreigabeSehen(unitId, modes) {
-    if (!geschafft(modes.mc) && !geschafft(modes.pick) && !geschafft(modes.cloze)) return;
+    if (!['mc', 'pick', 'cloze', 'listen'].some((m) => geschafft(modes[m]))) return;
 
     vorratAuffrischen().then((frisch) => {
         if (frisch && location.hash === `#/unit/${unitId}`) unitView(unitId);
@@ -340,11 +359,14 @@ function watchSentences(unitId, modes) {
 
         // Nur die Zeilen tauschen; der Handler sitzt am Behälter und bleibt.
         // Einsetzen hängt an denselben Sätzen - es wird mit frei.
-        modes.cloze = data.cloze;
-        modes.pick  = data.pick;
+        modes.cloze  = data.cloze;
+        modes.pick   = data.pick;
+        modes.listen = data.listen;
         row.outerHTML = uebungRow('cloze', data.cloze);
         const einsetzen = document.querySelector('[data-mode-row="pick"]');
         if (einsetzen) einsetzen.outerHTML = uebungRow('pick', data.pick);
+        const hoeren = document.querySelector('[data-mode-row="listen"]');
+        if (hoeren) hoeren.outerHTML = uebungRow('listen', data.listen);
     };
 
     setTimeout(tick, 2000);
@@ -360,8 +382,10 @@ function uebungRow(mode, info) {
 function exerciseRow(mode, icon, title, hint, info) {
     const fertig = geschafft(info);
     const wartet = info.status === 'running';
+    // Hören: Die Sätze sind da, ihre Aufnahmen noch nicht.
+    const aufnahmen = info.status === 'audio';
     const kaputt = info.status === 'failed';
-    const zu     = wartet || fertig;
+    const zu     = wartet || fertig || aufnahmen;
 
     /*
      * Solange die Sätze entstehen: Spinner statt Symbol, Zeile nicht
@@ -374,6 +398,8 @@ function exerciseRow(mode, icon, title, hint, info) {
     let text;
     if (wartet) {
         text = 'Deine Sätze werden vorbereitet...';
+    } else if (aufnahmen) {
+        text = 'Die Aufnahmen kommen noch.';
     } else if (fertig) {
         text = `Geschafft - alle ${info.total} gelernt`;
     } else if (kaputt) {

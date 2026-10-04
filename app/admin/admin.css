@@ -2327,3 +2327,17 @@ table.data tr.newrow.anlegen .iconaction.anlegeplus {
      */
     table.data.release tr.newrow.anlegen td { display: table-cell; padding: 8px 6px; }
 }
+
+/*
+ * Die Zeichen der Aufnahmen auf der Kostenseite (admin/index.php): eine
+ * Fläche, die über den Monat ansteigt, und gestrichelt die Grenze des
+ * Freikontingents.
+ */
+.zeichenkurve { display: block; width: 100%; height: auto; }
+.zeichenkurve text { fill: var(--text-soft); font-size: 12px; font-variant-numeric: tabular-nums; }
+.zeichenkurve .achse   { stroke: var(--border); stroke-width: 1; }
+.zeichenkurve .grenze  { stroke: var(--bad); stroke-width: 1.5; stroke-dasharray: 6 5; }
+.zeichenkurve .grenztext { fill: var(--bad); font-weight: 700; }
+.zeichenkurve .flaeche { fill: color-mix(in srgb, var(--accent) 18%, transparent); }
+.zeichenkurve .linie   { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; }
+.zeichenkurve .heute   { fill: var(--accent); }

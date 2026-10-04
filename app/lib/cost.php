@@ -75,9 +75,12 @@ function models_without_price(): array
 {
     $bekannt = array_keys(price_table());
 
+    // Ohne die Aufnahmen: Dort steht die Stimme, und ihr Preis kommt aus dem
+    // Tarif (lib/tts.php), nicht aus dieser Tabelle - sonst stünde jede
+    // Stimme hier als "ohne Preis".
     $gesehen = array_column(qa(
         "SELECT DISTINCT model FROM ai_requests
-          WHERE created_at >= NOW() - INTERVAL 90 DAY"
+          WHERE created_at >= NOW() - INTERVAL 90 DAY AND purpose <> 'tts'"
     ), 'model');
 
     return array_values(array_diff($gesehen, $bekannt));
@@ -175,7 +178,10 @@ function budget_block_reason(int $userId): ?string
 /** Schreibt einen Eintrag ins Kostenprotokoll und liefert die Kosten in USD. */
 function ai_log(array $row): float
 {
-    $cost = cost_for(
+    // Wer anders abrechnet als nach Token - die Aufnahmen nach Zeichen
+    // (lib/tts.php) -, bringt den Betrag selbst mit. Durch cost_for() ginge
+    // die Stimme als unbekanntes Modell zum teuersten Tokenpreis durch.
+    $cost = isset($row['cost_usd']) ? (float) $row['cost_usd'] : cost_for(
         (string) $row['model'],
         (int) ($row['input_tokens'] ?? 0),
         (int) ($row['output_tokens'] ?? 0),

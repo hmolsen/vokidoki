@@ -54,7 +54,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
      * Formular direkt ins UPDATE - und traf jede Einheit, die man hineinschrieb.
      */
     $braucheEinheit = ['save_rows', 'save_sentence_rows', 'delete_sentence',
-                       'make_sentences', 'delete_vocab', 'add_vocab'];
+                       'make_sentences', 'make_audio', 'delete_vocab', 'add_vocab'];
     foreach ($braucheEinheit as $aktion) {
         if (isset($_POST[$aktion]) && $unit === null) {
             flash('Diese Lerneinheit gibt es nicht mehr.', 'bad');
@@ -183,6 +183,29 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         } catch (Throwable $e) {
             error_log('[vokabeltrainer] Sätze: ' . scrub_secrets($e->getMessage()));
             flash('Die Sätze konnten nicht erzeugt werden. Details stehen im Protokoll.', 'bad');
+        }
+        back_to_filter($scope);
+    }
+
+    /*
+     * Fehlende Aufnahmen nachtragen - für Lerneinheiten, deren Sätze schon
+     * standen, bevor es "Hören" gab, und für Sätze, die seitdem verbessert
+     * wurden. Neue entstehen von selbst im Lauf nach den Sätzen.
+     */
+    if (isset($_POST['make_audio'])) {
+        set_time_limit(300);
+        $owner = course_billing_user($courseId);
+        if ($owner === null) {
+            flash('In diesem Kurs ist niemand - kein Konto, das für die Kosten geradesteht.', 'bad');
+            back_to_filter($scope);
+        }
+        $res = tts_nachtragen($unitId, $owner);
+        $text = sprintf('%d Aufnahme(n) erzeugt.', $res['erzeugt'])
+              . ($res['offen'] > 0 ? sprintf(' %d fehlen noch.', $res['offen']) : '');
+        if ($res['fehler'] !== null) {
+            flash($text . ' ' . $res['fehler'], 'bad');
+        } else {
+            flash($text);
         }
         back_to_filter($scope);
     }
@@ -735,6 +758,21 @@ flash_render();
             <?= $openSentences > 0 ? 'Fehlende Sätze erzeugen' : 'Nichts zu erzeugen' ?>
         </button>
     </form>
+    <?php if (tts_stimme(tts_sprachcode($unitId)) !== null): ?>
+    <?php $openAudio = tts_fehlend($unitId); ?>
+    <p class="tiny muted" style="margin:14px 0 8px">
+        <?= $openAudio > 0
+            ? sprintf('<strong>%d Satz/Sätze ohne Aufnahme</strong> &ndash; für &bdquo;Hören&ldquo;.', $openAudio)
+            : 'Jeder Satz hat seine Aufnahme.' ?>
+    </p>
+    <form method="post">
+        <?= csrf_field() ?>
+        <?= admin_scope_fields($scope) ?>
+        <button class="btn small secondary" name="make_audio" value="1"<?= $openAudio > 0 ? '' : ' disabled' ?>>
+            <?= $openAudio > 0 ? 'Fehlende Aufnahmen erzeugen' : 'Nichts aufzunehmen' ?>
+        </button>
+    </form>
+    <?php endif; ?>
 </div>
 
 <?php if ($sentences !== []): ?>

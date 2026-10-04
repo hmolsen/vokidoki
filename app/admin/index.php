@@ -19,9 +19,12 @@ $cap  = (float) setting('monthly_cost_cap_usd', '10.00');
 $eur = static fn (float $usd): string => number_format($usd * $rate, 2, ',', '.') . ' EUR';
 $usd = static fn (float $u): string => '$' . number_format($u, 4, '.', ',');
 
+// Token ohne die Aufnahmen - dort stehen Zeichen, und die haben unten einen
+// eigenen Abschnitt.
 $month = q1(
     "SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS c,
-            COALESCE(SUM(input_tokens), 0) AS ti, COALESCE(SUM(output_tokens), 0) AS to_
+            COALESCE(SUM(CASE WHEN purpose <> 'tts' THEN input_tokens ELSE 0 END), 0) AS ti,
+            COALESCE(SUM(CASE WHEN purpose <> 'tts' THEN output_tokens ELSE 0 END), 0) AS to_
        FROM ai_requests
       WHERE created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')"
 );
@@ -73,13 +76,14 @@ const ZWECK = [
     'vocab_ocr'  => 'Fehlerkorrektur',
     'sentences'  => 'Lückensätze',
     'word_types' => 'Kategorien',
+    'tts'        => 'Aufnahmen',
 ];
 
 $perModel = qa(
     "SELECT model, COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS c,
             COALESCE(SUM(input_tokens), 0) AS ti, COALESCE(SUM(output_tokens), 0) AS tokens_out
        FROM ai_requests
-      WHERE created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')
+      WHERE created_at >= DATE_FORMAT(NOW(), '%Y-%m-01') AND purpose <> 'tts'
       GROUP BY model
       ORDER BY c DESC"
 );
@@ -138,6 +142,96 @@ flash_render();
     <?php endforeach; ?>
 </div>
 <p class="tiny muted">Höchster Tageswert: <?= $eur($maxDaily) ?></p>
+
+<?php
+/*
+ * Die Aufnahmen (Azure Speech) - gezählt in Zeichen, nicht in Euro.
+ *
+ * Im kostenlosen Tarif zählt nur, wie viel vom Freikontingent übrig ist:
+ * Ist es aufgebraucht, nimmt Azure bis zum Monatsende nichts mehr an, und
+ * neue Lerneinheiten bekommen ihre Aufnahmen erst im nächsten Monat. Die
+ * Linie zeigt, wie der Monat dorthin unterwegs ist.
+ */
+$ttsTage   = tts_zeichen_je_tag();
+$ttsMonate = tts_zeichen_je_monat();
+?>
+<?php if (tts_aktiv() || array_sum($ttsMonate) > 0): ?>
+<?php
+$ttsFrei   = tts_tarif_frei();
+$ttsGrenze = $ttsFrei ? tts_freikontingent() : 0;
+$ttsSumme  = array_sum($ttsTage);
+$monatTage = (int) date('t');
+$heute     = (int) date('j');
+$zahl      = static fn (int $n): string => number_format($n, 0, ',', '.');
+
+// Die Linie: aufgelaufene Zeichen je Tag, bis heute.
+$b = 700; $hoehe = 210; $links = 64; $rechts = 16; $oben = 14; $unten = 26;
+$innenB = $b - $links - $rechts;
+$innenH = $hoehe - $oben - $unten;
+$ymax   = max(1000, (int) ceil(max($ttsGrenze * 1.1, $ttsSumme * 1.15)));
+$x = static fn (float $tag): float => $links + ($tag - 1) / max(1, $monatTage - 1) * $innenB;
+$y = static fn (float $z): float => $oben + $innenH - $z / $ymax * $innenH;
+$punkte = [];
+$lauf = 0;
+for ($t = 1; $t <= $heute; $t++) {
+    $lauf += $ttsTage[$t] ?? 0;
+    $punkte[] = sprintf('%.1f,%.1f', $x($t), $y($lauf));
+}
+$flaeche = sprintf('%.1f,%.1f ', $x(1), $y(0)) . implode(' ', $punkte)
+         . sprintf(' %.1f,%.1f', $x($heute), $y(0));
+?>
+<h2 id="aufnahmen">Aufnahmen: Zeichen diesen Monat</h2>
+<div class="card">
+    <p style="margin:0 0 6px">
+        <strong><?= $zahl($ttsSumme) ?></strong> Zeichen
+        <?php if ($ttsFrei && $ttsGrenze > 0): ?>
+            von <?= $zahl($ttsGrenze) ?> frei
+            (<?= (int) round($ttsSumme / $ttsGrenze * 100) ?>&nbsp;%)
+            &ndash; <?= $ttsSumme >= $ttsGrenze * TTS_KONTINGENT_RAND
+                ? '<strong>aufgebraucht</strong>, weiter ab dem 1.'
+                : 'noch ' . $zahl(max(0, $ttsGrenze - $ttsSumme)) . ' übrig' ?>
+        <?php else: ?>
+            &ndash; Standardtarif, <?= $eur(tts_kosten($ttsSumme)) ?>
+        <?php endif; ?>
+    </p>
+    <svg class="zeichenkurve" viewBox="0 0 <?= $b ?> <?= $hoehe ?>" role="img"
+         aria-label="Aufgelaufene Zeichen in diesem Monat, Tag für Tag">
+        <line class="achse" x1="<?= $links ?>" y1="<?= $y(0) ?>" x2="<?= $b - $rechts ?>" y2="<?= $y(0) ?>"/>
+        <?php if ($ttsGrenze > 0): ?>
+            <line class="grenze" x1="<?= $links ?>" y1="<?= $y($ttsGrenze) ?>"
+                  x2="<?= $b - $rechts ?>" y2="<?= $y($ttsGrenze) ?>"/>
+            <text class="grenztext" x="<?= $b - $rechts ?>" y="<?= $y($ttsGrenze) - 5 ?>"
+                  text-anchor="end">Freikontingent <?= $zahl($ttsGrenze) ?></text>
+        <?php endif; ?>
+        <text x="<?= $links - 8 ?>" y="<?= $y(0) + 4 ?>" text-anchor="end">0</text>
+        <text x="<?= $links - 8 ?>" y="<?= $y($ymax) + 10 ?>" text-anchor="end"><?= $zahl($ymax) ?></text>
+        <polygon class="flaeche" points="<?= h($flaeche) ?>"/>
+        <polyline class="linie" points="<?= h(implode(' ', $punkte)) ?>"/>
+        <circle class="heute" cx="<?= $x($heute) ?>" cy="<?= $y($lauf) ?>" r="4"/>
+        <?php foreach ([1, 10, 20, $monatTage] as $t): ?>
+            <text x="<?= $x($t) ?>" y="<?= $hoehe - 6 ?>" text-anchor="middle"><?= $t ?>.</text>
+        <?php endforeach; ?>
+    </svg>
+    <table class="data" style="margin-top:12px">
+        <tr><th>Monat</th><th class="num">Zeichen</th><?php if ($ttsFrei && $ttsGrenze > 0): ?><th class="num">vom Freikontingent</th><?php endif; ?></tr>
+        <?php foreach (array_reverse($ttsMonate, true) as $m => $z): ?>
+            <tr>
+                <td><?= h(date('m/Y', strtotime($m . '-01'))) ?></td>
+                <td class="num"><?= $zahl($z) ?></td>
+                <?php if ($ttsFrei && $ttsGrenze > 0): ?>
+                    <td class="num"><?= (int) round($z / $ttsGrenze * 100) ?>&nbsp;%</td>
+                <?php endif; ?>
+            </tr>
+        <?php endforeach; ?>
+    </table>
+    <p class="tiny muted" style="margin-bottom:0">
+        Gezählt wird der gesprochene Satz &ndash; Azure zählt selbst nach und kann
+        leicht abweichen. Deshalb hören die Läufe kurz vor der Grenze auf.
+        Tarif und Kontingent stehen unter
+        <a href="<?= h(admin_url('settings.php')) ?>">Einstellungen</a>.
+    </p>
+</div>
+<?php endif; ?>
 
 <h2>Nach Schule (dieser Monat)</h2>
 <?php $proSchule = cost_this_month_by_school(); ?>

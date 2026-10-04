@@ -36,6 +36,12 @@ return [
     // Gateway statt direkt an api.anthropic.com gehen sollen.
     'anthropic_base_url' => '',
 
+    // Die Aufnahmen für "Hören" (Azure Speech). Der Schlüssel steht wie der von
+    // Anthropic im Keyvault, unter diesem Namen; die Region steht im Admin.
+    'keyvault_tts_key' => 'vokabeltrainer-tts',
+    // Normalerweise leer lassen - nur für die Tests (tests/fake-azure-tts.php).
+    'azure_tts_base_url' => '',
+
     // Wird beim ersten Admin-Login als Hash in die settings-Tabelle übernommen.
     // Danach lässt sich das Passwort im Admin ändern; dieser Wert wird dann ignoriert.
     'admin_bootstrap_password' => 'bitte-ändern',

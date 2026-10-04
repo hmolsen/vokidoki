@@ -40,8 +40,15 @@ export const MODUS_EINSETZEN = 'pick';
 /* So viele Wörter stehen beim Einsetzen zur Wahl - die Lösung eingerechnet. */
 const ANZAHL_WOERTER = 3;
 
+/* Hören: der Satz wird abgespielt, das Kind legt ihn aus Wortknöpfen nach -
+   siehe frageHoeren(). */
+export const MODUS_HOEREN = 'listen';
+
 /* Die Übungsarten, die einen Lückensatz brauchen. */
 const MIT_SATZ = [MODUS_LUECKE, MODUS_EINSETZEN];
+
+/* Alle Übungsarten mit Lernstand - wie MODES in lib/progress.php. */
+const MODI = [MODUS_WAHL, MODUS_EINSETZEN, MODUS_LUECKE, MODUS_HOEREN];
 
 /* Der geladene Vorrat, mit Registern darüber. Einmal je Seitenaufruf
    aufgebaut - JSON.parse über ein halbes Megabyte will man nicht je Frage. */
@@ -235,6 +242,31 @@ export function vokabelnDerEinheit(unitId) {
     return vorratLaden()?.proEinheit.get(Number(unitId)) ?? [];
 }
 
+/** Hat die Sprache eine Stimme? Ohne sie (Latein) gibt es kein "Hören". */
+export function hatStimme(langId) {
+    return sprache(langId)?.h === 1;
+}
+
+/** Die Sätze einer Vokabel, zu denen es eine passende Aufnahme gibt. */
+function hoerSaetze(v, vocabId) {
+    return (v.saetze.get(vocabId) ?? []).filter((s) => typeof s.h === 'string' && s.h !== '');
+}
+
+/**
+ * Kann diese Vokabel in dieser Übungsart drankommen?
+ *
+ * Eine Stelle für alle: Auswählen geht immer, Einsetzen und Lückentext
+ * brauchen einen Satz, Hören braucht einen Satz mit Aufnahme - und eine
+ * Sprache, für die es eine Stimme gibt.
+ */
+function uebbar(v, w, modus) {
+    if (modus === MODUS_HOEREN) {
+        return hatStimme(v.einheit.get(w.u)?.l) && hoerSaetze(v, w.i).length > 0;
+    }
+    if (MIT_SATZ.includes(modus)) return (v.saetze.get(w.i)?.length ?? 0) > 0;
+    return true;
+}
+
 function standVon(vocabId, modus) {
     return vorratLaden()?.stand.get(`${vocabId}:${modus}`)
         ?? { v: vocabId, m: modus, s: 0, c: 0, w: 0, k: 0 };
@@ -251,9 +283,7 @@ export function fortschritt(unitId, modus) {
     const v = vorratLaden();
     if (v === null) return { known: 0, total: 0 };
 
-    const alle = vokabelnDerEinheit(unitId).filter(
-        (w) => !MIT_SATZ.includes(modus) || (v.saetze.get(w.i)?.length ?? 0) > 0,
-    );
+    const alle = vokabelnDerEinheit(unitId).filter((w) => uebbar(v, w, modus));
     const gekonnt = alle.filter((w) => standVon(w.i, modus).k === 1).length;
     return { known: gekonnt, total: alle.length };
 }
@@ -303,6 +333,7 @@ export function vokabelListe(unitId) {
         const wahl      = standVon(w.i, MODUS_WAHL);
         const einsetzen = standVon(w.i, MODUS_EINSETZEN);
         const luecke    = standVon(w.i, MODUS_LUECKE);
+        const hoeren    = standVon(w.i, MODUS_HOEREN);
         // Einsetzen und Lückentext brauchen einen Satz (MIT_SATZ).
         const mitSatz   = (v.saetze.get(w.i)?.length ?? 0) > 0;
         return {
@@ -323,6 +354,10 @@ export function vokabelListe(unitId) {
                     streak: luecke.s, correct: luecke.c, wrong: luecke.w,
                     known: luecke.k === 1, possible: mitSatz,
                 },
+                listen: {
+                    streak: hoeren.s, correct: hoeren.c, wrong: hoeren.w,
+                    known: hoeren.k === 1, possible: uebbar(v, w, MODUS_HOEREN),
+                },
             },
         };
     });
@@ -340,6 +375,7 @@ export function modusStand(unitId) {
     const wahl      = fortschritt(unitId, MODUS_WAHL);
     const luecke    = fortschritt(unitId, MODUS_LUECKE);
     const einsetzen = fortschritt(unitId, MODUS_EINSETZEN);
+    const hoeren    = fortschritt(unitId, MODUS_HOEREN);
     const roh       = einheit(unitId)?.z ?? '';
 
     const status = roh === ''
@@ -352,6 +388,18 @@ export function modusStand(unitId) {
         mc:    { known: wahl.known, total: wahl.total },
         pick:  { known: einsetzen.known, total: einsetzen.total, status, error: null },
         cloze: { known: luecke.known, total: luecke.total, status, error: null },
+        /*
+         * Hören hängt an den Aufnahmen, und die entstehen nach den Sätzen.
+         * Gibt es Sätze, aber noch keine Aufnahme, wartet die Übung auf sie
+         * ('audio') - eine leere Übung zu öffnen wäre schlimmer. stimme
+         * sagt, ob es sie in dieser Sprache überhaupt gibt.
+         */
+        listen: {
+            known: hoeren.known, total: hoeren.total, error: null,
+            stimme: hatStimme(einheit(unitId)?.l),
+            status: status === 'running' ? 'running'
+                : (hoeren.total === 0 && luecke.total > 0 ? 'audio' : status),
+        },
     };
 }
 
@@ -472,13 +520,21 @@ export function frageEinsetzen(unitId) {
     );
     if (offen.length === 0) return { done: true, ...stand };
 
-    const karte    = wuerfel(offen);
+    const karte = wuerfel(offen);
+    return {
+        done: false,
+        ...einsetzAufgabe(v, unitId, karte),
+        streak: standVon(karte.i, MODUS_EINSETZEN).s,
+        ...stand,
+    };
+}
+
+/** Eine Einsetzaufgabe zu dieser Vokabel - für die Übung und fürs Freie Üben. */
+function einsetzAufgabe(v, unitId, karte) {
     const satz     = wuerfel(v.saetze.get(karte.i));
     const optionen = mischen([satz.a, ...einsetzAblenker(v, unitId, karte, satz.a)]);
     const spr      = sprache(einheit(unitId)?.l);
-
     return {
-        done: false,
         vocabId:  karte.i,
         satzId:   satz.i,
         native:   satz.n,
@@ -487,8 +543,6 @@ export function frageEinsetzen(unitId) {
         optionen,
         richtig:  optionen.indexOf(satz.a),
         lang:     spr?.code ?? '',
-        streak:   standVon(karte.i, MODUS_EINSETZEN).s,
-        ...stand,
     };
 }
 
@@ -529,6 +583,167 @@ function einsetzAblenker(v, unitId, karte, loesung) {
 
     if (karte.t) nachlegen(alle.filter((w) => w.t === karte.t));
     if (ablenker.length < ANZAHL_WOERTER - 1) nachlegen(alle);
+    return ablenker;
+}
+
+/**
+ * Die nächste Aufgabe zum Hören.
+ *
+ * Ein Lückensatz mit Aufnahme, ganz - die Lücke mit der Lösung gefüllt.
+ * Das Kind hört ihn und legt ihn aus Wortknöpfen nach; dazwischen liegen
+ * zwei oder drei Wörter, die nicht hineingehören. Gezählt wird für die
+ * Vokabel, zu der der Satz gehört.
+ */
+export function frageHoeren(unitId) {
+    const v = vorratLaden();
+    if (v === null) return null;
+
+    const stand = fortschritt(unitId, MODUS_HOEREN);
+    if (stand.total === 0) return { leer: true };
+
+    const offen = vokabelnDerEinheit(unitId).filter(
+        (w) => uebbar(v, w, MODUS_HOEREN) && standVon(w.i, MODUS_HOEREN).k !== 1,
+    );
+    if (offen.length === 0) return { done: true, ...stand };
+
+    const karte = wuerfel(offen);
+    return {
+        done: false,
+        ...hoerAufgabe(v, unitId, karte),
+        streak: standVon(karte.i, MODUS_HOEREN).s,
+        ...stand,
+    };
+}
+
+/** Eine Höraufgabe zu dieser Vokabel - für die Übung und fürs Freie Üben. */
+function hoerAufgabe(v, unitId, karte) {
+    const satz    = wuerfel(hoerSaetze(v, karte.i));
+    const text    = satzGanz(satz);
+    const woerter = hoerWoerter(text);
+    const extra   = hoerAblenker(v, unitId, karte, woerter, woerter.length > 4 ? 3 : 2);
+    const spr     = sprache(einheit(unitId)?.l);
+
+    return {
+        vocabId:  karte.i,
+        satzId:   satz.i,
+        text,
+        native:   satz.n,
+        woerter,
+        // Die Knöpfe: die Wörter des Satzes und die falschen, gemischt. Je
+        // Knopf eine Nummer, weil ein Wort zweimal im Satz stehen kann.
+        knoepfe:  mischen([...woerter, ...extra]).map((w, i) => ({ i, w })),
+        audio:    tonAdresse(satz),
+        lang:     spr?.code ?? '',
+    };
+}
+
+/*
+ * Der Speicher der Aufnahmen - derselbe Name wie TON in sw.js. Der Service
+ * Worker liefert daraus; hier wird er von der Seite aus gefüllt.
+ */
+const TON_SPEICHER = 'vokabeltrainer-hoeren';
+
+/** Die Adresse einer Aufnahme - mit ihrem Kurzzeichen, das sich mit dem Satz ändert. */
+function tonAdresse(satz) {
+    return new URL(`${VT.base}/api/audio.php?s=${satz.i}&h=${encodeURIComponent(satz.h)}`,
+                   location.href).href;
+}
+
+/**
+ * Die Aufnahmen einer Lerneinheit vorab ablegen - für das Üben ohne Netz.
+ *
+ * Ohne das lägen offline nur die Sätze vor, die das Kind zufällig schon
+ * gehört hat. Abgelegt wird von hier aus und nicht über einen Abruf, den
+ * der Service Worker mitschneidet: Beim allerersten Start steuert er die
+ * Seite noch nicht, und genau dann - frisch eingerichtet, mit Netz - soll
+ * schon alles in den Speicher. Eine nach der anderen und nur mit Netz;
+ * was schon liegt, wird nicht noch einmal geholt.
+ */
+let vorladenLaeuft = false;
+export async function hoerenVorladen(unitId) {
+    const v = vorratLaden();
+    if (v === null || vorladenLaeuft || !navigator.onLine || typeof caches === 'undefined') return;
+    if (!hatStimme(einheit(unitId)?.l)) return;
+
+    vorladenLaeuft = true;
+    try {
+        const speicher = await caches.open(TON_SPEICHER);
+        for (const w of vokabelnDerEinheit(unitId)) {
+            for (const s of hoerSaetze(v, w.i)) {
+                const adresse = tonAdresse(s);
+                if (await speicher.match(adresse)) continue;
+                try {
+                    const antwort = await fetch(adresse, { credentials: 'same-origin' });
+                    if (antwort.status === 200) await speicher.put(adresse, antwort);
+                } catch { return; }   // Netz weg - beim nächsten Mal weiter
+            }
+        }
+    } catch {
+        // Kein Speicher (privates Fenster) - dann eben nur mit Netz.
+    } finally {
+        vorladenLaeuft = false;
+    }
+}
+
+/** Der ganze Satz - die Lücke mit der Lösung gefüllt, wie er gesprochen wird. */
+function satzGanz(satz) {
+    return String(satz.f).replace('{}', satz.a).trim();
+}
+
+/*
+ * Satzzeichen, die vorn oder hinten an einem Wort hängen. Apostroph und
+ * Bindestrich gehören dazu nicht - "j'habite", "What's" und
+ * "grands-parents" sind je ein Knopf.
+ */
+const HOER_RAND = /^[.,!?;:…"“”„«»()¿¡  ]+|[.,!?;:…"“”„«»()¿¡  ]+$/gu;
+
+/**
+ * Ein Satz als Wortknöpfe: an Leerzeichen getrennt, Satzzeichen weg.
+ *
+ * Das französische " ?" mit Leerzeichen davor wird so zu nichts und fällt
+ * heraus. Groß- und Kleinschreibung bleibt, wie sie im Satz steht.
+ */
+export function hoerWoerter(text) {
+    return String(text).split(/\s+/u)
+        .map((w) => w.replace(HOER_RAND, ''))
+        .filter((w) => w !== '');
+}
+
+/** Stimmt die gelegte Reihenfolge? Verglichen werden die Wörter, nicht die Knöpfe. */
+export function hoerPruefen(gelegt, woerter) {
+    return gelegt.length === woerter.length && gelegt.every((w, i) => w === woerter[i]);
+}
+
+/**
+ * Die Wörter, die nicht in den Satz gehören.
+ *
+ * Aus den anderen Sätzen derselben Sprache, zuerst aus derselben
+ * Lerneinheit - sie klingen nach demselben Thema und sind deshalb echte
+ * Ablenker. Keines, das (bis auf Akzente und Schreibung) schon im Satz
+ * steht: Ein zweites "chat" wäre genauso richtig.
+ */
+function hoerAblenker(v, unitId, karte, woerter, anzahl) {
+    const im = new Set(woerter.map(vereinfachen));
+    const ablenker = [];
+    const nachlegen = (vokabeln) => {
+        const kandidaten = [];
+        for (const w of vokabeln) {
+            if (w.i === karte.i) continue;
+            for (const s of v.saetze.get(w.i) ?? []) kandidaten.push(...hoerWoerter(satzGanz(s)));
+        }
+        for (const wort of mischen(kandidaten)) {
+            if (ablenker.length >= anzahl) return;
+            const k = vereinfachen(wort);
+            if (k === '' || im.has(k)) continue;
+            im.add(k);
+            ablenker.push(wort);
+        }
+    };
+
+    nachlegen(vokabelnDerEinheit(unitId));
+    if (ablenker.length < anzahl) {
+        nachlegen(v.vokabelnDerSprache.get(v.einheit.get(Number(unitId))?.l) ?? []);
+    }
     return ablenker;
 }
 
@@ -666,7 +881,7 @@ export function zuruecksetzen(unitId, modus = null) {
     if (v === null) return;
 
     for (const w of vokabelnDerEinheit(unitId)) {
-        for (const m of [MODUS_WAHL, MODUS_EINSETZEN, MODUS_LUECKE]) {
+        for (const m of MODI) {
             if (modus !== null && m !== modus) continue;
             v.stand.delete(`${w.i}:${m}`);
         }
@@ -894,7 +1109,7 @@ export function freiUmfang(unitIds) {
  * kein Filter auf „noch nicht gekonnt" - der liesse sie nach zwanzig
  * Antworten leerlaufen.
  */
-export function frageFrei(unitIds) {
+export function frageFrei(unitIds, { hoeren = true, schreiben = true } = {}) {
     const v = vorratLaden();
     if (v === null) return null;
 
@@ -905,11 +1120,24 @@ export function frageFrei(unitIds) {
     const saetze = v.saetze.get(karte.i) ?? [];
 
     /*
-     * Drei von fünf Aufgaben als Lückentext, wenn es Sätze gibt: Er ist die
-     * schwerere Übung, und wer frei übt, hat das Auswählen meist hinter
-     * sich. Eine einzelne Vokabel ohne Satz bekommt trotzdem ihre Frage.
+     * Alle Übungsarten, die bei dieser Vokabel gehen - gleich oft.
+     *
+     * Hier waren es einmal nur Auswählen und Lückentext. Seit es Einsetzen
+     * und Hören gibt, gehören sie dazu: Wer frei übt, soll alles üben, was
+     * die Lerneinheit kann. Hören nur, wenn es eine Aufnahme gibt. Hören und
+     * Schreiben (der Lückentext) lassen sich im Freien Üben abschalten - im
+     * Klassenzimmer ohne Kopfhörer, oder im Bus, wo Tippen mühsam ist.
      */
-    if (saetze.length > 0 && Math.random() < 0.6) {
+    const arten = [MODUS_WAHL];
+    if (saetze.length > 0) arten.push(MODUS_EINSETZEN);
+    if (saetze.length > 0 && schreiben) arten.push(MODUS_LUECKE);
+    if (hoeren && uebbar(v, karte, MODUS_HOEREN)) arten.push(MODUS_HOEREN);
+    const art = wuerfel(arten);
+
+    if (art === MODUS_EINSETZEN) return { art, ...einsetzAufgabe(v, karte.u, karte) };
+    if (art === MODUS_HOEREN) return { art, ...hoerAufgabe(v, karte.u, karte) };
+
+    if (art === MODUS_LUECKE) {
         const satz = wuerfel(saetze);
         const spr  = sprache(v.einheit.get(karte.u)?.l);
         return {
@@ -958,6 +1186,12 @@ export function frageFrei(unitIds) {
         nachVorn,
         language: spr?.name ?? '',
     };
+}
+
+/** Gibt es in diesen Lerneinheiten etwas zu hören? Sonst braucht es keinen Schalter. */
+export function freiHoerbar(unitIds) {
+    const v = vorratLaden();
+    return v !== null && vokabelnDerEinheiten(unitIds).some((w) => uebbar(v, w, MODUS_HOEREN));
 }
 
 /**

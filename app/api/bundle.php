@@ -5,6 +5,7 @@ require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/progress.php';
 require_once __DIR__ . '/../lib/streak.php';
 require_once __DIR__ . '/../lib/meldungen.php';
+require_once __DIR__ . '/../lib/tts.php';
 
 /*
  * Alles auf einmal - und alles auf einmal zurück.
@@ -89,6 +90,8 @@ switch (action()) {
              * genau diesen Kurs zeigen. Einem Kind sagt die Zahl nichts.
              */
             $r['course_id'] = user_is_teacher($user) ? (int) $r['course_id'] : null;
+            // Ob es eine Stimme gibt - ohne sie (Latein) gibt es kein "Hören".
+            $r['h'] = tts_stimme($r['code'] ?? null) === null ? 0 : 1;
             $sprachIds[] = $r['id'];
         }
         unset($r);
@@ -147,21 +150,36 @@ switch (action()) {
             }
 
             foreach (qa(
-                "SELECT s.vocab_id, s.id, s.native_text, s.foreign_text, s.answer
+                "SELECT s.vocab_id, s.id, s.native_text, s.foreign_text, s.answer,
+                        a.hash AS audio, l.code AS sprache
                    FROM sentences s
                    JOIN vocab v ON v.id = s.vocab_id
                    JOIN units u ON u.id = v.unit_id
+                   JOIN languages l ON l.id = u.language_id
+                   LEFT JOIN sentence_audio a ON a.sentence_id = s.id
                   WHERE v.unit_id IN ($ep) AND v.position < u.released_position
                   ORDER BY s.vocab_id, s.id",
                 $einheitIds,
             ) as $s) {
-                $saetze[] = [
+                $satz = [
                     'i' => (int) $s['id'],
                     'v' => (int) $s['vocab_id'],
                     'n' => (string) $s['native_text'],
                     'f' => (string) $s['foreign_text'],
                     'a' => (string) $s['answer'],
                 ];
+                /*
+                 * Die Aufnahme, wenn sie noch zum Satz passt - ihr Kurzzeichen
+                 * steht in der Adresse (api/audio.php?h=). Wurde der Satz im
+                 * Admin verbessert, passt sie nicht mehr, und der Satz zählt
+                 * für "Hören" erst wieder, wenn die neue da ist.
+                 */
+                $stimme = tts_stimme($s['sprache'] ?? null);
+                if ($stimme !== null && $s['audio'] !== null
+                    && $s['audio'] === tts_hash(tts_satztext($satz['f'], $satz['a']), $stimme['name'])) {
+                    $satz['h'] = (string) $s['audio'];
+                }
+                $saetze[] = $satz;
             }
         }
 

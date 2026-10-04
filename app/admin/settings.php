@@ -88,6 +88,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         redirect('settings.php');
     }
 
+    if (isset($_POST['save_tts'])) {
+        $region = strtolower(trim((string) ($_POST['tts_region'] ?? '')));
+        if (!array_key_exists($region, TTS_REGIONEN)) {
+            flash('Unbekannte Region.', 'bad');
+            redirect('settings.php');
+        }
+        $preis = max(0.0, (float) str_replace(',', '.', (string) ($_POST['tts_price'] ?? '16')));
+        $tarif = (string) ($_POST['tts_tarif'] ?? 'F0') === 'S0' ? 'S0' : 'F0';
+        $frei  = max(0, (int) str_replace(['.', ' '], '', (string) ($_POST['tts_free_chars'] ?? '500000')));
+
+        setting_set('tts_tarif', $tarif);
+        setting_set('tts_free_chars', (string) $frei);
+        setting_set('tts_enabled', isset($_POST['tts_enabled']) ? '1' : '0');
+        setting_set('tts_region', $region);
+        setting_set('tts_price_per_million', number_format($preis, 2, '.', ''));
+        flash('Einstellungen für die Aufnahmen gespeichert.');
+        redirect('settings.php');
+    }
+
     if (isset($_POST['save_budget'])) {
         $cap  = max(0.0, (float) str_replace(',', '.', (string) ($_POST['cap'] ?? '0')));
         $rate = max(0.0, (float) str_replace(',', '.', (string) ($_POST['rate'] ?? '0.92')));
@@ -220,6 +239,69 @@ flash_render();
         8&nbsp;ct mit Sonnet 5.5 (Voreinstellung), rund 16&nbsp;ct mit Opus 5.5.
     </p>
     <button class="btn small" name="save_sentences" value="1">Speichern</button>
+</form>
+
+<h2>Schritt 3: Aufnahmen (Hören)</h2>
+<form method="post" class="card">
+    <?= csrf_field() ?>
+    <label style="display:flex;align-items:center;gap:8px;margin:0 0 12px;font-weight:600">
+        <input type="checkbox" name="tts_enabled" value="1"<?= tts_aktiv() ? ' checked' : '' ?>
+               style="width:auto;min-height:auto;margin:0"> Aufnahmen erzeugen
+    </label>
+    <div class="formgrid">
+        <div>
+            <label for="tts_region">Region bei Azure</label>
+            <select name="tts_region" id="tts_region">
+                <?php foreach (TTS_REGIONEN as $id => $name): ?>
+                    <option value="<?= h($id) ?>"<?= $id === setting('tts_region') ? ' selected' : '' ?>>
+                        <?= h($name) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div>
+            <label for="tts_tarif">Tarif</label>
+            <select name="tts_tarif" id="tts_tarif">
+                <option value="F0"<?= tts_tarif_frei() ? ' selected' : '' ?>>Kostenlos (F0)</option>
+                <option value="S0"<?= tts_tarif_frei() ? '' : ' selected' ?>>Standard (S0)</option>
+            </select>
+        </div>
+        <div>
+            <label for="tts_free_chars">Freikontingent je Monat (F0), Zeichen</label>
+            <input type="text" id="tts_free_chars" name="tts_free_chars" inputmode="numeric"
+                   value="<?= h((string) tts_freikontingent()) ?>">
+        </div>
+        <div>
+            <label for="tts_price">Preis im Standardtarif (S0), USD je 1 Mio. Zeichen</label>
+            <input type="text" id="tts_price" name="tts_price" inputmode="decimal"
+                   value="<?= h(setting('tts_price_per_million')) ?>">
+        </div>
+    </div>
+    <p class="tiny muted">
+        Jeder Lückensatz wird einmal ganz gesprochen, gleich nachdem die Sätze
+        entstanden sind, und als Datei abgelegt &ndash; für die Übung
+        &bdquo;Hören&ldquo;. Bei drei Sätzen je Vokabel brauchen 100 Vokabeln rund
+        18.000 Zeichen &ndash; im kostenlosen Tarif reicht das Freikontingent also für
+        gut <?= h(number_format(intdiv(tts_freikontingent(), 18000) * 100, 0, ',', '.')) ?>
+        Vokabeln im Monat, ist es aufgebraucht, hören die Läufe auf und machen ab dem
+        1. weiter. Im Standardtarif kosten 100 Vokabeln rund
+        <?= h(number_format(18000 * (float) setting('tts_price_per_million') / 1_000_000, 2, ',', '.')) ?>&nbsp;$.
+        Den Verbrauch zeigt die Seite <em>Kosten</em>.
+        Der Schlüssel steht im Keyvault unter
+        <code><?= h((string) cfg('keyvault_tts_key', 'vokabeltrainer-tts')) ?></code>.
+        Für bestehende Lerneinheiten trägt <em>Unterlagen</em> die fehlenden nach.
+    </p>
+    <details class="tiny">
+        <summary>Stimmen je Sprache (<?= count(array_unique(array_column(TTS_STIMMEN, 1))) ?>)</summary>
+        <p class="muted">Latein und alle hier fehlenden Sprachen haben keine Stimme &ndash;
+            dort gibt es kein &bdquo;Hören&ldquo;.</p>
+        <ul>
+            <?php foreach (TTS_STIMMEN as $code => [$lang, $stimme]): ?>
+                <li><code><?= h($code) ?></code> &ndash; <?= h($stimme) ?></li>
+            <?php endforeach; ?>
+        </ul>
+    </details>
+    <button class="btn small" name="save_tts" value="1">Speichern</button>
 </form>
 
 <h2>Budget und Limits</h2>

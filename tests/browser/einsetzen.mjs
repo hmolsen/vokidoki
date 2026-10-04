@@ -62,12 +62,12 @@ export async function pruefe(f, aus, wurzel) {
             ringe:   document.querySelector('.vocabzeile .ringe')?.querySelectorAll('.ring').length,
         })`);
         ok('"Einsetzen" steht zwischen Auswählen und Lückentext',
-           JSON.stringify(ansicht.reihen) === JSON.stringify(['mc', 'pick', 'cloze']),
+           JSON.stringify(ansicht.reihen) === JSON.stringify(['mc', 'pick', 'cloze', 'listen']),
            JSON.stringify(ansicht.reihen));
         ok('Und heisst so', ansicht.titel === 'Einsetzen', ansicht.titel);
         ok('Neben den Vokabeln steht es auch - je Übung ein Ring, die Zeichen oben',
-           ansicht.ringe === 3
-           && JSON.stringify(ansicht.kopf) === JSON.stringify(['Auswählen', 'Einsetzen', 'Lückentext']),
+           ansicht.ringe === 4
+           && JSON.stringify(ansicht.kopf) === JSON.stringify(['Auswählen', 'Einsetzen', 'Lückentext', 'Hören']),
            `${ansicht.ringe} Ringe, Kopf: ${JSON.stringify(ansicht.kopf)}`);
 
         // Jedes Zeichen steht genau über seinem Ring - auch zwei Zeilen tiefer.
@@ -78,7 +78,7 @@ export async function pruefe(f, aus, wurzel) {
             return { kopf, ringe: [...zeile.querySelectorAll('.ring')].map(mitte) };
         })()`);
         ok('Jedes Zeichen steht über seinem Ring',
-           spalten.kopf.length === 3 && spalten.kopf.every((x, i) => Math.abs(x - spalten.ringe[i]) <= 1),
+           spalten.kopf.length === 4 && spalten.kopf.every((x, i) => Math.abs(x - spalten.ringe[i]) <= 1),
            JSON.stringify(spalten));
 
         // Ein Druck klappt die Zeile auf und nennt die Übungen beim Namen.
@@ -88,7 +88,7 @@ export async function pruefe(f, aus, wurzel) {
             return { offen: z.open, namen: [...z.querySelectorAll('.vocabdetail .mark-name')].map((n) => n.textContent.trim()) };
         })()`);
         ok('Ein Druck auf die Zeile zeigt die Übungen mit Namen',
-           detail.offen && detail.namen.length === 3 && detail.namen.some((n) => n.includes('Einsetzen')),
+           detail.offen && detail.namen.length === 4 && detail.namen.some((n) => n.includes('Einsetzen')),
            JSON.stringify(detail));
 
         // Die Leiste bleibt stehen, wenn die Seite rollt - wie im Lehrkraft-Bereich.

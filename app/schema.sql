@@ -118,6 +118,21 @@ CREATE TABLE IF NOT EXISTS sentences (
   CONSTRAINT fk_sentences_vocab FOREIGN KEY (vocab_id) REFERENCES vocab(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Die Aufnahme eines Lückensatzes für "Hören" - der ganze Satz, gesprochen
+-- (lib/tts.php). hash steht für Text und Stimme: Ändert sich der Satz im
+-- Admin, passt er nicht mehr, und die Aufnahme gilt als fehlend, bis eine
+-- neue entsteht. Die Datei selbst liegt unter daten/storage/audio/.
+CREATE TABLE IF NOT EXISTS sentence_audio (
+  sentence_id  INT UNSIGNED PRIMARY KEY,
+  voice        VARCHAR(64)  NOT NULL,
+  hash         CHAR(12)     NOT NULL,
+  file         VARCHAR(128) NOT NULL,
+  bytes        INT UNSIGNED NOT NULL DEFAULT 0,
+  created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_audio_sentence FOREIGN KEY (sentence_id) REFERENCES sentences(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
 -- Lernstand pro Vokabel und Trainer-Variante (mode): 'mc' und 'cloze'.
 -- Schule, Klasse, Kurs.
 --

@@ -38,6 +38,10 @@ switch ($name) {
         echo FAKE_KEY;
         break;
 
+    case 'vokabeltrainer-tts': // Der Schlüssel für Azure Speech - siehe tests/fake-azure-tts.php
+        echo 'fake-azure-tts-key-0123456789abcdef';
+        break;
+
     case 'leer':               // Eintrag existiert, ist aber leer
         echo '';
         break;
