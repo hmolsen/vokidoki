@@ -369,6 +369,10 @@ function navRechtsHtml() {
                     <span class="micon" aria-hidden="true">&#128273;</span>
                     <span>Passwort ändern</span>
                 </a>
+                <a class="mitem" href="#/lernstatistik">
+                    <span class="micon" aria-hidden="true">&#128202;</span>
+                    <span>Lernstatistik</span>
+                </a>
 
                 <hr class="mtrenner">
                 ${VT.user.isTeacher ? ansichtWahlHtml(esc(verwaltungZiel()))
@@ -526,51 +530,69 @@ function serieVorlesen(s) {
 }
 
 /**
- * Was in der Karte steht.
+ * Was in der Karte steht - kurz.
  *
- * Erst der Satz zur Lage - das ist die Frage, mit der jemand hierher tippt -,
- * dann die Regel, dann die Bestmarke. In dieser Reihenfolge, weil die Regel
- * nur interessiert, wer die Lage schon verstanden hat.
+ * Hier stand eine ganze Seite: die Lage, die Regel, die Ausnahme, die
+ * Bestmarke. Wer auf das Abzeichen tippt, will aber nur zwei Dinge wissen:
+ * Wie steht es, und was fehlt heute noch? Also Voki groß - froh, wenn der
+ * Tag geschafft ist, traurig, wenn nicht -, darunter, was genau noch fehlt,
+ * ein Balken von der jetzigen zur besten Serie, und ein Knopf zur
+ * Lernstatistik. Die Regeln stehen dort unter "Mehr erfahren".
+ *
+ * Und ein Kreuz zum Schließen: Nur daneben zu tippen war nicht zu erraten,
+ * zumal die Karte fast den ganzen Bildschirm füllt.
  */
 function serieKarteHtml(s) {
-    const tage = s.zahl === 1 ? '1 Tag' : `${s.zahl} Tage`;
+    const geschafft = s.lage === 'heute';
+    const tage = (n) => (n === 1 ? '1 Tag' : `${n} Tage`);
 
-    const kopf = {
-        heute:  ['&#127881;', `${tage} am Stück!`,
-                 'Heute hast du schon gelernt. Weiter so!'],
-        offen:  ['&#128064;', `${tage} am Stück`,
-                 'Heute noch nicht geübt - hol dir den Tag, dann wächst die Zahl.'],
-        gefahr: ['&#9888;&#65039;', `${tage} - und sie wackelt`,
-                 'Gestern hast du ausgesetzt. Übst du heute nichts, fängt sie morgen wieder bei null an.'],
-        aus:    ['&#128170;', 'Noch keine Serie',
-                 'Lerne heute etwas, dann steht hier morgen eine 1.'],
-    }[s.lage] ?? ['', '', ''];
+    /*
+     * Was heute noch fehlt: eine neue Vokabel - oder so viele richtige
+     * Antworten, wie bis zur Schwelle fehlen. Die heutige Zahl steht im
+     * Verlauf des Vorrats (serieTage()), dieselbe, die der Kalender zeigt.
+     */
+    const richtig = s.heuteRichtig ?? 0;
+    const fehlen  = Math.max(1, (s.schwelle ?? 10) - richtig);
+    const auftrag = `Lerne heute <strong>eine Vokabel</strong> - oder schaffe noch
+        <strong>${fehlen} richtige ${fehlen === 1 ? 'Antwort' : 'Antworten'}</strong>.`;
 
-    const best = (s.best ?? 0) > 0
-        ? `<p class="seriebest">Deine beste Serie: <strong>${s.best} ${
-               s.best === 1 ? 'Tag' : 'Tage'}</strong></p>`
-        : '';
+    const text = {
+        heute:  `<strong>Heute geschafft!</strong> Deine Serie steht bei ${tage(s.zahl)}.`,
+        offen:  `${auftrag} Dann wächst deine Serie auf ${tage(s.zahl + 1)}.`,
+        gefahr: `${auftrag} Sonst ist deine Serie von ${tage(s.zahl)} morgen weg.`,
+        aus:    `${auftrag} Dann beginnt deine Serie.`,
+    }[s.lage] ?? '';
 
     return `
-        <p class="seriekopf"><span aria-hidden="true">${kopf[0]}</span> ${esc(kopf[1])}</p>
-        <p class="serietext">${esc(kopf[2])}</p>
+        <button class="seriezu" type="button" data-zu aria-label="Schließen" title="Schließen">&#10005;</button>
+        <img class="seriegrossvoki${geschafft ? '' : ' traurig'}"
+             src="${esc(VT.base)}/assets/${geschafft ? 'voki-mini.svg' : 'voki-sad-mini.svg'}"
+             alt="" width="120" height="120">
+        <p class="seriezahlgross">${tage(s.zahl)}</p>
+        <p class="serieauftrag">${text}</p>
+        ${serieBalkenHtml(s)}
+        <a class="btn" href="#/lernstatistik">Zur Lernstatistik</a>`;
+}
 
-        <p class="mkopf klein">So bekommst du einen Tag</p>
-        <ul class="serieregel">
-            <li>Eine neue Vokabel lernen - dreimal hintereinander richtig, dann sitzt sie.</li>
-            <li>Oder alte wiederholen: Ab ${s.schwelle ?? 10} richtigen Antworten
-                zählt der Tag auch. So bleibt deine Serie am Leben, wenn gerade
-                nichts Neues aufgegeben ist.</li>
-        </ul>
-
-        <p class="mkopf klein">Wenn du mal keine Zeit hast</p>
-        <p class="serietext">
-            Einen Tag darfst du auslassen, die Serie läuft weiter. Lässt du
-            zwei Tage hintereinander aus, fängt sie wieder bei null an.
-        </p>
-
-        ${best}
-        <a class="btn small secondary" href="#/konto">Alle Tage ansehen</a>`;
+/**
+ * Die jetzige Serie neben der besten - als Balken.
+ *
+ * In der Karte und in der Lernstatistik derselbe, deshalb hier. Steht die
+ * jetzige auf der besten, ist der Balken voll und grün: Das ist der Rekord.
+ */
+export function serieBalkenHtml(s) {
+    const best = Math.max(s.best ?? 0, s.zahl);
+    const anteil = best === 0 ? 0 : Math.round((s.zahl / best) * 100);
+    const rekord = best > 0 && s.zahl >= best;
+    return `
+        <div class="seriebalken${rekord ? ' rekord' : ''}" role="img"
+             aria-label="Jetzt ${s.zahl}, beste Serie ${best}">
+            <div class="seriebalken-zahlen">
+                <span>Jetzt <strong>${s.zahl}</strong></span>
+                <span>${rekord ? 'Rekord!' : `Beste <strong>${best}</strong>`}</span>
+            </div>
+            <div class="bar"><i style="width:${anteil}%"></i></div>
+        </div>`;
 }
 
 /**

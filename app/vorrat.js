@@ -986,7 +986,60 @@ export function serie() {
 /** Was heute auf dem Abzeichen steht. */
 export function serieHeute() {
     const s = serie();
-    return { ...serieAnzeige(s.kette, s.letzter, heute()), best: s.best, schwelle: s.schwelle };
+    // Die richtigen Antworten von heute - die Karte sagt, wie viele noch fehlen.
+    const tag = (s.tage ?? []).find((t) => t.d === heute());
+    return { ...serieAnzeige(s.kette, s.letzter, heute()), best: s.best, schwelle: s.schwelle,
+             heuteRichtig: tag?.c ?? 0 };
+}
+
+/**
+ * Die Zahlen für die Lernstatistik - alles aus dem Vorrat im Gerät.
+ *
+ * Nur der eigene Lernstand liegt hier (api/bundle.php), und gerechnet wird
+ * nur hier: Die Seite zeigt nichts, was nicht ohnehin schon im Gerät des
+ * Kindes steht, und niemand sonst bekommt diese Zahlen zu sehen.
+ */
+export function lernstatistik() {
+    const v = vorratLaden();
+    if (v === null) return null;
+
+    const modi = Object.fromEntries(MODI.map((m) => [m, { gekonnt: 0, richtig: 0, falsch: 0 }]));
+    const irgendwo = new Set();
+    for (const p of v.stand.values()) {
+        if (!v.vokabel.has(p.v) || !(p.m in modi)) continue;
+        const m = modi[p.m];
+        m.richtig += p.c ?? 0;
+        m.falsch  += p.w ?? 0;
+        if (p.k === 1) { m.gekonnt++; irgendwo.add(p.v); }
+    }
+
+    // Die letzten dreissig Tage - auch das Freie Üben zählt hier mit.
+    const tage = serieTage();
+    const letzte = tage.filter((t) => tagAbstand(t.d, heute()) < 30);
+    const bester = letzte.reduce((b, t) => ((t.c ?? 0) > (b?.c ?? 0) ? t : b), null);
+
+    const kurse = sprachen().map((l) => {
+        const vokabeln = einheitenDerSprache(l.id).flatMap((u) => vokabelnDerEinheit(u.i));
+        return {
+            name: l.name,
+            flagge: l.flag_emoji ?? '',
+            vokabeln: vokabeln.length,
+            gekonnt: vokabeln.filter((w) => irgendwo.has(w.i)).length,
+        };
+    });
+
+    return {
+        vokabeln: v.vokabel.size,
+        gekonnt: irgendwo.size,
+        modi,
+        tage30: {
+            lerntage: letzte.filter((t) => tagZaehlt(t.l ?? 0, t.c ?? 0)).length,
+            richtig:  letzte.reduce((s, t) => s + (t.c ?? 0), 0),
+            neu:      letzte.reduce((s, t) => s + (t.l ?? 0), 0),
+            bester:   bester && (bester.c ?? 0) > 0 ? { tag: bester.d, richtig: bester.c } : null,
+        },
+        kurse,
+    };
 }
 
 /** Die letzten dreissig Tage, für den Kalender im Konto. */

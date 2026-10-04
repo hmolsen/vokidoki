@@ -229,7 +229,9 @@ export function menueAktivieren(wurzel = document) {
             e.preventDefault();
             if (m.open) schliessen(m); else oeffnen(m);
         });
-        m.querySelector('[data-zu]')?.addEventListener('click', () => schliessen(m));
+        // Alle, nicht nur das erste: Neben dem Schleier schliesst auch das
+        // Kreuz in der Serienkarte - mit querySelector hing es an nichts.
+        m.querySelectorAll('[data-zu]').forEach((z) => z.addEventListener('click', () => schliessen(m)));
     });
 
     /*

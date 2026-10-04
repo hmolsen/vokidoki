@@ -2,7 +2,6 @@ import {
     VT, api, render, esc, $, go, topbar, loading, wireBack,
     showError, clearError, withBusy,
 } from '../core.js';
-import { serie, serieHeute, serieTage, heute, tagZaehlt } from '../vorrat.js';
 import { farbwahlVerdrahten } from '../appsymbol.js';
 
 /**
@@ -55,8 +54,6 @@ export async function profileView(zumPasswort = false) {
     render(`
         ${topbar('Mein Konto', { backTo: '/' })}
         <div id="msg"></div>
-
-        ${serieAbschnitt()}
 
         <div class="card">
             <label for="name">Dein Name</label>
@@ -124,7 +121,6 @@ export async function profileView(zumPasswort = false) {
     `);
 
     wireBack();
-    kalenderAktivieren();
     farbwahlVerdrahten();
 
     if (zumPasswort) {
@@ -197,149 +193,3 @@ export async function profileView(zumPasswort = false) {
 }
 
 
-/**
- * Die Serie im Konto: ein Satz zur Lage, darunter ein Monatskalender.
- *
- * Hier standen dreissig Kaestchen in einer Reihe - eine Zeitleiste ohne
- * Bezug. Sie beantwortete "wie viele Tage am Stueck", aber nicht "wann
- * eigentlich": Der vierte Kasten von links war irgendein Dienstag. Ein
- * Kalender beantwortet beides, weil jeder weiss, wo im Monat er steht.
- *
- * In jedem Kasten steht, wie viele Antworten an dem Tag richtig waren.
- */
-function serieAbschnitt() {
-    const s = serieHeute();
-
-    const best = (s.best ?? 0) > 0
-        ? `<p class="tiny muted">Deine beste Serie: <strong>${s.best} ${
-               s.best === 1 ? 'Tag' : 'Tage'}</strong></p>`
-        : '';
-
-    const satz = {
-        heute:  `Du hast heute schon geübt. Deine Serie: <strong>${s.zahl} ${s.zahl === 1 ? 'Tag' : 'Tage'}</strong>.`,
-        offen:  `Deine Serie steht bei <strong>${s.zahl} ${s.zahl === 1 ? 'Tag' : 'Tage'}</strong> - heute fehlt noch etwas.`,
-        gefahr: `Deine Serie steht bei <strong>${s.zahl} ${s.zahl === 1 ? 'Tag' : 'Tage'}</strong>, aber sie wackelt: Übst du heute nichts, fängt sie wieder bei null an.`,
-        aus:    'Du hast gerade keine Serie. Lerne heute etwas, dann steht hier morgen eine 1.',
-    }[s.lage] ?? '';
-
-    return `
-        <h2 class="section">Deine Serie</h2>
-        <div class="card">
-            <p class="serietext">${satz}</p>
-
-            <div class="monatskopf">
-                <button class="iconbtn" type="button" id="monat-zurueck"
-                        aria-label="Voriger Monat">&#8249;</button>
-                <strong id="monat-name"></strong>
-                <button class="iconbtn" type="button" id="monat-vor"
-                        aria-label="Nächster Monat">&#8250;</button>
-            </div>
-
-            <div class="monatsgitter" id="monatsgitter"></div>
-
-            <div class="serielegende">
-                <span><i class="serietag voll"></i> Tag geschafft</span>
-                <span><i class="serietag halb"></i> geübt, aber zu wenig</span>
-                <span><i class="serietag"></i> nichts geübt</span>
-            </div>
-            ${best}
-        </div>`;
-}
-
-const MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli',
-                'August', 'September', 'Oktober', 'November', 'Dezember'];
-
-/**
- * Den Kalender zeichnen und die beiden Pfeile verdrahten.
- *
- * Gerechnet wird durchweg in UTC. Die Zeitumstellung macht einen Tag 23 oder
- * 25 Stunden lang, und ein Kalender, der im Oktober einen Tag verliert, ist
- * schlimmer als keiner.
- */
-function kalenderAktivieren() {
-    const gitter = $('#monatsgitter');
-    if (!gitter) return;
-
-    const s     = serie();
-    const jetzt = heute();
-    const tage  = new Map(serieTage().map((t) => [t.d, t]));
-
-    const [jJ, jM] = jetzt.split('-').map(Number);
-    const ende = jJ * 12 + (jM - 1);              // der laufende Monat
-
-    /*
-     * So weit zurueck geht es: zwoelf Monate - oder bis zu dem Monat, in dem
-     * das Konto entstanden ist, wenn das spaeter war. In Monate zu blaettern,
-     * in denen es das Konto noch gar nicht gab, sieht aus wie ein Fehler.
-     */
-    const [sJ, sM] = (s.seit ?? jetzt).split('-').map(Number);
-    const anfang = Math.max(ende - (s.monate ?? 12), sJ * 12 + (sM - 1));
-
-    let zeigt = ende;
-
-    const zeichnen = () => {
-        const jahr  = Math.floor(zeigt / 12);
-        const monat = zeigt % 12;                 // 0 = Januar
-
-        $('#monat-name').textContent = `${MONATE[monat]} ${jahr}`;
-        $('#monat-zurueck').disabled = zeigt <= anfang;
-        $('#monat-vor').disabled     = zeigt >= ende;
-
-        const imMonat = new Date(Date.UTC(jahr, monat + 1, 0)).getUTCDate();
-        // Montag als erste Spalte: getUTCDay() zaehlt ab Sonntag.
-        const versatz = (new Date(Date.UTC(jahr, monat, 1)).getUTCDay() + 6) % 7;
-
-        const zellen = [];
-        for (let i = 0; i < versatz; i++) {
-            zellen.push('<div class="monatstag leer"></div>');
-        }
-
-        const zwei = (n) => String(n).padStart(2, '0');
-        for (let t = 1; t <= imMonat; t++) {
-            const tag = `${jahr}-${zwei(monat + 1)}-${zwei(t)}`;
-            const e   = tage.get(tag);
-            const l   = e?.l ?? 0;
-            const c   = e?.c ?? 0;
-
-            const klassen = ['monatstag'];
-            if (tagZaehlt(l, c)) klassen.push('voll');
-            else if (c > 0)      klassen.push('halb');
-            if (tag === jetzt)   klassen.push('heute');
-            if (tag > jetzt)     klassen.push('spaeter');
-
-            const was = tagZaehlt(l, c)
-                ? (l > 0 ? `${c} richtige Antworten, ${l} neue Vokabel${l === 1 ? '' : 'n'}`
-                         : `${c} richtige Antworten`)
-                : (c > 0 ? `${c} richtige Antworten - zu wenig für den Tag`
-                         : 'nichts geübt');
-
-            /*
-             * Im Kasten steht die Zahl der richtigen Antworten - bis zu
-             * dreistellig. Die Nummer des Tages steht NICHT darin: Sie
-             * ergibt sich aus der Stelle im Gitter, und zwei Zahlen in einem
-             * Kaestchen von dieser Groesse liest niemand mehr.
-             */
-            zellen.push(
-                `<div class="${klassen.join(' ')}" title="${esc(tagLesbar(tag))}: ${esc(was)}">`
-                + `${c > 0 ? esc(String(Math.min(c, 999))) : ''}</div>`,
-            );
-        }
-
-        gitter.innerHTML = zellen.join('');
-    };
-
-    $('#monat-zurueck').addEventListener('click', () => {
-        if (zeigt > anfang) { zeigt--; zeichnen(); }
-    });
-    $('#monat-vor').addEventListener('click', () => {
-        if (zeigt < ende) { zeigt++; zeichnen(); }
-    });
-
-    zeichnen();
-}
-
-/** 2026-09-21 wird zu 21.09.2026 - so steht es auf jedem Zettel in der Schule. */
-function tagLesbar(tag) {
-    const [j, m, t] = tag.split('-');
-    return `${t}.${m}.${j}`;
-}

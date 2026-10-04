@@ -2861,3 +2861,112 @@ dialog.rueckfrage:has(.titelwahl) { width: min(100% - 32px, 420px); }
     flex: none;
 }
 .schalterreihe .hoerschalter { margin-left: 0; }
+
+/*
+ * Die Karte hinter dem Abzeichen (core.js, serieKarteHtml()): Voki groß,
+ * darunter die Zahl, was heute fehlt, der Balken zur besten Serie und der
+ * Knopf zur Lernstatistik. Oben rechts ein Kreuz - nur daneben zu tippen
+ * war nicht zu erraten.
+ */
+.seriekarte { text-align: center; padding-top: 22px; }
+.seriezu {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--surface-2);
+    color: var(--text-soft);
+    font-size: 1.05rem;
+    cursor: pointer;
+}
+.seriezu:hover { color: var(--text); }
+.seriezu:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seriegrossvoki {
+    display: block;
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 4px;
+}
+/* Traurig und grau, solange der Tag nicht steht - wie das Abzeichen. */
+.seriegrossvoki.traurig { filter: grayscale(.6); }
+.seriezahlgross {
+    margin: 0;
+    font-family: var(--schrift-kopf);
+    font-weight: 600;
+    font-size: 2rem;
+    line-height: 1.1;
+    color: var(--voki-text);
+}
+.serieauftrag { margin: 8px 0 16px; font-size: .98rem; color: var(--text); }
+.seriekarte .btn { width: 100%; margin-top: 4px; }
+
+/* Jetzt gegen die beste Serie - in der Karte und in der Lernstatistik. */
+.seriebalken { margin: 0 0 16px; text-align: left; }
+.seriebalken-zahlen {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-size: .9rem;
+    color: var(--text-soft);
+}
+.seriebalken-zahlen strong { color: var(--text); }
+.seriebalken.rekord .bar i { background: var(--good); }
+.seriebalken.rekord .seriebalken-zahlen span:last-child { color: var(--good); font-weight: 800; }
+
+/* ------------------------------------------------------- Lernstatistik */
+
+.notice.nurdu { display: flex; gap: 10px; align-items: flex-start; }
+.mehrerfahren { margin-top: 14px; }
+.mehrerfahren > summary { list-style: none; display: inline-flex; }
+.mehrerfahren > summary::-webkit-details-marker { display: none; }
+.mehrerfahren[open] > summary { margin-bottom: 12px; }
+
+.statkacheln {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 8px;
+}
+.statkachel {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 14px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+}
+.statkachel b {
+    font-family: var(--schrift-kopf);
+    font-weight: 600;
+    font-size: 1.6rem;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+.statkachel span { font-size: .82rem; color: var(--text-soft); }
+
+.lernzahlen { width: 100%; border-collapse: collapse; font-size: .95rem; }
+.lernzahlen th {
+    padding: 0 0 8px;
+    font-size: .74rem;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+    text-align: left;
+}
+.lernzahlen td { padding: 8px 0; border-top: 1px solid var(--border); }
+.lernzahlen .num { text-align: right; font-variant-numeric: tabular-nums; padding-left: 10px; }
+
+.kursstand + .kursstand { margin-top: 14px; }
+.kursstand-kopf {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+    font-weight: 600;
+}
+.kursstand-name { display: inline-flex; align-items: center; gap: 8px; }
+.kursflagge { width: 22px; height: 16px; object-fit: contain; }

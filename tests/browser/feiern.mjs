@@ -474,7 +474,7 @@ export async function pruefe(f, aus, wurzel) {
 
     // ------------------------------------------------------ Der Kalender
 
-    abschnitt('Der Kalender im Konto');
+    abschnitt('Der Kalender in der Lernstatistik');
 
     /*
      * Ein halbes Jahr Verlauf erfinden, mit einem dreistelligen Tag darin -
@@ -501,7 +501,7 @@ export async function pruefe(f, aus, wurzel) {
     const k = await browser({ port: 9417, breite: 320, hoehe: 1000, aus });
     try {
         await alsKind(k, f.basis, f.kind, f.passwort);
-        await k.geh(f.basis + '/#/konto', 3000);
+        await k.geh(f.basis + '/#/lernstatistik', 3000);
         await schlafe(800);
 
         const lage = () => k.js(`(() => {

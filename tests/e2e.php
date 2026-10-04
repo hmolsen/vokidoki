@@ -10119,9 +10119,38 @@ ok('Der Punkt waechst und faellt zurueck',
 ok('Und zwar ueber transform - sonst zappelt die Reihe',
    preg_match('/@keyframes punktAuf\s*\{(?:(?!\}\s*\n).)*?(width|height):/s', $stilQ) !== 1);
 
-section('Der Kalender im Konto');
+section('Die Lernstatistik, und die Karte hinter dem Abzeichen');
 
-$konto = http($base . '/views/profile.js')['body'];
+/*
+ * Die Serie stand im Konto, und die Karte hinter dem Abzeichen erklärte
+ * sie in einer ganzen Seite Text. Jetzt: eine kurze Karte (Voki, was heute
+ * fehlt, der Balken zur besten Serie, ein Kreuz, ein Knopf), und eine
+ * eigene Seite "Lernstatistik" mit dem Kalender, den Regeln unter "Mehr
+ * erfahren" und weiteren Zahlen - nur für das Kind.
+ */
+$kernS = (string) file_get_contents(__DIR__ . '/../app/core.js');
+$statS = (string) file_get_contents(__DIR__ . '/../app/views/lernstatistik.js');
+$profS = (string) file_get_contents(__DIR__ . '/../app/views/profile.js');
+ok('Im Konto steht keine Serie mehr', !str_contains($profS, 'monatsgitter') && !str_contains($profS, 'serieAbschnitt'));
+ok('Das rechte Menü führt zur Lernstatistik',
+   str_contains($kernS, 'href="#/lernstatistik"') && str_contains($kernS, '<span>Lernstatistik</span>'));
+ok('Die Seite hat ihren Weg', str_contains((string) file_get_contents(__DIR__ . '/../app/app.js'), 'lernstatistikView'));
+ok('Und sagt oben, dass sie nur für das Kind ist',
+   str_contains($statS, 'Nur für dich.') && str_contains($statS, 'deine Lehrkraft sieht sie nicht'));
+ok('Die Regeln stehen dort unter "Mehr erfahren", nicht mehr in der Karte',
+   str_contains($statS, 'Mehr erfahren') && str_contains($statS, 'So bekommst du einen Tag')
+   && !str_contains($kernS, 'So bekommst du einen Tag'));
+ok('Die Karte: ein Kreuz zum Schließen und ein Knopf zur Lernstatistik',
+   preg_match('/class="seriezu"[^>]*data-zu/', $kernS) === 1
+   && str_contains($kernS, '<a class="btn" href="#/lernstatistik">Zur Lernstatistik</a>'));
+ok('Das Kreuz schließt wirklich - jedes [data-zu], nicht nur das erste',
+   str_contains((string) file_get_contents(__DIR__ . '/../app/menue.js'), "querySelectorAll('[data-zu]')"));
+ok('Voki ist froh, wenn der Tag steht, sonst traurig',
+   str_contains($kernS, "geschafft ? 'voki-mini.svg' : 'voki-sad-mini.svg'"));
+ok('Und die Karte sagt, was heute fehlt: eine Vokabel - oder so viele richtige Antworten',
+   str_contains($kernS, 's.heuteRichtig') && str_contains($kernS, 'eine Vokabel'));
+
+$konto = http($base . '/views/lernstatistik.js')['body'];
 ok('Der Kalender steht in Wochen', str_contains($konto, 'monatsgitter'));
 ok('Sieben Spalten',
    preg_match('/\.monatsgitter\s*\{[^}]*grid-template-columns:\s*repeat\(7,/s', $stilQ) === 1);
@@ -10318,12 +10347,15 @@ ok('Das Abzeichen steht direkt links vom Zahnrad',
 ok('Und es ist ein Knopf, kein blosses Bild',
    str_contains($kern, 'class="seriebtn') && str_contains($kern, 'seriekarte'),
    'die Regel dahinter muss sich antippen lassen');
-ok('Die Karte erklaert beide Wege zu einem Tag',
-   str_contains($kern, 'Eine neue Vokabel lernen')
-   && str_contains($kern, 'Oder alte wiederholen'),
+// Die Regeln stehen nicht mehr in der Karte, sondern in der Lernstatistik
+// unter "Mehr erfahren" - die Karte sagt nur, was heute fehlt.
+$lernQ = (string) file_get_contents(__DIR__ . '/../app/views/lernstatistik.js');
+ok('Die Lernstatistik erklaert beide Wege zu einem Tag',
+   str_contains($lernQ, 'Eine neue Vokabel lernen')
+   && str_contains($lernQ, 'Oder alte wiederholen'),
    'gerade die zweite Tuer erklaert sich nicht von selbst');
 ok('Und was nach einer Pause passiert',
-   str_contains($kern, 'Einen Tag darfst du auslassen'));
+   str_contains($lernQ, 'Einen Tag darfst du auslassen'));
 
 $stil = (string) file_get_contents(__DIR__ . '/../app/style.css');
 ok('Froh und traurig unterscheiden sich auch ohne Farbe',

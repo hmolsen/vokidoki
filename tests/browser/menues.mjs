@@ -128,6 +128,50 @@ export async function pruefe(f, aus) {
         ok('Ein Druck schliesst sie',
            (await b.js(`!!document.getElementById('seriefeier')`)) === false);
 
+        /*
+         * Die Karte hinter dem Abzeichen: kurz, mit Voki, dem Balken zur
+         * besten Serie, einem Kreuz und einem Knopf zur Lernstatistik.
+         * Vorher schloss sie nur ein Druck daneben - bei einer Karte, die
+         * fast den ganzen Bildschirm füllt, nicht zu erraten.
+         */
+        await b.js(`document.querySelector('#menuSerie summary').click()`);
+        await schlafe(400);
+        const karte = await b.js(`({
+            offen:  document.getElementById('menuSerie').open,
+            voki:   !!document.querySelector('.seriekarte .seriegrossvoki'),
+            balken: !!document.querySelector('.seriekarte .seriebalken .bar'),
+            kreuz:  !!document.querySelector('.seriekarte .seriezu'),
+            knopf:  document.querySelector('.seriekarte a.btn')?.getAttribute('href') ?? '',
+            lang:   (document.querySelector('.seriekarte')?.textContent ?? '').length,
+        })`);
+        ok('Die Karte zeigt Voki, den Balken, ein Kreuz und den Knopf zur Lernstatistik',
+           karte.offen && karte.voki && karte.balken && karte.kreuz && karte.knopf === '#/lernstatistik',
+           JSON.stringify(karte));
+        ok('Und ist kurz - die Regeln stehen in der Lernstatistik', karte.lang < 400, String(karte.lang));
+        await b.js(`document.querySelector('.seriekarte .seriezu').click()`);
+        await schlafe(500);
+        ok('Das Kreuz schliesst die Karte', (await b.js(`document.getElementById('menuSerie').open`)) === false);
+
+        await b.js(`document.querySelector('#menuSerie summary').click()`);
+        await schlafe(400);
+        await b.js(`document.querySelector('.seriekarte a.btn').click()`);
+        await schlafe(1200);
+        const statistik = await b.js(`({
+            ort:      location.hash,
+            nurdu:    document.querySelector('.notice.nurdu')?.textContent ?? '',
+            kalender: !!document.getElementById('monatsgitter'),
+            mehr:     !!document.querySelector('details.mehrerfahren'),
+            kacheln:  document.querySelectorAll('.statkachel').length,
+            karteZu:  document.getElementById('menuSerie')?.open === false,
+        })`);
+        ok('Der Knopf führt zur Lernstatistik, und die Karte ist zu',
+           statistik.ort === '#/lernstatistik' && statistik.karteZu, JSON.stringify(statistik));
+        ok('Dort steht: nur für dich, die Lehrkraft sieht es nicht',
+           statistik.nurdu.includes('Nur für dich') && statistik.nurdu.includes('Lehrkraft'));
+        ok('Mit dem Kalender, "Mehr erfahren" und den Zahlen',
+           statistik.kalender && statistik.mehr && statistik.kacheln === 4, JSON.stringify(statistik));
+        await b.hash('/', 600);
+
 
         // ---- Die Schublade fliegt herein.
 

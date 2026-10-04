@@ -16,6 +16,7 @@ import { clozeView } from './views/cloze.js';
 import { einsetzenView } from './views/einsetzen.js';
 import { hoerenView } from './views/hoeren.js';
 import { profileView } from './views/profile.js';
+import { lernstatistikView } from './views/lernstatistik.js';
 import { freiView, freiWahlView } from './views/frei.js';
 import { einwilligungView } from './views/einwilligung.js';
 import {
@@ -101,6 +102,8 @@ const ROUTES = [
     // dafuer einen eigenen Knopf, und "erst suchen, dann tippen" ist kein
     // Weg, den man zweimal geht.
     [/^\/konto\/passwort$/,        () => profileView(true)],
+    // Die Serie im Kalender und die übrigen Zahlen - nur für das Kind.
+    [/^\/lernstatistik$/,         lernstatistikView],
 ];
 
 function currentPath() {
