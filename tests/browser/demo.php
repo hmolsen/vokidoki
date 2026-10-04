@@ -29,6 +29,7 @@ require_once $root . '/lib/courses.php';
 require_once $root . '/lib/vocab.php';
 require_once $root . '/lib/worldlanguages.php';
 require_once $root . '/lib/einwilligung.php';
+require_once $root . '/lib/tts.php';
 
 const DEMO_SCHULE   = 'VORFUEHRUNG Gymnasium am See';
 const DEMO_PASSWORT = 'vorfuehrung';
@@ -78,7 +79,9 @@ students_bulk_create($schuleId, $klasse7, "Anton Vogel\nGreta Roth\nMax Kühn\nS
 
 // Lina ist das Kind auf den Fotos: bekanntes Passwort, eine freundliche Farbe.
 $lina = (int) qv("SELECT id FROM users WHERE school_id = ? AND display_name LIKE 'Lina%'", [$schuleId]);
-q('UPDATE users SET password_hash = ?, initial_password = NULL, color = ?, streak_best = 14 WHERE id = ?',
+// Seit zwei Monaten dabei: Der Kalender blättert nicht vor das Anlegen des Kontos zurück.
+q('UPDATE users SET password_hash = ?, initial_password = NULL, color = ?, streak_best = 14,
+          created_at = NOW() - INTERVAL 60 DAY WHERE id = ?',
   [password_hash(DEMO_PASSWORT, PASSWORD_DEFAULT), '#7c5cff', $lina]);
 
 $fr = course_create($lehrer, 'Französisch', language_flag('Französisch'), $klasseId, '');
@@ -173,7 +176,7 @@ demo_einheit($en7, 'Unit 1 – Back to school', [
 ], 2, 'en');
 
 /*
- * Der Lernstand. Lina ist weit: die erste Unité in beiden Übungen durch, die
+ * Der Lernstand. Lina ist weit: die erste Unité in allen Übungen durch, die
  * zweite halb. Die Klasse streut, damit die Übersicht der Lehrkraft etwas
  * zu zeigen hat.
  */
@@ -188,8 +191,9 @@ $v1 = array_map('intval', array_column(qa('SELECT id FROM vocab WHERE unit_id = 
 $v2 = array_map('intval', array_column(qa('SELECT id FROM vocab WHERE unit_id = ? ORDER BY position', [$u2]), 'id'));
 
 foreach ($v1 as $v) {
-    $stand($lina, $v, 'mc', 3, true);
-    $stand($lina, $v, 'cloze', 3, true);
+    foreach (['mc', 'pick', 'cloze', 'listen'] as $modus) {
+        $stand($lina, $v, $modus, 3, true);
+    }
 }
 foreach ($v2 as $i => $v) {
     if ($i < 6) {
@@ -202,8 +206,27 @@ foreach ($v2 as $i => $v) {
          */
         $stand($lina, $v, 'mc', $i - 6, false);
     }
+    if ($i < 5) {
+        $stand($lina, $v, 'pick', 3, true);
+    }
     if ($i < 3) {
         $stand($lina, $v, 'cloze', 3, true);
+    }
+    if ($i < 2) {
+        $stand($lina, $v, 'listen', 3, true);
+    }
+}
+
+/*
+ * Die Aufnahmen fürs Hören. Lokal spricht tests/fake-azure-tts.php - die
+ * Tonspur ist dort nur Stille, aber fotografiert wird ja nur der Bildschirm.
+ * Ohne Aufnahmen gäbe es in der Lerneinheit kein Hören, und die Startseite
+ * zeigte drei Übungen statt vier.
+ */
+foreach ([$u1, $u2] as $u) {
+    $t = tts_nachtragen($u, $lehrer);
+    if ($t['fehler'] !== null) {
+        fwrite(STDERR, "Aufnahmen: {$t['fehler']}\n");
     }
 }
 

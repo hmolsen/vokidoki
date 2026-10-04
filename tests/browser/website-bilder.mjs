@@ -167,9 +167,26 @@ try {
         writeFileSync(resolve(ziel, 'kind-lueckentext.webp'), Buffer.from(luecke.result.data, 'base64'));
         console.log('  kind-lueckentext.webp');
 
+        // Einsetzen und Hören: die Frage, wie sie kommt - noch nichts angetippt.
         await k.hash('/', 600);
-        await k.hash('/konto', 1500);
-        await foto(k, 'kind-serie', { ...TELEFON, bereich: { von: 'h2.section', bis: '.card' } });
+        await k.hash(`/einsetzen/${d.unit2}`, 2000);
+        await foto(k, 'kind-einsetzen', TELEFON);
+
+        await k.hash('/', 600);
+        // Unité 2: Die erste hat Lina auch im Hören schon durch.
+        await k.hash(`/hoeren/${d.unit2}`, 2500);
+        await foto(k, 'kind-hoeren', TELEFON);
+
+        // Die Serie steht seit der Lernstatistik nicht mehr im Konto.
+        await k.hash('/', 600);
+        await k.hash('/lernstatistik', 1500);
+        // Am Monatsanfang stünden nur ein paar Tage im Kalender - dann den
+        // Vormonat, in dem der grösste Teil von Linas Serie liegt.
+        if (new Date().getDate() < 15) {
+            await k.js(`document.getElementById('monat-zurueck').click()`);
+            await schlafe(300);
+        }
+        await foto(k, 'kind-serie', { ...TELEFON, bereich: { von: '.nurdu', bis: '.mehrerfahren' } });
     } finally {
         await k.schliessen();
     }

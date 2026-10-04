@@ -376,7 +376,7 @@ dialog.ablauf::backdrop { background: rgba(10, 14, 22, .5); }
     width: 40px; height: 40px; border: 0; border-radius: 50%;
     background: var(--surface-2); color: var(--ink); font-size: 22px; cursor: pointer;
 }
-.ablauf .baender { display: grid; grid-template-columns: 2fr 3fr; gap: 14px; }
+.ablauf .baender { display: grid; grid-template-columns: 2fr 4fr; gap: 14px; }
 .ablauf .band {
     position: relative; padding: 34px 14px 14px; border-radius: 18px;
 }
@@ -491,7 +491,7 @@ dialog.ablauf::backdrop { background: rgba(10, 14, 22, .5); }
     <div class="rahmen">
         <header>
             <h2>Üben, bis es sitzt.<span class="nurohnejs"> – für Schülerinnen und Schüler</span></h2>
-            <p>Deine Vokabeln aus dem Unterricht, zwei Arten zu üben und ein kleiner
+            <p>Deine Vokabeln aus dem Unterricht, vier Arten zu üben und ein kleiner
                grüner Haken namens Voki, der sich mit dir freut.</p>
         </header>
 
@@ -515,31 +515,53 @@ dialog.ablauf::backdrop { background: rgba(10, 14, 22, .5); }
         <article class="merkmal gedreht">
             <div class="bild">
                 <div class="telefon"><img src="bilder/kind-auswaehlen.webp" loading="lazy"
-                     alt="Auswählen: Zum Wort „wohnen“ stehen vier französische Antworten, „habiter“ ist grün markiert"
+                     alt="Auswählen: Zu einem deutschen Wort stehen vier französische Antworten, die richtige ist grün markiert"
                      width="780" height="1688"></div>
-                <div class="telefon"><img src="bilder/kind-lueckentext.webp" loading="lazy"
-                     alt="Lückentext: „Nous avons un chat.“ – das eingetippte Wort „avons“ ist richtig"
+                <div class="telefon"><img src="bilder/kind-einsetzen.webp" loading="lazy"
+                     alt="Einsetzen: ein französischer Satz mit Lücke, darunter drei Wörter zur Wahl"
                      width="780" height="1688"></div>
             </div>
             <div class="text">
-                <span class="etikett">Zwei Übungen</span>
-                <h3>Erst erkennen, dann selbst schreiben</h3>
+                <span class="etikett">Vier Übungen</span>
+                <h3>Erst erkennen …</h3>
                 <p><strong>Beim Auswählen</strong> findest du das richtige Wort unter vier – mal von
                    Deutsch in die Fremdsprache, mal andersherum.</p>
-                <p><strong>Im Lückentext</strong> schreibst du es selbst, mitten in einem echten Satz.
-                   Aus <em>avoir</em> wird dort <em>Nous avons un chat</em> – so, wie man es
-                   wirklich braucht.</p>
-                <ul class="punkte">
-                    <li>Sonderzeichen wie é, è oder ç stehen gleich über der Tastatur.</li>
-                    <li>Ein vergessener Akzent zählt trotzdem – Vokidoki zeigt dir, wie man es schreibt.</li>
-                </ul>
+                <p><strong>Beim Einsetzen</strong> steht das Wort schon in einem echten Satz – du
+                   tippst die Form an, die in die Lücke passt. Aus <em>habiter</em> wird
+                   <em>J’habite à Hambourg</em>.</p>
             </div>
         </article>
 
         <article class="merkmal">
             <div class="bild">
+                <div class="telefon"><img src="bilder/kind-lueckentext.webp" loading="lazy"
+                     alt="Lückentext: ein französischer Satz, das eingetippte Wort in der Lücke ist richtig"
+                     width="780" height="1688"></div>
+                <div class="telefon"><img src="bilder/kind-hoeren.webp" loading="lazy"
+                     alt="Hören: ein Lautsprecher- und ein Schildkröten-Knopf, darunter Wortkärtchen, die in die richtige Reihenfolge gelegt werden"
+                     width="780" height="1688"></div>
+            </div>
+            <div class="text">
+                <span class="etikett">Vier Übungen</span>
+                <h3>… dann selbst schreiben und genau hinhören</h3>
+                <p><strong>Im Lückentext</strong> schreibst du das Wort selbst, mitten im Satz.
+                   Aus <em>avoir</em> wird dort <em>Nous avons un chat</em> – so, wie man es
+                   wirklich braucht.</p>
+                <p><strong>Beim Hören</strong> spricht dir eine echte Stimme den Satz vor, und du
+                   legst ihn aus Wortkärtchen nach. Zu schnell? Die Schildkröte spricht ihn
+                   langsamer.</p>
+                <ul class="punkte">
+                    <li>Sonderzeichen wie é, è oder ç stehen gleich über der Tastatur.</li>
+                    <li>Ein vergessener Akzent zählt trotzdem – Vokidoki zeigt dir, wie man es schreibt.</li>
+                    <li>Hören gibt es in jeder Sprache, die man spricht – nur in Latein nicht.</li>
+                </ul>
+            </div>
+        </article>
+
+        <article class="merkmal gedreht">
+            <div class="bild">
                 <div class="telefon"><img src="bilder/kind-einheit.webp" loading="lazy"
-                     alt="Eine Lerneinheit: Auswählen 6 von 8 gelernt, Lückentext 3 von 8, darunter jede Vokabel mit Haken oder Punkten"
+                     alt="Eine Lerneinheit: vier Übungen mit Balken, von Auswählen 6 von 8 gelernt bis Hören 2 von 8; darunter jede Vokabel mit einem Haken je Übung"
                      width="780" height="1688"></div>
             </div>
             <div class="text">
@@ -548,28 +570,32 @@ dialog.ablauf::backdrop { background: rgba(10, 14, 22, .5); }
                 <p>Jede Vokabel sammelt drei Punkte. Hast du sie dreimal hintereinander richtig,
                    kannst du sie, und sie bekommt ihren Haken. Ein Fehler, und es geht von vorn los –
                    so bleibt hängen, was du wirklich weisst.</p>
-                <p>Für jedes Wort siehst du, wo du stehst: beim Auswählen und im Lückentext.</p>
+                <p>Für jedes Wort siehst du, wo du stehst – in jeder der vier Übungen ein
+                   eigener Haken. Ein Tipp aufs Wort zeigt dir die Einzelheiten.</p>
             </div>
         </article>
 
-        <article class="merkmal gedreht">
+        <article class="merkmal">
             <div class="bild">
                 <div class="telefon kurz"><img src="bilder/kind-serie.webp" loading="lazy"
-                     alt="Der Kalender „Deine Serie“: zwölf Tage am Stück geübt, die beste Serie waren 14 Tage"
-                     width="780" height="1032"></div>
+                     alt="Die Lernstatistik: oben „Nur für dich“, darunter die Serie – jetzt 12 Tage, die beste waren 14 – und der Kalender des Monats"
+                     width="780" height="1228"></div>
             </div>
             <div class="text">
                 <span class="etikett">Jeden Tag ein bisschen</span>
                 <h3>Deine Serie wächst mit</h3>
-                <p>Übst du an einem Tag genug, zählt er für deine Serie. Im Kalender siehst du,
-                   wie viele Tage am Stück du dabei warst – und deine beste Serie bleibt
-                   stehen, auch wenn mal ein Tag ausfällt.</p>
+                <p>Eine neue Vokabel gelernt oder genug wiederholt – dann zählt der Tag für
+                   deine Serie. Ein Tipp auf Voki oben zeigt dir, was heute noch fehlt. Und
+                   wird es knapp, schaut er ein bisschen traurig.</p>
+                <p>In deiner <strong>Lernstatistik</strong> stehen der Kalender, deine beste
+                   Serie und wie es in jeder Übung und jedem Kurs läuft. <strong>Die siehst
+                   nur du</strong> – deine Lehrkraft nicht.</p>
                 <p>Für jede richtige Antwort gibt es einen Punkt, für jede gekonnte Vokabel
                    Konfetti und für eine geschaffte Lerneinheit ein Feuerwerk.</p>
             </div>
         </article>
 
-        <article class="merkmal">
+        <article class="merkmal gedreht">
             <div class="bild">
                 <div class="homescreen" role="img"
                      aria-label="Ein Home-Bildschirm mit Vokidoki-Symbolen in verschiedenen Farben, eines davon heisst „Lina H.s Vokidoki“">
@@ -601,7 +627,7 @@ dialog.ablauf::backdrop { background: rgba(10, 14, 22, .5); }
             <div class="kachel">
                 <span class="zeichen" aria-hidden="true">🏋️</span>
                 <h3>Freies Üben</h3>
-                <p>Alles, was freigegeben ist, so lange du magst – mit deiner Serie der Runde und deinem Rekord.</p>
+                <p>Alles, was freigegeben ist, in allen Übungen gemischt, so lange du magst. Hören und Schreiben lassen sich abschalten – etwa im Bus ohne Kopfhörer.</p>
             </div>
             <div class="kachel">
                 <span class="zeichen" aria-hidden="true">🚩</span>
@@ -623,7 +649,7 @@ dialog.ablauf::backdrop { background: rgba(10, 14, 22, .5); }
         <header>
             <h2>Weniger Vorbereitung, mehr Übung.<span class="nurohnejs"> – für Lehrkräfte</span></h2>
             <p>Sie stellen die Vokabeln zusammen und geben frei, was im Unterricht dran ist.
-               Übungen, Lückensätze und Lernstand erledigt Vokidoki.</p>
+               Übungen, Lückensätze, Aufnahmen und Lernstand erledigt Vokidoki.</p>
         </header>
 
         <article class="merkmal">
@@ -655,6 +681,7 @@ dialog.ablauf::backdrop { background: rgba(10, 14, 22, .5); }
                     <li>Lesefehler werden von der KI erkannt und Korrekturvorschläge erstellt.</li>
                     <li>Ihre Lerneinheiten können durch weitere Vokabeln ergänzt werden.</li>
                     <li>Lückensätze zu jeder Vokabel entstehen von selbst im Hintergrund, mit dem Wortschatz Ihrer Klasse.</li>
+                    <li>Jeder Satz wird mit einer natürlichen Stimme vorgelesen – fürs Hören.</li>
                 </ul>
                 <button type="button" class="infoknopf" data-ablauf hidden aria-haspopup="dialog">
                     <span class="i" aria-hidden="true">i</span>
@@ -678,6 +705,8 @@ dialog.ablauf::backdrop { background: rgba(10, 14, 22, .5); }
                 <p>Eine Vokabelliste können sie für eine ganze Lerneinheit vorbereiten, geübt
                    wird dann Stück für Stück. Ziehen Sie den Balken bis zur letzten Vokabel
                    dieser Stunde – Ihre Klasse sieht alle Vokabeln bis dahin.</p>
+                <p>Beim Freigeben prüft Vokidoki, ob zu jeder Vokabel Sätze und Aufnahmen da
+                   sind, und erzeugt, was fehlt, im Hintergrund nach.</p>
                 <p>Zurücknehmen geht jederzeit: Die Sätze bleiben, und der Lernstand der Kinder
                    ist beim nächsten Freigeben wieder da. Tippfehler korrigieren Sie jederzeit
                    direkt in der Tabelle.</p>
@@ -771,6 +800,10 @@ dialog.ablauf::backdrop { background: rgba(10, 14, 22, .5); }
                     <div><b>Kein Tracking, keine Werbung</b><span>Keine Analysewerkzeuge, keine Werbe-Cookies, keine Schriften von fremden Servern.</span></div></li>
                 <li><span class="z" aria-hidden="true">📖</span>
                     <div><b>Die KI sieht nur Wortlisten</b><span>Fotos bleiben auf dem Gerät der Lehrkraft und werden nirgends gespeichert. Zur KI geht nur der erkannte Text der Vokabelliste – ohne Namen, ohne Konten.</span></div></li>
+                <li><span class="z" aria-hidden="true">🎧</span>
+                    <div><b>Vorgelesen wird nur der Satz</b><span>Die Aufnahmen fürs Hören spricht Microsoft Azure in Frankfurt, einmal je Satz. Dorthin geht nur der Satz selbst – nichts über die Kinder.</span></div></li>
+                <li><span class="z" aria-hidden="true">🔒</span>
+                    <div><b>Wie viel ein Kind übt, sieht nur das Kind</b><span>Serie und Lernstatistik stehen nur auf seinem Gerät. Der Bereich der Lehrkraft zeigt nicht einmal, wer die App benutzt.</span></div></li>
             </ul>
         </div>
     </div>
@@ -810,8 +843,8 @@ dialog.ablauf::backdrop { background: rgba(10, 14, 22, .5); }
                     <span>Die Wörter werden direkt auf dem Gerät gelesen. Danach ist das Foto weg – gespeichert wird es nirgends.</span></div></li>
             </ol>
         </section>
-        <section class="band server" aria-label="Server und KI">
-            <span class="ort">Vokidoki-Server und KI</span>
+        <section class="band server" aria-label="Server, KI und Stimme">
+            <span class="ort">Vokidoki-Server, KI und Stimme</span>
             <ol start="3">
                 <li><span class="bild" aria-hidden="true">📋</span>
                     <div><span class="nr">3</span><br><b>Nur die Wortliste</b><br>
@@ -822,14 +855,18 @@ dialog.ablauf::backdrop { background: rgba(10, 14, 22, .5); }
                 <li><span class="bild" aria-hidden="true">🧩</span>
                     <div><span class="nr">5</span><br><b>KI erstellt Übungen</b><br>
                     <span>Zu jeder Vokabel werden Übungen, zum Beispiel Lückensätze, von der KI erstellt.</span></div></li>
+                <li><span class="bild" aria-hidden="true">🎧</span>
+                    <div><span class="nr">6</span><br><b>Aufnahmen</b><br>
+                    <span>Jeder Satz wird einmal vorgelesen und als Tondatei auf dem Vokidoki-Server gespeichert.</span></div></li>
             </ol>
         </section>
     </div>
 
     <p class="grenze"><strong>Das Foto überschreitet die Grenze zwischen den beiden Bändern nie.</strong>
         Es verlässt Ihr Gerät nicht und wird nirgends gespeichert, nicht einmal auf Ihrem Gerät. Die KI
-        (Anthropic) bekommt nur den Text der Vokabelliste. Einzelheiten, auch zur Speicherdauer
-        beim KI-Anbieter, stehen in der <a href="app/rechtliches.php?d=datenschutz">Datenschutzerklärung</a>.</p>
+        (Anthropic) bekommt nur den Text der Vokabelliste, die Sprachausgabe (Microsoft Azure,
+        Frankfurt) nur die fertigen Sätze. Einzelheiten, auch zur Speicherdauer bei den Anbietern,
+        stehen in der <a href="app/rechtliches.php?d=datenschutz">Datenschutzerklärung</a>.</p>
 </dialog>
 
 </main>
