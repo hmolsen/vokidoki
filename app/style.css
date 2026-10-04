@@ -1050,6 +1050,14 @@ html.locked body {
    aber nichts, weil die Kopfzeile ohnehin 44px hoch ist. Er bleibt also
    stehen, wo er hingehört. */
 body.keyboard-open .screen-top .topbar { margin-bottom: 6px; }
+/*
+ * In der festgesetzten Ansicht ist die Leiste nicht sticky: Es scrollt dort
+ * nichts, und sticky versetzte sie um das Polster der .app (14 px) nach
+ * unten - bei offener Tastatur lag sie damit über dem oberen Rand der
+ * Zahlen im Freien Üben. Und als iOS die Ansicht doch einmal schob, blieb
+ * die sticky Leiste stehen und deckte zu, was darunter lag.
+ */
+.app.fitted .topbar { position: relative; top: auto; }
 body.keyboard-open .cloze-native { margin-bottom: 10px; }
 body.keyboard-open .cloze-dots { margin-top: 10px; }
 
@@ -2354,7 +2362,18 @@ body.rechtsseite { background: var(--bg); }
 /* Im Lückentext steht die Leiste im Kopf des Bildschirms, unter dem Titel -
    dort bleibt sie auch bei offener Tastatur, aber schmaler. */
 .screen-top .freikopf { margin-bottom: 10px; }
-body.keyboard-open .screen-top .freikopf { padding: 4px 12px; margin-bottom: 6px; }
+/*
+ * Mit offener Tastatur nur noch eine schmale Zeile: Zahlen und Balken, ohne
+ * die Wörter darunter. Auf dem iPhone bleiben über der Tastatur rund 460 px,
+ * und mit der vollen Leiste passten Satz, Rückmeldung und "Weiter" nicht
+ * mehr hinein - iOS schob die Ansicht hoch, die Leiste rutschte unter den
+ * Titel und blieb dort, auch bei der nächsten Aufgabe.
+ */
+body.keyboard-open .screen-top .freikopf { padding: 3px 12px; margin-bottom: 6px; }
+body.keyboard-open .screen-top .freiname { display: none; }
+body.keyboard-open .screen-top .freizahl b { font-size: 1rem; }
+body.keyboard-open .screen-top .freizahl.aussen b { font-size: .9rem; }
+body.keyboard-open .screen-top .freivoki { width: 14px; height: 14px; }
 
 /* Dieselbe Bewegung wie beim Punkt in den anderen Übungen. */
 /* Der Zaehler neben dem Voki ist ein <span> im <b> - der Voki selbst soll
@@ -2506,9 +2525,15 @@ dialog.rueckfrage:has(.titelwahl) { width: min(100% - 32px, 420px); }
     gap: 10px;
     margin: 4px 0 12px;
 }
+/*
+ * So breit wie das Wort, mindestens ein Drittel der Zeile. Passt ein Wort
+ * nicht neben die anderen ("Den anden" neben "toede"), rutscht es in eine
+ * eigene Zeile und nimmt sie ganz - statt mitten im Wort umzubrechen.
+ */
 .wort {
-    flex: 1 1 28%;
-    min-width: 0;
+    flex: 1 1 auto;
+    min-width: calc((100% - 20px) / 3);
+    max-width: 100%;
     min-height: var(--tap);
     padding: 10px 12px;
     border: 2px solid var(--border);
@@ -2518,7 +2543,7 @@ dialog.rueckfrage:has(.titelwahl) { width: min(100% - 32px, 420px); }
     font: inherit;
     font-size: 1.1rem;
     font-weight: 700;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
     cursor: grab;
     touch-action: none;
     user-select: none;

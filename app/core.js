@@ -177,10 +177,31 @@ export function render(html) {
     const fest = app.querySelector(':scope > .screen') !== null;
     app.classList.toggle('fitted', fest);
     document.documentElement.classList.toggle('locked', fest);
+    festhalten(app);
 
     app.scrollTop = 0;
     window.scrollTo(0, 0);
     return app;
+}
+
+/*
+ * Eine festgesetzte Ansicht scrollt nie - auch nicht, wenn iOS es will.
+ *
+ * Bekommt ein Feld den Fokus, schiebt iOS jeden Container, der überläuft,
+ * so weit, dass das Feld zu sehen ist - auch einen mit overflow: hidden.
+ * Die Leiste oben ist sticky und blieb stehen; was unter ihr lag, im
+ * Freien Üben die Zahlen der Runde, rutschte darunter und war weg. Und es
+ * blieb weg: Die Verschiebung überlebte das Schliessen der Tastatur und
+ * die nächste Aufgabe. Die Ansicht ist so gebaut, dass sie in die sichtbare
+ * Höhe passt (--vvh) - zu scrollen gibt es nichts.
+ */
+let festGehalten = false;
+function festhalten(app) {
+    if (festGehalten) return;
+    festGehalten = true;
+    app.addEventListener('scroll', () => {
+        if (app.classList.contains('fitted') && app.scrollTop !== 0) app.scrollTop = 0;
+    });
 }
 
 export function $(selector, root = document) {

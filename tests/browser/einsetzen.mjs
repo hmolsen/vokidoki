@@ -215,6 +215,37 @@ export async function pruefe(f, aus, wurzel) {
         await schlafe(400);
         ok('"Weiter" bringt die nächste', (await aufgabe()).luecke === '');
 
+        /*
+         * ---- Lange Wörter: Sie stehen ganz, notfalls in einer eigenen
+         * Zeile. Ein Drittel der Breite je Knopf brach "Den anden" mitten im
+         * Wort um. Die Wörter werden für die Prüfung nur ausgetauscht.
+         */
+        const lagen = await b.js(`(() => {
+            const w = [...document.querySelectorAll('#woerter .wort')];
+            ['toede', 'Den anden', 'bedsteforældrene'].forEach((t, i) => { w[i].textContent = t; });
+            return w.map((k) => { const r = k.getBoundingClientRect();
+                return { top: Math.round(r.top), breite: Math.round(r.width), hoch: Math.round(r.height) }; });
+        })()`);
+        ok('Kurze Wörter stehen nebeneinander, ein langes in einer eigenen Zeile',
+           lagen[0].top === lagen[1].top && lagen[2].top > lagen[0].top && lagen[2].breite > lagen[1].breite,
+           JSON.stringify(lagen));
+        ok('Und kein Wort bricht mitten im Knopf um', lagen.every((l) => l.hoch === lagen[0].hoch),
+           JSON.stringify(lagen));
+
+        // ---- Die festgesetzte Ansicht scrollt nie - auch nicht, wenn iOS sie
+        // beim Fokus schieben will. Sonst rutschte, was unter der Leiste lag, weg.
+        const geschoben = await b.js(`(async () => {
+            const app = document.getElementById('app');
+            app.scrollTop = 60;
+            await new Promise((r) => setTimeout(r, 100));
+            return { fest: app.classList.contains('fitted'), oben: app.scrollTop,
+                     leiste: getComputedStyle(document.querySelector('.topbar')).position };
+        })()`);
+        ok('Eine Verschiebung der Ansicht wird gleich zurückgenommen',
+           geschoben.fest && geschoben.oben === 0, JSON.stringify(geschoben));
+        ok('Und die Leiste ist dort nicht sticky - sie steht, wo sie hingehört',
+           geschoben.leiste === 'relative', geschoben.leiste);
+
         // ---- Zählt für die Serie und landet als eigene Übung auf dem Server.
         await b.js(`(async () => { const v = await import('${f.basis}/vorrat.js'); await v.warteschlangeSenden(); })()`);
         await schlafe(800);
