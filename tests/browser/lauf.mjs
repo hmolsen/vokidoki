@@ -43,6 +43,7 @@ import { pruefe as fassung } from './fassung.mjs';
 import { pruefe as ocr } from './ocr.mjs';
 import { pruefe as einsetzen } from './einsetzen.mjs';
 import { pruefe as hoeren, pruefeOhneNetz as hoerenOhneNetz } from './hoeren.mjs';
+import { pruefe as erzeugung } from './erzeugung.mjs';
 
 const hier  = dirname(fileURLToPath(import.meta.url));
 // Die Anwendung: dort liegen lib/ und assets/, von dort laufen die php-Aufrufe.
@@ -88,6 +89,7 @@ try {
     await einsetzen(f, aus, wurzel);
     await hoeren(f, aus, wurzel);
     await hoerenOhneNetz(f, aus, wurzel);
+    await erzeugung(f, aus, wurzel);
     /*
      * Spaet: gibt in der Lerneinheit nur noch EINE Vokabel frei und raeumt
      * den Lernstand weg. Wer davor zaehlt, zaehlt sonst etwas anderes.

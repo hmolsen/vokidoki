@@ -1591,6 +1591,62 @@ function initAusKlasse() {
 
 initAusKlasse();
 
+// --------------------------------------------- Was im Hintergrund entsteht
+
+/**
+ * Ring und Haken in den Lerneinheiten eines Kurses - vom Server geschickt.
+ *
+ * Nach dem Freigeben entstehen Lückensätze und Aufnahmen im Hintergrund.
+ * Die Kursseite bekommt den Stand als Strom (teacher/erzeugung.php) und
+ * setzt nur die Zellen ein, die sich geändert haben - fertig gerechnet und
+ * fertig gezeichnet kommen sie aus lib/erzeugung.php, wie beim ersten
+ * Aufbau der Seite.
+ *
+ * Wann der Browser wieder fragt, sagt der Server (retry): gleich, solange
+ * etwas entsteht, sonst in vier Sekunden. Ist der Tab nicht zu sehen, ist
+ * der Strom zu - eine vergessene Kursseite soll auf dem Webhoster keinen
+ * Prozess festhalten.
+ */
+function initErzeugung() {
+    const tabelle = document.getElementById('einheiten');
+    const quelle  = tabelle?.dataset.erzeugung;
+    if (!quelle || !window.EventSource) return;
+
+    const anwenden = (stand) => {
+        for (const [id, zellen] of Object.entries(stand.einheiten ?? {})) {
+            const zeile = tabelle.querySelector(`tr[data-unit="${id}"]`);
+            if (!zeile) continue;
+            for (const [art, z] of Object.entries(zellen)) {
+                const td = zeile.querySelector(`td[data-erz="${art}"]`);
+                if (!td || td.dataset.stand === z.s) continue;
+                const war = td.dataset.stand;
+                td.innerHTML = z.html;
+                td.dataset.stand = z.s;
+                // Eben fertig geworden - der Haken springt einmal auf (admin.css).
+                td.classList.toggle('eben', (war === 'laeuft' || war === 'wartet') && z.s === 'fertig');
+            }
+        }
+    };
+
+    let strom = null;
+    const auf = () => {
+        if (strom) return;
+        strom = new EventSource(quelle);
+        strom.addEventListener('stand', (e) => {
+            try { anwenden(JSON.parse(e.data)); } catch { /* ein kaputtes Stück - das nächste kommt */ }
+        });
+    };
+    const zu = () => {
+        strom?.close();
+        strom = null;
+    };
+    document.addEventListener('visibilitychange', () => (document.hidden ? zu() : auf()));
+    window.addEventListener('pagehide', zu);
+    if (!document.hidden) auf();
+}
+
+initErzeugung();
+
 // --------------------------------------------- Lerneinheiten sortieren
 
 /**

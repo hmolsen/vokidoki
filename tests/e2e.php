@@ -8700,18 +8700,19 @@ q('UPDATE units SET released_position = 2 WHERE id = ?', [$efHalb]);
 q('UPDATE units SET released_position = 4 WHERE id = ?', [$efGanz]);
 
 $res = teacherGet('course.php?id=' . $efKursId);
-preg_match('/<table class="data courses rowlink kompakt" id="einheiten">.*?<\/table>/s',
+preg_match('/<table class="data courses rowlink kompakt" id="einheiten"[^>]*>.*?<\/table>/s',
            $res['body'], $etm);
 $etab = $etm[0] ?? '';
 
 /*
- * Vier Spalten: Griff, Titel, Freigegeben, Pfeil. Der Griff kam dazu, als
- * die Reihenfolge von Hand legbar wurde - sie ist dieselbe, in der die
- * Klasse die Lerneinheiten sieht.
+ * Sechs Spalten: Griff, Titel, Freigegeben, Lueckensaetze, Aufnahmen,
+ * Pfeil. Der Griff kam dazu, als die Reihenfolge von Hand legbar wurde -
+ * sie ist dieselbe, in der die Klasse die Lerneinheiten sieht. Die beiden
+ * schmalen zeigen, was nach dem Freigeben im Hintergrund entsteht.
  */
-ok('Vier Spalten, nicht fuenf',
-   preg_match_all('/<th[\s>]/', $etab) === 4,
-   preg_match_all('/<th[\s>]/', $etab) . ' statt 4');
+ok('Sechs Spalten - die Vokabelzahl kam nicht zurueck',
+   preg_match_all('/<th[\s>]/', $etab) === 6,
+   preg_match_all('/<th[\s>]/', $etab) . ' statt 6');
 ok('Die Vokabelzahl steht nicht mehr als eigene Spalte da',
    !str_contains($etab, '>Vokabeln</th>'),
    'sie steht in "n von m" schon drin');
@@ -8738,6 +8739,34 @@ ok('Eine Lerneinheit ohne Vokabeln sagt das statt einer Zahl',
 ok('Und erbt dabei nicht den Leerzustands-Kasten',
    !str_contains($etab, 'pill leer'),
    'zwei Bedeutungen fuer einen Klassennamen');
+
+/*
+ * Die beiden schmalen Spalten: Lueckensaetze und Aufnahmen. Ihren Stand
+ * schickt teacher/erzeugung.php als Strom (Server-Sent Events) - hier die
+ * Seite des Servers, das Umspringen ohne Neuladen prueft
+ * tests/browser/erzeugung.mjs.
+ */
+ok('Die Tabelle kennt die Adresse ihres Stroms',
+   str_contains($etab, 'data-erzeugung="') && str_contains($etab, 'erzeugung.php?id=' . $efKursId));
+ok('Noch nichts freigegeben: In der Spalte der Saetze steht nichts',
+   preg_match('/data-unit="' . $efZu . '".*?data-erz="saetze"\s+data-stand="leer"><\/td>/s', $etab) === 1);
+ok('Freigegeben, aber ohne Saetze und ohne Lauf: ein Ausrufezeichen mit Grund',
+   preg_match('/data-unit="' . $efHalb . '".*?data-erz="saetze"\s+data-stand="fehlt"><span class="erz fehlt"[^>]*title="2 Vokabeln ohne Lückensatz/s',
+              $etab) === 1);
+
+$strom = teacherGet('erzeugung.php?id=' . $efKursId);
+preg_match('/^event: stand\ndata: (.+)$/m', $strom['body'], $sm);
+$stromStand = json_decode($sm[1] ?? 'null', true);
+ok('Der Strom schickt den Stand als Ereignis "stand"',
+   $strom['status'] === 200 && is_array($stromStand), substr($strom['body'], 0, 200));
+ok('Mit beiden Zellen je Lerneinheit, fertig gezeichnet',
+   ($stromStand['einheiten'][$efHalb]['saetze']['s'] ?? '') === 'fehlt'
+   && str_contains($stromStand['einheiten'][$efHalb]['saetze']['html'] ?? '', 'class="erz fehlt"')
+   && isset($stromStand['einheiten'][$efZu]['ton']));
+ok('Und sagt, wann wieder gefragt wird: in vier Sekunden, weil nichts laeuft',
+   ($stromStand['laeuft'] ?? null) === false && str_contains($strom['body'], "retry: 4000\n"));
+ok('Ein fremder Kurs hat keinen Strom',
+   teacherGet('erzeugung.php?id=999999999')['status'] === 404);
 
 /*
  * Und der Titel: Die Sprache stand als eigene Zeile unter dem Kursnamen -

@@ -570,13 +570,20 @@ function generate_sentence_batch(
 /** Wie viele geeignete Vokabeln der Einheit noch keinen Satz haben. */
 function vocab_without_sentences(int $unitId): int
 {
-    $n = 0;
-    foreach (sentence_candidates($unitId) as $r) {
-        if ((int) qv('SELECT COUNT(*) FROM sentences WHERE vocab_id = ?', [(int) $r['id']]) === 0) {
-            $n++;
-        }
-    }
-    return $n;
+    /*
+     * Eine Abfrage statt einer je Vokabel: Die Kursseite fragt das alle zwei
+     * Sekunden für jede Lerneinheit ab, solange etwas entsteht
+     * (erzeugung_stand()). Die Auswahl ist dieselbe wie in
+     * sentence_candidates() - freigegeben heisst: vor der Marke.
+     */
+    return (int) qv(
+        'SELECT COUNT(*)
+           FROM vocab v
+           JOIN units u ON u.id = v.unit_id
+          WHERE v.unit_id = ? AND v.position < u.released_position
+            AND NOT EXISTS (SELECT 1 FROM sentences s WHERE s.vocab_id = v.id)',
+        [$unitId],
+    );
 }
 
 /**

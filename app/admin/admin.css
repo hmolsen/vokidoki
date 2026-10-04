@@ -1857,7 +1857,7 @@ a.rowmain:hover { text-decoration: underline; }
     table.data.kompakt#kurse th:nth-child(4) { width: 86px; }
 
     /*
-     * Lerneinheiten: Griff, Titel, Freigabe, Haken.
+     * Lerneinheiten: Griff, Titel, Freigabe, Sätze, Aufnahmen, Haken.
      *
      * Am Telefon wird nicht gezogen - dort stehen die beiden Pfeile, und
      * die brauchen Platz. In sechsundzwanzig Pixeln lagen sie uebereinander
@@ -1865,6 +1865,10 @@ a.rowmain:hover { text-decoration: underline; }
      */
     table.data.kompakt#einheiten th:nth-child(1) { width: 34px; }
     table.data.kompakt#einheiten th:nth-child(3) { width: 86px; }
+    /* Die beiden Spalten fuer Ring und Haken: so schmal wie das Zeichen. */
+    table.data.kompakt#einheiten th.erzspalte { width: 24px; padding: 7px 1px; font-size: .85rem; }
+    table.data.kompakt#einheiten td.erzzelle { padding: 8px 1px; text-align: center; }
+    table.data.kompakt#einheiten .erz { width: 18px; height: 18px; font-size: .7rem; }
     table.data.kompakt#einheiten td.griff {
         padding: 4px 0 4px 2px;
         text-align: center;
@@ -2341,3 +2345,54 @@ table.data tr.newrow.anlegen .iconaction.anlegeplus {
 .zeichenkurve .flaeche { fill: color-mix(in srgb, var(--accent) 18%, transparent); }
 .zeichenkurve .linie   { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; }
 .zeichenkurve .heute   { fill: var(--accent); }
+
+/* ------------------------------------------------- Was im Hintergrund entsteht
+ *
+ * Zwei schmale Spalten in den Lerneinheiten eines Kurses: Lückensätze und
+ * Aufnahmen. Ein drehender Ring, solange es entsteht, danach ein Haken -
+ * den Wechsel schickt der Server (teacher/erzeugung.php), teacher.js setzt
+ * nur die Zelle ein. Die Zeichen stehen in lib/erzeugung.php.
+ */
+th.erzspalte,
+td.erzzelle {
+    width: 1%;
+    padding-left: 4px;
+    padding-right: 4px;
+    text-align: center;
+    white-space: nowrap;
+}
+th.erzspalte { font-size: 1rem; }
+.erz {
+    display: inline-grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    font-size: .8rem;
+    font-weight: 700;
+    line-height: 1;
+    vertical-align: middle;
+}
+.erz.laeuft {
+    border: 3px solid color-mix(in srgb, var(--accent) 22%, transparent);
+    border-top-color: var(--accent);
+    animation: erzDreht .9s linear infinite;
+}
+/* Die Aufnahmen warten auf die Sätze: derselbe Ring, nur leiser. */
+.erz.laeuft.wartet { opacity: .45; animation-duration: 1.6s; }
+.erz.fertig { background: var(--good); color: #fff; }
+.erz.fehlt  { background: var(--warn-bg); color: var(--warn); }
+.erz.fehler { background: var(--bad-bg); color: var(--bad); }
+.erz.keine  { color: var(--text-soft); font-weight: 400; }
+/* Eben fertig geworden: Der Haken springt einmal auf. */
+td.erzzelle.eben .erz.fertig { animation: erzFertig .45s cubic-bezier(.3, 1.6, .5, 1); }
+
+@keyframes erzDreht { to { transform: rotate(360deg); } }
+@keyframes erzFertig {
+    from { transform: scale(.3); opacity: 0; }
+    to   { transform: scale(1);  opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .erz.laeuft { animation-duration: 3s; }
+    td.erzzelle.eben .erz.fertig { animation: none; }
+}

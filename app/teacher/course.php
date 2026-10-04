@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/qr.php';
 require_once __DIR__ . '/../lib/handoff.php';
+require_once __DIR__ . '/../lib/erzeugung.php';
 
 $user = teacher_require();
 
@@ -256,6 +257,7 @@ $mitglieder = course_members_list($courseId);
 // Wie viele Lehrkraefte - die letzte laesst sich nicht entfernen.
 $lehrkraefteImKurs = count(array_filter($mitglieder, static fn (array $m): bool => $m['member_role'] === 'teacher'));
 $einheiten  = course_units_list($courseId);
+$erzeugung  = erzeugung_kurs($courseId)['einheiten'];
 $offene     = course_candidates($courseId, $schoolId);
 $verlust    = course_delete_preview($courseId);
 
@@ -301,7 +303,8 @@ teacher_flash_render();
 ) ?>
 <?php endif; ?>
 <?php // Die Tabelle steht auch leer da: Ihre Anlegezeile ist der Weg zur ersten. ?>
-<table class="data courses rowlink kompakt" id="einheiten">
+<table class="data courses rowlink kompakt" id="einheiten"
+       data-erzeugung="<?= h(teacher_url('erzeugung.php') . '?id=' . $courseId) ?>">
     <?php
     /*
      * Zwei Spalten weniger.
@@ -316,6 +319,16 @@ teacher_flash_render();
         <th class="griffspalte"><span class="nurvorlesen">Reihenfolge</span></th>
         <th>Titel</th>
         <th>Freigegeben</th>
+        <?php
+        /*
+         * Was nach dem Freigeben im Hintergrund entsteht: erst die
+         * Lückensätze, dann ihre Aufnahmen - in dieser Reihenfolge, wie
+         * sie entstehen. Ein Ring, solange es läuft, dann ein Haken; der
+         * Server schickt den Wechsel (teacher/erzeugung.php, lib/erzeugung.php).
+         */
+        ?>
+        <th class="erzspalte" title="Lückensätze"><span aria-hidden="true">&#9999;&#65039;</span><span class="nurvorlesen">Lückensätze</span></th>
+        <th class="erzspalte" title="Aufnahmen zum Hören"><span aria-hidden="true">&#127911;</span><span class="nurvorlesen">Aufnahmen</span></th>
         <th class="actions"></th>
     </tr>
     <?php endif; ?>
@@ -380,6 +393,11 @@ teacher_flash_render();
                     <span class="pill <?= $ton ?>"><?= $frei ?> von <?= $gesamt ?></span>
                 <?php endif; ?>
             </td>
+            <?php foreach (['saetze' => 'Lückensätze', 'ton' => 'Aufnahmen'] as $art => $was): ?>
+                <?php $z = $erzeugung[(int) $e['id']][$art]; ?>
+                <td class="erzzelle" data-label="<?= $was ?>" data-erz="<?= $art ?>"
+                    data-stand="<?= h($z['s']) ?>"><?= $z['html'] ?></td>
+            <?php endforeach; ?>
             <td class="actions chev" aria-hidden="true">&#8250;</td>
         </tr>
     <?php endforeach; ?>
@@ -412,7 +430,7 @@ teacher_flash_render();
         'form'    => 'neueEinheit',
         'name'    => 'add_unit',
         'vorne'   => 1,
-        'spalten' => 2,
+        'spalten' => 4,
     ]) ?>
 </table>
 
