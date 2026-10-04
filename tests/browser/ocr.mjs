@@ -64,6 +64,44 @@ export async function pruefe(f, aus, wurzel) {
            JSON.stringify(zeilen) === JSON.stringify(['the spoon\tder Löffel', 'to cook\tkochen']),
            JSON.stringify(zeilen));
 
+        /*
+         * ---- Eine Bildschirmkopie: Symbole neben der Überschrift, darunter
+         * eine Tabelle mit Rahmen. Tesseract.js las von sich aus alles als
+         * einen Textblock; die Symbole warfen den Block um, übrig blieben
+         * die Überschrift und Zeichensalat - und die KI fand "keine Vokabeln".
+         * Nachgebaut nach einer dänischen Liste, mit der es so geschah.
+         */
+        const bildschirm = await b.js(`(async () => {
+            const c = document.createElement('canvas');
+            c.width = 1300; c.height = 620;
+            const x = c.getContext('2d');
+            x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+            for (const [cx, farbe] of [[88, '#29b6d8'], [188, '#e5546a']]) {
+                x.fillStyle = farbe; x.beginPath(); x.arc(cx, 70, 50, 0, 7); x.fill();
+                x.fillStyle = '#6b3e26'; x.beginPath(); x.arc(cx, 62, 18, 0, 7); x.fill();
+                x.fillStyle = '#f2c94c'; x.fillRect(cx - 28, 88, 56, 22);
+            }
+            x.fillStyle = '#222'; x.font = 'bold 24px Arial'; x.fillText('Über sich selbst sprechen', 258, 78);
+            const paare = [['Deutsch', 'Dänisch'], ['meine Familie', 'min familie'], ['meine Mutter', 'min mor'],
+                           ['mein Vater', 'min far'], ['ein Onkel', 'en onkel'], ['eine Cousine', 'en kusine'],
+                           ['ein Cousin', 'en fætter'], ['meine Eltern', 'mine forældre'], ['eine Tante', 'en tante'],
+                           ['mein Kind', 'mit barn'], ['dein', 'din - dit - dine']];
+            x.strokeStyle = '#222'; x.lineWidth = 1;
+            paare.forEach(([d, f], i) => {
+                const y = 150 + i * 38;
+                x.strokeRect(28.5, y + .5, 630, 38); x.strokeRect(658.5, y + .5, 630, 38);
+                x.font = (i === 0 ? 'bold ' : '') + '17px Arial';
+                x.fillText(d, 34, y + 25); x.fillText(f, 664, y + 25);
+            });
+            const { texterkennung } = await import(document.getElementById('stapel').dataset.ocr);
+            return await texterkennung([c.toDataURL('image/jpeg', 0.82)], 'da');
+        })()`, 300000);
+        const paarZeilen = bildschirm.split('\n').filter((z) => z.includes('\t'));
+        ok('Eine Tabelle neben Symbolen wird ganz gelesen, Zeile für Zeile',
+           paarZeilen.length >= 9 && bildschirm.includes('meine Mutter\tmin mor')
+           && bildschirm.includes('ein Cousin\ten fætter'),
+           JSON.stringify(bildschirm));
+
         // ---- Ein echtes Bild einer Vokabelliste.
         const bild = await b.js(`(() => {
             const c = document.createElement('canvas');

@@ -79,9 +79,22 @@ export async function texterkennung(bilder, sprachcode, { fortschritt } = {}) {
     });
 
     try {
-        // Leerzeichen zwischen Wörtern erhalten - daran erkennt zeilenBauen()
-        // die Spalten, wenn Tesseract eine Zeile nicht selbst getrennt hat.
-        await worker.setParameters({ preserve_interword_spaces: '1' });
+        /*
+         * Leerzeichen zwischen Wörtern erhalten - daran erkennt zeilenBauen()
+         * die Spalten, wenn Tesseract eine Zeile nicht selbst getrennt hat.
+         *
+         * Und die Seite selbst gliedern lassen (AUTO). Tesseract.js liest von
+         * sich aus alles als einen einzigen Textblock (SINGLE_BLOCK) - steht
+         * dann etwas anderes als Text auf der Seite, geht der Block verloren.
+         * Eine Bildschirmkopie mit zwei Symbolen neben der Überschrift ergab
+         * so nur "76 Uber sich selbst sprechen / OO.": die Tabelle darunter
+         * fehlte ganz, und die KI fand "keine Vokabeln". Die Zeilen setzt
+         * ohnehin zeilenBauen() nach der Lage wieder zusammen.
+         */
+        await worker.setParameters({
+            preserve_interword_spaces: '1',
+            tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+        });
 
         const teile = [];
         for (seite = 0; seite < bilder.length; seite++) {
