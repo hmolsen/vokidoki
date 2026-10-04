@@ -269,6 +269,9 @@ export async function pruefe(f, aus, wurzel) {
            wahl.frage.includes('Welche Lerneinheiten sollen geübt werden?'), wahl.frage);
         ok('Mit einer Zeile je Lerneinheit', wahl.boxen >= 1, String(wahl.boxen));
         ok('Alle vorgehakt', wahl.alleAn === true);
+        ok('"Losüben" steht oben, über der Frage - nicht am Ende der Liste',
+           await fr.js(`document.getElementById('los').getBoundingClientRect().top
+                        < document.querySelector('.sub').getBoundingClientRect().top`));
 
         await fr.js(`document.getElementById('keine').click()`);
         await schlafe(150);

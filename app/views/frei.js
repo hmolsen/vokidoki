@@ -204,6 +204,12 @@ export async function freiWahlView(languageId) {
         ${kopf('Freies Üben', `/lang/${languageId}`)}
         <div id="msg"></div>
 
+        <!-- Oben, nicht unter der Liste: Bei zwanzig Lerneinheiten musste man
+             erst ganz hinunterrollen, um anzufangen. -->
+        <button class="btn" id="los" style="margin-bottom:16px">
+            ${hantel()} Losüben
+        </button>
+
         <p class="sub">Welche Lerneinheiten sollen geübt werden?</p>
 
         <div class="btn-row" style="margin-bottom:12px">
@@ -212,10 +218,6 @@ export async function freiWahlView(languageId) {
         </div>
 
         ${zeilen}
-
-        <button class="btn" id="los" style="margin-top:14px">
-            ${hantel()} Losüben
-        </button>
     `);
 
     wireBack();
