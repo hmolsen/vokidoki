@@ -2399,3 +2399,7 @@ td.erzzelle.eben .erz.fertig { animation: erzFertig .45s cubic-bezier(.3, 1.6, .
 
 /* Die Knöpfe zum Anhören in einer Meldung (lib/meldungen.php). */
 .meldung .hoerprobe { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
+.meldung details.aussprache { margin: 0 0 10px; }
+.meldung details.aussprache summary { cursor: pointer; color: var(--text-soft); }
+.meldung .ausspracheform { display: grid; gap: 6px; margin-top: 8px; }
+.meldung .ausspracheform button { justify-self: start; }

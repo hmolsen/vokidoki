@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/html.php';
 require_once __DIR__ . '/courses.php';
+require_once __DIR__ . '/tts.php';
 
 /*
  * Meldungen: Ein Kind sagt "hier stimmt etwas nicht".
@@ -288,6 +289,42 @@ function meldung_bearbeiten(?int $lehrerId, array $post): array
 }
 
 /**
+ * "Die Stimme liest dieses Wort falsch" - aus einer Meldung auf die
+ * Ausspracheliste (lib/tts.php).
+ *
+ * Nur ein Wort, das in dem gemeldeten Satz auch vorkommt: Die Liste gilt
+ * für alle Schulen, und über eine Meldung soll nicht irgendein Wort auf
+ * sie geraten. Die Meldung bleibt offen - erst die neue Aufnahme anhören,
+ * dann "Stimmt so".
+ *
+ * @return array{0: bool, 1: string, 2: ?array{0: string, 1: string}}
+ *         Erfolg, Text, und was danach neu zu sprechen ist (Sprache, Wort)
+ */
+function meldung_aussprache(?int $lehrerId, array $post): array
+{
+    $vocabId = (int) ($post['meldung'] ?? 0);
+    $sid     = (int) ($post['aussprache'] ?? 0);
+    $m       = meldung_laden($vocabId, $lehrerId);
+    $satz    = $m['saetze'][$sid] ?? null;
+    if ($m === null || $satz === null || tts_stimme($m['code']) === null) {
+        return [false, 'Diese Meldung ist schon erledigt.', null];
+    }
+
+    $wort = trim((string) ($post['aw'][$sid] ?? ''));
+    $text = tts_satztext($satz['foreign'], $satz['answer']);
+    if ($wort === '' || preg_match('/(?<![\p{L}\p{N}])' . preg_quote($wort, '/') . '(?![\p{L}\p{N}])/iu', $text) !== 1) {
+        return [false, 'Das Wort muss so im Satz stehen.', null];
+    }
+
+    $fehler = tts_alias_setzen((string) $m['code'], $wort, (string) ($post['aa'][$sid] ?? ''));
+    if ($fehler !== null) {
+        return [false, $fehler, null];
+    }
+    return [true, sprintf('„%s" steht jetzt auf der Ausspracheliste.', $wort),
+            [(string) $m['code'], $wort]];
+}
+
+/**
  * Die Meldung als Karte mit Formular.
  *
  * Steht hier und nicht in den beiden Seiten, weil Lehrkraft und Admin
@@ -361,6 +398,31 @@ function meldung_html(array $m, int $offen, string $csrfFeld): string
                     <button type="button" class="btn secondary small" data-hoerprobe="<?= h($ton) ?>"
                             data-tempo="<?= MELDUNG_LANGSAM ?>">&#128034; Langsam</button>
                 </div>
+                <?php
+                /*
+                 * Liest die Stimme ein Wort falsch, kommt es auf die
+                 * Ausspracheliste - für alle Schulen (meldung_aussprache()).
+                 * Zugeklappt: Meist ist am Satz etwas falsch, nicht an der
+                 * Stimme.
+                 */
+                $woerter = array_values(array_unique(preg_split('/[^\p{L}\p{N}\'’-]+/u',
+                    tts_satztext($s['foreign'], $s['answer']), -1, PREG_SPLIT_NO_EMPTY) ?: []));
+                ?>
+                <details class="aussprache">
+                    <summary class="tiny">Die Stimme liest ein Wort falsch?</summary>
+                    <div class="ausspracheform">
+                        <label for="aw<?= $id ?>">Wort im Satz</label>
+                        <input type="text" id="aw<?= $id ?>" name="aw[<?= $id ?>]" list="awl<?= $id ?>"
+                               maxlength="64" autocomplete="off">
+                        <datalist id="awl<?= $id ?>"><?php foreach ($woerter as $w): ?><option value="<?= h($w) ?>"><?php endforeach; ?></datalist>
+                        <label for="aa<?= $id ?>">So soll es klingen</label>
+                        <input type="text" id="aa<?= $id ?>" name="aa[<?= $id ?>]" maxlength="128"
+                               autocomplete="off" placeholder="so geschrieben, wie man es spricht">
+                        <button class="btn secondary small" name="aussprache" value="<?= $id ?>" formnovalidate>
+                            Auf die Ausspracheliste</button>
+                        <p class="tiny muted">Gilt für alle Sätze mit diesem Wort, an allen Schulen.</p>
+                    </div>
+                </details>
             <?php endif; ?>
             <label for="sn<?= $id ?>">Deutscher Satz</label>
             <input type="text" id="sn<?= $id ?>" name="s[<?= $id ?>][n]"

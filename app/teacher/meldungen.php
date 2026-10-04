@@ -19,6 +19,22 @@ $uid  = (int) $user['id'];
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     teacher_csrf_check();
 
+    // Ein Wort auf die Ausspracheliste - die Meldung bleibt offen, damit sich
+    // die neue Aufnahme anhören lässt. Gesprochen wird nach der Antwort.
+    if (isset($_POST['aussprache'])) {
+        [$ok, $text, $neu] = meldung_aussprache($uid, $_POST);
+        teacher_flash($text . ($neu !== null ? ' Die neue Aufnahme entsteht gerade - gleich noch einmal anhören.' : ''),
+                      $ok ? 'good' : 'bad');
+        $zurueck = 'meldungen.php?v=' . (int) ($_POST['meldung'] ?? 0);
+        if ($neu === null) {
+            teacher_redirect($zurueck);
+        }
+        teacher_redirect_and_continue($zurueck);
+        set_time_limit(600);
+        tts_alias_nachsprechen($neu[0], $neu[1]);
+        exit;
+    }
+
     [$ok, $text] = meldung_bearbeiten($uid, $_POST);
     teacher_flash($text, $ok ? 'good' : 'bad');
     // Hat es nicht geklappt, bleibt dieselbe Meldung stehen - mit dem

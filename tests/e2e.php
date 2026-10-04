@@ -6615,6 +6615,126 @@ ok('Gelöschte Sätze lassen keine Dateien liegen',
    && (int) qv('SELECT COUNT(*) FROM sentence_audio WHERE sentence_id IN (?, ?)', $hSaetze) === 0
    && !is_file(storage_path((string) $hZeile['file'])));
 
+section('Hören: wie ein Satz gesprochen wird, und die Ausspracheliste');
+
+/*
+ * Azure löst Abkürzungen auf, bevor es spricht - im Dänischen hiess "Jeg har
+ * en kat." so "... katalog", "Mit navn er Mia." so "... milliard". Der
+ * Punkt am Ende geht deshalb nicht mit, <s> sagt, dass der Satz endet
+ * (tts_sprechfassung()). Was dann noch falsch klingt, steht auf einer
+ * Ausspracheliste für alle Schulen.
+ */
+$pF = tts_sprechfassung('Jeg har en kat.', 'da');
+ok('Der Punkt am Satzende geht nicht mit - der Satz steht in <s>',
+   $pF['ssml'] === '<s>Jeg har en kat</s>', $pF['ssml']);
+ok('Fragezeichen und Ausrufezeichen bleiben',
+   tts_sprechfassung('Hvad hedder du?', 'da')['ssml'] === '<s>Hvad hedder du?</s>'
+   && tts_sprechfassung('Hej!', 'da')['ssml'] === '<s>Hej!</s>');
+ok('Auslassungspunkte auch - der Satz bleibt in der Schwebe',
+   tts_sprechfassung('Jeg hedder ...', 'da')['ssml'] === '<s>Jeg hedder ...</s>');
+ok('Zeichen der SSML werden maskiert',
+   tts_sprechfassung('Tom & Jerry <3', 'da')['ssml'] === '<s>Tom &amp; Jerry &lt;3</s>');
+ok('Eine Frage behält ihr altes Kurzzeichen - sie wird nicht neu gesprochen',
+   tts_hash('Hvad hedder du?', 'da-DK-ChristelNeural', 'da') === tts_hash_alt('Hvad hedder du?', 'da-DK-ChristelNeural'));
+ok('Ein Satz mit Punkt bekommt ein neues - die alte Aufnahme las "katalog"',
+   tts_hash('Jeg har en kat.', 'da-DK-ChristelNeural', 'da') !== tts_hash_alt('Jeg har en kat.', 'da-DK-ChristelNeural'));
+$pStimme = tts_stimme('da');
+ok('Bis die neue da ist, passt die alte trotzdem - der Satz bleibt im "Hören"',
+   tts_passt(tts_hash_alt('Jeg har en kat.', $pStimme['name']), 'Jeg har en kat.', $pStimme)
+   && !tts_passt(tts_hash_alt('Jeg har en hund.', $pStimme['name']), 'Jeg har en kat.', $pStimme));
+
+$pSql = (string) file_get_contents(__DIR__ . '/../app/schema.sql');
+ok('Die Liste steht in schema.sql und in den Änderungen',
+   str_contains($pSql, 'CREATE TABLE IF NOT EXISTS tts_aliase')
+   && isset(schema_migrations()['tts_aliase']) && table_exists('tts_aliase'));
+
+// Ein dänischer Kurs mit zwei Sätzen, gesprochen gegen den Simulator.
+@unlink(sys_get_temp_dir() . '/vt-fake-tts.log');
+$pLang = makeLanguage($userId, 'Hördänisch', 'da');
+$pUnit = makeUnit($userId, $pLang, 'Udtale');
+$pSaetze = [];
+foreach ([['kat', 'Jeg har en {}.', 'kat'], ['fx', 'Jeg kan {} svømme.', 'fx']] as $i => [$w, $satz, $loesung]) {
+    q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, ?)',
+      [$pUnit, $w, 'de-' . $w, $i]);
+    $vid = (int) db()->lastInsertId();
+    q('INSERT INTO sentences (vocab_id, native_text, foreign_text, answer) VALUES (?, ?, ?, ?)',
+      [$vid, 'Satz ' . $i, $satz, $loesung]);
+    $pSaetze[$i] = (int) db()->lastInsertId();
+}
+q('UPDATE units SET released_position = 2 WHERE id = ?', [$pUnit]);
+$pRes = tts_nachtragen($pUnit, q1('SELECT * FROM users WHERE id = ?', [$userId]));
+$pLog = (string) @file_get_contents(sys_get_temp_dir() . '/vt-fake-tts.log');
+ok('An Azure geht der Satz ohne Punkt, in <s>',
+   $pRes['erzeugt'] === 2 && str_contains($pLog, '<s>Jeg har en kat</s>') && !str_contains($pLog, 'kat.'),
+   $pLog);
+
+// ---- Die Liste im Admin
+$pSeite = http($base . '/admin/aussprache.php')['body'];
+ok('Der Admin hat eine Seite "Aussprache"',
+   str_contains($pSeite, '<h1>Aussprache</h1>') && str_contains($pSeite, 'aussprache.php" class="on"'));
+$pHashVorher = (string) qv('SELECT hash FROM sentence_audio WHERE sentence_id = ?', [$pSaetze[1]]);
+@unlink(sys_get_temp_dir() . '/vt-fake-tts.log');
+adminPost('aussprache.php', ['add' => 1, 'sprache' => 'da', 'wort' => 'fx', 'aussprache' => 'for eksempel']);
+$pZeile = q1("SELECT * FROM tts_aliase WHERE sprache = 'da' AND wort = 'fx'");
+tts_aliase_vergessen();   // geschrieben hat der Server - hier steht die Liste noch von vorhin
+ok('Ein Wort kommt auf die Liste', ($pZeile['aussprache'] ?? '') === 'for eksempel');
+ok('Und die Sätze damit werden gleich neu gesprochen - mit <sub alias>',
+   str_contains((string) @file_get_contents(sys_get_temp_dir() . '/vt-fake-tts.log'),
+                '<sub alias=\"for eksempel\">fx</sub>')
+   && qv('SELECT hash FROM sentence_audio WHERE sentence_id = ?', [$pSaetze[1]]) !== $pHashVorher
+   && tts_fehlend($pUnit) === 0);
+ok('Nur die mit dem Wort - der andere Satz blieb, wie er war',
+   !str_contains((string) @file_get_contents(sys_get_temp_dir() . '/vt-fake-tts.log'), 'kat'));
+ok('Die Liste zeigt es zum Ändern',
+   str_contains(http($base . '/admin/aussprache.php')['body'], 'value="for eksempel"'));
+
+adminPost('aussprache.php', ['save' => (int) $pZeile['id'], 'sprache' => [(int) $pZeile['id'] => 'da'],
+          'wort' => [(int) $pZeile['id'] => 'fx'], 'aussprache' => [(int) $pZeile['id'] => 'for eksempel du']]);
+ok('Ändern ersetzt die Aussprache',
+   qv('SELECT aussprache FROM tts_aliase WHERE id = ?', [(int) $pZeile['id']]) === 'for eksempel du');
+adminPost('aussprache.php', ['add' => 1, 'sprache' => 'la', 'wort' => 'x', 'aussprache' => 'y']);
+ok('Eine Sprache ohne Stimme nimmt die Liste nicht',
+   (int) qv("SELECT COUNT(*) FROM tts_aliase WHERE sprache = 'la'") === 0);
+
+// ---- Aus einer Meldung: Die Lehrkraft hört, dass "kat" falsch klingt.
+$pVokabel = (int) qv('SELECT vocab_id FROM sentences WHERE id = ?', [$pSaetze[0]]);
+q('INSERT INTO vocab_flags (vocab_id, sentence_id, user_id, typed, mode) VALUES (?, ?, ?, NULL, ?)',
+  [$pVokabel, $pSaetze[0], $userId, 'listen']);
+[$pOk] = meldung_aussprache(null, ['meldung' => $pVokabel, 'aussprache' => $pSaetze[0],
+                                    'aw' => [$pSaetze[0] => 'hund'], 'aa' => [$pSaetze[0] => 'hunn']]);
+ok('Aus einer Meldung nur ein Wort, das im Satz steht',
+   $pOk === false && (int) qv("SELECT COUNT(*) FROM tts_aliase WHERE wort = 'hund'") === 0);
+[$pOk, , $pNeu] = meldung_aussprache(null, ['meldung' => $pVokabel, 'aussprache' => $pSaetze[0],
+                                    'aw' => [$pSaetze[0] => 'kat'], 'aa' => [$pSaetze[0] => 'katt']]);
+ok('Steht es darin, kommt es auf die Liste - und will neu gesprochen werden',
+   $pOk === true && $pNeu === ['da', 'kat']
+   && qv("SELECT aussprache FROM tts_aliase WHERE sprache = 'da' AND wort = 'kat'") === 'katt');
+ok('Die Meldung bleibt offen - erst anhören, dann "Stimmt so"',
+   (int) qv('SELECT COUNT(*) FROM vocab_flags WHERE vocab_id = ?', [$pVokabel]) === 1);
+$pKarte = http($base . '/admin/meldungen.php?v=' . $pVokabel)['body'];
+ok('Die Karte bietet es an, zugeklappt, mit den Wörtern des Satzes zur Auswahl',
+   str_contains($pKarte, 'Die Stimme liest ein Wort falsch?')
+   && str_contains($pKarte, 'name="aussprache" value="' . $pSaetze[0] . '"')
+   && str_contains($pKarte, '<option value="kat">'));
+
+adminPost('aussprache.php', ['delete' => (int) $pZeile['id']]);
+ok('Löschen nimmt das Wort von der Liste', qv('SELECT 1 FROM tts_aliase WHERE id = ?', [(int) $pZeile['id']]) === null);
+
+// Neu sprechen nach einem Wort auf der Liste darf das Einlesen nicht sperren.
+$pMax = (int) setting('imports_per_hour', '20');
+for ($i = 0; $i < $pMax; $i++) {
+    ai_log(['user_id' => $userId, 'model' => 'da-DK-ChristelNeural', 'purpose' => 'tts', 'cost_usd' => 0.0, 'status' => 'ok']);
+}
+ok('Aufnahmen zaehlen nicht gegen das Stundenlimit fuers Einlesen', budget_block_reason($userId) === null,
+   (string) budget_block_reason($userId));
+q("DELETE FROM ai_requests WHERE user_id = ? AND purpose = 'tts' AND created_at >= NOW() - INTERVAL 1 MINUTE", [$userId]);
+
+q("DELETE FROM tts_aliase WHERE sprache = 'da' AND wort IN ('fx', 'kat')");
+q('DELETE FROM units WHERE id = ?', [$pUnit]);
+q('DELETE FROM courses WHERE language_id = ?', [$pLang]);
+q('DELETE FROM languages WHERE id = ?', [$pLang]);
+tts_waisen_entfernen();
+
 section('Zettel mit den Zugangsdaten');
 
 require_once __DIR__ . '/../app/lib/letter.php';
@@ -7034,7 +7154,8 @@ $satzZu = static fn (string $wort): int => (int) qv(
 if ($isFake) {
     $anStand = waitForSentences($anUnit);
     ok('Der Satzlauf fuer die angehaengten Vokabeln wird fertig',
-       $anStand === 'done', $anStand);
+       $anStand === 'done',
+       $anStand . ': ' . qv('SELECT sentences_error FROM units WHERE id = ?', [$anUnit]));
     ok('Solange sie zu sind, entsteht kein Satz', $satzZu('yellow') === 0,
        $satzZu('yellow') . ' - was nicht geuebt wird, braucht keinen');
 

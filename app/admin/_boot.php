@@ -367,6 +367,7 @@ function admin_head(string $title, string $active): void
          */
         'vocab.php'     => 'Unterlagen',
         'meldungen.php' => 'Meldungen',
+        'aussprache.php' => 'Aussprache',
         'settings.php'  => 'Einstellungen',
         'selfcheck.php' => 'Selbsttest',
     ];

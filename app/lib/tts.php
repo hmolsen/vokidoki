@@ -82,8 +82,9 @@ const TTS_FORMAT = 'audio-24khz-48kbitrate-mono-mp3';
 /** Die Stimme für einen Sprachcode, oder null - dann gibt es kein "Hören". */
 function tts_stimme(?string $code): ?array
 {
-    $stimme = TTS_STIMMEN[strtolower(trim((string) $code))] ?? null;
-    return $stimme === null ? null : ['lang' => $stimme[0], 'name' => $stimme[1]];
+    $code   = strtolower(trim((string) $code));
+    $stimme = TTS_STIMMEN[$code] ?? null;
+    return $stimme === null ? null : ['lang' => $stimme[0], 'name' => $stimme[1], 'code' => $code];
 }
 
 /** Der ganze Satz, wie er gesprochen wird: die Lücke mit der Lösung gefüllt. */
@@ -93,12 +94,153 @@ function tts_satztext(string $foreign, string $answer): string
 }
 
 /**
- * Kurzzeichen für Text und Stimme. Ändert sich eines davon, passt die
- * Aufnahme nicht mehr - etwa wenn im Admin ein Satz verbessert wird.
+ * Kurzzeichen für das, was gesprochen wird, und die Stimme. Ändert sich
+ * eines davon, passt die Aufnahme nicht mehr - etwa wenn im Admin ein Satz
+ * verbessert wird oder ein Wort in die Ausspracheliste kommt.
+ *
+ * Gerechnet über die Sprechfassung (tts_sprechfassung()), nicht über den
+ * Satz allein: Sonst hielte tts_offen() eine Aufnahme, die "kat." noch als
+ * "katalog" las, für aktuell. Sätze, an denen die Sprechfassung nichts
+ * ändert - eine Frage, ein Ausruf -, behalten ihr altes Kurzzeichen und
+ * werden nicht noch einmal gesprochen.
  */
-function tts_hash(string $text, string $voice): string
+function tts_hash(string $text, string $voice, string $code = ''): string
+{
+    $f = tts_sprechfassung($text, $code);
+    return $f['merkmal'] === null
+        ? tts_hash_alt($text, $voice)
+        : substr(sha1($voice . "\n" . TTS_SPRECHFASSUNG . "\n" . $f['merkmal']), 0, 12);
+}
+
+/** Das Kurzzeichen, wie es vor der Sprechfassung gerechnet wurde - nur Stimme und Satz. */
+function tts_hash_alt(string $text, string $voice): string
 {
     return substr(sha1($voice . "\n" . $text), 0, 12);
+}
+
+/**
+ * Passt diese Aufnahme noch zum Satz? Für das Bündel (api/bundle.php).
+ *
+ * Auch die alte Fassung desselben Satzes passt, bis die neue gesprochen
+ * ist: Ein "katalog" am Satzende ist ärgerlich, aber kein Grund, den Satz
+ * bis dahin aus "Hören" zu nehmen. Ein geänderter Satz dagegen passt nicht -
+ * dann sagte die Aufnahme etwas anderes, als dasteht.
+ */
+function tts_passt(string $hash, string $text, array $stimme): bool
+{
+    return $hash === tts_hash($text, $stimme['name'], $stimme['code'] ?? '')
+        || $hash === tts_hash_alt($text, $stimme['name']);
+}
+
+/*
+ * Die Fassung der Regeln in tts_sprechfassung(). Ändern sich die Regeln,
+ * eins hochzählen - dann gilt jede betroffene Aufnahme als veraltet.
+ */
+const TTS_SPRECHFASSUNG = 'v2';
+
+/**
+ * Was an Azure geht: der Satz, so vorbereitet, dass die Stimme ihn liest
+ * wie ein Mensch.
+ *
+ * 1. Kein Punkt am Ende. Azure löst vor dem Sprechen Abkürzungen auf, und
+ *    im Dänischen ist "mia." die übliche für "milliard", "kat." die für
+ *    "katalog": "Mit navn er Mia." hiess "... milliard", "Jeg har en kat."
+ *    hiess "... katalog". Stattdessen sagt <s> der Stimme, dass hier ein
+ *    Satz endet - die Stimme senkt sich trotzdem. Fragezeichen und
+ *    Ausrufezeichen bleiben: Sie kürzen nichts ab.
+ * 2. Die Ausspracheliste (tts_aliase): Was danach noch falsch klingt,
+ *    sprechen die Lehrkräfte und der Admin einzeln vor - als <sub alias>.
+ *
+ * merkmal ist null, wenn nichts davon gegriffen hat; sonst das, woran sich
+ * die Aufnahme festmacht (tts_hash()).
+ *
+ * @return array{ssml:string, merkmal:?string}
+ */
+function tts_sprechfassung(string $text, string $code = ''): array
+{
+    $x = static fn (string $s): string => htmlspecialchars($s, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+
+    $satz    = $text;
+    $geaendert = false;
+    // Ein Punkt, keine Auslassungspunkte: "Jeg hedder ..." soll in der Schwebe bleiben.
+    if (preg_match('/(?<![.…])\.\s*$/u', $satz) === 1) {
+        $satz = rtrim(preg_replace('/\.\s*$/u', '', $satz));
+        $geaendert = true;
+    }
+
+    $treffer = [];
+    $aliase  = $code === '' ? [] : tts_aliase_fuer($code);
+    if ($aliase !== []) {
+        // Längere zuerst - "en kat" vor "kat", falls beide auf der Liste stehen.
+        uksort($aliase, static fn (string $a, string $b): int => mb_strlen($b) <=> mb_strlen($a));
+        $muster = '/(?<![\p{L}\p{N}])(' . implode('|', array_map(
+            static fn (string $w): string => preg_quote($w, '/'), array_keys($aliase))) . ')(?![\p{L}\p{N}])/iu';
+        $teile = preg_split($muster, $satz, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$satz];
+        $ssml  = '';
+        foreach ($teile as $i => $teil) {
+            if ($i % 2 === 0) {
+                $ssml .= $x($teil);
+                continue;
+            }
+            $alias = $aliase[mb_strtolower($teil)] ?? null;
+            if ($alias === null) {
+                $ssml .= $x($teil);
+                continue;
+            }
+            $ssml .= '<sub alias="' . $x($alias) . '">' . $x($teil) . '</sub>';
+            $treffer[] = mb_strtolower($teil) . '=' . $alias;
+        }
+    } else {
+        $ssml = $x($satz);
+    }
+
+    $merkmal = null;
+    if ($geaendert || $treffer !== []) {
+        sort($treffer);
+        $merkmal = $satz . "\n" . implode("\n", $treffer);
+    }
+    return ['ssml' => '<s>' . $ssml . '</s>', 'merkmal' => $merkmal];
+}
+
+/**
+ * Die Ausspracheliste einer Sprache: Wort (klein) => wie es klingen soll.
+ *
+ * Eine Liste für alle Schulen - wie ein Wort klingt, hängt nicht an der
+ * Klasse. Je Anfrage einmal gelesen.
+ *
+ * @return array<string, string>
+ */
+function tts_aliase_fuer(string $code): array
+{
+    $cache = &tts_aliase_cache();
+    if (!table_exists_tts_aliase()) {
+        return [];
+    }
+    return $cache[$code] ??= array_column(
+        qa('SELECT LOWER(wort) AS wort, aussprache FROM tts_aliase WHERE sprache = ?', [$code]),
+        'aussprache', 'wort');
+}
+
+/** Vor der Schemaänderung gibt es die Tabelle noch nicht - dann eben ohne Liste. */
+function table_exists_tts_aliase(): bool
+{
+    static $da = null;
+    return $da ??= qv("SELECT COUNT(*) FROM information_schema.TABLES
+                        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tts_aliase'") > 0;
+}
+
+/** Die Liste neu lesen - nach einer Änderung, im selben Lauf, der dann neu spricht. */
+function tts_aliase_vergessen(): void
+{
+    $cache = &tts_aliase_cache();
+    $cache = [];
+}
+
+/** @return array<string, array<string, string>> */
+function &tts_aliase_cache(): array
+{
+    static $cache = [];
+    return $cache;
 }
 
 /** Der Pfad der Datei unter daten/storage - mit dem Kurzzeichen im Namen. */
@@ -130,7 +272,7 @@ function tts_offen(int $unitId, array $stimme): array
         [$unitId],
     ) as $s) {
         $text = tts_satztext((string) $s['foreign_text'], (string) $s['answer']);
-        $hash = tts_hash($text, $stimme['name']);
+        $hash = tts_hash($text, $stimme['name'], $stimme['code'] ?? '');
         if ($text === '' || $s['alt'] === $hash) {
             continue;
         }
@@ -423,7 +565,7 @@ function tts_anfragen(string $schluessel, array $saetze, array $stimme): array
         $ssml = sprintf(
             "<speak version='1.0' xml:lang='%s'><voice name='%s'>%s</voice></speak>",
             $stimme['lang'], $stimme['name'],
-            htmlspecialchars($s['text'], ENT_XML1 | ENT_QUOTES, 'UTF-8'),
+            tts_sprechfassung($s['text'], $stimme['code'] ?? '')['ssml'],
         );
         $ch = curl_init(tts_endpunkt());
         $eintrag = ['ch' => $ch, 'satz' => $s, 'warten' => null];
@@ -520,4 +662,113 @@ function tts_waisen_entfernen(): int
         }
     }
     return $weg;
+}
+
+// ---------------------------------------------------------------- Ausspracheliste
+
+/*
+ * Wörter, die die Stimme falsch liest, und wie sie klingen sollen.
+ *
+ * Eine Liste für alle Schulen und Konten: Wie "fx" im Dänischen klingt,
+ * hängt nicht an einer Klasse, und wer es einmal richtigstellt, stellt es
+ * für alle richtig. Gepflegt im Admin (admin/aussprache.php); dazu kommt
+ * ein Wort auch aus einer Meldung, wenn eine Lehrkraft beim Anhören merkt,
+ * dass die Stimme danebenliegt (lib/meldungen.php).
+ *
+ * Wirkt über tts_sprechfassung(): Das Wort geht als <sub alias> an Azure,
+ * und weil die Liste in das Kurzzeichen eingeht, gilt jede Aufnahme mit
+ * dem Wort danach als veraltet - tts_alias_nachsprechen() spricht sie neu.
+ */
+
+/** @return list<array{id:int, sprache:string, wort:string, aussprache:string, created_at:string}> */
+function tts_alias_liste(): array
+{
+    if (!table_exists_tts_aliase()) {
+        return [];
+    }
+    return array_map(static fn (array $r): array => ['id' => (int) $r['id']] + $r,
+        qa('SELECT id, sprache, wort, aussprache, created_at FROM tts_aliase ORDER BY sprache, wort'));
+}
+
+/**
+ * Ein Wort aufnehmen oder ändern. Gibt einen Fehlertext zurück, oder null.
+ *
+ * Gibt es das Wort in der Sprache schon, wird seine Aussprache ersetzt -
+ * zwei Einträge für dasselbe Wort wären zwei Antworten auf eine Frage.
+ */
+function tts_alias_setzen(string $sprache, string $wort, string $aussprache, int $id = 0): ?string
+{
+    $sprache    = strtolower(trim($sprache));
+    $wort       = trim(preg_replace('/\s+/u', ' ', $wort) ?? '');
+    $aussprache = trim(preg_replace('/\s+/u', ' ', $aussprache) ?? '');
+
+    if (tts_stimme($sprache) === null) {
+        return 'Für diese Sprache gibt es keine Stimme.';
+    }
+    if ($wort === '' || $aussprache === '') {
+        return 'Es braucht das Wort und wie es klingen soll.';
+    }
+    if (mb_strlen($wort) > 64 || mb_strlen($aussprache) > 128) {
+        return 'Das ist zu lang für ein Wort.';
+    }
+    if (mb_strtolower($wort) === mb_strtolower($aussprache)) {
+        return 'Die Aussprache ist dieselbe wie das Wort - so ändert sich nichts.';
+    }
+
+    $vorher = $id > 0 ? q1('SELECT * FROM tts_aliase WHERE id = ?', [$id]) : null;
+    if ($vorher !== null) {
+        q('UPDATE tts_aliase SET sprache = ?, wort = ?, aussprache = ? WHERE id = ?',
+          [$sprache, $wort, $aussprache, $id]);
+    } else {
+        q('INSERT INTO tts_aliase (sprache, wort, aussprache) VALUES (?, ?, ?)
+           ON DUPLICATE KEY UPDATE aussprache = VALUES(aussprache), wort = VALUES(wort)',
+          [$sprache, $wort, $aussprache]);
+    }
+    tts_aliase_vergessen();
+    return null;
+}
+
+/** Einen Eintrag löschen - die Sprache und das Wort, damit neu gesprochen werden kann. */
+function tts_alias_loeschen(int $id): ?array
+{
+    $zeile = q1('SELECT sprache, wort FROM tts_aliase WHERE id = ?', [$id]);
+    if ($zeile !== null) {
+        q('DELETE FROM tts_aliase WHERE id = ?', [$id]);
+        tts_aliase_vergessen();
+    }
+    return $zeile;
+}
+
+/**
+ * Die Sätze mit diesem Wort neu sprechen - in jeder Lerneinheit, in der es
+ * vorkommt, auf Rechnung des jeweiligen Kurses.
+ *
+ * Läuft nach der Antwort (die Seiten leiten zuerst weiter); was nicht
+ * durchkommt, holt die nächste Freigabe nach. Gibt zurück, wie viele
+ * Aufnahmen entstanden.
+ */
+function tts_alias_nachsprechen(string $sprache, string $wort): int
+{
+    require_once __DIR__ . '/courses.php';
+
+    $muster = '%' . addcslashes($wort, '\\%_') . '%';
+    $einheiten = qa(
+        'SELECT DISTINCT u.id, u.course_id
+           FROM sentences s
+           JOIN vocab v     ON v.id = s.vocab_id
+           JOIN units u     ON u.id = v.unit_id
+           JOIN languages l ON l.id = u.language_id
+          WHERE l.code = ? AND (s.foreign_text LIKE ? OR s.answer LIKE ?)',
+        [$sprache, $muster, $muster],
+    );
+
+    $erzeugt = 0;
+    foreach ($einheiten as $u) {
+        $zahler = $u['course_id'] === null ? null : course_billing_user((int) $u['course_id']);
+        if ($zahler === null) {
+            continue;
+        }
+        $erzeugt += tts_nachtragen((int) $u['id'], $zahler)['erzeugt'];
+    }
+    return $erzeugt;
 }

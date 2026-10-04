@@ -42,6 +42,13 @@ if (!str_starts_with($_SERVER['CONTENT_TYPE'] ?? '', 'application/ssml+xml')
     exit;
 }
 
+/*
+ * Was ankam, für die Prüfungen mitschreiben - je Anfrage eine Zeile. So
+ * lässt sich prüfen, wie ein Satz an Azure ging (tts_sprechfassung()).
+ */
+file_put_contents(sys_get_temp_dir() . '/vt-fake-tts.log',
+    json_encode($m[2], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n", FILE_APPEND);
+
 if (str_contains($m[2], 'FEHLER-TTS')) {
     http_response_code(500);
     exit;

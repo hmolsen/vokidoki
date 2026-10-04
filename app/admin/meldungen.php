@@ -18,6 +18,19 @@ admin_require();
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     csrf_check();
 
+    // Ein Wort auf die Ausspracheliste - wie bei der Lehrkraft, nur wartet
+    // der Admin, bis neu gesprochen ist.
+    if (isset($_POST['aussprache'])) {
+        [$ok, $text, $neu] = meldung_aussprache(null, $_POST);
+        if ($neu !== null) {
+            set_time_limit(600);
+            tts_alias_nachsprechen($neu[0], $neu[1]);
+            $text .= ' Neu gesprochen - noch einmal anhören.';
+        }
+        flash($text, $ok ? 'good' : 'bad');
+        redirect('meldungen.php?v=' . (int) ($_POST['meldung'] ?? 0));
+    }
+
     [$ok, $text] = meldung_bearbeiten(null, $_POST);
     flash($text, $ok ? 'good' : 'bad');
     redirect('meldungen.php' . ($ok ? '' : '?v=' . (int) ($_POST['meldung'] ?? 0)));

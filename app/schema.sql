@@ -132,6 +132,16 @@ CREATE TABLE IF NOT EXISTS sentence_audio (
   CONSTRAINT fk_audio_sentence FOREIGN KEY (sentence_id) REFERENCES sentences(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Die Ausspracheliste fuer die Aufnahmen - siehe lib/tts.php.
+CREATE TABLE IF NOT EXISTS tts_aliase (
+  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  sprache     VARCHAR(8)   NOT NULL,
+  wort        VARCHAR(64)  NOT NULL,
+  aussprache  VARCHAR(128) NOT NULL,
+  created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_tts_alias (sprache, wort)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 
 -- Lernstand pro Vokabel und Trainer-Variante (mode): 'mc' und 'cloze'.
 -- Schule, Klasse, Kurs.

@@ -176,7 +176,7 @@ switch (action()) {
                  */
                 $stimme = tts_stimme($s['sprache'] ?? null);
                 if ($stimme !== null && $s['audio'] !== null
-                    && $s['audio'] === tts_hash(tts_satztext($satz['f'], $satz['a']), $stimme['name'])) {
+                    && tts_passt((string) $s['audio'], tts_satztext($satz['f'], $satz['a']), $stimme)) {
                     $satz['h'] = (string) $s['audio'];
                 }
                 $saetze[] = $satz;

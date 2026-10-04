@@ -150,7 +150,22 @@ SQL,
                  ELSE v END
               WHERE k IN ('prices_json', 'vision_model', 'sentence_model')",
         ],
+        // Die Ausspracheliste für die Aufnahmen - siehe lib/tts.php.
+        'tts_aliase' => [
+            static fn (): bool => !table_exists('tts_aliase'),
+            <<<'SQL'
+CREATE TABLE IF NOT EXISTS tts_aliase (
+  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  sprache     VARCHAR(8)   NOT NULL,
+  wort        VARCHAR(64)  NOT NULL,
+  aussprache  VARCHAR(128) NOT NULL,
+  created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_tts_alias (sprache, wort)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL,
+        ],
         // Aus welcher Übung eine Meldung kam - siehe lib/meldungen.php.
+
         'vocab_flags.mode' => [
             static fn (): bool => !column_exists('vocab_flags', 'mode'),
             'ALTER TABLE vocab_flags ADD COLUMN mode VARCHAR(16) NULL AFTER typed',

@@ -160,11 +160,19 @@ function budget_block_reason(int $userId): ?string
              . 'Der Betreiber kann sie im Admin-Bereich wieder freischalten.';
     }
 
+    /*
+     * Die Aufnahmen zählen hier nicht mit. Sie stehen im selben Protokoll,
+     * sind aber keine Analysen, und seit der Ausspracheliste spricht ein
+     * einziges neues Wort jede Lerneinheit neu, in der es vorkommt - je ein
+     * Eintrag auf die Lehrkraft des Kurses. Ein häufiges Wort sperrte ihr
+     * sonst für eine Stunde das Einlesen.
+     */
     $perHour = (int) setting('imports_per_hour', '20');
     if ($perHour > 0) {
         $recent = (int) qv(
-            'SELECT COUNT(*) FROM ai_requests
-              WHERE user_id = ? AND created_at >= (NOW() - INTERVAL 1 HOUR)',
+            "SELECT COUNT(*) FROM ai_requests
+              WHERE user_id = ? AND created_at >= (NOW() - INTERVAL 1 HOUR)
+                AND (purpose IS NULL OR purpose <> 'tts')",
             [$userId],
         );
         if ($recent >= $perHour) {
