@@ -43,29 +43,33 @@ switch (action()) {
         $username = body_str($b, 'username', 64);
         $password = (string) ($b['password'] ?? '');
 
+        // Schulkürzel, Benutzername, Passwort - siehe lib/schulkuerzel.php.
+        ['konto' => $user, 'schluessel' => $schluessel]
+            = konto_zur_anmeldung(body_str($b, 'school', 32), $username);
+
         // Erst bremsen, dann prüfen. Die Bremse zählt auch unbekannte
-        // Benutzernamen mit - sonst liesse sich an ihr ablesen, welche
-        // Konten es gibt.
+        // Benutzernamen und Schulen mit - sonst liesse sich an ihr ablesen,
+        // welche Konten es gibt.
         $ip    = login_client_ip();
-        $sperr = login_guard($username, $ip);
+        $sperr = login_guard($schluessel, $ip);
         if ($sperr !== null) {
             json_fail($sperr, 429);
         }
 
-        $user = q1('SELECT * FROM users WHERE username = ? AND active = 1', [$username]);
-
         // password_verify auch bei unbekanntem Nutzer aufrufen, damit die
         // Antwortzeit keine Rückschlüsse auf existierende Konten zulässt.
+        // Dieselbe Meldung für eine falsche Schule: Sie verrät nicht, ob es
+        // die Schule gibt.
         $hash = $user['password_hash'] ?? '$2y$12$' . str_repeat('.', 53);
         if ($user === null || !password_verify($password, $hash)) {
-            login_attempt_record($username, $ip);
+            login_attempt_record($schluessel, $ip);
             usleep(random_int(150_000, 400_000));
-            json_fail('Benutzername oder Passwort stimmt nicht.', 401);
+            json_fail('Schulkürzel, Benutzername oder Passwort stimmt nicht.', 401);
         }
 
         // Wer sein Passwort kennt, soll nicht an den Fehlversuchen von
         // vorhin hängenbleiben.
-        login_attempts_reset($username);
+        login_attempts_reset($schluessel);
 
         login_user((int) $user['id']);
 

@@ -23,7 +23,7 @@ export async function pruefe(f, aus) {
 
     const b = await browser({ port: 9409, breite: 1200, hoehe: 1100, aus });
     try {
-        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort);
+        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort, f.kuerzel);
 
         // ---- Von der Startseite in den Assistenten.
 

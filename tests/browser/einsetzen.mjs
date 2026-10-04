@@ -50,7 +50,7 @@ export async function pruefe(f, aus, wurzel) {
 
     const b = await browser({ port: 9420, breite: 390, hoehe: 844, handy: true, aus });
     try {
-        await alsKind(b, f.basis, f.kind, f.passwort);
+        await alsKind(b, f.basis, f.kind, f.passwort, f.kuerzel);
         await b.js(`(async () => { const v = await import('${f.basis}/vorrat.js'); await v.vorratAuffrischen(); })()`);
 
         // ---- In der Lerneinheit: zwischen Auswählen und Lückentext.

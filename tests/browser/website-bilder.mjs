@@ -122,7 +122,7 @@ try {
     // ------------------------------------------------------------ Kinder
     const k = await browser({ port: 9471, breite: 390, hoehe: 844, handy: true });
     try {
-        await alsKind(k, basis, d.kind, d.passwort);
+        await alsKind(k, basis, d.kind, d.passwort, d.kuerzel);
 
         await k.hash(`/lang/${sprache}`, 1500);
         await foto(k, 'kind-kurs', TELEFON);
@@ -194,7 +194,7 @@ try {
     // ------------------------------------------------------------ Lehrkraft
     const l = await browser({ port: 9472, breite: 1280, hoehe: 820 });
     try {
-        await alsLehrkraft(l, basis, d.lehrer, d.passwort);
+        await alsLehrkraft(l, basis, d.lehrer, d.passwort, d.kuerzel);
 
         await l.geh(`${basis}/teacher/`, 1500);
         await foto(l, 'lehrer-kurse', RECHNER);
@@ -236,7 +236,7 @@ try {
     // mit einer Zeile, die die KI berichtigt hat und die gelb markiert ist.
     const t = await browser({ port: 9473, breite: 390, hoehe: 844, handy: true });
     try {
-        await alsLehrkraft(t, basis, d.lehrer, d.passwort);
+        await alsLehrkraft(t, basis, d.lehrer, d.passwort, d.kuerzel);
         await t.geh(`${basis}/`, 1200);
         await t.js(`localStorage.setItem('vt-draft-${sprache}', JSON.stringify({
             title: 'Unité 4 – Mes loisirs',

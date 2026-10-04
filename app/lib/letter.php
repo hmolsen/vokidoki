@@ -34,6 +34,7 @@ function letter_placeholders(): array
 {
     return [
         'name'         => 'Der Name des Kindes, etwa "Lilli M."',
+        'kuerzel'      => 'Das Kürzel der Schule zum Anmelden, etwa "opsk"',
         'benutzername' => 'Sein Benutzername, etwa "lilli.m"',
         'passwort'     => 'Das Anfangspasswort, etwa "müder-Gepard"',
         'klasse'       => 'Die Klasse, etwa "5B"',
@@ -61,9 +62,11 @@ function letter_default(): string
         '',
         'So kommst du hinein:',
         '',
-        '1. Den Code oben abfotografieren - oder {url} eintippen.',
-        '2. Als Benutzername {benutzername} eingeben.',
-        '3. Als Passwort {passwort} eingeben, mit dem Bindestrich in der Mitte.',
+        '1. Den Code oben abfotografieren - dann stehen Schulkürzel und Benutzername schon da. '
+            . 'Oder {url} eintippen.',
+        '2. Als Schulkürzel {kuerzel} eingeben.',
+        '3. Als Benutzername {benutzername} eingeben.',
+        '4. Als Passwort {passwort} eingeben, mit dem Bindestrich in der Mitte.',
         '',
         'Danach kannst du dir ein eigenes Passwort ausdenken. Merk es dir gut - '
             . 'wenn du es vergisst, kann dir deine Lehrkraft ein neues geben.',
@@ -139,7 +142,8 @@ function letter_save_own(int $lehrkraftId, string $text): array
 function letter_missing_placeholders(string $text): array
 {
     $fehlend = [];
-    foreach (['name', 'benutzername', 'passwort'] as $noetig) {
+    // Ohne Schulkürzel kommt niemand hinein (lib/schulkuerzel.php).
+    foreach (['name', 'kuerzel', 'benutzername', 'passwort'] as $noetig) {
         if (!str_contains($text, '{' . $noetig . '}')) {
             $fehlend[] = '{' . $noetig . '}';
         }

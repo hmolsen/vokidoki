@@ -20,6 +20,7 @@ require_once __DIR__ . '/../lib/meldungen.php';
 require_once __DIR__ . '/../lib/letter.php';
 require_once __DIR__ . '/../lib/passwords.php';
 require_once __DIR__ . '/../lib/tts.php';
+require_once __DIR__ . '/../lib/schulkuerzel.php';
 
 boot_error_handling();
 
@@ -422,6 +423,22 @@ function admin_head(string $title, string $active): void
                 count($offen) === 1 ? '' : 'en',
                 h(admin_url('selfcheck.php')),
             );
+        } elseif (column_exists('schools', 'kuerzel')) {
+            /*
+             * Ohne Kürzel kann sich an einer Schule niemand anmelden
+             * (lib/schulkuerzel.php). Nach dem Update betrifft das jede
+             * Schule - also steht es hier, bis es erledigt ist.
+             */
+            $ohne = schulen_ohne_kuerzel();
+            if ($ohne !== []) {
+                printf(
+                    '<div class="notice bad">%d Schule%s ohne Kürzel - dort kann sich niemand '
+                    . 'anmelden. <a href="%s">Im Selbsttest vergeben</a>.</div>',
+                    count($ohne),
+                    count($ohne) === 1 ? '' : 'n',
+                    h(admin_url('selfcheck.php') . '#kuerzel'),
+                );
+            }
         }
     }
 }

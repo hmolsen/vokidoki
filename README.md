@@ -167,9 +167,14 @@ mysql -u BENUTZER -p DATENBANK < app/schema.sql
    `daten/config.php` und das Fehlerprotokoll von aussen nicht abrufbar sind.
    Die Liste der Schemaänderungen ist leer: `schema.sql` legt das fertige
    Schema an, eine frische Installation hat nichts nachzutragen.
-2. Unter **Schulen** die erste Schule anlegen. Ohne sie kann ein Konto weder
-   eine Sprache anlegen noch eine Lerneinheit sehen — beides hängt am Kurs
-   und ein Kurs an der Schule. Es entsteht keine Schule von selbst.
+2. Unter **Schulen** die erste Schule anlegen, mit ihrem **Kürzel** (etwa
+   „opsk"). Ohne Schule kann ein Konto weder eine Sprache anlegen noch eine
+   Lerneinheit sehen — beides hängt am Kurs und ein Kurs an der Schule. Es
+   entsteht keine Schule von selbst. Angemeldet wird mit Schulkürzel,
+   Benutzername und Passwort; Benutzernamen sind nur innerhalb ihrer Schule
+   eindeutig (`lib/schulkuerzel.php`). Nach dem Update, mit dem die Kürzel
+   kamen, vergibt der Admin sie für die bestehenden Schulen im **Selbsttest**
+   — bis dahin kann sich dort niemand neu anmelden.
 3. Unter **Accounts** das erste Lehrkraft-Konto anlegen; Klassen, Kinder und
    Kurse legt die Lehrkraft dann in ihrem eigenen Bereich an.
 4. Unter **Einstellungen** ggf. Modell und Monatsbudget anpassen.

@@ -56,13 +56,23 @@ $kinder   = array_values(array_filter(
         && (string) ($k['initial_password'] ?? '') !== '',
 ));
 
-$schule   = q1('SELECT name FROM schools WHERE id = ?', [$schoolId]);
+$schule   = q1('SELECT name, kuerzel FROM schools WHERE id = ?', [$schoolId]);
+$kuerzel  = (string) ($schule['kuerzel'] ?? '');
 // Die Vorlage der Lehrkraft, die druckt - sonst die des Betreibers.
 $vorlage  = letter_template($user);
 // Mit Schema und Host: Der Zettel verlaesst die Anwendung, und ein QR-Code
 // mit einem blossen Pfad darin ist kein Link, sondern eine Zeichenkette.
 $adresse  = public_url('/');
-$qrSvg    = qr_svg($adresse, 4, 'Adresse der App');
+
+/*
+ * Der QR-Code bringt Schulkürzel und Benutzernamen mit (views/login.js
+ * liest ?schule= und ?name=): Wer ihn abfotografiert, tippt nur noch das
+ * Passwort. Das Passwort selbst steht nicht darin - ein abfotografierter
+ * Zettel soll kein Schlüssel sein.
+ */
+$qrFuer = static fn (array $k): ?string => qr_svg(
+    public_url('/?' . http_build_query(['schule' => $kuerzel, 'name' => (string) $k['username']])),
+    4, 'Anmeldung in der App');
 
 /**
  * Der Brief als Absätze.
@@ -262,6 +272,7 @@ body {
     $passwort = (string) $k['initial_password'];
     $brief    = letter_render($vorlage, [
         'name'         => (string) $k['display_name'],
+        'kuerzel'      => $kuerzel,
         'benutzername' => (string) $k['username'],
         'passwort'     => $passwort,
         'klasse'       => (string) $klasse['name'],
@@ -285,6 +296,7 @@ body {
         </h1>
 
         <div class="zugang">
+            <?php $qrSvg = $qrFuer($k); ?>
             <?php if ($qrSvg !== null): ?>
             <div class="qr">
                 <?= $qrSvg ?>
@@ -293,6 +305,7 @@ body {
             <?php endif; ?>
             <dl>
                 <dt>Adresse</dt><dd><?= h($adresse) ?></dd>
+                <dt>Schulkürzel</dt><dd><?= h($kuerzel) ?></dd>
                 <dt>Benutzername</dt><dd><?= h($k['username']) ?></dd>
                 <dt>Passwort</dt><dd class="pw"><?= h($passwort) ?></dd>
             </dl>

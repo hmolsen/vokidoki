@@ -90,8 +90,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         } elseif ($schule === null) {
             flash('Bitte eine Schule wählen. Ohne Schule sieht das Konto nichts - '
                   . 'unter "Schulen" lässt sich eine anlegen.', 'bad');
-        } elseif (q1('SELECT id FROM users WHERE username = ?', [$username]) !== null) {
-            flash('Diesen Benutzernamen gibt es schon.', 'bad');
+        } elseif (q1('SELECT id FROM users WHERE school_id = ? AND username = ?',
+                     [(int) $schule['id'], $username]) !== null) {
+            // Eindeutig je Schule - an einer anderen darf es ihn geben.
+            flash('Diesen Benutzernamen gibt es an dieser Schule schon.', 'bad');
         } else {
             q(
                 'INSERT INTO users (username, display_name, password_hash, color, role, can_import)

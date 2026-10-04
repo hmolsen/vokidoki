@@ -225,10 +225,11 @@ export async function browser({ port = 9400, breite = 1200, hoehe = 1000,
 // ------------------------------------------------------------------ Anmelden
 
 /** Als Lehrkraft in den Lehrkraft-Bereich - über das Formular, wie ein Mensch. */
-export async function alsLehrkraft(b, basis, nutzer, passwort) {
+export async function alsLehrkraft(b, basis, nutzer, passwort, schule) {
     await b.geh(basis + '/teacher/', 900);
     await b.js(`(() => {
         const f = document.querySelector('form');
+        f.querySelector('[name=school]').value = ${JSON.stringify(schule)};
         f.querySelector('[name=username]').value = ${JSON.stringify(nutzer)};
         f.querySelector('[name=password]').value = ${JSON.stringify(passwort)};
         f.querySelector('button').click();
@@ -243,12 +244,12 @@ export async function alsLehrkraft(b, basis, nutzer, passwort) {
  * laufende Seite kennt VT.user noch als null, und route() schickt einen
  * dann auf die Anmeldeseite.
  */
-export async function alsKind(b, basis, nutzer, passwort) {
+export async function alsKind(b, basis, nutzer, passwort, schule) {
     await b.geh(basis + '/', 1200);
     await b.js(`fetch('${basis}/api/auth.php?action=login', {
         method: 'POST',
         headers: { 'X-Vokabeltrainer': '1', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: ${JSON.stringify(nutzer)},
+        body: JSON.stringify({ school: ${JSON.stringify(schule)}, username: ${JSON.stringify(nutzer)},
                                password: ${JSON.stringify(passwort)} }),
         credentials: 'same-origin',
     }).then((r) => r.json())`);

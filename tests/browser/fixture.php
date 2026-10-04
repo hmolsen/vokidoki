@@ -27,6 +27,7 @@ require_once $root . '/lib/worldlanguages.php';
 require_once $root . '/lib/einwilligung.php';
 
 const BT_SCHULE   = 'BROWSERTEST-Schule';
+const BT_KUERZEL  = 'btest';
 const BT_LEHRER   = 'browsertest_lehr';
 const BT_PASSWORT = 'lehrerin123';
 
@@ -59,7 +60,8 @@ if (($argv[1] ?? '') === 'weg') {
 
 bt_weg();
 
-q('INSERT INTO schools (name, active) VALUES (?, 1)', [BT_SCHULE]);
+// Mit Kürzel: Angemeldet wird mit Schulkürzel, Benutzername, Passwort.
+q('INSERT INTO schools (name, kuerzel, active) VALUES (?, ?, 1)', [BT_SCHULE, BT_KUERZEL]);
 $schuleId = (int) db()->lastInsertId();
 
 q('INSERT INTO users (school_id, username, display_name, password_hash, color, role, can_import)
@@ -161,6 +163,7 @@ echo json_encode([
     'lehrer'     => BT_LEHRER,
     'passwort'   => BT_PASSWORT,
     'schule'     => $schuleId,
+    'kuerzel'    => BT_KUERZEL,
     'klasse'     => $klasseId,
     'leereKlasse' => $leereId,
     'suchKlasse'  => (int) $suchKlasse['id'],

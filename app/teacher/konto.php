@@ -203,9 +203,10 @@ teacher_flash_render();
 </form>
 
 <p class="tiny muted">
-    Dein Benutzername zum Anmelden ist
-    <code><?= h((string) $user['username']) ?></code> und lässt sich nicht
-    ändern.
+    Zum Anmelden: Schulkürzel
+    <code><?= h(schulkuerzel_von(isset($user['school_id']) ? (int) $user['school_id'] : null)) ?></code>,
+    Benutzername <code><?= h((string) $user['username']) ?></code> &ndash; beides lässt sich nicht
+    selbst ändern.
 </p>
 
 <?php teacher_foot(); ?>

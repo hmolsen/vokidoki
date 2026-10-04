@@ -45,7 +45,7 @@ export async function pruefe(f, aus, wurzel) {
 
     const b = await browser({ port: 9481, breite: 1200, hoehe: 1000, aus });
     try {
-        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort);
+        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort, f.kuerzel);
         await b.geh(f.basis + '/teacher/course.php?id=' + f.kurs, 1500);
 
         const kopf = await b.js(`[...document.querySelectorAll('#einheiten th.erzspalte')].map((t) => t.title)`);

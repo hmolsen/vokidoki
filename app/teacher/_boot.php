@@ -232,29 +232,35 @@ function teacher_require(): array
     }
 
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['teacher_login'])) {
-        $username = strtolower(trim((string) ($_POST['username'] ?? '')));
         $password = (string) ($_POST['password'] ?? '');
 
+        // Dieselbe Regel wie in der App (lib/schulkuerzel.php).
+        ['konto' => $row, 'schluessel' => $schluessel] = konto_zur_anmeldung(
+            (string) ($_POST['school'] ?? ''), (string) ($_POST['username'] ?? ''));
+
         $ip    = login_client_ip();
-        $sperr = login_guard($username, $ip);
+        $sperr = login_guard($schluessel, $ip);
         if ($sperr !== null) {
             teacher_login_page($sperr);
         }
-
-        $row = q1('SELECT * FROM users WHERE username = ? AND active = 1', [$username]);
 
         // password_verify auch ohne Treffer aufrufen, damit die Antwortzeit
         // nichts über vorhandene Konten verrät.
         $hash = $row['password_hash'] ?? '$2y$12$' . str_repeat('.', 53);
         if ($row === null || !password_verify($password, $hash) || !user_is_teacher($row)) {
-            login_attempt_record($username, $ip);
+            login_attempt_record($schluessel, $ip);
             usleep(random_int(200_000, 500_000));
-            teacher_login_page('Benutzername oder Passwort stimmt nicht.');
+            teacher_login_page('Schulkürzel, Benutzername oder Passwort stimmt nicht.');
         }
 
-        login_attempts_reset($username);
+        login_attempts_reset($schluessel);
 
         login_user((int) $row['id']);
+        // Das Kürzel für die nächste Anmeldung merken - ein Jahr, nur dieser Pfad.
+        setcookie('vt_schule', schulkuerzel_von((int) $row['school_id']), [
+            'expires' => time() + 365 * 86400, 'path' => url('/'), 'samesite' => 'Lax',
+            'secure' => (($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off'),
+        ]);
         teacher_redirect('index.php');
     }
 
@@ -304,8 +310,20 @@ function teacher_login_page(?string $error): never
 <?php if ($error !== null): ?><div class="notice"><?= h($error) ?></div><?php endif; ?>
 <form method="post" class="card">
     <?= teacher_csrf_field() ?>
+    <?php
+    /*
+     * Das Kürzel der Schule zuerst - Benutzernamen sind nur innerhalb ihrer
+     * Schule eindeutig. Das zuletzt benutzte steht schon da (Cookie, siehe
+     * unten): Eine Lehrkraft wechselt ihre Schule selten.
+     */
+    $kuerzelVorher = schulkuerzel_normal((string) ($_POST['school'] ?? $_COOKIE['vt_schule'] ?? ''));
+    ?>
+    <label for="s">Schulkürzel</label>
+    <input type="text" id="s" name="school" autocapitalize="off" autocorrect="off" spellcheck="false"
+           maxlength="12" value="<?= h($kuerzelVorher) ?>" placeholder="z. B. opsk"<?= $kuerzelVorher === '' ? ' autofocus' : '' ?>>
     <label for="u">Benutzername</label>
-    <input type="text" id="u" name="username" autocapitalize="off" autocomplete="username" autofocus>
+    <input type="text" id="u" name="username" autocapitalize="off" autocomplete="username"
+           value="<?= h(strtolower(trim((string) ($_POST['username'] ?? '')))) ?>"<?= $kuerzelVorher !== '' ? ' autofocus' : '' ?>>
     <label for="p">Passwort</label>
     <input type="password" id="p" name="password" autocomplete="current-password">
     <button class="btn" name="teacher_login" value="1">Anmelden</button>

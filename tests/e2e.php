@@ -140,11 +140,44 @@ function vorAnmeldung(string $username): void
     }
 }
 
+/**
+ * Das Schulkürzel eines Kontos - für die Anmeldungen der Prüfungen.
+ *
+ * Angemeldet wird mit Schulkürzel, Benutzername und Passwort
+ * (lib/schulkuerzel.php). Die Prüfungen legen Konten an vielen Stellen an;
+ * statt jede Anmeldung um das Kürzel zu ergänzen, holen apiCall() und
+ * teacherRequest() es hier, wenn es fehlt. Hat die Schule noch keines (die
+ * Testschule von vor dem Kürzel), bekommt sie eines. Wer das Kürzel selbst
+ * prüft, gibt es ausdrücklich mit.
+ */
+function e2eKuerzel(string $username): string
+{
+    $schule = qv('SELECT school_id FROM users WHERE username = ? ORDER BY id DESC LIMIT 1',
+                 [strtolower($username)]);
+    if ($schule === null) {
+        return 'unbekannt';
+    }
+    $kuerzel = (string) (qv('SELECT kuerzel FROM schools WHERE id = ?', [(int) $schule]) ?? '');
+    if ($kuerzel === '') {
+        $kuerzel = 'e2e' . (int) $schule;
+        q('UPDATE schools SET kuerzel = ? WHERE id = ?', [$kuerzel, (int) $schule]);
+    }
+    return $kuerzel;
+}
+
+/** Der Schlüssel, unter dem die Anmeldebremse ein Konto zählt (login_schluessel()). */
+function e2eSchluessel(string $username): string
+{
+    return login_schluessel((int) qv('SELECT school_id FROM users WHERE username = ? ORDER BY id DESC LIMIT 1',
+                                     [strtolower($username)]), $username);
+}
+
 function apiCall(string $file, string $action, ?array $body = null, array $query = []): array
 {
     global $base;
     if ($file === 'auth' && $action === 'login') {
         vorAnmeldung((string) ($body['username'] ?? ''));
+        $body = ['school' => e2eKuerzel((string) ($body['username'] ?? ''))] + (array) $body;
     }
     $url = $base . "/api/$file.php?" . http_build_query(['action' => $action] + $query);
     $res = http($url, $body, ['X-Vokabeltrainer: 1', 'Content-Type: application/json']);
@@ -158,6 +191,7 @@ echo "End-to-End-Test gegen $base\n";
 section('Testaccount vorbereiten');
 
 require_once __DIR__ . '/../app/lib/courses.php';
+require_once __DIR__ . '/../app/lib/schulkuerzel.php';
 require_once __DIR__ . '/../app/lib/access.php';
 require_once __DIR__ . '/../app/lib/vocab.php';
 
@@ -2971,6 +3005,7 @@ preg_match('/name="csrf" value="([a-f0-9]+)"/', $seite['body'], $fm);
 vorAnmeldung($freiLehrer);
 freiPost($base . '/teacher/index.php', [
     'teacher_login' => '1',
+    'school'        => e2eKuerzel($freiLehrer),
     'username'      => $freiLehrer,
     'password'      => 'lehrerin123',
     'csrf'          => $fm[1] ?? '',
@@ -3770,19 +3805,21 @@ $seite = http($base . '/admin/schools.php')['body'];
 ok('Die Seite laedt', str_contains($seite, 'Schule anlegen'));
 
 $schulName = 'Testschule ' . bin2hex(random_bytes(3));
-$res = adminPost('schools.php', ['create' => '1', 'name' => $schulName]);
+$schulKuerzel = 'ts' . bin2hex(random_bytes(3));
+$res = adminPost('schools.php', ['create' => '1', 'name' => $schulName, 'kuerzel' => $schulKuerzel]);
 ok('Eine Schule laesst sich anlegen', str_contains($res['body'], 'angelegt'));
 
 $neueSchule = (int) qv('SELECT id FROM schools WHERE name = ?', [$schulName]);
 ok('Und steht in der Datenbank', $neueSchule > 0);
 
-$res = adminPost('schools.php', ['create' => '1', 'name' => $schulName]);
+$schulKuerzel = 'ts' . bin2hex(random_bytes(3));
+$res = adminPost('schools.php', ['create' => '1', 'name' => $schulName, 'kuerzel' => $schulKuerzel]);
 ok('Zweimal derselbe Name geht nicht', str_contains($res['body'], 'gibt es schon'));
 
 // Umbenennen und ein eigenes Monatslimit setzen.
 $res = adminPost('schools.php', [
     'update' => '1', 'id' => $neueSchule,
-    'name'   => $schulName . ' II', 'cap' => '3,50', 'active' => '1',
+    'name'   => $schulName . ' II', 'cap' => '3,50', 'active' => '1', 'kuerzel' => $schulKuerzel,
 ]);
 ok('Der Name laesst sich aendern',
    qv('SELECT name FROM schools WHERE id = ?', [$neueSchule]) === $schulName . ' II');
@@ -3798,7 +3835,7 @@ ok('Und ein eigenes Monatslimit setzen',
  */
 adminPost('schools.php', [
     'update' => '1', 'id' => $neueSchule,
-    'name'   => $schulName . ' II', 'cap' => '', 'active' => '1',
+    'name'   => $schulName . ' II', 'cap' => '', 'active' => '1', 'kuerzel' => $schulKuerzel,
 ]);
 ok('Ein leeres Limit bedeutet "keines", nicht "null"',
    qv('SELECT monthly_cost_cap_usd FROM schools WHERE id = ?', [$neueSchule]) === null);
@@ -3820,7 +3857,7 @@ ok('Eine leere Schule dagegen schon',
 // ---- Konten werden beim Anlegen einer Schule zugeordnet.
 
 $zuordSchule = 'Zuordnung ' . bin2hex(random_bytes(3));
-adminPost('schools.php', ['create' => '1', 'name' => $zuordSchule]);
+adminPost('schools.php', ['create' => '1', 'name' => $zuordSchule, 'kuerzel' => 'zu' . bin2hex(random_bytes(3))]);
 $zuordId = (int) qv('SELECT id FROM schools WHERE name = ?', [$zuordSchule]);
 
 $lehrName = 'e2e_lehr_' . bin2hex(random_bytes(3));
@@ -3872,7 +3909,7 @@ $absBody = (function () use ($base, $absJar, $lehrName, $fremdKurs): string {
     preg_match('/name="csrf" value="([a-f0-9]+)"/', $seite, $m);
 
     vorAnmeldung($lehrName);
-    foreach ([['teacher_login' => '1', 'username' => $lehrName,
+    foreach ([['teacher_login' => '1', 'school' => e2eKuerzel($lehrName), 'username' => $lehrName,
                'password' => 'start12345', 'csrf' => $m[1] ?? ''], null] as $post) {
         $ch = curl_init($base . ($post === null
             ? '/teacher/course.php?id=' . $fremdKurs : '/teacher/index.php'));
@@ -4325,7 +4362,7 @@ function bremsLogin(string $user, string $pass): array
         CURLOPT_COOKIEJAR      => $bremsJar,
         CURLOPT_COOKIEFILE     => $bremsJar,
         CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => json_encode(['username' => $user, 'password' => $pass]),
+        CURLOPT_POSTFIELDS     => json_encode(['school' => e2eKuerzel($user), 'username' => $user, 'password' => $pass]),
         CURLOPT_HTTPHEADER     => ['X-Vokabeltrainer: 1', 'Content-Type: application/json'],
         CURLOPT_TIMEOUT        => 30,
     ]);
@@ -4340,8 +4377,8 @@ $opferB = 'brems_b_' . bin2hex(random_bytes(3));
 $opferAId = makeUser($opferA, 'Bremse A');
 $opferBId = makeUser($opferB, 'Bremse B');
 
-login_attempts_reset($opferA);
-login_attempts_reset($opferB);
+login_attempts_reset(e2eSchluessel($opferA));
+login_attempts_reset(e2eSchluessel($opferB));
 
 for ($i = 1; $i <= LOGIN_ACCOUNT_LIMIT; $i++) {
     [$d, $s] = bremsLogin($opferA, 'bestimmt-falsch');
@@ -4369,15 +4406,15 @@ ok('Ein anderes Kind an derselben Adresse kommt weiter rein',
    $s === 200 && ($d['ok'] ?? false), "Status $s");
 
 ok('Die erfolgreiche Anmeldung löscht die eigenen Fehlversuche',
-   login_attempts_count($opferB, '127.0.0.1')['account'] === 0);
+   login_attempts_count(e2eSchluessel($opferB), '127.0.0.1')['account'] === 0);
 
 // Die Lehrkraft schliesst auf.
-login_attempts_reset($opferA);
+login_attempts_reset(e2eSchluessel($opferA));
 [$d, $s] = bremsLogin($opferA, 'geheim123');
 ok('Nach dem Aufschliessen geht die Anmeldung wieder',
    $s === 200 && ($d['ok'] ?? false), "Status $s");
 
-q('DELETE FROM login_attempts WHERE username IN (?, ?)', [$opferA, $opferB]);
+q('DELETE FROM login_attempts WHERE username IN (?, ?)', [e2eSchluessel($opferA), e2eSchluessel($opferB)]);
 q('DELETE FROM users WHERE id IN (?, ?)', [$opferAId, $opferBId]);
 @unlink($bremsJar);
 
@@ -4402,6 +4439,7 @@ function teacherRequest(string $url, ?array $post): array
     global $lehrerJar;
     if (isset($post['teacher_login'])) {
         vorAnmeldung((string) ($post['username'] ?? ''));
+        $post = ['school' => e2eKuerzel((string) ($post['username'] ?? ''))] + $post;
     }
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -6088,11 +6126,13 @@ q('DELETE FROM ai_requests WHERE user_id IS NULL');
  * Wer sich nur vertippt hat, soll weder warten noch abtippen muessen.
  */
 $lilliName = (string) $lilli['username'];
+// Die Bremse zählt je Schule und Benutzername (login_schluessel()).
+$lilliSchluessel = e2eSchluessel($lilliName);
 for ($i = 0; $i < LOGIN_ACCOUNT_LIMIT; $i++) {
-    login_attempt_record($lilliName, '127.0.0.1');
+    login_attempt_record($lilliSchluessel, '127.0.0.1');
 }
 ok('Ein Kind lässt sich aussperren',
-   isset(login_locked_usernames([$lilliName])[$lilliName]));
+   isset(login_locked_usernames([$lilliSchluessel])[$lilliSchluessel]));
 
 $res = teacherGet('class.php?id=' . $klasseId);
 ok('Die Klassenliste zeigt die Sperre an', str_contains($res['body'], 'gesperrt'));
@@ -6105,7 +6145,7 @@ teacherRequest($base . '/teacher/class.php?id=' . $klasseId, [
     'csrf'     => $lehrerCsrf,
 ]);
 ok('Nach dem Entsperren geht es wieder',
-   login_locked_usernames([$lilliName]) === []);
+   login_locked_usernames([$lilliSchluessel]) === []);
 ok('Und das Passwort ist dasselbe geblieben',
    (string) qv('SELECT password_hash FROM users WHERE id = ?', [(int) $lilli['id']])
    === $hashVorher);
@@ -6746,6 +6786,107 @@ q('DELETE FROM courses WHERE language_id = ?', [$feLang]);
 q('DELETE FROM languages WHERE id = ?', [$feLang]);
 tts_waisen_entfernen();
 
+section('Schulkürzel: angemeldet wird mit Schule, Benutzername, Passwort');
+
+/*
+ * Benutzernamen sind nur innerhalb ihrer Schule eindeutig; das Kürzel sagt,
+ * welche gemeint ist (lib/schulkuerzel.php). Zwei Schulen, dasselbe Kind -
+ * und jedes kommt nur mit seinem Kürzel hinein.
+ */
+$skA = 'ska' . bin2hex(random_bytes(2));
+$skB = 'skb' . bin2hex(random_bytes(2));
+q('INSERT INTO schools (name, kuerzel, active) VALUES (?, ?, 1)', ['Kürzelschule A ' . $skA, $skA]);
+$skSchuleA = (int) db()->lastInsertId();
+q('INSERT INTO schools (name, kuerzel, active) VALUES (?, ?, 1)', ['Kürzelschule B ' . $skB, $skB]);
+$skSchuleB = (int) db()->lastInsertId();
+$skKlasseA = (int) class_create($skSchuleA, '5a')['id'];
+$skKlasseB = (int) class_create($skSchuleB, '5a')['id'];
+
+$skKindA = student_create($skSchuleA, $skKlasseA, 'Lilli', 'M');
+$skKindB = student_create($skSchuleB, $skKlasseB, 'Lilli', 'M');
+ok('Dasselbe Kind an zwei Schulen heisst an beiden gleich - ohne angehängte Ziffer',
+   $skKindA['username'] === $skKindB['username'] && !preg_match('/\d$/', $skKindA['username']),
+   $skKindA['username'] . ' / ' . $skKindB['username']);
+ok('In der Datenbank darf es den Namen jetzt je Schule einmal geben',
+   index_exists('users', 'uq_users_school_username') && !index_exists('users', 'uq_users_username'));
+$skZweitesA = student_create($skSchuleA, $skKlasseA, 'Lilli', 'M');
+ok('An derselben Schule wird weiter durchgezählt', $skZweitesA['username'] === $skKindA['username'] . '2',
+   $skZweitesA['username']);
+q('UPDATE users SET consent_version = 99 WHERE school_id IN (?, ?)', [$skSchuleA, $skSchuleB]);
+
+$skTopf  = tempnam(sys_get_temp_dir(), 'vtsk');
+$skLogin = static fn (array $body): array => apiAls($skTopf, static function () use ($body) {
+    global $base;
+    $r = http($base . '/api/auth.php?action=login', $body, ['X-Vokabeltrainer: 1', 'Content-Type: application/json']);
+    return [json_decode($r['body'], true), $r['status']];
+});
+
+[$d, $st] = $skLogin(['school' => $skA, 'username' => $skKindA['username'], 'password' => $skKindA['initial_password']]);
+ok('Mit Kürzel, Benutzername und Passwort geht es hinein', $st === 200 && ($d['ok'] ?? false), json_encode($d));
+[$d, $st] = $skLogin(['school' => strtoupper($skB), 'username' => $skKindB['username'], 'password' => $skKindB['initial_password']]);
+ok('Das Kind der anderen Schule mit seinem Kürzel auch - gross geschrieben zählt nicht', $st === 200, json_encode($d));
+[$d, $st] = $skLogin(['school' => $skB, 'username' => $skKindA['username'], 'password' => $skKindA['initial_password']]);
+ok('Mit dem Kürzel der falschen Schule nicht', $st === 401, (string) $st);
+$skMeldungFalsch = (string) ($d['error'] ?? '');
+[$d, $st] = $skLogin(['username' => $skKindA['username'], 'password' => $skKindA['initial_password']]);
+ok('Und ohne Kürzel auch nicht', $st === 401, (string) $st);
+[$d, $st] = $skLogin(['school' => 'gibtsnicht' . bin2hex(random_bytes(2)), 'username' => 'x', 'password' => 'y']);
+ok('Eine Schule, die es nicht gibt, bekommt dieselbe Meldung - sie verrät keine Schule',
+   $st === 401 && ($d['error'] ?? '') === $skMeldungFalsch
+   && $skMeldungFalsch === 'Schulkürzel, Benutzername oder Passwort stimmt nicht.', json_encode($d));
+ok('Die Bremse zählt auch eine unbekannte Schule',
+   (int) qv("SELECT COUNT(*) FROM login_attempts WHERE username LIKE '?gibtsnicht%'") >= 1);
+
+// Die Lehrkraft meldet sich ebenso an - im Lehrkraft-Bereich mit drei Feldern.
+$skLehr = 'sk_lehr_' . bin2hex(random_bytes(2));
+q("INSERT INTO users (school_id, username, display_name, password_hash, role, can_import, consent_version)
+   VALUES (?, ?, 'Frau Kürzel', ?, 'teacher', 1, 99)",
+  [$skSchuleA, $skLehr, password_hash('lehrerin123', PASSWORD_DEFAULT)]);
+$skSeite = apiAls($skTopf, static fn () => http($base . '/teacher/')['body']);
+ok('Die Anmeldung der Lehrkräfte fragt nach dem Schulkürzel',
+   str_contains($skSeite, 'name="school"') && str_contains($skSeite, 'Schulkürzel'));
+preg_match('/name="csrf" value="([a-f0-9]+)"/', $skSeite, $skM);
+$skNachher = apiAls($skTopf, static function () use ($skLehr, $skB, $skM) {
+    global $base, $jar;
+    $ch = curl_init($base . '/teacher/index.php');
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_COOKIEJAR => $jar, CURLOPT_COOKIEFILE => $jar,
+        CURLOPT_POST => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_TIMEOUT => 30,
+        CURLOPT_POSTFIELDS => http_build_query(['teacher_login' => '1', 'school' => $skB, 'username' => $skLehr,
+                                                'password' => 'lehrerin123', 'csrf' => $skM[1] ?? ''])]);
+    $b = (string) curl_exec($ch);
+    curl_close($ch);
+    return $b;
+});
+ok('Mit dem Kürzel einer anderen Schule kommt sie nicht hinein',
+   str_contains($skNachher, 'Schulkürzel, Benutzername oder Passwort stimmt nicht.'));
+
+// ---- Der Admin: Kürzel sind Pflicht, und fehlende vergibt er im Selbsttest.
+$res = adminPost('schools.php', ['create' => '1', 'name' => 'Ohne Kürzel ' . bin2hex(random_bytes(2)), 'kuerzel' => '']);
+ok('Eine neue Schule braucht ein Kürzel', str_contains($res['body'], '2 bis 12 Zeichen'));
+$res = adminPost('schools.php', ['create' => '1', 'name' => 'Doppelt ' . bin2hex(random_bytes(2)), 'kuerzel' => $skA]);
+ok('Und keines, das eine andere Schule schon hat', str_contains($res['body'], 'schon eine andere Schule'));
+
+q("INSERT INTO schools (name, active) VALUES ('Otfried-Preußler-Schule Kleinwelsdorf', 1)");
+$skOhne = (int) db()->lastInsertId();
+ok('Der Vorschlag sind die Anfangsbuchstaben', schulkuerzel_vorschlag('Otfried-Preußler-Schule Kleinwelsdorf') === 'opsk');
+$res = http($base . '/admin/vocab.php');
+ok('Fehlt einer Schule das Kürzel, sagt es jede Admin-Seite - mit dem Weg dorthin',
+   str_contains($res['body'], 'ohne Kürzel - dort kann sich niemand anmelden') && str_contains($res['body'], 'selfcheck.php#kuerzel'));
+$res = http($base . '/admin/selfcheck.php');
+ok('Der Selbsttest bietet ein Feld mit Vorschlag an',
+   str_contains($res['body'], 'name="kuerzel[' . $skOhne . ']"') && str_contains($res['body'], 'value="opsk'));
+adminPost('selfcheck.php', ['set_kuerzel' => '1', 'kuerzel' => [$skOhne => 'OPSK7']]);
+ok('Gespeichert wird klein geschrieben', qv('SELECT kuerzel FROM schools WHERE id = ?', [$skOhne]) === 'opsk7');
+
+foreach ([$skSchuleA, $skSchuleB] as $skId) {
+    q('DELETE FROM users WHERE school_id = ?', [$skId]);
+    q('DELETE FROM classes WHERE school_id = ?', [$skId]);
+}
+q('DELETE FROM schools WHERE id IN (?, ?, ?)', [$skSchuleA, $skSchuleB, $skOhne]);
+q("DELETE FROM schools WHERE name LIKE 'Ohne Kürzel %' OR name LIKE 'Doppelt %'");
+q("DELETE FROM login_attempts WHERE username LIKE '?gibtsnicht%'");
+@unlink($skTopf);
+
 section('Zettel mit den Zugangsdaten');
 
 require_once __DIR__ . '/../app/lib/letter.php';
@@ -6830,9 +6971,19 @@ ok('Im QR-Code auf dem Zettel steht eine aufrufbare Adresse',
  * Anfrage, aus der sich ein Host ableiten liesse; der Server kennt ihn.
  */
 $erwarteteAdresse = $base . '/';
-ok('Und zwar die der App',
-   $qrGelesen === $erwarteteAdresse,
-   var_export($qrGelesen, true) . ' statt ' . $erwarteteAdresse);
+/*
+ * Mit Schulkürzel und Benutzernamen: Die App füllt damit die Anmeldung aus
+ * (views/login.js), es fehlt nur noch das Passwort - das nie im Code steht.
+ */
+parse_str((string) parse_url((string) $qrGelesen, PHP_URL_QUERY), $qrTeile);
+ok('Und zwar die der App - mit Schulkürzel und Benutzername',
+   str_starts_with((string) $qrGelesen, $erwarteteAdresse . '?')
+   && ($qrTeile['schule'] ?? '') === schulkuerzel_von((int) qv('SELECT school_id FROM classes WHERE id = ?', [$klasseId]))
+   && qv('SELECT id FROM users WHERE username = ? AND school_id = (SELECT school_id FROM classes WHERE id = ?)',
+         [(string) ($qrTeile['name'] ?? ''), $klasseId]) !== null,
+   var_export($qrGelesen, true));
+ok('Aber ohne Passwort', !isset($qrTeile['passwort']) && !str_contains((string) $qrGelesen, 'pass'));
+ok('Und auf dem Zettel steht das Schulkürzel', str_contains($res['body'], '<dt>Schulkürzel</dt>'));
 ok('Dieselbe Adresse steht auch zum Abtippen darauf',
    str_contains($res['body'], h($erwarteteAdresse)));
 // Gezaehlt wird gegen die Klasse, nicht gegen eine feste Zahl - wer hier
@@ -7661,7 +7812,7 @@ $einzelSeite = (function () use ($base, $einzelJar, $einzelName, $einzelKurs): s
     preg_match('/name="csrf" value="([a-f0-9]+)"/', $seite, $m);
     vorAnmeldung($einzelName);
     $hole($base . '/teacher/index.php', [
-        'teacher_login' => '1', 'username' => $einzelName,
+        'teacher_login' => '1', 'school' => e2eKuerzel($einzelName), 'username' => $einzelName,
         'password' => 'lehrerin123', 'csrf' => $m[1] ?? '',
     ]);
     return $hole($base . '/teacher/course.php?id=' . (int) $einzelKurs['id'], null);
@@ -10940,7 +11091,7 @@ $ewCsrf = static fn (string $seite): string =>
 
 [$s] = $ewHole($base . '/teacher/');
 [$s, $wo] = $ewHole($base . '/teacher/index.php', ['teacher_login' => '1',
-    'username' => 'e2e_einw_lehr', 'password' => 'lehrerin123', 'csrf' => $ewCsrf($s)]);
+    'school' => e2eKuerzel('e2e_einw_lehr'), 'username' => 'e2e_einw_lehr', 'password' => 'lehrerin123', 'csrf' => $ewCsrf($s)]);
 ok('Nach der Anmeldung steht die Lehrkraft vor den Hinweisen',
    str_ends_with($wo, '/teacher/einwilligung.php') && str_contains($s, 'Willkommen bei Vokidoki'), $wo);
 [$s2, $wo2] = $ewHole($base . '/teacher/class.php?id=1');

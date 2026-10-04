@@ -17,7 +17,7 @@ export async function pruefe(f, aus) {
 
     const b = await browser({ port: 9414, breite: 420, hoehe: 900, aus });
     try {
-        await alsKind(b, f.basis, f.kind, f.passwort);
+        await alsKind(b, f.basis, f.kind, f.passwort, f.kuerzel);
         await b.geh(f.basis + '/', 2000);
 
         const start = await b.js(`({
@@ -252,7 +252,7 @@ export async function pruefe(f, aus) {
 
     const t = await browser({ port: 9415, breite: 900, hoehe: 900, aus });
     try {
-        await alsLehrkraft(t, f.basis, f.lehrer, f.passwort);
+        await alsLehrkraft(t, f.basis, f.lehrer, f.passwort, f.kuerzel);
         await t.geh(f.basis + '/teacher/', 1500);
 
         await t.js(`document.querySelector('#menuRechts summary').click()`);

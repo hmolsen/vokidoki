@@ -23,7 +23,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     csrf_check();
 
     if (isset($_POST['create'])) {
-        $name = trim(preg_replace('/\s+/u', ' ', (string) ($_POST['name'] ?? '')) ?? '');
+        $name    = trim(preg_replace('/\s+/u', ' ', (string) ($_POST['name'] ?? '')) ?? '');
+        // Ohne Kürzel könnte sich niemand anmelden - also gleich beim Anlegen.
+        $kuerzel = schulkuerzel_normal((string) ($_POST['kuerzel'] ?? ''));
 
         if ($name === '') {
             flash('Die Schule braucht einen Namen.', 'bad');
@@ -31,9 +33,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             flash('Der Name ist zu lang.', 'bad');
         } elseif (q1('SELECT id FROM schools WHERE name = ?', [$name]) !== null) {
             flash('Diese Schule gibt es schon.', 'bad');
+        } elseif (($grund = schulkuerzel_pruefen($kuerzel)) !== null) {
+            flash($grund, 'bad');
         } else {
-            q('INSERT INTO schools (name) VALUES (?)', [$name]);
-            flash('Schule "' . $name . '" angelegt.');
+            q('INSERT INTO schools (name, kuerzel) VALUES (?, ?)', [$name, $kuerzel]);
+            flash('Schule "' . $name . '" mit dem Kürzel "' . $kuerzel . '" angelegt.');
         }
         redirect('schools.php');
     }
@@ -44,12 +48,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $cap  = trim((string) ($_POST['cap'] ?? ''));
 
         $andere = q1('SELECT id FROM schools WHERE name = ? AND id <> ?', [$name, $id]);
+        $kuerzel = schulkuerzel_normal((string) ($_POST['kuerzel'] ?? ''));
 
         if ($name === '') {
             flash('Die Schule braucht einen Namen.', 'bad');
         } elseif ($andere !== null) {
             flash('Diesen Namen trägt schon eine andere Schule.', 'bad');
+        } elseif (($grund = schulkuerzel_pruefen($kuerzel, $id)) !== null) {
+            flash($grund, 'bad');
         } else {
+            /*
+             * Ein neues Kürzel gilt sofort: Wer angemeldet ist, bleibt es;
+             * wer sich neu anmeldet, braucht das neue. Gedruckte Zettel
+             * tragen dann noch das alte.
+             */
+            q('UPDATE schools SET kuerzel = ? WHERE id = ?', [$kuerzel, $id]);
             /*
              * Leeres Feld heisst "kein eigenes Limit" und nicht "null Dollar".
              * Der Unterschied ist erheblich: NULL laesst nur das Budget des
@@ -138,6 +151,12 @@ flash_render();
     <label for="name">Name der Schule</label>
     <input type="text" id="name" name="name" maxlength="128"
            placeholder="Gymnasium Musterstadt" required autofocus>
+    <label for="kuerzel">Kürzel zum Anmelden</label>
+    <input type="text" id="kuerzel" name="kuerzel" maxlength="12" autocapitalize="off"
+           placeholder="gm" required pattern="[a-z0-9]{2,12}"
+           title="2 bis 12 Kleinbuchstaben oder Ziffern">
+    <p class="tiny muted" style="margin:-4px 0 10px">Kinder und Lehrkräfte tippen es bei der
+        Anmeldung ein; es steht auf jedem Zettel.</p>
     <button class="btn small" name="create" value="1">Schule anlegen</button>
 </form>
 
@@ -163,6 +182,9 @@ flash_render();
             <input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
             <input type="text" name="name" value="<?= h($s['name']) ?>" maxlength="128"
                    style="width:240px;margin:0">
+            <input type="text" name="kuerzel" value="<?= h((string) ($s['kuerzel'] ?? '')) ?>" maxlength="12"
+                   placeholder="Kürzel" title="Kürzel zum Anmelden" autocapitalize="off"
+                   style="width:100px;margin:0" required>
             <input type="text" name="cap" inputmode="decimal"
                    value="<?= $s['monthly_cost_cap_usd'] === null
                               ? '' : h((string) (float) $s['monthly_cost_cap_usd']) ?>"

@@ -31,7 +31,7 @@ export async function pruefe(f, aus, wurzel) {
 
     const b = await browser({ port: 9416, breite: 390, hoehe: 840, aus });
     try {
-        await alsKind(b, f.basis, f.kind, f.passwort);
+        await alsKind(b, f.basis, f.kind, f.passwort, f.kuerzel);
         await b.hash('/quiz/' + f.unit, 2500);
         await schlafe(600);
 
@@ -257,7 +257,7 @@ export async function pruefe(f, aus, wurzel) {
     const fr = await browser({ port: 9418, breite: 390, hoehe: 860, aus });
     try {
         const vorher = lernstand();
-        await alsKind(fr, f.basis, f.kind, f.passwort);
+        await alsKind(fr, f.basis, f.kind, f.passwort, f.kuerzel);
 
         // Die Auswahl vom Kurs aus.
         await fr.hash('/frei/waehlen/' + f.sprache, 2400);
@@ -506,7 +506,7 @@ export async function pruefe(f, aus, wurzel) {
 
     const k = await browser({ port: 9417, breite: 320, hoehe: 1000, aus });
     try {
-        await alsKind(k, f.basis, f.kind, f.passwort);
+        await alsKind(k, f.basis, f.kind, f.passwort, f.kuerzel);
         await k.geh(f.basis + '/#/lernstatistik', 3000);
         await schlafe(800);
 
