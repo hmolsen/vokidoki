@@ -67,7 +67,9 @@ function erzeugung_stand(array $unit): array
         $ton = 'laeuft';
     } elseif ($saetze === 'laeuft') {
         $ton = 'wartet';
-    } elseif (cloze_sentence_count($id) === 0) {
+    } elseif ($frei === 0) {
+        // Gesprochen werden die Sätze und die freigegebenen Vokabeln (fürs
+        // Auswählen) - ohne Freigabe ist beides noch nicht dran.
         $ton = 'leer';
     } else {
         $offen = count(tts_offen($id, $stimme));
@@ -129,8 +131,8 @@ function erzeugung_zelle_html(string $art, array $st, int $unitId = 0): string
         'fehlt'  => ['fehlt', '!', $art === 'saetze'
                         ? sprintf('%d %s ohne Lückensatz - antippen, um sie jetzt zu erzeugen',
                                   $n, $n === 1 ? 'Vokabel' : 'Vokabeln')
-                        : sprintf('%d %s ohne Aufnahme - antippen, um sie jetzt zu erzeugen',
-                                  $n, $n === 1 ? 'Satz' : 'Sätze')],
+                        : sprintf('%d %s - antippen, um sie jetzt zu erzeugen',
+                                  $n, $n === 1 ? 'Aufnahme fehlt' : 'Aufnahmen fehlen')],
         'fehler' => ['fehler', '!', 'Lückensätze: ' . ((string) ($st['fehler'] ?? '') ?: 'fehlgeschlagen')
                                     . ' - antippen, um es noch einmal zu versuchen'],
         'keine'  => ['keine', '&ndash;', 'Für diese Sprache gibt es keine Aufnahmen'],

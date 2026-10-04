@@ -809,6 +809,29 @@ a.row { text-decoration: none; }
 
 .options { display: grid; gap: 10px; }
 
+/*
+ * Die Aussprache beim Auswählen (views/wortton.js): der Lautsprecher neben
+ * dem Wort in der Fremdsprache. Neben einer Möglichkeit rückt deren Knopf
+ * zusammen - der Lautsprecher bekommt eine eigene Spalte, damit ein Daumen
+ * nicht aus Versehen die Antwort trifft.
+ */
+.wortzeile { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.optzeile  { display: flex; gap: 8px; }
+.optzeile .option { flex: 1; min-width: 0; }
+.tonknopf {
+    flex: none;
+    width: 52px;
+    min-height: 52px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    font-size: 1.3rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.optzeile .tonknopf { min-height: 62px; }
+.tonknopf.spielt { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+
 .option {
     min-height: 62px;
     padding: 14px 18px;

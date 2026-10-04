@@ -6299,10 +6299,11 @@ foreach ([['chat', 'Le {} dort.', 'chat'], ['chien', 'Le {} aboie FEHLER-TTS.', 
 $hKind = q1('SELECT * FROM users WHERE id = ?', [$userId]);
 $hVorher = (int) qv("SELECT COUNT(*) FROM ai_requests WHERE purpose = 'tts'");
 
-ok('Zwei Sätze ohne Aufnahme', tts_fehlend($hUnit) === 2);
+// Zwei Sätze fürs Hören, und die beiden Vokabeln selbst fürs Auswählen.
+ok('Zwei Sätze und zwei Vokabeln ohne Aufnahme', tts_fehlend($hUnit) === 4, (string) tts_fehlend($hUnit));
 $hRes = tts_nachtragen($hUnit, $hKind);
 ok('Der eine wird gesprochen, der andere scheitert - ohne den ersten mitzureissen',
-   $hRes['erzeugt'] === 1 && $hRes['offen'] === 1 && $hRes['fehler'] !== null, json_encode($hRes));
+   $hRes['erzeugt'] === 3 && $hRes['offen'] === 1 && $hRes['fehler'] !== null, json_encode($hRes));
 
 $hZeile = q1('SELECT * FROM sentence_audio WHERE sentence_id = ?', [$hSaetze[0]]);
 ok('Die Aufnahme liegt als Datei unter daten/storage',
@@ -6316,8 +6317,8 @@ $hLog = q1("SELECT * FROM ai_requests WHERE purpose = 'tts' ORDER BY id DESC LIM
 ok('Ein Eintrag im Kostenprotokoll je Lauf, nicht je Satz',
    (int) qv("SELECT COUNT(*) FROM ai_requests WHERE purpose = 'tts'") === $hVorher + 1);
 ok('Abgerechnet nach Zeichen, zum Preis aus den Einstellungen',
-   (int) $hLog['input_tokens'] === mb_strlen('Le chat dort.')
-   && abs((float) $hLog['cost_usd'] - mb_strlen('Le chat dort.') * 16 / 1_000_000) < 0.000001
+   (int) $hLog['input_tokens'] === mb_strlen('Le chat dort.chatchien')
+   && abs((float) $hLog['cost_usd'] - mb_strlen('Le chat dort.chatchien') * 16 / 1_000_000) < 0.000001
    && $hLog['model'] === 'fr-FR-DeniseNeural',
    json_encode([$hLog['input_tokens'], $hLog['cost_usd'], $hLog['model']]));
 
@@ -6364,6 +6365,28 @@ $hSprache = array_values(array_filter($hBundle['sprachen'] ?? [], fn ($l) => (in
 ok('Die Sprache trägt, ob es eine Stimme gibt', ($hSprache['h'] ?? null) === 1);
 ok('Ein Satz mit passender Aufnahme trägt ihr Kurzzeichen',
    ($hInBundle[$hSaetze[1]] ?? null) === tts_hash('Le chien aboie.', 'fr-FR-DeniseNeural'));
+/*
+ * Die Aussprache der Vokabeln selbst - fürs Auswählen. Sie entsteht im
+ * selben Lauf wie die Sätze und reist im Bündel an der Vokabel.
+ */
+ok('Gesprochen wird die Vokabel ohne Klammern, Varianten mit Pause',
+   tts_worttext('a knife (pl. knives)') === 'a knife'
+   && tts_worttext('en tante / en moster (Schwester der Mutter)') === 'en tante, en moster'
+   && tts_worttext('Tu t\'appelles comment ?') === 'Tu t\'appelles comment ?',
+   tts_worttext('en tante / en moster (Schwester der Mutter)'));
+$hWort = q1('SELECT a.* FROM vocab_audio a JOIN vocab v ON v.id = a.vocab_id
+              WHERE v.unit_id = ? AND v.term_foreign = ?', [$hUnit, 'chat']);
+ok('Jede Vokabel hat ihre Aufnahme, als eigene Datei',
+   $hWort !== null && is_file(storage_path((string) $hWort['file']))
+   && str_starts_with((string) $hWort['file'], 'audio/w'), json_encode($hWort));
+$hVokBundle = array_values(array_filter($hBundle['vokabeln'] ?? [], fn ($w) => (int) $w['i'] === (int) ($hWort['vocab_id'] ?? 0)))[0] ?? [];
+ok('Das Bündel trägt ihr Kurzzeichen an der Vokabel',
+   ($hVokBundle['h'] ?? null) === ($hWort['hash'] ?? 'x'), json_encode($hVokBundle));
+$hWortUrl = $base . '/api/audio.php?w=' . (int) ($hWort['vocab_id'] ?? 0) . '&h=' . ($hWort['hash'] ?? '');
+ok('Und api/audio.php liefert sie aus (?w=)', http($hWortUrl)['status'] === 200);
+ok('Ohne Anmeldung nicht',
+   apiAls(tempnam(sys_get_temp_dir(), 'vt'), fn () => http($hWortUrl)['status']) === 401);
+
 ok('Ein verbesserter Satz ohne neue Aufnahme trägt keines',
    array_key_exists($hSaetze[0], $hInBundle) && $hInBundle[$hSaetze[0]] === null,
    'sonst spielte die App den alten Satz zum neuen Text');
@@ -6604,7 +6627,7 @@ q('UPDATE units SET released_position = 2 WHERE id = ?', [$pUnit]);
 $pRes = tts_nachtragen($pUnit, q1('SELECT * FROM users WHERE id = ?', [$userId]));
 $pLog = (string) @file_get_contents(sys_get_temp_dir() . '/vt-fake-tts.log');
 ok('An Azure geht der Satz ohne Punkt, in <s>',
-   $pRes['erzeugt'] === 2 && str_contains($pLog, '<s>Jeg har en kat</s>') && !str_contains($pLog, 'kat.'),
+   $pRes['erzeugt'] === 4 && str_contains($pLog, '<s>Jeg har en kat</s>') && !str_contains($pLog, 'kat.'),
    $pLog);
 
 // ---- Die Liste im Admin

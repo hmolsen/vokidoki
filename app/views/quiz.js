@@ -7,6 +7,7 @@ import {
 } from '../vorrat.js';
 import { weiterKnopf, weiterVerdrahten } from './unit.js';
 import { meldeKnopf, meldenVerdrahten } from '../melden.js';
+import { tonKnopf, optionHtml, tonVerdrahten } from './wortton.js';
 
 const NEXT_DELAY_CORRECT = 700;    // richtig: zügig weiter
 const NEXT_DELAY_WRONG   = 1900;   // falsch: Zeit, die richtige Lösung zu lesen
@@ -73,21 +74,20 @@ function nextQuestion(unitId) {
         <div class="prompt">
             <div>
                 <div class="dir">${dirLabel}</div>
-                <div class="word">${esc(data.frage)}</div>
+                <div class="wortzeile"><div class="word">${esc(data.frage)}</div>${tonKnopf(data.frageTon)}</div>
             </div>
             ${meldeKnopf(true)}
         </div>
 
         <div class="options" id="options">
-            ${data.optionen.map((opt, i) => `
-                <button class="option" data-index="${i}">${esc(opt)}</button>
-            `).join('')}
+            ${data.optionen.map((opt, i) => optionHtml(opt, i, data.optionToene?.[i])).join('')}
         </div>
 
         <div class="verdict" id="verdict"></div>
     `);
 
     wireBack();
+    tonVerdrahten();
 
     // Beim Auswählen ist das Wortpaar gemeint - einen Satz gibt es hier nicht.
     meldenVerdrahten($('[data-melden]'), () => ({ vocabId: data.vocabId, modus: MODUS_WAHL }));

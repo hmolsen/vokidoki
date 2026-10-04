@@ -7,6 +7,7 @@ import {
     einheitenDerSprache, MODUS_WAHL, MODUS_EINSETZEN, MODUS_HOEREN, MODUS_LUECKE,
 } from '../vorrat.js';
 import { meldeKnopf, meldenVerdrahten } from '../melden.js';
+import { tonKnopf, optionHtml, tonVerdrahten } from './wortton.js';
 import { lueckeZeigen } from './cloze.js';
 import { einsetzenZeigen } from './einsetzen.js';
 import { hoerenZeigen, hoerenAnhalten } from './hoeren.js';
@@ -479,21 +480,20 @@ function zeigeWahl(a) {
         <div class="prompt">
             <div>
                 <div class="dir">${richtung}</div>
-                <div class="word">${esc(a.frage)}</div>
+                <div class="wortzeile"><div class="word">${esc(a.frage)}</div>${tonKnopf(a.frageTon)}</div>
             </div>
             ${meldeKnopf(true)}
         </div>
 
         <div class="options" id="options">
-            ${a.optionen.map((o, i) => `
-                <button class="option" data-index="${i}">${esc(o)}</button>
-            `).join('')}
+            ${a.optionen.map((o, i) => optionHtml(o, i, a.optionToene?.[i])).join('')}
         </div>
 
         <div class="verdict" id="verdict"></div>
     `);
 
     verdrahten();
+    tonVerdrahten();
     meldenVerdrahten($('[data-melden]'), () => ({ vocabId: a.vocabId, modus: MODUS_WAHL }));
 
     let beantwortet = false;

@@ -214,9 +214,16 @@ async function tonLiefern(request, url) {
 
 /** Ältere Fassungen derselben Aufnahme wegräumen - der Satz wurde verbessert. */
 async function tonAltWeg(speicher, url) {
+    /*
+     * Satz (?s=) oder Vokabel (?w=) - beide vergleichen. Nur nach s
+     * gefragt, war bei einer Vokabel s überall leer, und jede andere
+     * Vokabel galt als ältere Fassung derselben.
+     */
     const satz = url.searchParams.get('s');
+    const wort = url.searchParams.get('w');
     for (const alt of await speicher.keys()) {
         const a = new URL(alt.url);
-        if (a.searchParams.get('s') === satz && a.href !== url.href) await speicher.delete(alt);
+        if (a.searchParams.get('s') === satz && a.searchParams.get('w') === wort
+            && a.href !== url.href) await speicher.delete(alt);
     }
 }

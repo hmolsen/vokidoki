@@ -19,7 +19,16 @@ require_once __DIR__ . '/../lib/tts.php';
  * nachzufragen.
  */
 
-$id = (int) ($_GET['s'] ?? 0);
+/*
+ * ?s= ein Satz (fürs Hören), ?w= eine Vokabel (fürs Auswählen). Dieselben
+ * Schranken - nur die Tabelle ist eine andere.
+ */
+$wort  = isset($_GET['w']);
+$id    = (int) ($wort ? $_GET['w'] : ($_GET['s'] ?? 0));
+$quelle = $wort
+    ? 'FROM vocab_audio a JOIN vocab v ON v.id = a.vocab_id'
+    : 'FROM sentence_audio a JOIN sentences s ON s.id = a.sentence_id JOIN vocab v ON v.id = s.vocab_id';
+$schluessel = $wort ? 'a.vocab_id' : 'a.sentence_id';
 
 /*
  * Die Meldungen (lib/meldungen.php) spielen die Aufnahme zum Anhören ab -
@@ -28,18 +37,16 @@ $id = (int) ($_GET['s'] ?? 0);
  */
 session_boot();
 if (!empty($_SESSION['is_admin'])) {
-    $zeile = q1('SELECT file, hash FROM sentence_audio WHERE sentence_id = ?', [$id]);
+    $zeile = q1("SELECT a.file, a.hash $quelle WHERE $schluessel = ?", [$id]);
 } else {
     $user  = require_user();
     $zeile = q1(
         "SELECT a.file, a.hash
-           FROM sentence_audio a
-           JOIN sentences s ON s.id = a.sentence_id
-           JOIN vocab v ON v.id = s.vocab_id
+           $quelle
            JOIN units u ON u.id = v.unit_id
            JOIN courses co ON co.id = u.course_id
            JOIN course_members m ON m.course_id = co.id AND m.user_id = ?
-          WHERE a.sentence_id = ?
+          WHERE $schluessel = ?
             AND (v.position < u.released_position OR m.member_role = 'teacher')",
         [(int) $user['id'], $id],
     );

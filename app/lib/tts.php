@@ -94,6 +94,22 @@ function tts_satztext(string $foreign, string $answer): string
 }
 
 /**
+ * Eine Vokabel, wie sie gesprochen wird - fürs Auswählen.
+ *
+ * Ohne das, was in Klammern steht: "a knife (pl. knives)" oder "en moster
+ * (Schwester der Mutter)" sind Hinweise zum Lesen, nicht zum Sprechen, und
+ * oft deutsch. Schrägstriche trennen Varianten ("en hund / en kat") - die
+ * Stimme macht dort eine Pause statt "Schrägstrich" zu sagen.
+ */
+function tts_worttext(string $foreign): string
+{
+    $t = preg_replace('/\([^)]*\)|\[[^\]]*\]/u', ' ', $foreign) ?? $foreign;
+    $t = preg_replace('/\s*\/\s*/u', ', ', $t) ?? $t;
+    $t = preg_replace('/\s+/u', ' ', $t) ?? $t;
+    return trim($t, " \t,;");
+}
+
+/**
  * Kurzzeichen für das, was gesprochen wird, und die Stimme. Ändert sich
  * eines davon, passt die Aufnahme nicht mehr - etwa wenn im Admin ein Satz
  * verbessert wird oder ein Wort in die Ausspracheliste kommt.
@@ -243,10 +259,13 @@ function &tts_aliase_cache(): array
     return $cache;
 }
 
-/** Der Pfad der Datei unter daten/storage - mit dem Kurzzeichen im Namen. */
-function tts_datei(int $sentenceId, string $hash): string
+/**
+ * Der Pfad der Datei unter daten/storage - mit dem Kurzzeichen im Namen.
+ * Ein Satz heisst nach seiner Nummer, eine Vokabel bekommt ein "w" davor.
+ */
+function tts_datei(int|string $kennung, string $hash): string
 {
-    return 'audio/' . $sentenceId . '-' . $hash . '.mp3';
+    return 'audio/' . $kennung . '-' . $hash . '.mp3';
 }
 
 function tts_aktiv(): bool
@@ -255,13 +274,35 @@ function tts_aktiv(): bool
 }
 
 /**
- * Die Sätze einer Lerneinheit, denen eine passende Aufnahme fehlt.
+ * Was in einer Lerneinheit noch eine passende Aufnahme braucht: die Sätze
+ * fürs Hören und die freigegebenen Vokabeln fürs Auswählen.
  *
- * @return list<array{id:int, text:string, hash:string, alte_datei:?string}>
+ * id ist "s12" für einen Satz und "w45" für eine Vokabel - eindeutig in
+ * einem Lauf (tts_anfragen() führt die Antworten danach); nr ist die
+ * Nummer in ihrer Tabelle.
+ *
+ * @return list<array{id:string, art:string, nr:int, text:string, hash:string, alte_datei:?string}>
  */
 function tts_offen(int $unitId, array $stimme): array
 {
     $offen = [];
+    foreach (qa(
+        'SELECT v.id, v.term_foreign, a.hash AS alt, a.file AS alte_datei
+           FROM vocab v
+           JOIN units u ON u.id = v.unit_id
+           LEFT JOIN vocab_audio a ON a.vocab_id = v.id
+          WHERE v.unit_id = ? AND v.position < u.released_position
+          ORDER BY v.position',
+        [$unitId],
+    ) as $w) {
+        $text = tts_worttext((string) $w['term_foreign']);
+        $hash = tts_hash($text, $stimme['name'], $stimme['code'] ?? '');
+        if ($text === '' || $w['alt'] === $hash) {
+            continue;
+        }
+        $offen[] = ['id' => 'w' . $w['id'], 'art' => 'wort', 'nr' => (int) $w['id'], 'text' => $text,
+                    'hash' => $hash, 'alte_datei' => $w['alte_datei']];
+    }
     foreach (qa(
         'SELECT s.id, s.foreign_text, s.answer, a.hash AS alt, a.file AS alte_datei
            FROM sentences s
@@ -276,13 +317,13 @@ function tts_offen(int $unitId, array $stimme): array
         if ($text === '' || $s['alt'] === $hash) {
             continue;
         }
-        $offen[] = ['id' => (int) $s['id'], 'text' => $text, 'hash' => $hash,
-                    'alte_datei' => $s['alte_datei']];
+        $offen[] = ['id' => 's' . $s['id'], 'art' => 'satz', 'nr' => (int) $s['id'], 'text' => $text,
+                    'hash' => $hash, 'alte_datei' => $s['alte_datei']];
     }
     return $offen;
 }
 
-/** Wie viele Sätze einer Lerneinheit noch keine passende Aufnahme haben. */
+/** Wie viele Aufnahmen einer Lerneinheit noch fehlen - Sätze und Vokabeln. */
 function tts_fehlend(int $unitId): int
 {
     $stimme = tts_stimme(tts_sprachcode($unitId));
@@ -397,7 +438,8 @@ function tts_nachtragen_gesperrt(int $unitId, array $user, array $stimme, array 
             $fehler ??= is_array($mp3) ? $mp3['fehler'] : 'keine Antwort';
             continue;
         }
-        $datei = tts_datei($s['id'], $s['hash']);
+        $wort  = ($s['art'] ?? 'satz') === 'wort';
+        $datei = tts_datei($wort ? 'w' . $s['nr'] : $s['nr'], $s['hash']);
         $pfad  = storage_path($datei);
         if (!is_dir(dirname($pfad))) {
             @mkdir(dirname($pfad), 0775, true);
@@ -406,12 +448,13 @@ function tts_nachtragen_gesperrt(int $unitId, array $user, array $stimme, array 
             $fehler ??= 'Die Aufnahme liess sich nicht speichern.';
             continue;
         }
-        q('INSERT INTO sentence_audio (sentence_id, voice, hash, file, bytes)
+        q(($wort ? 'INSERT INTO vocab_audio (vocab_id' : 'INSERT INTO sentence_audio (sentence_id')
+          . ', voice, hash, file, bytes)
            VALUES (?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE voice = VALUES(voice), hash = VALUES(hash),
                                    file = VALUES(file), bytes = VALUES(bytes),
                                    created_at = NOW()',
-          [$s['id'], $stimme['name'], $s['hash'], $datei, strlen($mp3)]);
+          [$s['nr'], $stimme['name'], $s['hash'], $datei, strlen($mp3)]);
         // Die alte Fassung dieses Satzes wird nicht mehr gebraucht.
         if (($s['alte_datei'] ?? null) !== null && $s['alte_datei'] !== $datei) {
             @unlink(storage_path((string) $s['alte_datei']));
@@ -654,7 +697,8 @@ function tts_anfragen(string $schluessel, array $saetze, array $stimme): array
 /** Dateien, zu denen kein Satz mehr gehört - etwa nach dem Löschen eines Kurses. */
 function tts_waisen_entfernen(): int
 {
-    $bekannt = array_flip(array_column(qa('SELECT file FROM sentence_audio'), 'file'));
+    $bekannt = array_flip(array_column(qa('SELECT file FROM sentence_audio
+                                           UNION ALL SELECT file FROM vocab_audio'), 'file'));
     $weg = 0;
     foreach (glob(storage_path('audio/*.mp3')) ?: [] as $pfad) {
         if (!isset($bekannt['audio/' . basename($pfad)]) && @unlink($pfad)) {
@@ -758,8 +802,8 @@ function tts_alias_nachsprechen(string $sprache, string $wort): int
            JOIN vocab v     ON v.id = s.vocab_id
            JOIN units u     ON u.id = v.unit_id
            JOIN languages l ON l.id = u.language_id
-          WHERE l.code = ? AND (s.foreign_text LIKE ? OR s.answer LIKE ?)',
-        [$sprache, $muster, $muster],
+          WHERE l.code = ? AND (s.foreign_text LIKE ? OR s.answer LIKE ? OR v.term_foreign LIKE ?)',
+        [$sprache, $muster, $muster, $muster],
     );
 
     $erzeugt = 0;

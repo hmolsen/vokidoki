@@ -164,6 +164,21 @@ CREATE TABLE IF NOT EXISTS tts_aliase (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL,
         ],
+        // Die Aussprache der einzelnen Vokabeln, fürs Auswählen - siehe lib/tts.php.
+        'vocab_audio' => [
+            static fn (): bool => !table_exists('vocab_audio'),
+            <<<'SQL'
+CREATE TABLE IF NOT EXISTS vocab_audio (
+  vocab_id     INT UNSIGNED PRIMARY KEY,
+  voice        VARCHAR(64)  NOT NULL,
+  hash         CHAR(12)     NOT NULL,
+  file         VARCHAR(128) NOT NULL,
+  bytes        INT UNSIGNED NOT NULL DEFAULT 0,
+  created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_vaudio_vocab FOREIGN KEY (vocab_id) REFERENCES vocab(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL,
+        ],
         // Aus welcher Übung eine Meldung kam - siehe lib/meldungen.php.
 
         'vocab_flags.mode' => [

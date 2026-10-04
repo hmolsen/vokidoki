@@ -183,7 +183,8 @@ export async function unitView(unitId) {
 
     kopfUnterLeiste();
     // Die Aufnahmen schon holen, solange Netz da ist - im Zug ist es zu spät.
-    if (modes.listen.stimme && modes.listen.total > 0) hoerenVorladen(unit.id);
+    // Auch ohne Hören: Die Aussprache der Vokabeln braucht das Auswählen.
+    if (modes.listen.stimme) hoerenVorladen(unit.id);
     wireExercises(unit.id);
     watchSentences(unit.id, modes);
     nachFreigabeSehen(unit.id, modes);

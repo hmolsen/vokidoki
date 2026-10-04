@@ -360,9 +360,12 @@ export async function pruefeOhneNetz(f, aus, wurzel) {
         // Start, bevor der Service Worker die Seite steuert.
         await b.hash(`/unit/${einheit}`, 2500);
         const abgelegt = await b.js(`caches.open('vokabeltrainer-hoeren')
-            .then((c) => c.keys()).then((k) => k.map((r) => new URL(r.url).searchParams.get('s')))`);
+            .then((c) => c.keys()).then((k) => k.map((r) => { const p = new URL(r.url).searchParams;
+                return p.get('s') ? 's' + p.get('s') : 'w' + p.get('w'); }))`);
+        // Die beiden Sätze fürs Hören - und die beiden Vokabeln fürs Auswählen.
         ok('Beim Öffnen der Lerneinheit liegen ihre Aufnahmen schon im Speicher',
-           abgelegt.length === 2, JSON.stringify(abgelegt));
+           abgelegt.filter((a) => a.startsWith('s')).length === 2
+           && abgelegt.filter((a) => a.startsWith('w')).length === 2, JSON.stringify(abgelegt));
 
         // Jetzt steuert er sie: einmal neu aufrufen - gewöhnlich, nicht mit neuLaden():
         // Das lädt hart neu, und ein hartes Neuladen geht am Service Worker vorbei.

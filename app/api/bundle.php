@@ -131,9 +131,12 @@ switch (action()) {
              * dreihundertmal ist ein Kilobyte Feldname.
              */
             foreach (qa(
-                "SELECT v.id, v.unit_id, v.term_foreign, v.term_native, v.word_type
+                "SELECT v.id, v.unit_id, v.term_foreign, v.term_native, v.word_type,
+                        a.hash AS audio, l.code AS sprache
                    FROM vocab v
                    JOIN units u ON u.id = v.unit_id
+                   JOIN languages l ON l.id = u.language_id
+                   LEFT JOIN vocab_audio a ON a.vocab_id = v.id
                   WHERE v.unit_id IN ($ep) AND v.position < u.released_position
                   ORDER BY v.unit_id, v.position",
                 $einheitIds,
@@ -147,6 +150,13 @@ switch (action()) {
                     // aus derselben (vorrat.js, einsetzAblenker()).
                     't' => (string) ($v['word_type'] ?? ''),
                 ];
+                // Die Aussprache fürs Auswählen - wie beim Satz: nur, solange
+                // sie noch zur Vokabel passt (api/audio.php?w=).
+                $stimme = tts_stimme($v['sprache'] ?? null);
+                if ($stimme !== null && $v['audio'] !== null
+                    && tts_passt((string) $v['audio'], tts_worttext((string) $v['term_foreign']), $stimme)) {
+                    $vokabeln[array_key_last($vokabeln)]['h'] = (string) $v['audio'];
+                }
             }
 
             foreach (qa(

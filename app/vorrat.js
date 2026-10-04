@@ -448,44 +448,67 @@ export function frageWahl(unitId) {
     if (offen.length === 0) return { done: true, ...stand };
 
     const karte = wuerfel(offen);
+    return {
+        done: false,
+        ...wahlAufgabe(v, karte, vokabelnDerEinheit(unitId)),
+        streak:   standVon(karte.i, MODUS_WAHL).s,
+        ...stand,
+    };
+}
+
+/**
+ * Eine Auswahlfrage zu dieser Vokabel - fürs Auswählen und fürs Freie Üben.
+ *
+ * Die Richtung wird gewürfelt. Die Ablenker kommen zuerst aus `eigene`
+ * (die Lerneinheit, beim Freien Üben die gewählten), und reicht das nicht,
+ * aus der ganzen Sprache. Sie dürfen die Lösung nicht doppeln - und auch
+ * einander nicht: Zwei gleiche Möglichkeiten nebeneinander sehen aus wie
+ * ein Fehler, und eine davon wäre dann ja richtig.
+ *
+ * Dazu die Aussprache (wortTon()): bei der Frage, wenn sie in der
+ * Fremdsprache steht, sonst bei jeder Möglichkeit. Stand zweimal da - hier
+ * und im Freien Üben -, und die Aussprache wäre an einer Stelle gefehlt.
+ */
+function wahlAufgabe(v, karte, eigene) {
     const nachVorn = Math.random() < 0.5;
-    const frage    = nachVorn ? karte.f : karte.n;
-    const loesung  = nachVorn ? karte.n : karte.f;
     const feld     = nachVorn ? 'n' : 'f';
+    const loesung  = karte[feld];
 
-    /*
-     * Die Ablenker dürfen die Lösung nicht doppeln - und auch einander
-     * nicht: Zwei gleiche Möglichkeiten nebeneinander sehen aus wie ein
-     * Fehler, und eine davon wäre dann ja richtig.
-     */
     const genommen = new Set([loesung]);
-    const optionen = [loesung];
-
+    const optionen = [karte];
     const nachlegen = (quelle) => {
         for (const kandidat of mischen([...quelle])) {
             if (optionen.length >= ANZAHL_OPTIONEN) return;
             const wort = kandidat[feld];
             if (kandidat.i === karte.i || genommen.has(wort)) continue;
             genommen.add(wort);
-            optionen.push(wort);
+            optionen.push(kandidat);
         }
     };
-    nachlegen(vokabelnDerEinheit(unitId));
+    nachlegen(eigene);
     if (optionen.length < ANZAHL_OPTIONEN) {
-        nachlegen(v.vokabelnDerSprache.get(v.einheit.get(Number(unitId))?.l) ?? []);
+        nachlegen(v.vokabelnDerSprache.get(v.einheit.get(karte.u)?.l) ?? []);
     }
 
     const gemischt = mischen(optionen);
     return {
-        done: false,
-        vocabId:  karte.i,
-        frage,
-        optionen: gemischt,
-        richtig:  gemischt.indexOf(loesung),
+        vocabId:     karte.i,
+        frage:       nachVorn ? karte.f : karte.n,
+        optionen:    gemischt.map((w) => w[feld]),
+        richtig:     gemischt.indexOf(karte),
         nachVorn,
-        streak:   standVon(karte.i, MODUS_WAHL).s,
-        ...stand,
+        frageTon:    nachVorn ? wortTon(v, karte) : null,
+        optionToene: nachVorn ? gemischt.map(() => null) : gemischt.map((w) => wortTon(v, w)),
     };
+}
+
+/**
+ * Die Adresse der Aussprache einer Vokabel, oder null - wenn die Sprache
+ * keine Stimme hat oder die Aufnahme noch nicht da ist (api/audio.php?w=).
+ */
+function wortTon(v, w) {
+    if (typeof w.h !== 'string' || w.h === '' || !hatStimme(v.einheit.get(w.u)?.l)) return null;
+    return new URL(`${VT.base}/api/audio.php?w=${w.i}&h=${encodeURIComponent(w.h)}`, location.href).href;
 }
 
 /** Die nächste Lückentextaufgabe. */
@@ -691,8 +714,9 @@ export async function hoerenVorladen(unitId) {
     try {
         const speicher = await caches.open(TON_SPEICHER);
         for (const w of vokabelnDerEinheit(unitId)) {
-            for (const s of hoerSaetze(v, w.i)) {
-                const adresse = tonAdresse(s);
+            // Die Sätze fürs Hören, und die Vokabel selbst fürs Auswählen.
+            const adressen = [...hoerSaetze(v, w.i).map(tonAdresse), wortTon(v, w)].filter(Boolean);
+            for (const adresse of adressen) {
                 if (await speicher.match(adresse)) continue;
                 try {
                     const antwort = await fetch(adresse, { credentials: 'same-origin' });
@@ -1227,38 +1251,12 @@ export function frageFrei(unitIds, { hoeren = true, schreiben = true } = {}) {
         };
     }
 
-    const nachVorn = Math.random() < 0.5;
-    const frage    = nachVorn ? karte.f : karte.n;
-    const loesung  = nachVorn ? karte.n : karte.f;
-    const feld     = nachVorn ? 'n' : 'f';
-
-    // Die Ablenker aus demselben Vorrat wie die Frage - und wenn der zu
-    // klein ist, aus der ganzen Sprache. Dieselbe Regel wie beim Quiz.
-    const genommen = new Set([loesung]);
-    const optionen = [loesung];
-    const nachlegen = (quelle) => {
-        for (const kandidat of mischen([...quelle])) {
-            if (optionen.length >= ANZAHL_OPTIONEN) return;
-            const wort = kandidat[feld];
-            if (kandidat.i === karte.i || genommen.has(wort)) continue;
-            genommen.add(wort);
-            optionen.push(wort);
-        }
-    };
-    nachlegen(alle);
-    if (optionen.length < ANZAHL_OPTIONEN) {
-        nachlegen(v.vokabelnDerSprache.get(v.einheit.get(karte.u)?.l) ?? []);
-    }
-
-    const gemischt = mischen(optionen);
+    // Dieselbe Frage wie beim Auswählen (wahlAufgabe()), die Ablenker aus
+    // den gewählten Lerneinheiten.
     const spr = sprache(v.einheit.get(karte.u)?.l);
     return {
         art:      MODUS_WAHL,
-        vocabId:  karte.i,
-        frage,
-        optionen: gemischt,
-        richtig:  gemischt.indexOf(loesung),
-        nachVorn,
+        ...wahlAufgabe(v, karte, alle),
         language: spr?.name ?? '',
     };
 }
