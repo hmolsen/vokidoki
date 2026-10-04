@@ -204,10 +204,10 @@ export async function pruefe(f, aus, wurzel) {
             const v = await import('${f.basis}/vorrat.js');
             const zaehle = (mitHoeren) => {
                 const n = {};
-                for (let i = 0; i < 300; i++) { const a = v.frageFrei([${einheit}], mitHoeren); n[a.art] = (n[a.art] ?? 0) + 1; }
+                for (let i = 0; i < 300; i++) { const a = v.frageFrei([${einheit}], { hoeren: mitHoeren }); n[a.art] = (n[a.art] ?? 0) + 1; }
                 return n;
             };
-            const s = document.getElementById('hoerSchalter');
+            const s = document.getElementById('schalter-hoeren');
             return { schalter: !!s, an: s?.checked ?? null, mit: zaehle(true), ohne: zaehle(false) };
         })()`);
         ok('Freies Üben zieht aus allen vier Übungsarten',
@@ -215,14 +215,84 @@ export async function pruefe(f, aus, wurzel) {
         ok('Im Kopf steht ein Schalter für Hören, eingeschaltet', frei.schalter && frei.an === true,
            JSON.stringify(frei));
         ok('Abgeschaltet kommt kein Hören mehr', !('listen' in frei.ohne), JSON.stringify(frei.ohne));
-        await b.js(`document.getElementById('hoerSchalter').click()`);
+        await b.js(`document.getElementById('schalter-hoeren').click()`);
         await schlafe(300);
         await b.hash('/', 300);
         await b.hash(`/unit/${einheit}/frei`, 1000);
         ok('Der Schalter merkt sich, wie er stand',
-           (await b.js(`document.getElementById('hoerSchalter')?.checked`)) === false
+           (await b.js(`document.getElementById('schalter-hoeren')?.checked`)) === false
            && (await b.js(`!document.getElementById('satzlinie')`)) === true);
-        await b.js(`document.getElementById('hoerSchalter').click()`);   // wieder an, für später
+        await b.js(`document.getElementById('schalter-hoeren').click()`);   // wieder an, für später
+
+        // ---- Schreiben: derselbe Schalter für den Lückentext.
+        await b.hash('/', 300);
+        await b.hash(`/unit/${einheit}/frei`, 1000);
+        const schreiben = await b.js(`(async () => {
+            const v = await import('${f.basis}/vorrat.js');
+            const s = document.getElementById('schalter-schreiben');
+            let luecke = 0;
+            for (let i = 0; i < 300; i++) if (v.frageFrei([${einheit}], { schreiben: false }).art === 'cloze') luecke++;
+            return { da: !!s, an: s?.checked ?? null, luecke };
+        })()`);
+        ok('Daneben ein Schalter für Schreiben, eingeschaltet', schreiben.da && schreiben.an === true,
+           JSON.stringify(schreiben));
+        ok('Abgeschaltet kommt kein Lückentext mehr', schreiben.luecke === 0, JSON.stringify(schreiben));
+
+        /*
+         * Die Tastatur: Folgt auf eine andere Aufgabe ein Lückentext, hält
+         * schon beim Antworten ein unsichtbares Feld den Fokus (im Tipp - nur
+         * dann öffnet ein Telefon die Tastatur), und erscheint die Lücke,
+         * wandert er in ihr Feld. Geantwortet wird irgendwie; es geht nur um
+         * den Übergang.
+         */
+        const antworteIrgendwie = () => b.js(`(() => {
+            if (document.getElementById('satzlinie')) {
+                document.querySelector('#woerter .wort')?.click();
+                document.getElementById('pruefen')?.click();
+                return 'hoeren';
+            }
+            if (document.getElementById('luecke')) { document.querySelector('#woerter .wort')?.click(); return 'einsetzen'; }
+            if (document.getElementById('answer')) {
+                document.getElementById('answer').value = 'xx';
+                document.getElementById('check').click();
+                return 'luecke';
+            }
+            document.querySelector('.option')?.click();
+            return 'wahl';
+        })()`);
+        const fokus = () => b.js(`({ id: document.activeElement?.id ?? '', halter: !!document.getElementById('tastaturhalter'),
+            luecke: !!document.getElementById('answer'), weiter: (document.getElementById('weiter')?.offsetParent ?? null) !== null })`);
+        let uebergang = null;
+        for (let i = 0; i < 40 && uebergang === null; i++) {
+            const art = await antworteIrgendwie();
+            const sofort = await fokus();
+            if (art !== 'luecke' && sofort.id === 'tastaturhalter') {
+                await schlafe(2200);
+                let danach = await fokus();
+                if (danach.weiter) { await b.js(`document.getElementById('weiter').click()`); await schlafe(400); danach = await fokus(); }
+                uebergang = { art, sofort, danach };
+                break;
+            }
+            await schlafe(2200);
+            if ((await fokus()).weiter) { await b.js(`document.getElementById('weiter').click()`); await schlafe(400); }
+            if (art === 'luecke' && (await b.js(`document.getElementById('check')?.textContent`)) === 'Weiter') {
+                await b.js(`document.getElementById('check').click()`); await schlafe(400);
+            }
+        }
+        ok('Folgt ein Lückentext, hält schon beim Antworten ein Feld die Tastatur offen',
+           uebergang !== null && uebergang.sofort.id === 'tastaturhalter', JSON.stringify(uebergang));
+        ok('Und erscheint er, ist sein Feld im Fokus - die Tastatur ist schon da',
+           uebergang?.danach.luecke && uebergang.danach.id === 'answer' && !uebergang.danach.halter,
+           JSON.stringify(uebergang));
+
+        // Mitten im Lückentext abgeschaltet: gleich die nächste, die keine ist.
+        if (await b.js(`!!document.getElementById('answer')`)) {
+            await b.js(`document.getElementById('schalter-schreiben').click()`);
+            await schlafe(500);
+            ok('Abgeschaltet mitten im Lückentext kommt gleich eine andere Aufgabe',
+               await b.js(`!document.getElementById('answer')`));
+            await b.js(`document.getElementById('schalter-schreiben').click()`);   // wieder an
+        }
 
         // ---- Eine Sprache ohne Stimme: keine Übung, kein Ring.
         php(wurzel, `require 'lib/db.php'; q("UPDATE languages SET code = 'la' WHERE id = ?", [${sprache}]);`);

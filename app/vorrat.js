@@ -1109,7 +1109,7 @@ export function freiUmfang(unitIds) {
  * kein Filter auf „noch nicht gekonnt" - der liesse sie nach zwanzig
  * Antworten leerlaufen.
  */
-export function frageFrei(unitIds, mitHoeren = true) {
+export function frageFrei(unitIds, { hoeren = true, schreiben = true } = {}) {
     const v = vorratLaden();
     if (v === null) return null;
 
@@ -1124,13 +1124,14 @@ export function frageFrei(unitIds, mitHoeren = true) {
      *
      * Hier waren es einmal nur Auswählen und Lückentext. Seit es Einsetzen
      * und Hören gibt, gehören sie dazu: Wer frei übt, soll alles üben, was
-     * die Lerneinheit kann. Hören nur, wenn es eine Aufnahme gibt - und nur,
-     * wenn es nicht abgeschaltet ist (der Schalter im Freien Üben: im
-     * Klassenzimmer ohne Kopfhörer will man es nicht).
+     * die Lerneinheit kann. Hören nur, wenn es eine Aufnahme gibt. Hören und
+     * Schreiben (der Lückentext) lassen sich im Freien Üben abschalten - im
+     * Klassenzimmer ohne Kopfhörer, oder im Bus, wo Tippen mühsam ist.
      */
     const arten = [MODUS_WAHL];
-    if (saetze.length > 0) arten.push(MODUS_EINSETZEN, MODUS_LUECKE);
-    if (mitHoeren && uebbar(v, karte, MODUS_HOEREN)) arten.push(MODUS_HOEREN);
+    if (saetze.length > 0) arten.push(MODUS_EINSETZEN);
+    if (saetze.length > 0 && schreiben) arten.push(MODUS_LUECKE);
+    if (hoeren && uebbar(v, karte, MODUS_HOEREN)) arten.push(MODUS_HOEREN);
     const art = wuerfel(arten);
 
     if (art === MODUS_EINSETZEN) return { art, ...einsetzAufgabe(v, karte.u, karte) };

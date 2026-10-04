@@ -4,7 +4,7 @@ import {
 } from '../core.js';
 import {
     frageFrei, freiMerken, freiUmfang, freiHoerbar, einheit, sprache,
-    einheitenDerSprache, MODUS_WAHL, MODUS_EINSETZEN, MODUS_HOEREN,
+    einheitenDerSprache, MODUS_WAHL, MODUS_EINSETZEN, MODUS_HOEREN, MODUS_LUECKE,
 } from '../vorrat.js';
 import { meldeKnopf, meldenVerdrahten } from '../melden.js';
 import { lueckeZeigen } from './cloze.js';
@@ -42,44 +42,99 @@ const LOB_FOLGE = 5;
 let runde = null;
 
 /*
- * Hören an oder aus - ein Schalter im Kopf der Runde.
+ * Schalter im Kopf der Runde: Hören und Schreiben an oder aus.
  *
  * Im Klassenzimmer ohne Kopfhörer will man keine Sätze, die laut aus dem
- * Telefon kommen; im Bus mit Kopfhörern gerade die. Also ein Schalter, der
- * sich merkt, wie er stand - im Gerät, nicht am Konto: Es ist eine Frage
- * der Lage, und die ist auf dem Schul-Tablet eine andere als zu Hause.
+ * Telefon kommen; im Bus mit Kopfhörern gerade die. Und wer im Stehen übt,
+ * will nicht tippen. Also je ein Schalter, der sich merkt, wie er stand -
+ * im Gerät, nicht am Konto: Es ist eine Frage der Lage, und die ist auf dem
+ * Schul-Tablet eine andere als zu Hause.
+ *
+ * Beide stehen in dieser einen Liste: Zeichen, Name, wo er sich merkt, und
+ * ob es in dieser Auswahl überhaupt etwas dafür gibt.
  */
-const HOEREN_SCHLUESSEL = 'vt-frei-hoeren';
+const SCHALTER = [
+    { id: 'hoeren',    modus: MODUS_HOEREN, zeichen: '\u{1F3A7}',        name: 'Hören',
+      schluessel: 'vt-frei-hoeren',    da: (r) => r.hoerbar },
+    { id: 'schreiben', modus: MODUS_LUECKE, zeichen: '\u{270F}\u{FE0F}', name: 'Schreiben',
+      schluessel: 'vt-frei-schreiben', da: (r) => r.schreibbar },
+];
 
-function hoerenAn() {
+function schalterAn(s) {
     try {
-        return localStorage.getItem(HOEREN_SCHLUESSEL) !== 'aus';
+        return localStorage.getItem(s.schluessel) !== 'aus';
     } catch {
         return true;
     }
 }
 
-function hoerenSetzen(an) {
+function schalterSetzen(s, an) {
     try {
-        if (an) localStorage.removeItem(HOEREN_SCHLUESSEL);
-        else localStorage.setItem(HOEREN_SCHLUESSEL, 'aus');
+        if (an) localStorage.removeItem(s.schluessel);
+        else localStorage.setItem(s.schluessel, 'aus');
     } catch { /* privates Fenster: dann gilt es nur für diese Runde */ }
 }
 
+/** Was die Runde gerade ziehen darf - für frageFrei(). */
+function erlaubt() {
+    const an = (id) => {
+        const s = SCHALTER.find((x) => x.id === id);
+        return s.da(runde) && schalterAn(s);
+    };
+    return { hoeren: an('hoeren'), schreiben: an('schreiben') };
+}
+
 /*
- * Einmal angemeldet, für jeden Bildschirm der Runde: Der Schalter steht im
- * Kopf, und der wird mit jeder Aufgabe neu gezeichnet. Wird Hören mitten
- * in einer Höraufgabe abgeschaltet, kommt sofort die nächste - keine, die
- * man nun nicht mehr hören soll.
+ * Einmal angemeldet, für jeden Bildschirm der Runde: Die Schalter stehen im
+ * Kopf, und der wird mit jeder Aufgabe neu gezeichnet. Wird eine Übungsart
+ * mitten in einer ihrer Aufgaben abgeschaltet, kommt sofort die nächste -
+ * keine, die man nun nicht mehr will.
  */
 document.addEventListener('change', (e) => {
-    if (e.target?.id !== 'hoerSchalter' || runde === null) return;
-    hoerenSetzen(e.target.checked);
-    if (!e.target.checked && runde.art === MODUS_HOEREN) {
+    const s = SCHALTER.find((x) => e.target?.id === `schalter-${x.id}`);
+    if (!s || runde === null) return;
+    schalterSetzen(s, e.target.checked);
+    runde.vorgemerkt = null;   // vielleicht eine, die es jetzt nicht mehr geben soll
+    if (!e.target.checked && runde.art === s.modus) {
         hoerenAnhalten();
         naechste();
     }
 });
+
+/*
+ * Die Tastatur für den nächsten Lückentext schon offen halten.
+ *
+ * Ein Telefon öffnet die Tastatur nur, wenn ein Feld während eines Tipps
+ * den Fokus bekommt. Der Lückentext kommt aber erst nach der Rückmeldung
+ * zur vorigen Aufgabe - ein Zeitgeber später, ohne Tipp: Das Feld bekam den
+ * Fokus, die Tastatur blieb zu, und das Kind musste erst hineintippen.
+ *
+ * Deshalb wird die nächste Aufgabe schon beim Antworten gezogen. Ist sie ein
+ * Lückentext, bekommt noch im selben Tipp ein unsichtbares Feld den Fokus,
+ * und die Tastatur geht auf; erscheint der Lückentext, wandert der Fokus in
+ * sein Feld - von Feld zu Feld darf das ohne Tipp, die Tastatur bleibt.
+ */
+function tastaturHalten() {
+    let halter = document.getElementById('tastaturhalter');
+    if (!halter) {
+        halter = document.createElement('input');
+        halter.id = 'tastaturhalter';
+        halter.type = 'text';
+        halter.tabIndex = -1;
+        halter.setAttribute('aria-hidden', 'true');
+        halter.autocomplete = 'off';
+        // 16 px, sonst zoomt Safari beim Fokus hinein.
+        halter.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;'
+            + 'opacity:0;border:0;padding:0;font-size:16px;pointer-events:none';
+        document.body.append(halter);
+    }
+    halter.focus({ preventScroll: true });
+}
+
+function tastaturHalterWeg() {
+    document.getElementById('tastaturhalter')?.remove();
+}
+window.addEventListener('hashchange', tastaturHalterWeg);
 
 /**
  * Das Symbol: eine Hantel.
@@ -195,19 +250,19 @@ export async function freiWahlView(languageId) {
 
 /** Eine eigene Leiste statt topbar(): Hier zählt die Runde, nicht der Weg. */
 function kopf(titel, zurueck) {
-    // Der Schalter nur, wenn es in dieser Auswahl überhaupt etwas zu hören gibt.
-    const schalter = runde?.hoerbar ? `
-            <label class="hoerschalter" title="Hören an oder aus">
-                <input type="checkbox" role="switch" id="hoerSchalter"${hoerenAn() ? ' checked' : ''}>
+    // Ein Schalter nur, wenn es in dieser Auswahl überhaupt etwas dafür gibt.
+    const schalter = runde === null ? [] : SCHALTER.filter((s) => s.da(runde)).map((s) => `
+            <label class="hoerschalter" title="${esc(s.name)} an oder aus">
+                <input type="checkbox" role="switch" id="schalter-${s.id}"${schalterAn(s) ? ' checked' : ''}>
                 <span class="hoerschalter-bahn" aria-hidden="true"></span>
-                <span aria-hidden="true">\u{1F3A7}</span>
-                <span class="nurvorlesen">Hören</span>
-            </label>` : '';
+                <span aria-hidden="true">${s.zeichen}</span>
+                <span class="nurvorlesen">${esc(s.name)}</span>
+            </label>`);
     return `
         <div class="topbar">
             <button class="iconbtn" data-back="${esc(zurueck)}" aria-label="Zurück">&#8249;</button>
             <h1 title="${esc(titel)}">${esc(titel)}</h1>
-            ${schalter}
+            ${schalter.length ? `<span class="schalterreihe">${schalter.join('')}</span>` : ''}
         </div>`;
 }
 
@@ -232,7 +287,8 @@ export async function freiView(roh, zurueck = null) {
     }
 
     runde = { richtig: 0, falsch: 0, folge: 0, beste: 0, unitIds, zurueck,
-              adresse: location.hash, hoerbar: freiHoerbar(unitIds), art: null };
+              adresse: location.hash, hoerbar: freiHoerbar(unitIds),
+              schreibbar: freiUmfang(unitIds).saetze > 0, art: null, vorgemerkt: null };
     naechste();
 }
 
@@ -340,6 +396,13 @@ function zaehlen(vocabId, richtig) {
     zaehlerNachziehen();
     freiMerken(vocabId, richtig);
     if (richtig) meilenstein();
+
+    // Die nächste Aufgabe schon jetzt, noch im Tipp - siehe tastaturHalten().
+    // Folgt Lückentext auf Lückentext, hält dessen eigenes Feld die Tastatur.
+    runde.vorgemerkt = frageFrei(runde.unitIds, erlaubt());
+    if (runde.vorgemerkt?.art === MODUS_LUECKE && runde.art !== MODUS_LUECKE) {
+        tastaturHalten();
+    }
 }
 
 /*
@@ -364,7 +427,9 @@ function verbuchen(vocabId, richtig, weiter) {
 }
 
 function naechste() {
-    const a = frageFrei(runde.unitIds, runde.hoerbar && hoerenAn());
+    const a = runde.vorgemerkt ?? frageFrei(runde.unitIds, erlaubt());
+    runde.vorgemerkt = null;
+    if (a?.art !== MODUS_LUECKE) tastaturHalterWeg();
 
     if (a === null || a.leer) {
         render(`${kopf('Freies Üben', runde.zurueck)}<div id="msg"></div>`);
@@ -478,6 +543,8 @@ function zeigeLuecke(a) {
         },
         weiter: weiterWennNochHier,
     }, a);
+    // Der Fokus ist jetzt im Feld der Lücke (lueckeZeigen()) - der Halter hat ausgedient.
+    tastaturHalterWeg();
 }
 
 /** Was jede Aufgabe braucht. */

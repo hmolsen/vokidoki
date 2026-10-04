@@ -2851,3 +2851,13 @@ dialog.rueckfrage:has(.titelwahl) { width: min(100% - 32px, 420px); }
 @media (prefers-reduced-motion: reduce) {
     .hoerschalter-bahn, .hoerschalter-bahn::after { transition: none; }
 }
+
+/* Mehrere Schalter im Kopf des Freien Übens - nebeneinander, rechts. */
+.schalterreihe {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+    flex: none;
+}
+.schalterreihe .hoerschalter { margin-left: 0; }
