@@ -247,7 +247,9 @@ export async function pruefe(f, aus, wurzel) {
          */
         const antworteIrgendwie = () => b.js(`(() => {
             if (document.getElementById('satzlinie')) {
-                document.querySelector('#woerter .wort')?.click();
+                // Alle Kärtchen legen: Mit nur einem blieb "Prüfen" zu, und die
+                // Schleife hing bei mehreren Wörtern vierzigmal an derselben Aufgabe.
+                document.querySelectorAll('#woerter .wort').forEach((w) => w.click());
                 document.getElementById('pruefen')?.click();
                 return 'hoeren';
             }

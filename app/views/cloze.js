@@ -90,7 +90,14 @@ async function nextQuestion(unitId) {
     if (data.leer && zustandDerSaetze === 'running') {
         showPreparing(unitId);
         // Der Vorrat bringt die frischen Saetze mit, sobald sie da sind.
-        setTimeout(async () => { await vorratAuffrischen(); nextQuestion(unitId); }, 2500);
+        // Nur weiter warten, solange das Kind noch hier ist - mit dem Pfeil
+        // zurück zeichnete der nächste Blick sonst die Übung über die Lerneinheit.
+        const hier = location.hash;
+        setTimeout(async () => {
+            if (location.hash !== hier) return;
+            await vorratAuffrischen();
+            if (location.hash === hier) nextQuestion(unitId);
+        }, 2500);
         return;
     }
 
@@ -469,7 +476,10 @@ function showPreparing(unitId) {
     if (document.getElementById('preparing')) return;   // schon zu sehen
 
     zustand = null;
+    // Mit Leiste und Pfeil zurück: Ohne sie sass ein Kind hier fest, wenn
+    // die Sätze nicht kamen - es gab keinen Weg hinaus.
     render(`
+        ${topbar('Lückentext', { backTo: `/unit/${unitId}` })}
         <div class="empty" id="preparing" style="padding-top:18vh">
             <div class="spinner"></div>
             <strong>Deine Sätze werden vorbereitet...</strong>
@@ -479,6 +489,7 @@ function showPreparing(unitId) {
             </p>
         </div>
     `);
+    wireBack();
 }
 
 async function prepare(unitId) {

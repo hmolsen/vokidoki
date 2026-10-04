@@ -385,7 +385,13 @@ function exerciseRow(mode, icon, title, hint, info) {
     // Hören: Die Sätze sind da, ihre Aufnahmen noch nicht.
     const aufnahmen = info.status === 'audio';
     const kaputt = info.status === 'failed';
-    const zu     = wartet || fertig || aufnahmen;
+    /*
+     * Ohne Sätze nicht anklickbar - auch wenn gerade keiner entsteht. Die
+     * Zeile führte sonst in "Deine Sätze werden vorbereitet ...", und dort
+     * wartete das Kind auf einen Lauf, den es gar nicht gab.
+     */
+    const ohneSaetze = mode !== 'mc' && info.total === 0;
+    const zu     = wartet || fertig || aufnahmen || ohneSaetze;
 
     /*
      * Solange die Sätze entstehen: Spinner statt Symbol, Zeile nicht
@@ -404,6 +410,8 @@ function exerciseRow(mode, icon, title, hint, info) {
         text = `Geschafft - alle ${info.total} gelernt`;
     } else if (kaputt) {
         text = info.error || 'Die Sätze konnten nicht erzeugt werden.';
+    } else if (ohneSaetze) {
+        text = 'Noch keine Sätze - deine Lehrkraft kümmert sich darum.';
     } else if (info.total > 0) {
         text = `${info.known} von ${info.total} gelernt`;
     } else {

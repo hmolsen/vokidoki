@@ -6063,7 +6063,8 @@ ok('Waehrend der Erzeugung dreht sich ein Spinner',
    && str_contains($unitQuelle, 'spinner inline'));
 ok('Und die Zeile ist solange nicht anklickbar',
    // Dazu kommt bei Hören: die Sätze da, die Aufnahmen noch nicht ("aufnahmen").
-   preg_match('/const zu\s*=\s*wartet \|\| fertig( \|\| aufnahmen)?;/', $unitQuelle) === 1
+   // Und ohne Sätze überhaupt ("ohneSaetze") - dort wartete ein Kind sonst auf nichts.
+   preg_match('/const zu\s*=\s*wartet \|\| fertig( \|\| aufnahmen)?( \|\| ohneSaetze)?;/', $unitQuelle) === 1
    && preg_match('/\$\{zu \? .disabled./', $unitQuelle) === 1);
 // Eine geschaffte Uebung ebenso - aber gruen statt grau, und mit ihrem Symbol.
 ok('Eine geschaffte Uebung ist ebenfalls nicht anklickbar',

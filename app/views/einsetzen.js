@@ -63,7 +63,14 @@ function naechste(unitId) {
     // Die Sätze entstehen noch - dieselben wie beim Lückentext.
     if (data.leer && (einheit(unitId)?.z ?? '') === 'running') {
         wartebild(unitId);
-        setTimeout(async () => { await vorratAuffrischen(); naechste(unitId); }, 2500);
+        // Nur weiter warten, solange das Kind noch hier ist - mit dem Pfeil
+        // zurück zeichnete der nächste Blick sonst die Übung über die Lerneinheit.
+        const hier = location.hash;
+        setTimeout(async () => {
+            if (location.hash !== hier) return;
+            await vorratAuffrischen();
+            if (location.hash === hier) naechste(unitId);
+        }, 2500);
         return;
     }
 
