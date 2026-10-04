@@ -314,29 +314,37 @@ export function einheitStatistik(unitId) {
     const v = vorratLaden();
     const modi = Object.fromEntries(MODI.map((m) => [m, fortschritt(unitId, m)]));
 
-    let punkte = 0;
-    let moeglich = 0;
+    // Je Übung gezählt - der Kurs zeigt aufgeklappt jede einzeln.
+    const jeUebung = Object.fromEntries(MODI.map((m) => [m, { punkte: 0, moeglich: 0 }]));
     if (v !== null) {
         for (const w of vokabelnDerEinheit(unitId)) {
             for (const m of MODI) {
                 if (!uebbar(v, w, m)) continue;
-                moeglich += PUNKTE_JE_UEBUNG;
-                punkte   += punkteVon(standVon(w.i, m));
+                jeUebung[m].moeglich += PUNKTE_JE_UEBUNG;
+                jeUebung[m].punkte   += punkteVon(standVon(w.i, m));
             }
         }
     }
+    const punkte   = MODI.reduce((s, m) => s + jeUebung[m].punkte, 0);
+    const moeglich = MODI.reduce((s, m) => s + jeUebung[m].moeglich, 0);
     const done = moeglich > 0 && punkte >= moeglich;
 
     return {
         id:       Number(unitId),
         title:    einheit(unitId)?.t ?? '',
         modi,
+        jeUebung,
         punkte,
         moeglich,
-        // Abgerundet: 100 % erst, wenn wirklich alles gekonnt ist.
-        percent:  moeglich === 0 ? 0 : (done ? 100 : Math.floor((punkte / moeglich) * 100)),
+        percent:  prozentVon(punkte, moeglich),
         done,
     };
+}
+
+/** Punkte als Prozent - abgerundet: 100 % erst, wenn wirklich alles gekonnt ist. */
+export function prozentVon(punkte, moeglich) {
+    if (moeglich === 0) return 0;
+    return punkte >= moeglich ? 100 : Math.floor((punkte / moeglich) * 100);
 }
 
 /**

@@ -134,7 +134,7 @@ export async function pruefe(f, aus, wurzel) {
          * Reihenfolge aus einer einzigen Zeile.
          */
         await b.geh(f.basis + '/#/lang/' + f.sprache, 2200);
-        const ohneLeere = await b.js(`[...document.querySelectorAll('.row[data-unit]')]
+        const ohneLeere = await b.js(`[...document.querySelectorAll('.einheitzeile[data-unit]')]
             .map((el) => el.dataset.unit)`);
         ok('Leere Lerneinheiten sieht die Klasse nicht',
            ohneLeere.length === 1 && ohneLeere[0] === String(f.unit),
@@ -150,7 +150,7 @@ export async function pruefe(f, aus, wurzel) {
 
         await b.geh(f.basis + '/#/lang/' + f.sprache, 2200);
         await b.neuLaden(2200);
-        const inDerApp = await b.js(`[...document.querySelectorAll('.row[data-unit]')]
+        const inDerApp = await b.js(`[...document.querySelectorAll('.einheitzeile[data-unit]')]
             .map((el) => el.dataset.unit)`);
         ok('Die Klasse sieht sie in derselben Reihenfolge',
            inDerApp.join('|') === nachher.join('|'),

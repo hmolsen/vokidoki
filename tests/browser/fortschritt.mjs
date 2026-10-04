@@ -73,13 +73,41 @@ export async function pruefe(f, aus, wurzel) {
 
         await b.hash(`/lang/${f.sprache}`, 1500);
         const zeile = await b.js(`(() => {
-            const r = document.querySelector('.row[data-unit="${ids.unit}"]');
-            return r ? r.textContent.replace(/\\s+/g, ' ').trim() : null;
+            const r = document.querySelector('.einheitzeile[data-unit="${ids.unit}"]');
+            return r ? r.querySelector('.ez-p').textContent.replace(/\\s+/g, ' ').trim() : null;
         })()`);
-        ok('Die Zeile der Lerneinheit im Kurs zeigt es', zeile?.includes('37 % gelernt'), zeile);
-        const fuss = await b.js(`document.querySelector('.bigpercent')?.parentElement.textContent.replace(/\\s+/g, ' ')`);
-        ok('Unter dem Balken stehen alle vier Übungen', ['Auswählen', 'Einsetzen', 'Lückentext', 'Hören']
-            .every((n) => fuss?.includes(n)), fuss);
+        ok('Die Zeile der Lerneinheit im Kurs zeigt es', zeile === '37 %', zeile);
+
+        /*
+         * Die Lerneinheiten: eine Karte, kein Bild je Zeile, und der Anteil
+         * steht rechts untereinander - egal wie lang der Titel ist.
+         */
+        const liste = await b.js(`(() => {
+            const zeilen = [...document.querySelectorAll('.einheitenliste .einheitzeile')];
+            const rechts = zeilen.map((z) => Math.round(z.querySelector('.ez-p').getBoundingClientRect().right));
+            return { anzahl: zeilen.length, rechts: [...new Set(rechts)].length,
+                     bilder: document.querySelectorAll('.einheitenliste .lead').length };
+        })()`);
+        ok('Die Lerneinheiten stehen in einer Karte, ohne Bild in jeder Zeile',
+           liste.anzahl >= 2 && liste.bilder === 0, JSON.stringify(liste));
+        ok('Und der Anteil steht rechts genau untereinander', liste.rechts === 1, JSON.stringify(liste));
+
+        // "Insgesamt gelernt" klappt auf: jede Übung mit Zeichen, Anteil und Balken.
+        const gesamt = await b.js(`(async () => {
+            const d = document.querySelector('details.gesamt');
+            const zu = { offen: d.open, sichtbar: d.querySelector('.ue').checkVisibility() };
+            d.querySelector('summary').click();
+            await new Promise((r) => setTimeout(r, 100));
+            const ue = [...d.querySelectorAll('.ue')].map((u) => ({
+                name: u.querySelector('.ue-n').textContent, p: u.querySelector('.ue-p').textContent.replace(/\\s/g, ' '),
+                zeichen: u.querySelector('.ue-z').textContent !== '', balken: !!u.querySelector('.bar') }));
+            return { zu, offen: d.open, ue };
+        })()`);
+        ok('Zu Anfang ist der Fortschritt zugeklappt', gesamt.zu.offen === false && !gesamt.zu.sichtbar,
+           JSON.stringify(gesamt.zu));
+        ok('Ein Druck klappt ihn auf: alle vier Übungen mit Zeichen, Anteil und Balken',
+           gesamt.offen && ['Auswählen', 'Einsetzen', 'Lückentext', 'Hören'].every((n) => gesamt.ue.some((u) => u.name === n))
+           && gesamt.ue.every((u) => u.zeichen && u.balken && /\d+ %/.test(u.p)), JSON.stringify(gesamt));
 
         // Ohne Aufnahmen gibt es kein Hören - dann neun Punkte je Vokabel,
         // und die Punkte vom Hören fallen mit heraus.

@@ -772,6 +772,56 @@ a.row { text-decoration: none; }
 }
 .bar.done > i { background: var(--good); }
 
+/*
+ * Der Kurs (views/language.js): "Insgesamt gelernt" klappt auf und zeigt
+ * jede Übung mit Zeichen, Anteil und Balken.
+ */
+.gesamt summary { display: block; list-style: none; cursor: pointer; }
+.gesamt summary::-webkit-details-marker { display: none; }
+.g-zeile { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.g-auf { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.g-pfeil { display: inline-block; font-size: 1.2rem; line-height: 1; transition: transform .2s ease; }
+.gesamt[open] .g-pfeil { transform: rotate(90deg); }
+.gesamt .g-offen, .gesamt[open] .g-zu { display: none; }
+.gesamt[open] .g-offen { display: inline; }
+.ue-liste { display: grid; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.ue { display: grid; grid-template-columns: 26px 1fr auto; column-gap: 8px; align-items: center; }
+.ue-z { font-size: 1.15rem; }
+.ue-n { font-weight: 600; }
+.ue-p { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ue-bar, .ue-k { grid-column: 2 / 4; }
+.ue-bar .bar { margin-top: 4px; }
+.ue-k { margin-top: 2px; }
+
+/*
+ * Die Lerneinheiten: eine Karte, Zeile an Zeile. Der Anteil steht rechts
+ * in einer festen Spalte, damit er untereinander steht, egal wie lang der
+ * Titel ist; ein langer Titel bricht um.
+ */
+.einheitenliste { padding: 0; overflow: hidden; }
+.einheitzeile {
+    display: grid;
+    grid-template-columns: 1fr 3.6em;
+    column-gap: 10px;
+    align-items: center;
+    width: 100%;
+    padding: 13px 16px;
+    border: 0;
+    border-top: 1px solid var(--border);
+    background: none;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.einheitzeile:first-child { border-top: 0; }
+.einheitzeile:active { background: var(--surface-2); }
+.ez-t { font-weight: 600; min-width: 0; line-height: 1.3; overflow-wrap: anywhere; }
+.ez-p { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-soft); }
+.ez-p.fertig { color: var(--good); font-size: 1.15rem; }
+.ez-bar { grid-column: 1 / 3; }
+.ez-bar .bar { margin-top: 6px; height: 6px; }
+
 /* Drei Punkte: wie oft die Vokabel schon hintereinander saß. */
 .dots { display: flex; gap: 5px; }
 .dots i {
