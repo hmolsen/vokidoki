@@ -91,13 +91,13 @@ switch (action()) {
             $r['cloze_known'] = (int) $r['cloze_known'];
             $r['correct']     = (int) $r['correct'];
             $r['wrong']       = (int) $r['wrong'];
-
-            $r['steps_total'] = $r['total'] + $r['cloze_total'];
-            $r['steps_done']  = $r['known'] + $r['cloze_known'];
-            $r['percent']     = $r['steps_total'] > 0
-                ? (int) round($r['steps_done'] / $r['steps_total'] * 100)
-                : 0;
-            $r['done'] = $r['steps_total'] > 0 && $r['steps_done'] >= $r['steps_total'];
+            /*
+             * Hier stand noch der Gesamtfortschritt - nach der alten Regel,
+             * nur Auswählen und Lückentext. Gezeigt hat ihn niemand mehr:
+             * Der Kurs rechnet im Gerät (einheitStatistik() in vorrat.js),
+             * und das Einlesen braucht von hier nur Titel und Zahl. Eine
+             * zweite, veraltete Fassung der Regel war eine zu viel.
+             */
         }
         unset($r);
         /*

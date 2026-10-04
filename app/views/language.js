@@ -1,6 +1,9 @@
 import { VT, render, esc, on, go, topbar, wireBack, progressBar, flagHtml,
          showError, lernansicht } from '../core.js';
-import { sprache, einheitenDerSprache, einheitStatistik } from '../vorrat.js';
+import {
+    sprache, einheitenDerSprache, einheitStatistik,
+    MODUS_WAHL, MODUS_EINSETZEN, MODUS_LUECKE, MODUS_HOEREN,
+} from '../vorrat.js';
 import { hantel } from './frei.js';
 
 /**
@@ -30,6 +33,14 @@ function selbstEinlesen() {
     return VT.user.canImport && !VT.user.isTeacher;
 }
 
+/* Die Übungen in der Reihenfolge der Lerneinheit, wie sie unter dem Balken stehen. */
+const UEBUNGEN = [
+    [MODUS_WAHL, 'Auswählen'],
+    [MODUS_EINSETZEN, 'Einsetzen'],
+    [MODUS_LUECKE, 'Lückentext'],
+    [MODUS_HOEREN, 'Hören'],
+];
+
 export async function languageView(languageId) {
     /*
      * Aus dem Vorrat statt vom Server. Kein Ladepunkt, kein Warten - und
@@ -54,21 +65,22 @@ export async function languageView(languageId) {
     const units = einheitenDerSprache(languageId).map((u) => einheitStatistik(u.i));
 
     /*
-     * Gesamtfortschritt über beide Übungsarten.
-     *
-     * Gezählt wird in Schritten: Jede Vokabel bringt einen fürs Auswählen mit
-     * und einen zweiten fürs Einsetzen, sofern sie einen Lückensatz hat.
-     * Vorher zählte hier nur das Auswählen - der Balken stand auf voll,
-     * während im Lückentext noch alles offen war.
+     * Gesamtfortschritt über alle Übungen, in Punkten (einheitStatistik()):
+     * drei je Vokabel und Übung. Abgerundet wie dort - 100 % erst, wenn
+     * alles gekonnt ist.
      */
-    const schritte = units.reduce((s, u) => s + u.steps_total, 0);
-    const getan    = units.reduce((s, u) => s + u.steps_done, 0);
-    const prozent  = schritte > 0 ? Math.round((getan / schritte) * 100) : 0;
+    const moeglich = units.reduce((s, u) => s + u.moeglich, 0);
+    const punkte   = units.reduce((s, u) => s + u.punkte, 0);
+    const prozent  = moeglich === 0 ? 0
+        : (punkte >= moeglich ? 100 : Math.floor((punkte / moeglich) * 100));
 
-    const mcKnown    = units.reduce((s, u) => s + u.known, 0);
-    const mcTotal    = units.reduce((s, u) => s + u.total, 0);
-    const clozeKnown = units.reduce((s, u) => s + u.cloze_known, 0);
-    const clozeTotal = units.reduce((s, u) => s + u.cloze_total, 0);
+    // Darunter je Übung, wie viele Vokabeln dort gekonnt sind.
+    const jeUebung = UEBUNGEN
+        .map(([m, name]) => [name, units.reduce((s, u) => s + u.modi[m].known, 0),
+                             units.reduce((s, u) => s + u.modi[m].total, 0)])
+        .filter(([, , gesamt]) => gesamt > 0)
+        .map(([name, gekonnt, gesamt]) => `${name} ${gekonnt}/${gesamt}`)
+        .join(' &middot; ');
 
     const rows = units.map((u) => `
         <button class="row" data-unit="${u.id}">
@@ -76,7 +88,7 @@ export async function languageView(languageId) {
             <span class="body">
                 <span class="title">${esc(u.title)}</span>
                 <span class="tiny muted">${u.percent} % gelernt</span>
-                ${progressBar(u.steps_done, u.steps_total)}
+                ${progressBar(u.punkte, u.moeglich)}
             </span>
             <span class="chev">&#8250;</span>
         </button>
@@ -93,11 +105,8 @@ export async function languageView(languageId) {
             <div class="card">
                 <div class="tiny muted">Insgesamt gelernt</div>
                 <strong class="bigpercent">${prozent}&thinsp;%</strong>
-                ${progressBar(getan, schritte)}
-                <div class="tiny muted" style="margin-top:8px">
-                    Auswählen ${mcKnown}/${mcTotal}
-                    &middot; Lückentext ${clozeKnown}/${clozeTotal}
-                </div>
+                ${progressBar(punkte, moeglich)}
+                <div class="tiny muted" style="margin-top:8px">${jeUebung}</div>
             </div>` : ''}
 
         ${selbstEinlesen() ? `

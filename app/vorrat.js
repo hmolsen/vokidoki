@@ -288,32 +288,54 @@ export function fortschritt(unitId, modus) {
     return { known: gekonnt, total: alle.length };
 }
 
+/* So viele Punkte hat eine Vokabel je Übung: einer je richtige Antwort in
+   Folge, voll, wenn sie dort gekonnt ist (dreimal hintereinander richtig). */
+const PUNKTE_JE_UEBUNG = 3;
+
+/** Die Punkte einer Vokabel in einer Übung - siehe einheitStatistik(). */
+function punkteVon(stand) {
+    return stand.k === 1 ? PUNKTE_JE_UEBUNG : Math.min(stand.s ?? 0, PUNKTE_JE_UEBUNG);
+}
+
 /**
- * Die Zahlen einer Lerneinheit - wie api/units.php sie liefert.
+ * Wie weit ist eine Lerneinheit - über alle Übungen.
  *
- * Gezaehlt wird in Schritten, nicht in Vokabeln: Jede bringt einen Schritt
- * fuers Auswaehlen mit und einen zweiten fuers Einsetzen, sofern sie einen
- * Lueckensatz hat. Sonst stuende der Balken auf voll, waehrend im
- * Lueckentext noch alles offen ist.
+ * In Punkten: Jede Übung, in der eine Vokabel drankommen kann (uebbar()),
+ * bringt ihr drei - einen je richtige Antwort in Folge, alle drei, wenn sie
+ * dort gekonnt ist. Mit allen vier Übungen hat eine Vokabel also zwölf, in
+ * Latein ohne Hören neun.
+ *
+ * Gezählt wurden hier einmal nur Auswählen und Lückentext, und nur
+ * "gekonnt" oder nicht: Wer jede Vokabel beim Hören konnte, sah 0 %, und
+ * wer zweimal richtig lag, sah davon nichts. Die Regel steht nur hier - der
+ * Kurs im Gerät rechnet sie, auch ohne Netz.
  */
 export function einheitStatistik(unitId) {
-    const wahl   = fortschritt(unitId, MODUS_WAHL);
-    const luecke = fortschritt(unitId, MODUS_LUECKE);
+    const v = vorratLaden();
+    const modi = Object.fromEntries(MODI.map((m) => [m, fortschritt(unitId, m)]));
 
-    const stepsTotal = wahl.total + luecke.total;
-    const stepsDone  = wahl.known + luecke.known;
+    let punkte = 0;
+    let moeglich = 0;
+    if (v !== null) {
+        for (const w of vokabelnDerEinheit(unitId)) {
+            for (const m of MODI) {
+                if (!uebbar(v, w, m)) continue;
+                moeglich += PUNKTE_JE_UEBUNG;
+                punkte   += punkteVon(standVon(w.i, m));
+            }
+        }
+    }
+    const done = moeglich > 0 && punkte >= moeglich;
 
     return {
-        id:          Number(unitId),
-        title:       einheit(unitId)?.t ?? '',
-        total:       wahl.total,
-        known:       wahl.known,
-        cloze_total: luecke.total,
-        cloze_known: luecke.known,
-        steps_total: stepsTotal,
-        steps_done:  stepsDone,
-        percent:     stepsTotal > 0 ? Math.round((stepsDone / stepsTotal) * 100) : 0,
-        done:        stepsTotal > 0 && stepsDone >= stepsTotal,
+        id:       Number(unitId),
+        title:    einheit(unitId)?.t ?? '',
+        modi,
+        punkte,
+        moeglich,
+        // Abgerundet: 100 % erst, wenn wirklich alles gekonnt ist.
+        percent:  moeglich === 0 ? 0 : (done ? 100 : Math.floor((punkte / moeglich) * 100)),
+        done,
     };
 }
 
