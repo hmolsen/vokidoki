@@ -3,8 +3,8 @@ import {
     zahlAktualisieren, VT,
 } from '../core.js';
 import {
-    frageFrei, freiMerken, freiUmfang, freiHoerbar, einheit, sprache,
-    einheitenDerSprache, MODUS_WAHL, MODUS_EINSETZEN, MODUS_HOEREN, MODUS_LUECKE,
+    frageFrei, frageFehler, freiMerken, freiUmfang, freiHoerbar, einheit, sprache,
+    einheitenDerSprache, MODUS_WAHL, MODUS_EINSETZEN, MODUS_HOEREN, MODUS_LUECKE, FEHLER_TOPF,
 } from '../vorrat.js';
 import { meldeKnopf, meldenVerdrahten } from '../melden.js';
 import { tonKnopf, optionHtml, tonVerdrahten } from './wortton.js';
@@ -103,6 +103,29 @@ document.addEventListener('change', (e) => {
 });
 
 /*
+ * Zwei Runden auf demselben Bildschirm: das Freie Üben, und das Lernen aus
+ * Fehlern - dieselben Aufgaben, dieselbe Leiste, dieselben Schalter; nur
+ * woher die nächste Aufgabe kommt, ist anders (ziehen()). Adressen:
+ * #/frei/... und #/fehler/..., die Auswahl unter #/frei/waehlen/ und
+ * #/fehler/waehlen/.
+ */
+const QUELLEN = {
+    frei: {
+        titel: 'Freies Üben',
+        pfad: 'frei',
+        zeichen: () => hantel(),
+        erklaerung: '',
+    },
+    fehler: {
+        titel: 'Aus Fehlern lernen',
+        pfad: 'fehler',
+        zeichen: () => '<span aria-hidden="true">\u{1FA79}</span>',
+        erklaerung: `Geübt werden die ${FEHLER_TOPF} Aufgaben, die dir am schwersten fallen - nach jeder
+            Antwort neu ausgesucht. Was sitzt, rutscht hinaus, und das Nächste rückt nach.`,
+    },
+};
+
+/*
  * Die Tastatur für den nächsten Lückentext schon offen halten.
  *
  * Ein Telefon öffnet die Tastatur nur, wenn ein Feld während eines Tipps
@@ -163,12 +186,13 @@ export function hantel(klasse = 'hantel') {
  * Lerneinheiten sollen geübt werden?" ist die einzige Entscheidung, die
  * diese Übung überhaupt verlangt.
  */
-export async function freiWahlView(languageId) {
+export async function freiWahlView(languageId, quelle = 'frei') {
+    const q     = QUELLEN[quelle] ?? QUELLEN.frei;
     const spr   = sprache(languageId);
     const units = einheitenDerSprache(languageId);
 
     if (spr === null) {
-        render(`${kopf('Freies Üben', `/lang/${languageId}`)}<div id="msg"></div>`);
+        render(`${kopf(q.titel, `/lang/${languageId}`)}<div id="msg"></div>`);
         wireBack();
         showError('Dieser Kurs ist noch nicht geladen. '
                   + 'Einmal mit Netz öffnen, dann geht es auch ohne.');
@@ -177,7 +201,7 @@ export async function freiWahlView(languageId) {
 
     if (units.length === 0) {
         render(`
-            ${kopf('Freies Üben', `/lang/${languageId}`)}
+            ${kopf(q.titel, `/lang/${languageId}`)}
             <div class="empty">
                 <span class="big">${hantel('hantel gross')}</span>
                 Hier ist noch keine Lerneinheit freigegeben.
@@ -201,15 +225,16 @@ export async function freiWahlView(languageId) {
     }).join('');
 
     render(`
-        ${kopf('Freies Üben', `/lang/${languageId}`)}
+        ${kopf(q.titel, `/lang/${languageId}`)}
         <div id="msg"></div>
 
         <!-- Oben, nicht unter der Liste: Bei zwanzig Lerneinheiten musste man
              erst ganz hinunterrollen, um anzufangen. -->
         <button class="btn" id="los" style="margin-bottom:16px">
-            ${hantel()} Losüben
+            ${q.zeichen()} Losüben
         </button>
 
+        ${q.erklaerung ? `<p class="tiny muted">${q.erklaerung}</p>` : ''}
         <p class="sub">Welche Lerneinheiten sollen geübt werden?</p>
 
         <div class="btn-row" style="margin-bottom:12px">
@@ -230,7 +255,7 @@ export async function freiWahlView(languageId) {
         $('#los').disabled = n === 0;
         $('#los').innerHTML = n === 0
             ? 'Wähle mindestens eine Lerneinheit'
-            : `${hantel()} Losüben`;
+            : `${q.zeichen()} Losüben`;
     };
 
     $('#alle').addEventListener('click', () => {
@@ -245,7 +270,7 @@ export async function freiWahlView(languageId) {
     $('#los').addEventListener('click', () => {
         const wahl = gewaehlt();
         if (wahl.length === 0) return;
-        go(`/frei/${wahl.join('-')}`);
+        go(`/${q.pfad}/${wahl.join('-')}`);
     });
 }
 
@@ -276,13 +301,14 @@ function kopf(titel, zurueck) {
  * wurde. Ohne führt der Pfeil in den Kurs - dort liegt die Auswahl, über
  * die man sonst hierher kommt.
  */
-export async function freiView(roh, zurueck = null) {
+export async function freiView(roh, zurueck = null, quelle = 'frei') {
+    const q       = QUELLEN[quelle] ?? QUELLEN.frei;
     const unitIds = String(roh).split('-').map(Number).filter((n) => n > 0);
     const erste   = einheit(unitIds[0]);
     zurueck ??= erste === null ? '/' : `/lang/${erste.l}`;
 
     if (freiUmfang(unitIds).vokabeln === 0) {
-        render(`${kopf('Freies Üben', zurueck)}<div id="msg"></div>`);
+        render(`${kopf(q.titel, zurueck)}<div id="msg"></div>`);
         wireBack();
         showError('Hier gibt es noch nichts zu üben. '
                   + 'Einmal mit Netz öffnen, dann geht es auch ohne.');
@@ -291,7 +317,8 @@ export async function freiView(roh, zurueck = null) {
 
     runde = { richtig: 0, falsch: 0, folge: 0, beste: 0, unitIds, zurueck,
               adresse: location.hash, hoerbar: freiHoerbar(unitIds),
-              schreibbar: freiUmfang(unitIds).saetze > 0, art: null, vorgemerkt: null };
+              schreibbar: freiUmfang(unitIds).saetze > 0, art: null, vorgemerkt: null,
+              quelle: q === QUELLEN.fehler ? 'fehler' : 'frei', titel: q.titel, zuletzt: '' };
     naechste();
 }
 
@@ -402,7 +429,7 @@ function zaehlen(vocabId, richtig) {
 
     // Die nächste Aufgabe schon jetzt, noch im Tipp - siehe tastaturHalten().
     // Folgt Lückentext auf Lückentext, hält dessen eigenes Feld die Tastatur.
-    runde.vorgemerkt = frageFrei(runde.unitIds, erlaubt());
+    runde.vorgemerkt = ziehen();
     if (runde.vorgemerkt?.art === MODUS_LUECKE && runde.art !== MODUS_LUECKE) {
         tastaturHalten();
     }
@@ -429,19 +456,30 @@ function verbuchen(vocabId, richtig, weiter) {
     setTimeout(weiterWennNochHier, weiter);
 }
 
+/**
+ * Die nächste Aufgabe ziehen - frei aus allem, oder beim Lernen aus Fehlern
+ * aus den schwächsten (frageFehler()), nur nicht gleich dieselbe noch einmal.
+ */
+function ziehen() {
+    return runde.quelle === 'fehler'
+        ? frageFehler(runde.unitIds, erlaubt(), runde.zuletzt)
+        : frageFrei(runde.unitIds, erlaubt());
+}
+
 function naechste() {
-    const a = runde.vorgemerkt ?? frageFrei(runde.unitIds, erlaubt());
+    const a = runde.vorgemerkt ?? ziehen();
     runde.vorgemerkt = null;
     if (a?.art !== MODUS_LUECKE) tastaturHalterWeg();
 
     if (a === null || a.leer) {
-        render(`${kopf('Freies Üben', runde.zurueck)}<div id="msg"></div>`);
+        render(`${kopf(runde.titel, runde.zurueck)}<div id="msg"></div>`);
         wireBack();
         showError('Hier gibt es nichts zu üben.');
         return;
     }
 
     runde.art = a.art;
+    runde.zuletzt = `${a.vocabId}:${a.art}`;
     if (a.art === MODUS_WAHL) zeigeWahl(a);
     else if (a.art === MODUS_EINSETZEN) einsetzenZeigen(freiArt(), a);
     else if (a.art === MODUS_HOEREN) hoerenZeigen(freiArt(), a);
@@ -457,7 +495,7 @@ function naechste() {
 function freiArt() {
     return {
         schluessel: 'frei',
-        kopf: () => kopf('Freies Üben', runde.zurueck) + zaehlerLeiste(),
+        kopf: () => kopf(runde.titel, runde.zurueck) + zaehlerLeiste(),
         punkte: false,
         zeigen: () => {},
         merken: (data, richtig) => {
@@ -476,7 +514,7 @@ function zeigeWahl(a) {
         : `Deutsch → ${esc(a.language)}`;
 
     render(`
-        ${kopf('Freies Üben', runde.zurueck)}
+        ${kopf(runde.titel, runde.zurueck)}
         ${zaehlerLeiste()}
 
         <div class="prompt">
@@ -536,7 +574,7 @@ function zeigeWahl(a) {
 function zeigeLuecke(a) {
     lueckeZeigen({
         schluessel: 'frei',
-        kopf: () => kopf('Freies Üben', runde.zurueck) + zaehlerLeiste(),
+        kopf: () => kopf(runde.titel, runde.zurueck) + zaehlerLeiste(),
         punkte: false,
         zeigen: () => {},
         merken: (data, richtig) => {

@@ -1216,23 +1216,30 @@ export function frageFrei(unitIds, { hoeren = true, schreiben = true } = {}) {
     if (alle.length === 0) return { leer: true };
 
     const karte = wuerfel(alle);
+    return aufgabeFuer(v, karte, wuerfel(artenFuer(v, karte, { hoeren, schreiben })), alle);
+}
+
+/**
+ * Die Übungsarten, die bei dieser Vokabel gehen - mit den Schaltern.
+ *
+ * Hier waren es einmal nur Auswählen und Lückentext. Seit es Einsetzen
+ * und Hören gibt, gehören sie dazu: Wer frei übt, soll alles üben, was die
+ * Lerneinheit kann (uebbar()). Hören und Schreiben (der Lückentext) lassen
+ * sich abschalten - im Klassenzimmer ohne Kopfhörer, oder im Bus, wo Tippen
+ * mühsam ist.
+ */
+function artenFuer(v, karte, { hoeren = true, schreiben = true } = {}) {
+    return MODI.filter((m) => uebbar(v, karte, m)
+        && (m !== MODUS_LUECKE || schreiben) && (m !== MODUS_HOEREN || hoeren));
+}
+
+/**
+ * Die Aufgabe einer Übung zu einer Vokabel - fürs Freie Üben und fürs
+ * Lernen aus Fehlern. `alle` sind die Vokabeln der Runde: Aus ihnen kommen
+ * beim Auswählen zuerst die Ablenker.
+ */
+function aufgabeFuer(v, karte, art, alle) {
     const saetze = v.saetze.get(karte.i) ?? [];
-
-    /*
-     * Alle Übungsarten, die bei dieser Vokabel gehen - gleich oft.
-     *
-     * Hier waren es einmal nur Auswählen und Lückentext. Seit es Einsetzen
-     * und Hören gibt, gehören sie dazu: Wer frei übt, soll alles üben, was
-     * die Lerneinheit kann. Hören nur, wenn es eine Aufnahme gibt. Hören und
-     * Schreiben (der Lückentext) lassen sich im Freien Üben abschalten - im
-     * Klassenzimmer ohne Kopfhörer, oder im Bus, wo Tippen mühsam ist.
-     */
-    const arten = [MODUS_WAHL];
-    if (saetze.length > 0) arten.push(MODUS_EINSETZEN);
-    if (saetze.length > 0 && schreiben) arten.push(MODUS_LUECKE);
-    if (hoeren && uebbar(v, karte, MODUS_HOEREN)) arten.push(MODUS_HOEREN);
-    const art = wuerfel(arten);
-
     if (art === MODUS_EINSETZEN) return { art, ...einsetzAufgabe(v, karte.u, karte) };
     if (art === MODUS_HOEREN) return { art, ...hoerAufgabe(v, karte.u, karte) };
 
@@ -1259,6 +1266,61 @@ export function frageFrei(unitIds, { hoeren = true, schreiben = true } = {}) {
         ...wahlAufgabe(v, karte, alle),
         language: spr?.name ?? '',
     };
+}
+
+/* So viele Aufgaben sind beim Lernen aus Fehlern im Topf - die schwächsten. */
+export const FEHLER_TOPF = 50;
+
+/**
+ * Aus Fehlern lernen: die schwächsten Aufgaben der gewählten Lerneinheiten.
+ *
+ * Eine Aufgabe ist eine Vokabel in einer Übung - jede hat ihre Zahlen
+ * (richtig, falsch; auch aus dem Freien Üben). Sortiert wird nach der
+ * Trefferquote, die schlechteste zuerst; bei gleicher Quote die mit mehr
+ * Fehlern. Was noch nie drankam, hat keine Quote: Es steht hinter allem,
+ * was schon einmal falsch war, aber vor dem, was immer saß - sonst füllte
+ * sich der Topf bei wenigen Antworten mit lauter Sicherem.
+ *
+ * Neu gerechnet bei jeder Frage: Jede Antwort ändert die Zahlen
+ * (freiMerken()), und was sitzt, rutscht hinaus, während etwas anderes
+ * hereinrückt. Ein Ende gibt es nicht.
+ *
+ * @returns {{karte: object, art: string, richtig: number, falsch: number, quote: number|null}[]}
+ */
+export function fehlerTopf(unitIds, schalter = {}) {
+    const v = vorratLaden();
+    if (v === null) return [];
+
+    const aufgaben = [];
+    for (const karte of vokabelnDerEinheiten(unitIds)) {
+        for (const art of artenFuer(v, karte, schalter)) {
+            const p = standVon(karte.i, art);
+            const richtig = p.c ?? 0;
+            const falsch  = p.w ?? 0;
+            aufgaben.push({ karte, art, richtig, falsch,
+                            quote: richtig + falsch === 0 ? null : richtig / (richtig + falsch) });
+        }
+    }
+    const rang = (a) => (a.quote === null ? 1 - 1e-9 : a.quote);   // knapp vor "immer richtig"
+    aufgaben.sort((a, b) => rang(a) - rang(b) || b.falsch - a.falsch);
+    return aufgaben.slice(0, FEHLER_TOPF);
+}
+
+/**
+ * Die nächste Aufgabe beim Lernen aus Fehlern: eine aus dem Topf, zufällig -
+ * nur nicht gleich dieselbe noch einmal (`zuletzt` ist "vokabel:übung").
+ */
+export function frageFehler(unitIds, schalter = {}, zuletzt = '') {
+    const v = vorratLaden();
+    if (v === null) return null;
+
+    const alle = vokabelnDerEinheiten(unitIds);
+    const topf = fehlerTopf(unitIds, schalter);
+    if (alle.length === 0 || topf.length === 0) return { leer: true };
+
+    const andere = topf.filter((a) => `${a.karte.i}:${a.art}` !== zuletzt);
+    const a = wuerfel(andere.length > 0 ? andere : topf);
+    return aufgabeFuer(v, a.karte, a.art, alle);
 }
 
 /** Gibt es in diesen Lerneinheiten etwas zu hören? Sonst braucht es keinen Schalter. */

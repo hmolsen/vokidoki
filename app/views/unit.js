@@ -148,6 +148,15 @@ export async function unitView(unitId) {
                 </span>
                 <span class="chev">&#8250;</span>
             </button>
+            <!-- Aus Fehlern lernen: die schwächsten Aufgaben, immer neu ausgesucht (frei.js). -->
+            <button class="row" data-fehler="${unit.id}">
+                <span class="lead" aria-hidden="true">\u{1FA79}</span>
+                <span class="body">
+                    <span class="title">Aus Fehlern lernen</span>
+                    <span class="tiny muted">Was dir am schwersten fällt - bis es sitzt</span>
+                </span>
+                <span class="chev">&#8250;</span>
+            </button>
         </div>
 
         ${quota === null ? '' : `
@@ -244,6 +253,8 @@ function wireExercises(unitId) {
         // geht ohne Umweg los.
         const frei = event.target.closest('[data-frei]');
         if (frei) { go(`/unit/${frei.dataset.frei}/frei`); return; }
+        const fehler = event.target.closest('[data-fehler]');
+        if (fehler) { go(`/unit/${fehler.dataset.fehler}/fehler`); return; }
 
         /*
          * Eine geschaffte Übung hat kein data-mode und ist disabled - sie

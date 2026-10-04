@@ -165,11 +165,12 @@ export async function pruefe(f, aus) {
            'sie soll genau so aussehen, wie ein Kind sie hat');
         ok('Der Streifen bleibt als einziger Unterschied', sichtbar.banner);
         /*
-         * Übrig bleiben darf nur, was ein Kind auch hat. Freies Üben ist
-         * für alle da - das Einlesen nicht, und genau darum ging es hier.
+         * Übrig bleiben darf nur, was ein Kind auch hat. Freies Üben und
+         * Aus Fehlern lernen sind für alle da - das Einlesen nicht, und genau
+         * darum ging es hier.
          */
         ok('Und es steht keine Zeile mehr da, die ein Kind nicht hat',
-           sichtbar.zeilen.every((z) => z.startsWith('/frei/')),
+           sichtbar.zeilen.every((z) => z.startsWith('/frei/') || z.startsWith('/fehler/')),
            sichtbar.zeilen.join(', ') || '(keine)');
 
         // In einer Lerneinheit zeigt er auf die Lerneinheit, nicht auf den Kurs.

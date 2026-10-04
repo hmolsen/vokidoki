@@ -97,6 +97,10 @@ const ROUTES = [
      */
     [/^\/frei\/waehlen\/(\d+)$/,  freiWahlView],
     [/^\/frei\/([\d-]+)$/,        freiView],
+    // Aus Fehlern lernen - dieselbe Runde, die schwächsten Aufgaben (frei.js).
+    [/^\/unit\/(\d+)\/fehler$/,   (id) => freiView(id, `/unit/${id}`, 'fehler')],
+    [/^\/fehler\/waehlen\/(\d+)$/, (id) => freiWahlView(id, 'fehler')],
+    [/^\/fehler\/([\d-]+)$/,      (ids) => freiView(ids, null, 'fehler')],
     [/^\/konto$/,                 profileView],
     // Dieselbe Seite, aber gleich beim Passwort: Der Lehrkraft-Bereich hat
     // dafuer einen eigenen Knopf, und "erst suchen, dann tippen" ist kein

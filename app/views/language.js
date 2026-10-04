@@ -140,6 +140,15 @@ export async function languageView(languageId) {
                 </span>
                 <span class="chev">&#8250;</span>
             </button>
+            <!-- Aus Fehlern lernen: dieselbe Auswahl, die schwächsten Aufgaben (frei.js). -->
+            <button class="row" data-go="/fehler/waehlen/${language.id}">
+                <span class="lead" aria-hidden="true">\u{1FA79}</span>
+                <span class="body">
+                    <span class="title">Aus Fehlern lernen</span>
+                    <span class="tiny muted">Was dir am schwersten fällt - bis es sitzt</span>
+                </span>
+                <span class="chev">&#8250;</span>
+            </button>
 
             <h2 class="section">Lerneinheiten</h2>
             ${rows}
