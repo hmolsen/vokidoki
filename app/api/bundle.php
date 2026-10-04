@@ -359,6 +359,8 @@ switch (action()) {
                     continue;
                 }
                 streak_verbuchen($uid, $tag, $richtig, false);
+                // Und in die Zahlen der Übung, aus der die Aufgabe kam (m).
+                record_practice($uid, $vocabId, (string) ($e['m'] ?? ''), $richtig);
                 $genommen++;
                 continue;
             }

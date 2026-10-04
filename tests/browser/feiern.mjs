@@ -247,7 +247,9 @@ export async function pruefe(f, aus, wurzel) {
         + "$u=(int)qv('SELECT id FROM users WHERE username=?',['" + f.kind + "']);"
         + "echo json_encode(["
         + " 'zeilen'=>(int)qv('SELECT COUNT(*) FROM progress WHERE user_id=?',[$u]),"
-        + " 'summe'=>(int)qv('SELECT COALESCE(SUM(streak+correct_count+wrong_count),0)"
+        + " 'summe'=>(int)qv('SELECT COALESCE(SUM(streak + (known_at IS NOT NULL)),0)"
+        + "                   FROM progress WHERE user_id=?',[$u]),"
+        + " 'antworten'=>(int)qv('SELECT COALESCE(SUM(correct_count+wrong_count),0)"
         + "                   FROM progress WHERE user_id=?',[$u]),"
         + " 'tag'=>(int)qv('SELECT COALESCE(correct,0) FROM learn_days"
         + "                 WHERE user_id=? AND `day`=CURDATE()',[$u])]);"));
@@ -445,10 +447,11 @@ export async function pruefe(f, aus, wurzel) {
         })()`);
         await schlafe(1500);
         const nachher = lernstand();
-        ok('Freies Üben rührt den Lernstand nicht an',
-           nachher.zeilen === vorher.zeilen && nachher.summe === vorher.summe,
-           'progress ' + vorher.zeilen + '->' + nachher.zeilen
-           + ', Summe ' + vorher.summe + '->' + nachher.summe);
+        ok('Freies Üben rührt Serie und "gekonnt" nicht an',
+           nachher.summe === vorher.summe, 'Summe ' + vorher.summe + '->' + nachher.summe);
+        // Richtig und falsch zählen aber mit (record_practice()) - 6 richtige, 1 falsche.
+        ok('Aber richtig und falsch zählen in den Zahlen der Vokabeln mit',
+           nachher.antworten === vorher.antworten + 7, vorher.antworten + ' -> ' + nachher.antworten);
         ok('Zählt aber für den Tag - und damit für die Serie',
            nachher.tag === vorher.tag + 6, vorher.tag + ' -> ' + nachher.tag);
 

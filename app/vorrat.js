@@ -1274,11 +1274,26 @@ export function freiHoerbar(unitIds) {
  * Der Server prüft an ihr, ob dieses Konto überhaupt antworten darf -
  * dieselbe Schranke wie bei jeder anderen Antwort.
  */
-export function freiMerken(vocabId, richtig) {
+export function freiMerken(vocabId, richtig, modus = '') {
     const tagGeschafft = serieVerbuchen(richtig, false);
+
+    /*
+     * Richtig und falsch zählen mit - in der Übung, aus der die Aufgabe kam
+     * (record_practice() auf dem Server). Die Serie "dreimal hintereinander"
+     * und "gekonnt" nicht: Hier wird wiederholt.
+     */
+    const v = vorratLaden();
+    if (v !== null && MODI.includes(modus)) {
+        const schl = `${vocabId}:${modus}`;
+        const p = v.stand.get(schl) ?? { v: Number(vocabId), m: modus, s: 0, c: 0, w: 0, k: 0 };
+        if (richtig) p.c += 1; else p.w += 1;
+        v.stand.set(schl, p);
+        sichern();
+    }
 
     warteschlangeAnhaengen({
         e: kennung(), k: 'frei', v: Number(vocabId), r: richtig ? 1 : 0, d: heute(),
+        m: MODI.includes(modus) ? modus : '',
     });
 
     return { tag_geschafft: tagGeschafft };

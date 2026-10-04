@@ -397,7 +397,7 @@ function zaehlen(vocabId, richtig) {
     }
 
     zaehlerNachziehen();
-    freiMerken(vocabId, richtig);
+    freiMerken(vocabId, richtig, runde.art);
     if (richtig) meilenstein();
 
     // Die nächste Aufgabe schon jetzt, noch im Tipp - siehe tastaturHalten().

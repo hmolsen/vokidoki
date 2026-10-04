@@ -154,6 +154,30 @@ function record_answer(
 }
 
 /**
+ * Eine Antwort aus dem Freien Üben mitzählen - nur richtig und falsch.
+ *
+ * Für die Zahlen je Vokabel und Übung (die Lerneinheit zeigt sie) zählt
+ * jede Antwort, auch die aus dem Freien Üben und aus "Aus Fehlern lernen".
+ * Die Serie "dreimal hintereinander" und "gekonnt" bleiben, wie sie sind:
+ * Dort wird wiederholt, nicht gelernt - so stand es schon, als das Freie
+ * Üben noch gar nichts zählte.
+ */
+function record_practice(int $userId, int $vocabId, string $mode, bool $correct): void
+{
+    if (!in_array($mode, MODES, true)) {
+        return;
+    }
+    q(
+        'INSERT INTO progress (user_id, vocab_id, mode, streak, correct_count, wrong_count, known_at, last_seen_at)
+         VALUES (?, ?, ?, 0, ?, ?, NULL, NOW())
+         ON DUPLICATE KEY UPDATE correct_count = correct_count + VALUES(correct_count),
+                                 wrong_count   = wrong_count + VALUES(wrong_count),
+                                 last_seen_at  = NOW()',
+        [$userId, $vocabId, $mode, $correct ? 1 : 0, $correct ? 0 : 1],
+    );
+}
+
+/**
  * Setzt den Lernstand einer Lerneinheit zurück - eine Übungsart oder alle.
  *
  * Ausdrücklich ohne Rücksicht auf die Freigabe, anders als alles darüber.

@@ -1466,9 +1466,6 @@ dialog.rueckfrage::backdrop { background: rgba(10, 14, 22, .45); }
     box-shadow: none;
 }
 .vocabdetail {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 8px 18px;
     margin-bottom: 10px;
     padding: 10px 16px 12px;
     border: 1px solid var(--border);
@@ -1478,19 +1475,15 @@ dialog.rueckfrage::backdrop { background: rgba(10, 14, 22, .45); }
     font-size: .9rem;
 }
 
-/* Je Übung: Zeichen und Name links, drei Punkte, Haken oder Strich rechts. */
-.mark {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    min-width: 0;
-}
+/* Je Übung richtig, falsch, Treffer - darunter alles zusammen (unit.js). */
+.vokzahlen { width: 100%; border-collapse: collapse; }
+.vokzahlen th, .vokzahlen td { padding: 3px 0; text-align: left; font-weight: 400; }
+.vokzahlen tr:first-child th { color: var(--text-soft); font-size: .75rem; }
+.vokzahlen .num { text-align: right; width: 4.2em; font-variant-numeric: tabular-nums; }
+.vokzahlen tr.aus { color: var(--text-soft); opacity: .6; }
+.vokzahlen tr.summe th, .vokzahlen tr.summe td { border-top: 1px solid var(--border); padding-top: 6px; font-weight: 700; }
 .mark-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .mark-icon { flex: none; width: 18px; text-align: center; }
-.mark-state { flex: none; display: flex; align-items: center; }
-.mark-done { color: var(--good); font-weight: 700; font-size: 1.05rem; }
-.mark-off  { color: var(--text-soft); opacity: .55; }
 
 /* ---------------------------------------------------------------- Aktualisierung */
 

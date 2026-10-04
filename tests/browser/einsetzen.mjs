@@ -259,6 +259,32 @@ export async function pruefe(f, aus, wurzel) {
            JSON.stringify(stand));
         ok('Und die richtigen Antworten zählen für die Serie',
            korrektHeute() === vorherKorrekt + 2, `${vorherKorrekt} -> ${korrektHeute()}`);
+
+        /*
+         * ---- Die Zahlen je Vokabel: In der Lerneinheit steht aufgeklappt je
+         * Übung richtig, falsch und Treffer, darunter zusammen - statt der
+         * drei Punkte, die der Ring schon zeigt.
+         */
+        await b.hash(`/unit/${einheit}`, 1200);
+        const zahlen = await b.js(`(() => {
+            let r = 0, f = 0, zusammenR = 0, zusammenF = 0;
+            for (const t of document.querySelectorAll('.vocabdetail table.vokzahlen')) {
+                for (const z of t.querySelectorAll('tr')) {
+                    const td = [...z.querySelectorAll('td')].map((c) => Number(c.textContent));
+                    if (z.textContent.includes('Einsetzen') && td.length === 3) { r += td[0]; f += td[1]; }
+                    if (z.classList.contains('summe')) { zusammenR += td[0]; zusammenF += td[1]; }
+                }
+            }
+            return { r, f, zusammenR, zusammenF, tabellen: document.querySelectorAll('.vocabdetail table.vokzahlen').length,
+                     punkte: document.querySelectorAll('.vocabdetail .dots').length,
+                     treffer: document.querySelector('.vocabdetail tr.summe td:last-child')?.textContent ?? '' };
+        })()`);
+        ok('Aufgeklappt stehen Zahlen statt Punkten - eine Tabelle je Vokabel',
+           zahlen.tabellen === 6 && zahlen.punkte === 0, JSON.stringify(zahlen));
+        ok('Je Übung richtig und falsch: beim Einsetzen 2 richtig, 1 falsch',
+           zahlen.r === 2 && zahlen.f === 1, JSON.stringify(zahlen));
+        ok('Und zusammen über alle Übungen, mit der Trefferquote',
+           zahlen.zusammenR === 2 && zahlen.zusammenF === 1 && /%|–/.test(zahlen.treffer), JSON.stringify(zahlen));
     } finally {
         b.schliessen();
         php(wurzel, `require 'lib/db.php'; q('DELETE FROM units WHERE id = ?', [${einheit}]);`);

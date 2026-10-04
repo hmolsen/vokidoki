@@ -10156,6 +10156,37 @@ ok('Und eine Quittung gibt es auch',
    'sonst zaehlte ein zweimal geschickter Stapel doppelt');
 
 /*
+ * Richtig und falsch zaehlen aber mit - in der Uebung, aus der die Aufgabe
+ * kam. Die Lerneinheit zeigt sie je Vokabel (unit.js, vokabelZahlen()).
+ * Serie und "gekonnt" bleiben, wie sie sind.
+ */
+$fzVokabel = (int) qv('SELECT v.id FROM vocab v JOIN units u ON u.id = v.unit_id
+                        WHERE v.unit_id = ? AND v.position < u.released_position LIMIT 1', [$unitId]);
+q("INSERT INTO progress (user_id, vocab_id, mode, streak, correct_count, wrong_count, known_at)
+   VALUES (?, ?, 'cloze', 2, 4, 1, NULL)
+   ON DUPLICATE KEY UPDATE streak = 2, correct_count = 4, wrong_count = 1, known_at = NULL",
+  [$userId, $fzVokabel]);
+$fzMarke = bin2hex(random_bytes(5));
+$fzEreignis = static fn (string $n, bool $r, string $m): array =>
+    ['e' => $fzMarke . $n, 'k' => 'frei', 'v' => $fzVokabel, 'r' => $r ? 1 : 0, 'd' => date('Y-m-d'), 'm' => $m];
+apiCall('bundle', 'push', ['ereignisse' => [
+    $fzEreignis('1', true, 'cloze'), $fzEreignis('2', false, 'cloze'), $fzEreignis('3', true, 'cloze'),
+    $fzEreignis('4', true, 'listen'), $fzEreignis('5', true, 'quatsch'),
+]]);
+$fz = q1("SELECT * FROM progress WHERE user_id = ? AND vocab_id = ? AND mode = 'cloze'", [$userId, $fzVokabel]);
+ok('Freies Ueben zaehlt richtig und falsch in seiner Uebung mit',
+   (int) $fz['correct_count'] === 6 && (int) $fz['wrong_count'] === 2, json_encode($fz));
+ok('Aber die Serie und "gekonnt" bleiben, wie sie waren',
+   (int) $fz['streak'] === 2 && $fz['known_at'] === null, json_encode($fz));
+ok('Eine Uebung ohne Lernstand bekommt einen - nur mit den Zahlen',
+   q1("SELECT streak, correct_count, known_at FROM progress WHERE user_id = ? AND vocab_id = ? AND mode = 'listen'",
+      [$userId, $fzVokabel]) === ['streak' => 0, 'correct_count' => 1, 'known_at' => null]);
+ok('Eine Uebung, die es nicht gibt, zaehlt nirgends',
+   (int) qv("SELECT COUNT(*) FROM progress WHERE user_id = ? AND vocab_id = ? AND mode = 'quatsch'",
+            [$userId, $fzVokabel]) === 0);
+q("DELETE FROM progress WHERE user_id = ? AND vocab_id = ? AND mode IN ('cloze', 'listen')", [$userId, $fzVokabel]);
+
+/*
  * Die Runde hat kein Ende - deshalb zieht sie auch nicht nur offene
  * Vokabeln. Ein Filter auf "noch nicht gekonnt" liesse sie leerlaufen.
  */

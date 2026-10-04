@@ -118,9 +118,7 @@ export async function unitView(unitId) {
                     ${uebungen.map((e) => ring(e, v.modes[e.mode])).join('')}
                 </span>
             </summary>
-            <div class="vocabdetail">
-                ${uebungen.map((e) => mark(e, v.modes[e.mode])).join('')}
-            </div>
+            <div class="vocabdetail">${vokabelZahlen(uebungen, v.modes)}</div>
         </details>
     `).join('');
 
@@ -474,39 +472,40 @@ function ring(exercise, info) {
 }
 
 /**
- * Der Stand einer Vokabel in einer Übungsart: Haken, drei Punkte oder Strich.
- * Steht in der aufgeklappten Zeile, mit dem Namen der Übung davor.
- * Der Strich heißt "noch kein Lückensatz" - etwa weil das Modell für diese
- * Vokabel keinen brauchbaren erzeugen konnte. Im Admin lässt sich nachtragen.
+ * Die Einzelheiten einer Vokabel: je Übung richtig, falsch und die
+ * Trefferquote, darunter alles zusammen.
+ *
+ * Hier standen drei Punkte je Übung - dasselbe, was der Ring darüber schon
+ * zeigt. Die Zahlen sagen, was der Ring nicht sagt: wie oft die Vokabel
+ * schon drankam, und wie sicher sie sitzt. Antworten aus dem Freien Üben
+ * zählen mit (freiMerken()).
  */
-function mark(exercise, info) {
-    // Symbol und Stand jeweils in einer Zelle fester Breite: Drei Punkte sind
-    // breiter als ein Haken, sonst tanzten die Symbole von Zeile zu Zeile.
-    const zelle = (inhalt, titel) => `
-        <span class="mark" title="${esc(titel)}">
-            <span class="mark-name"><span class="mark-icon">${exercise.icon}</span>
-                ${esc(exercise.title)}</span>
-            <span class="mark-state">${inhalt}</span>
-        </span>`;
+function vokabelZahlen(uebungen, modes) {
+    const quote = (r, f) => (r + f === 0 ? '–' : `${Math.round((r / (r + f)) * 100)}\u{202F}%`);
+    const zeile = (name, r, f, klasse = '') => `
+        <tr${klasse ? ` class="${klasse}"` : ''}>
+            <th scope="row">${name}</th>
+            <td class="num">${r}</td><td class="num">${f}</td><td class="num">${quote(r, f)}</td>
+        </tr>`;
 
-    if (!info.possible) {
-        return zelle('<span class="mark-off">&ndash;</span>',
-            `${exercise.title}: noch kein Lückensatz`);
-    }
+    let r = 0;
+    let f = 0;
+    const zeilen = uebungen.map((e) => {
+        const info = modes[e.mode];
+        const name = `<span class="mark-name"><span class="mark-icon">${e.icon}</span>${esc(e.title)}</span>`;
+        // Der Strich heißt "noch kein Lückensatz" - dort kann die Vokabel nicht drankommen.
+        if (!info.possible) {
+            return `<tr class="aus"><th scope="row">${name}</th><td class="num" colspan="3">&ndash;</td></tr>`;
+        }
+        r += info.correct;
+        f += info.wrong;
+        return zeile(name, info.correct, info.wrong);
+    }).join('');
 
-    if (info.known) {
-        return zelle('<span class="mark-done">\u{2713}</span>',
-            `${exercise.title}: gekonnt`);
-    }
-
-    return zelle(dots(info.streak),
-        `${exercise.title}: ${Math.min(3, info.streak)} von 3 hintereinander`);
-}
-
-/** Drei Punkte zeigen, wie oft die Vokabel schon hintereinander saß. */
-function dots(streak) {
-    const filled = Math.min(3, Math.max(0, streak));
-    return `<span class="dots">${
-        [0, 1, 2].map((i) => `<i class="${i < filled ? 'on' : ''}"></i>`).join('')
-    }</span>`;
+    return `
+        <table class="vokzahlen">
+            <tr><th></th><th class="num">richtig</th><th class="num">falsch</th><th class="num">Treffer</th></tr>
+            ${zeilen}
+            ${zeile('Zusammen', r, f, 'summe')}
+        </table>`;
 }

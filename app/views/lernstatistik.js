@@ -137,8 +137,9 @@ function zahlenHtml(st) {
                 ${ueb}
             </table>
             <p class="tiny muted" style="margin:10px 0 0">
-                „Gekonnt" heißt: dreimal hintereinander richtig. Das Freie Üben zählt
-                für die Serie, aber nicht hier - dort wird nur wiederholt.
+                „Gekonnt" heißt: dreimal hintereinander richtig. Antworten aus dem
+                Freien Üben zählen bei richtig und Treffer mit, aber nicht für „gekonnt" -
+                dort wird wiederholt.
             </p>
         </div>
 
