@@ -140,9 +140,13 @@ mitgeliefert.
 ## Dienste
 
 * **Anthropic PBC** — die Programmierschnittstelle, die den auf dem Gerät
-  erkannten Text zu Vokabeln ordnet und Lückensätze erzeugt. Fotos erhält
-  sie nicht. Was dabei übermittelt wird und was nicht, steht in der
-  Datenschutzerklärung.
+  erkannten Text zu Vokabeln ordnet, Lückensätze erzeugt und Wortarten
+  zuordnet. Fotos erhält sie nicht. Was dabei übermittelt wird und was
+  nicht, steht in der Datenschutzerklärung.
+* **Microsoft Azure AI Speech** — die Stimmen, die die Sätze fürs „Hören“
+  und die Vokabeln beim „Auswählen“ vorlesen. Gesprochen wird einmal, die
+  Tondateien liegen danach auf diesem Server. Übermittelt wird nur der
+  Text; Einzelheiten in der Datenschutzerklärung.
 * **ALL-INKL.COM** — der Betrieb des Servers. Serverstandort Deutschland,
   mit Vertrag zur Auftragsverarbeitung.
 
