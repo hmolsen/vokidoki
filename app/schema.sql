@@ -168,6 +168,8 @@ CREATE TABLE IF NOT EXISTS schools (
   monthly_cost_cap_usd DECIMAL(10,2) NULL,
   -- Das Kuerzel zum Anmelden ("opsk") - siehe lib/schulkuerzel.php.
   kuerzel    VARCHAR(12) NULL,
+  -- So viele Lehrkraefte darf die Schule haben - siehe lib/lehrkraefte.php.
+  max_lehrkraefte SMALLINT UNSIGNED NOT NULL DEFAULT 50,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_school_name (name),
   UNIQUE KEY uq_school_kuerzel (kuerzel)

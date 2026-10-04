@@ -18,6 +18,7 @@ require_once __DIR__ . '/../lib/throttle.php';
 require_once __DIR__ . '/../lib/courses.php';
 require_once __DIR__ . '/../lib/meldungen.php';
 require_once __DIR__ . '/../lib/letter.php';
+require_once __DIR__ . '/../lib/lehrkraefte.php';
 require_once __DIR__ . '/../lib/passwords.php';
 require_once __DIR__ . '/../lib/tts.php';
 require_once __DIR__ . '/../lib/schulkuerzel.php';

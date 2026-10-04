@@ -94,6 +94,64 @@ function letter_default(): string
     ]);
 }
 
+/**
+ * Der Zettel für eine neue Lehrkraft - in der Fassung, mit der eine frische
+ * Installation anfängt.
+ *
+ * Anders als der für die Kinder pflegt ihn nur der Betreiber
+ * (Einstellungen), nicht die Lehrkräfte selbst: Er erklärt, dass Kolleginnen
+ * einander das Passwort neu setzen können - der Grund, warum Vokidoki ohne
+ * E-Mail-Adressen auskommt -, und das soll an jeder Schule gleich lauten.
+ */
+function letter_lehrkraft_default(): string
+{
+    return implode("\n", [
+        'Liebe Kollegin, lieber Kollege,',
+        '',
+        'für Sie ist ein Konto bei Vokidoki angelegt. Damit stellen Sie Vokabeln für Ihre Klassen zusammen, '
+            . 'geben sie frei und legen Konten für die Kinder an.',
+        '',
+        'So kommen Sie hinein:',
+        '',
+        '1. Den Code oben mit dem Handy abfotografieren - dann stehen Schulkürzel und Benutzername schon da. '
+            . 'Oder am Rechner {url} aufrufen.',
+        '2. Als Schulkürzel {kuerzel} eingeben.',
+        '3. Als Benutzername {benutzername} eingeben.',
+        '4. Als Passwort {passwort} eingeben.',
+        '',
+        'Gleich danach: unter "Mein Konto" ein eigenes Passwort wählen. Bitte ein starkes - mindestens '
+            . '10 Zeichen, am besten ein ganzer Satz.',
+        '',
+        'Als App auf dem Handy: Im Browser die Seite öffnen, angemeldet bleiben und "Zum Home-Bildschirm" '
+            . 'wählen (iPhone: Teilen-Knopf, Android: Menü mit den drei Punkten). Dann öffnet sich Vokidoki '
+            . 'wie eine App, und Sie fotografieren Vokabellisten direkt mit der Kamera.',
+        '',
+        'Wichtig: Vokidoki kennt keine E-Mail-Adressen. Vergessen Sie Ihr Passwort, gibt Ihnen eine Kollegin '
+            . 'oder ein Kollege unter "Lehrkräfte" ein neues. Genau deshalb kann das jede Lehrkraft Ihrer '
+            . 'Schule - und deshalb sollte Ihr Passwort niemand erraten können.',
+        '',
+        'Fragen beantwortet support@vokidoki.de.',
+    ]);
+}
+
+/** Die Platzhalter des Zettels für Lehrkräfte - alle ausser der Klasse. */
+function letter_lehrkraft_placeholders(): array
+{
+    $p = letter_placeholders();
+    unset($p['klasse']);
+    $p['name']         = 'Der Name der Lehrkraft, etwa "Frau Müller"';
+    $p['benutzername'] = 'Ihr Benutzername, etwa "mue"';
+    $p['url']          = 'Die Adresse des Lehrkraft-Bereichs';
+    return $p;
+}
+
+/** Die Fassung, die gilt: die des Betreibers, sonst die Voreinstellung. */
+function letter_lehrkraft(): string
+{
+    $eigene = setting('teacher_letter_template', '');
+    return trim($eigene) === '' ? letter_lehrkraft_default() : $eigene;
+}
+
 /** Die Vorlage des Betreibers - die Voreinstellung für jede Lehrkraft. */
 function letter_standard(): string
 {

@@ -166,9 +166,9 @@ teacher_flash_render();
 
     <button class="btn secondary" name="change_password" value="1">Passwort ändern</button>
     <p class="tiny muted">
-        Mindestens sechs Zeichen. Wenn du es vergisst, kann dir nur der
-        Betreiber ein neues geben &ndash; anders als bei den Kindern, denen
-        du selbst eines geben kannst.
+        Mindestens zehn Zeichen, am besten ein ganzer Satz. Wenn du es
+        vergisst, gibt dir eine Kollegin unter &bdquo;Lehrkräfte&ldquo; ein
+        neues &ndash; deshalb darf es niemand erraten können.
     </p>
 </form>
 

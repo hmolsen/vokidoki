@@ -56,6 +56,27 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         redirect('settings.php');
     }
 
+    /*
+     * Der Zettel für neue Lehrkräfte (lib/letter.php, letter_lehrkraft()).
+     * Ihn ändert nur der Betreiber: Er erklärt, dass Kolleginnen einander das
+     * Passwort neu setzen - das soll an jeder Schule gleich lauten.
+     */
+    if (isset($_POST['save_teacher_letter'])) {
+        $text = str_replace("\r\n", "\n", (string) ($_POST['teacher_letter_template'] ?? ''));
+        if (trim($text) === '' || trim($text) === trim(letter_lehrkraft_default())) {
+            setting_set('teacher_letter_template', '');
+            flash('Zettel für Lehrkräfte: es gilt die Standardfassung.');
+            redirect('settings.php#lehrkraftzettel');
+        }
+        setting_set('teacher_letter_template', $text);
+        $fehlend = array_values(array_diff(letter_missing_placeholders($text), ['{name}']));
+        flash($fehlend === []
+            ? 'Zettel für Lehrkräfte gespeichert.'
+            : 'Zettel für Lehrkräfte gespeichert - ohne ' . implode(' und ', $fehlend)
+              . '. Das ist erlaubt, aber bitte einmal Probe drucken.');
+        redirect('settings.php#lehrkraftzettel');
+    }
+
     if (isset($_POST['save_words'])) {
         $art = (string) ($_POST['word_kind'] ?? '');
         if (!in_array($art, [PW_ADJECTIVE, PW_ANIMAL], true)) {
@@ -386,6 +407,28 @@ flash_render();
         <br><br>Leeren und speichern stellt die Standardfassung wieder her.
     </p>
     <button class="btn small" name="save_letter" value="1">Speichern</button>
+</form>
+
+<h2 id="lehrkraftzettel">Zettel für neue Lehrkräfte</h2>
+<form method="post" class="card">
+    <?= csrf_field() ?>
+    <p class="tiny muted" style="margin-top:0">
+        Diesen Zettel druckt eine Lehrkraft, wenn sie unter <em>Lehrkräfte</em> eine Kollegin
+        anlegt oder ihr ein neues Passwort gibt. Anders als den für die Kinder können die
+        Lehrkräfte ihn nicht selbst ändern.
+    </p>
+    <label for="lkletter">Text des Zettels</label>
+    <textarea id="lkletter" name="teacher_letter_template" rows="18"
+              style="width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.9rem"
+    ><?= h(letter_lehrkraft()) ?></textarea>
+    <p class="tiny muted">
+        Reiner Text. Diese Platzhalter werden ersetzt:
+        <?php foreach (letter_lehrkraft_placeholders() as $p => $was): ?>
+            <br><code class="token">{<?= h($p) ?>}</code> &ndash; <?= h($was) ?>
+        <?php endforeach; ?>
+        <br><br>Leeren und speichern stellt die Standardfassung wieder her.
+    </p>
+    <button class="btn small" name="save_teacher_letter" value="1">Speichern</button>
 </form>
 
 <h2>Wörter für die Anfangspasswörter</h2>

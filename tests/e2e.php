@@ -192,6 +192,9 @@ section('Testaccount vorbereiten');
 
 require_once __DIR__ . '/../app/lib/courses.php';
 require_once __DIR__ . '/../app/lib/schulkuerzel.php';
+require_once __DIR__ . '/../app/lib/lehrkraefte.php';
+require_once __DIR__ . '/../app/lib/profile.php';
+require_once __DIR__ . '/../app/lib/letter.php';
 require_once __DIR__ . '/../app/lib/access.php';
 require_once __DIR__ . '/../app/lib/vocab.php';
 
@@ -8210,7 +8213,7 @@ $res = teacherRequest($base . '/teacher/konto.php', [
 ]);
 ok('Und ein zu kurzes neues auch nicht',
    (string) qv('SELECT password_hash FROM users WHERE id = ?', [$lehrerId]) === $vorherHash
-   && str_contains($res['body'], 'mindestens 6 Zeichen'));
+   && str_contains($res['body'], 'mindestens 10 Zeichen'));
 
 $res = teacherRequest($base . '/teacher/konto.php', [
     'change_password' => '1', 'current' => 'lehrerin123',
@@ -11202,6 +11205,222 @@ q('DELETE FROM users WHERE id IN (?, ?, ?, ?)',
 q('DELETE FROM classes WHERE id = ?', [$ewKlasseId]);
 @unlink($ewJar);
 @unlink($ewLehrJar);
+
+section('Lehrkräfte legen Lehrkräfte an');
+
+/*
+ * Lehrkräfte legen einander an und geben einander ein neues Passwort - ohne
+ * E-Mail-Adressen, nur in einer erhöhten Sitzung von fünf Minuten
+ * (lib/lehrkraefte.php). Wie viele es höchstens sein dürfen, legt der Admin
+ * je Schule fest.
+ */
+$lkKz = 'lk' . bin2hex(random_bytes(3));
+adminPost('schools.php', ['create' => '1', 'name' => 'E2E Schule ' . $lkKz, 'kuerzel' => $lkKz]);
+$lkSchule = (int) (qv('SELECT id FROM schools WHERE kuerzel = ?', [$lkKz]) ?? 0);
+ok('Eine neue Schule darf ohne Angabe 50 Lehrkräfte haben',
+   $lkSchule > 0 && lehrkraefte_grenze($lkSchule) === 50);
+$lkAdmin = http($base . '/admin/schools.php')['body'];
+ok('Das Anlegeformular fragt nach der Höchstzahl, voreingestellt 50',
+   preg_match('~name="max_lehrkraefte"[^>]*value="50"~', $lkAdmin) === 1);
+adminPost('schools.php', ['update' => '1', 'id' => $lkSchule, 'name' => 'E2E Schule ' . $lkKz,
+    'kuerzel' => $lkKz, 'cap' => '', 'active' => '1', 'max_lehrkraefte' => '3']);
+ok('Der Admin ändert die Höchstzahl', lehrkraefte_grenze($lkSchule) === 3);
+ok('Und sieht, wie viele es schon sind',
+   str_contains(http($base . '/admin/schools.php')['body'], 'von höchstens 3 Lehrkräften'));
+
+// Drei Lehrkräfte: Anna verwaltet, Bert wird gelöscht, Carla teilt einen Kurs mit ihm.
+$lkKonto = static function (string $name, string $anzeige) use ($lkSchule): array {
+    q("INSERT INTO users (school_id, username, display_name, role, password_hash, color, can_import)
+       VALUES (?, ?, ?, 'teacher', ?, '#4f7cff', 1)",
+      [$lkSchule, $name, $anzeige, password_hash('ein-langes-passwort', PASSWORD_DEFAULT)]);
+    $id = (int) db()->lastInsertId();
+    zugestimmt($id);
+    return q1('SELECT * FROM users WHERE id = ?', [$id]);
+};
+$lkAnna  = $lkKonto('ann', 'Frau Anna');
+$lkBert  = $lkKonto('ber', 'Herr Bert');
+
+$lkJar = tempnam(sys_get_temp_dir(), 'vtlk');
+/** Ein Aufruf mit Annas Sitzung: [Inhalt, Adresse am Ende]. */
+$lkHole = static function (string $pfad, ?array $post = null) use ($lkJar, $base): array {
+    $ch = curl_init($base . '/teacher/' . $pfad);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_TIMEOUT => 30,
+        CURLOPT_COOKIEJAR => $lkJar, CURLOPT_COOKIEFILE => $lkJar,
+    ]);
+    if ($post !== null) {
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post));
+    }
+    $body = (string) curl_exec($ch);
+    $wo   = (string) curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+    curl_close($ch);
+    return [$body, $wo];
+};
+[$s] = $lkHole('');
+[$s] = $lkHole('index.php', ['teacher_login' => '1', 'school' => $lkKz, 'username' => 'ann',
+    'password' => 'ein-langes-passwort', 'csrf' => csrfFrom($s)]);
+ok('Im Menü steht "Lehrkräfte" unter einem eigenen Strich',
+   preg_match('~<hr class="mtrenner">\s*<a[^>]*href="[^"]*lehrkraefte\.php"[^>]*>.*?Lehrkräfte~s', $s) === 1);
+ok('Ohne Verwaltungssitzung kein gelbes Band', !str_contains($s, 'class="erhoeht"'));
+
+// ---- Die Hürde.
+[$lk] = $lkHole('lehrkraefte.php');
+ok('Die Seite fragt zuerst nach dem eigenen Passwort',
+   str_contains($lk, 'name="erhoehen"') && !str_contains($lk, 'id="lehrkraefte"'));
+
+// Ohne erhöhte Sitzung bleibt jeder Handgriff verschlossen - auch direkt geschickt.
+$lkHole('lehrkraefte.php', ['add_teacher' => '1', 'display_name' => 'Frau Heimlich',
+    'username' => 'hei', 'csrf' => csrfFrom($lk)]);
+ok('Ohne Verwaltungssitzung legt niemand eine Lehrkraft an',
+   qv('SELECT id FROM users WHERE school_id = ? AND username = ?', [$lkSchule, 'hei']) === null);
+[$lkDr] = $lkHole('print.php?lehrkraefte=1');
+ok('Und druckt keine Zettel für Lehrkräfte', !str_contains($lkDr, 'class="blatt"'));
+
+[$lk] = $lkHole('lehrkraefte.php', ['erhoehen' => '1', 'password' => 'falsch', 'csrf' => csrfFrom($lk)]);
+ok('Ein falsches Passwort öffnet nichts',
+   str_contains($lk, 'stimmt nicht') && !str_contains($lk, 'id="lehrkraefte"'));
+[$lk] = $lkHole('lehrkraefte.php', ['erhoehen' => '1', 'password' => 'ein-langes-passwort',
+    'csrf' => csrfFrom($lk)]);
+ok('Mit dem richtigen Passwort erscheint die Liste', str_contains($lk, 'id="lehrkraefte"'));
+ok('Und oben das gelbe Band mit der Uhr',
+   preg_match('~class="erhoeht" id="erhoeht" role="status" data-rest="(\d+)"~', $lk, $lkRest) === 1
+   && (int) $lkRest[1] > 290 && (int) $lkRest[1] <= ERHOEHT_SEKUNDEN
+   && preg_match('~class="erhoeht-uhr">[45]:\d\d<~', $lk) === 1 && str_contains($lk, 'name="erhoeht_verlaengern"')
+   && str_contains($lk, 'name="erhoeht_beenden"'));
+ok('Auf der Lehrkräfte-Seite führt das Ende nach Hause',
+   preg_match('~id="erhoeht"[^>]*data-zuhause="[^"]*index\.php"~', $lk) === 1);
+[$lkStart] = $lkHole('index.php');
+ok('Das Band steht auf jeder Seite, dort ohne Weg nach Hause',
+   str_contains($lkStart, 'id="erhoeht"') && !str_contains($lkStart, 'data-zuhause'));
+ok('Die eigene Zeile hat weder neues Passwort noch Löschen',
+   preg_match('~data-lehrkraft="' . (int) $lkAnna['id'] . '">.*?</tr>~s', $lk, $lkZeile) === 1
+   && !str_contains($lkZeile[0], 'reset_password') && !str_contains($lkZeile[0], 'delete_teacher'));
+ok('Als Benutzername wird das Kürzel vorgeschlagen', str_contains($lk, 'Kürzel als Benutzername'));
+
+// ---- Anlegen.
+[$lk] = $lkHole('lehrkraefte.php', ['add_teacher' => '1', 'display_name' => 'Frau Carla',
+    'username' => 'Car', 'csrf' => csrfFrom($lk)]);
+$lkCarla = q1('SELECT * FROM users WHERE school_id = ? AND username = ?', [$lkSchule, 'car']);
+ok('Eine Lehrkraft legt eine Kollegin an', $lkCarla !== null && $lkCarla['role'] === 'teacher'
+   && (int) $lkCarla['can_import'] === 1);
+ok('Mit Anfangspasswort, das gleich zu sehen ist',
+   (string) ($lkCarla['initial_password'] ?? '') !== '' && str_contains($lk, (string) $lkCarla['initial_password']));
+ok('Und einem Zettel zum Drucken', str_contains($lk, 'print.php?lehrkraefte=1&amp;user=' . (int) $lkCarla['id']));
+
+[$lk] = $lkHole('lehrkraefte.php', ['add_teacher' => '1', 'display_name' => 'Noch eine Anna',
+    'username' => 'ann', 'csrf' => csrfFrom($lk)]);
+ok('Ein Benutzername gibt es an einer Schule nur einmal',
+   (int) qv('SELECT COUNT(*) FROM users WHERE school_id = ? AND username = ?', [$lkSchule, 'ann']) === 1);
+ok('Jetzt ist die Grenze erreicht - kein Anlegen mehr',
+   str_contains($lk, 'mehr sind nicht vorgesehen') && !str_contains($lk, 'name="add_teacher"'));
+$lkHole('lehrkraefte.php', ['add_teacher' => '1', 'display_name' => 'Frau Vier',
+    'username' => 'vie', 'csrf' => csrfFrom($lk)]);
+ok('Auch direkt geschickt nicht über die Grenze', lehrkraefte_anzahl($lkSchule) === 3);
+
+// ---- Der Zettel für Lehrkräfte.
+[$lkDr] = $lkHole('print.php?lehrkraefte=1&user=' . (int) $lkCarla['id']);
+ok('Der Zettel für Lehrkräfte trägt Kürzel, Benutzername und Passwort',
+   substr_count($lkDr, 'class="blatt"') === 1 && str_contains($lkDr, 'Ihr Zugang zu Vokidoki')
+   && str_contains($lkDr, $lkKz) && str_contains($lkDr, (string) $lkCarla['initial_password']));
+ok('Und erklärt, warum das Passwort stark sein muss',
+   str_contains($lkDr, 'keine E-Mail-Adressen') && str_contains($lkDr, 'Home-Bildschirm'));
+ok('Er führt in den Lehrkraft-Bereich, nicht in die App',
+   str_contains($lkDr, '/teacher/') && !str_contains($lkDr, 'Text anpassen'));
+
+// Den Text pflegt der Betreiber, nicht die Lehrkraft.
+$lkSet = http($base . '/admin/settings.php')['body'];
+ok('In den Einstellungen steht der Zettel für Lehrkräfte',
+   str_contains($lkSet, 'name="teacher_letter_template"') && str_contains($lkSet, 'keine E-Mail-Adressen'));
+adminPost('settings.php', ['save_teacher_letter' => '1',
+    'teacher_letter_template' => "LEHRKRAFTVORLAGE {name}: {kuerzel} / {benutzername} / {passwort}"]);
+[$lkDr] = $lkHole('print.php?lehrkraefte=1&user=' . (int) $lkCarla['id']);
+ok('Der Betreiber ändert den Text, der Zettel folgt',
+   str_contains($lkDr, 'LEHRKRAFTVORLAGE Frau Carla: ' . $lkKz . ' / car / '));
+adminPost('settings.php', ['save_teacher_letter' => '1', 'teacher_letter_template' => '']);
+ok('Leer gespeichert gilt wieder die Standardfassung', letter_lehrkraft() === letter_lehrkraft_default());
+
+// ---- Neues Passwort.
+$lkAltesPw = (string) $lkCarla['initial_password'];
+q('UPDATE users SET initial_password = NULL WHERE id = ?', [(int) $lkCarla['id']]);
+[$lk] = $lkHole('lehrkraefte.php', ['reset_password' => (int) $lkCarla['id'], 'csrf' => csrfFrom($lk)]);
+$lkNeuesPw = (string) qv('SELECT initial_password FROM users WHERE id = ?', [(int) $lkCarla['id']]);
+ok('Eine Kollegin bekommt ein neues Passwort', $lkNeuesPw !== '' && $lkNeuesPw !== $lkAltesPw
+   && str_contains($lk, $lkNeuesPw));
+$lkHole('lehrkraefte.php', ['reset_password' => (int) $lkAnna['id'], 'csrf' => csrfFrom($lk)]);
+ok('Das eigene Passwort lässt sich hier nicht zurücksetzen',
+   password_verify('ein-langes-passwort', (string) qv('SELECT password_hash FROM users WHERE id = ?',
+                                                     [(int) $lkAnna['id']])));
+$lkFremd = (string) qv('SELECT password_hash FROM users WHERE id = ?', [$lehrerId]);
+$lkHole('lehrkraefte.php', ['reset_password' => $lehrerId, 'csrf' => csrfFrom($lk)]);
+ok('Und keines an einer anderen Schule',
+   (string) qv('SELECT password_hash FROM users WHERE id = ?', [$lehrerId]) === $lkFremd);
+
+// ---- Löschen: Bert hat einen Kurs mit Carla und einen allein.
+$lkGeteilt = course_create($lkBert, 'Lkisch', '', null, 'Geteilt');
+$lkAllein  = course_create($lkBert, 'Lkisch', '', null, 'Allein');
+course_add_member((int) $lkGeteilt['id'], (int) $lkCarla['id'], COURSE_ROLE_TEACHER);
+[$lk] = $lkHole('lehrkraefte.php');
+ok('Die Rückfrage beim Löschen nennt beide Zahlen',
+   preg_match('~name="delete_teacher" value="' . (int) $lkBert['id'] . '"[^>]*data-confirm="([^"]*)"~', $lk, $lkFrage) === 1
+   && str_contains($lkFrage[1], 'nicht rückgängig')
+   && str_contains($lkFrage[1], '1 Kurs mit weiteren Lehrkräften')
+   && str_contains($lkFrage[1], '1 Kurs allein, die du dann automatisch übernimmst'),
+   $lkFrage[1] ?? '');
+[$lk] = $lkHole('lehrkraefte.php', ['delete_teacher' => (int) $lkBert['id'], 'csrf' => csrfFrom($lk)]);
+ok('Die Lehrkraft ist gelöscht', q1('SELECT id FROM users WHERE id = ?', [(int) $lkBert['id']]) === null);
+$lkLehrer = static fn (int $kurs): array => array_map('intval', array_column(qa(
+    "SELECT user_id FROM course_members WHERE course_id = ? AND member_role = 'teacher' ORDER BY user_id",
+    [$kurs]), 'user_id'));
+ok('Den Kurs, den sie allein hatte, führt jetzt die Löschende',
+   $lkLehrer((int) $lkAllein['id']) === [(int) $lkAnna['id']]);
+ok('Aus dem geteilten ist sie nur herausgenommen',
+   $lkLehrer((int) $lkGeteilt['id']) === [(int) $lkCarla['id']]);
+ok('Und die Meldung sagt es', str_contains($lk, 'Du führst jetzt 1 Kurs'));
+
+// ---- Verlängern, beenden, ablaufen.
+[$lk] = $lkHole('index.php', ['erhoeht_beenden' => '1', 'csrf' => csrfFrom($lk)]);
+ok('Beenden nimmt das Band weg', !str_contains($lk, 'id="erhoeht"'));
+[$lk, $lkWo] = $lkHole('lehrkraefte.php', ['erhoeht_beenden' => '1', 'csrf' => csrfFrom($lk)]);
+[$lk] = $lkHole('lehrkraefte.php');
+ok('Danach fragt die Seite wieder nach dem Passwort', str_contains($lk, 'name="erhoehen"'));
+[$lk] = $lkHole('lehrkraefte.php', ['erhoehen' => '1', 'password' => 'ein-langes-passwort', 'csrf' => csrfFrom($lk)]);
+
+/*
+ * Ablaufen lassen, ohne fünf Minuten zu warten: Die Sitzungsdatei liegt unter
+ * storage/sessions, und darin steht, bis wann die erhöhte Sitzung gilt.
+ */
+preg_match('~\tvtsess\t(\S+)~', (string) file_get_contents($lkJar), $lkSid);
+$lkDatei = storage_path('sessions') . '/sess_' . ($lkSid[1] ?? 'fehlt');
+$lkStellen = static function (int $bis) use ($lkDatei): void {
+    file_put_contents($lkDatei, preg_replace('~(s:3:"bis";i:)\d+~', '${1}' . $bis,
+                                             (string) file_get_contents($lkDatei)));
+};
+ok('Die Sitzung trägt ihr Ende', str_contains((string) @file_get_contents($lkDatei), 's:3:"bis";i:'));
+$lkStellen(time() + 20);
+[$lk] = $lkHole('index.php', ['erhoeht_verlaengern' => '1', 'csrf' => csrfFrom($lk)]);
+ok('Verlängern stellt die Uhr wieder auf fünf Minuten',
+   preg_match('~data-rest="(\d+)"~', $lk, $lkRest) === 1 && (int) $lkRest[1] > 290);
+$lkStellen(time() - 1);
+[$lk] = $lkHole('lehrkraefte.php');
+ok('Abgelaufen ist die Liste wieder verschlossen',
+   !str_contains($lk, 'id="lehrkraefte"') && !str_contains($lk, 'id="erhoeht"'));
+$lkHole('lehrkraefte.php', ['delete_teacher' => (int) $lkCarla['id'], 'csrf' => csrfFrom($lk)]);
+ok('Und nach dem Ablauf löscht niemand mehr',
+   q1('SELECT id FROM users WHERE id = ?', [(int) $lkCarla['id']]) !== null);
+[$lk] = $lkHole('index.php', ['erhoeht_verlaengern' => '1', 'csrf' => csrfFrom($lk)]);
+ok('Eine abgelaufene Sitzung lässt sich nicht verlängern', !str_contains($lk, 'id="erhoeht"'));
+
+// ---- Ein starkes Passwort für Lehrkräfte.
+ok('Lehrkräfte brauchen mindestens zehn Zeichen',
+   profile_change_password(q1('SELECT * FROM users WHERE id = ?', [(int) $lkAnna['id']]),
+                           'ein-langes-passwort', 'kurz12345') === 'Das neue Passwort braucht mindestens 10 Zeichen.');
+
+// Aufräumen.
+q('DELETE FROM languages WHERE school_id = ?', [$lkSchule]);
+q('DELETE FROM users WHERE school_id = ?', [$lkSchule]);
+q('DELETE FROM schools WHERE id = ?', [$lkSchule]);
+@unlink($lkJar);
 
 section('Abmelden und Token-Widerruf');
 

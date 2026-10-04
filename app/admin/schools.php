@@ -36,7 +36,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         } elseif (($grund = schulkuerzel_pruefen($kuerzel)) !== null) {
             flash($grund, 'bad');
         } else {
-            q('INSERT INTO schools (name, kuerzel) VALUES (?, ?)', [$name, $kuerzel]);
+            // Wie viele Lehrkräfte sie haben darf - Lehrkräfte legen einander an (lib/lehrkraefte.php).
+            $grenze = max(1, min(1000, (int) ($_POST['max_lehrkraefte'] ?? LEHRKRAEFTE_VOREINSTELLUNG)));
+            q('INSERT INTO schools (name, kuerzel, max_lehrkraefte) VALUES (?, ?, ?)', [$name, $kuerzel, $grenze]);
             flash('Schule "' . $name . '" mit dem Kürzel "' . $kuerzel . '" angelegt.');
         }
         redirect('schools.php');
@@ -69,11 +71,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
              * Betreibers greifen, 0.00 wuerde die Schule sofort aussperren.
              */
             q(
-                'UPDATE schools SET name = ?, active = ?, monthly_cost_cap_usd = ? WHERE id = ?',
+                'UPDATE schools SET name = ?, active = ?, monthly_cost_cap_usd = ?, max_lehrkraefte = ? WHERE id = ?',
                 [
                     mb_substr($name, 0, 128),
                     isset($_POST['active']) ? 1 : 0,
                     $cap === '' ? null : number_format((float) str_replace(',', '.', $cap), 2, '.', ''),
+                    max(1, min(1000, (int) ($_POST['max_lehrkraefte'] ?? LEHRKRAEFTE_VOREINSTELLUNG))),
                     $id,
                 ],
             );
@@ -157,6 +160,11 @@ flash_render();
            title="2 bis 12 Kleinbuchstaben oder Ziffern">
     <p class="tiny muted" style="margin:-4px 0 10px">Kinder und Lehrkräfte tippen es bei der
         Anmeldung ein; es steht auf jedem Zettel.</p>
+    <label for="maxlk">Höchstens so viele Lehrkräfte</label>
+    <input type="number" id="maxlk" name="max_lehrkraefte" min="1" max="1000"
+           value="<?= LEHRKRAEFTE_VOREINSTELLUNG ?>" style="width:120px">
+    <p class="tiny muted" style="margin:-4px 0 10px">Lehrkräfte legen einander selbst an
+        (&bdquo;Lehrkräfte&ldquo; im Menü) &ndash; bis zu dieser Zahl.</p>
     <button class="btn small" name="create" value="1">Schule anlegen</button>
 </form>
 
@@ -169,7 +177,7 @@ flash_render();
             <?= h($s['name']) ?>
             <span class="muted" style="font-weight:400">
                 &middot; <?= (int) $s['konten'] ?> Konten
-                (<?= (int) $s['lehrkraefte'] ?> Lehrkräfte)
+                (<?= (int) $s['lehrkraefte'] ?> von höchstens <?= (int) $s['max_lehrkraefte'] ?> Lehrkräften)
                 &middot; <?= (int) $s['klassen'] ?> Klassen
                 &middot; <?= (int) $s['kurse'] ?> Kurse
                 &middot; <?= $eur((float) $s['kosten']) ?> diesen Monat
@@ -190,6 +198,9 @@ flash_render();
                               ? '' : h((string) (float) $s['monthly_cost_cap_usd']) ?>"
                    placeholder="Limit USD" title="Monatslimit dieser Schule in USD. Leer = kein eigenes Limit."
                    style="width:110px;margin:0">
+            <input type="number" name="max_lehrkraefte" min="1" max="1000"
+                   value="<?= (int) $s['max_lehrkraefte'] ?>" title="Höchstens so viele Lehrkräfte"
+                   style="width:90px;margin:0">
             <label style="display:flex;align-items:center;gap:6px;margin:0;font-weight:500">
                 <input type="checkbox" name="active" value="1"<?= $s['active'] ? ' checked' : '' ?>
                        style="width:auto;min-height:auto;margin:0"> aktiv

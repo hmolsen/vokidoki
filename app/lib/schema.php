@@ -202,6 +202,11 @@ SQL,
                ADD UNIQUE KEY uq_users_school_username (school_id, username),
                DROP INDEX uq_users_username',
         ],
+        // Wie viele Lehrkräfte eine Schule haben darf - siehe lib/lehrkraefte.php.
+        'schools.max_lehrkraefte' => [
+            static fn (): bool => !column_exists('schools', 'max_lehrkraefte'),
+            'ALTER TABLE schools ADD COLUMN max_lehrkraefte SMALLINT UNSIGNED NOT NULL DEFAULT 50 AFTER kuerzel',
+        ],
         // Aus welcher Übung eine Meldung kam - siehe lib/meldungen.php.
 
         'vocab_flags.mode' => [

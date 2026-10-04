@@ -2055,3 +2055,32 @@ function initReleaseBar() {
 }
 
 initReleaseBar();
+
+// --------------------------------------------- Die erhöhte Sitzung
+
+/**
+ * Das gelbe Band zählt herunter (m:ss) - wie lange die Verwaltungssitzung
+ * noch gilt (lib/lehrkraefte.php). Ist sie um, verschwindet es; wer dann
+ * auf der Seite der Lehrkräfte steht, kommt nach Hause, denn dort ist ohne
+ * sie nichts mehr zu tun. Die Zeit kommt vom Server (data-rest) und wird
+ * hier nur gezählt - verlängert wird mit dem Knopf, nicht im Gerät.
+ */
+function initErhoeht() {
+    const band = document.getElementById('erhoeht');
+    if (!band) return;
+
+    const ende = Date.now() + Number(band.dataset.rest) * 1000;
+    const uhr  = band.querySelector('.erhoeht-uhr');
+    const ticken = () => {
+        const rest = Math.max(0, Math.round((ende - Date.now()) / 1000));
+        uhr.textContent = `${Math.floor(rest / 60)}:${String(rest % 60).padStart(2, '0')}`;
+        if (rest > 0) return;
+        clearInterval(takt);
+        band.remove();
+        if (band.dataset.zuhause) location.href = band.dataset.zuhause;
+    };
+    const takt = setInterval(ticken, 1000);
+    ticken();
+}
+
+initErhoeht();
