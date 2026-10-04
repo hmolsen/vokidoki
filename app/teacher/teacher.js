@@ -1568,6 +1568,23 @@ function initAktualisierenStattAbmelden() {
 
 initAktualisierenStattAbmelden();
 
+/**
+ * Als Symbol "Verwaltung" gestartet: das Gerät unter "Deine Geräte"
+ * vermerken - dieselbe Meldung wie aus der Lernansicht (installieren.js).
+ */
+async function initInstalliertMelden() {
+    const fassung = document.querySelector('script[data-fassung]');
+    const modul   = document.querySelector('[data-installieren]')?.dataset.installieren
+                 ?? fassung?.src.replace(/aktualisieren\.js/, 'installieren.js');
+    if (!fassung || !modul || !document.querySelector('.adminbar')) return;
+    if (!(window.navigator.standalone === true
+          || window.matchMedia('(display-mode: standalone)').matches)) return;
+    const { installiertMelden } = await import(modul);
+    installiertMelden(fassung.dataset.base);
+}
+
+initInstalliertMelden();
+
 /** "Mein Konto": die Farbwahl wie in der App - sofort sichtbar (appsymbol.js). */
 async function initFarbwahl() {
     const feld = document.querySelector('[data-farbwahl]');

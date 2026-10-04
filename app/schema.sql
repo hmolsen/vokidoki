@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS device_tokens (
   label        VARCHAR(128) NULL,
   created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   last_used_at DATETIME     NULL,
+  -- Gesetzt, sobald die App damit als Symbol vom Home-Bildschirm startet (lib/geraete.php).
+  installed_at DATETIME     NULL,
+  system       VARCHAR(16)  NULL,
   revoked_at   DATETIME     NULL,
   UNIQUE KEY uq_dt_hash (token_hash),
   KEY idx_dt_user (user_id),

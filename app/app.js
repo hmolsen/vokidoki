@@ -6,6 +6,7 @@ import {
     VT, go, render, notice, api, navQuelle, navAbmelden, serieQuelle,
 } from './core.js';
 import { fassungBeobachten } from './aktualisieren.js';
+import { installiertMelden } from './installieren.js';
 import { loginView } from './views/login.js';
 import { languagesView } from './views/languages.js';
 import { languageView } from './views/language.js';
@@ -254,6 +255,9 @@ async function vorratBereit() {
 
 await vorratBereit();
 route();
+
+// Läuft die App als Symbol, steht das Gerät unter "Deine Geräte" (installieren.js).
+if (VT.user && !VT.user.einwilligung) installiertMelden(VT.base);
 
 /*
  * Und wenn die App aus dem Hintergrund zurueckkommt: Die installierte App

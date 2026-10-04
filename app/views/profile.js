@@ -25,6 +25,27 @@ import { farbwahlVerdrahten } from '../appsymbol.js';
  * Lehrkraft-Bereich, der dieselbe Karte zeigt.
  */
 
+/**
+ * "Deine Geräte": die Symbole auf Home-Bildschirmen, die ohne Anmeldung
+ * hineinführen (lib/geraete.php). Dieselbe Liste zeigt teacher/konto.php.
+ */
+function geraeteListe(geraete) {
+    if (geraete.length === 0) {
+        return `<p class="tiny muted" id="keinegeraete">Noch keins. Legst du Vokidoki auf den
+            Home-Bildschirm eines Geräts, steht es hier.</p>`;
+    }
+    return `<ul class="geraete">${geraete.map((g) => `
+        <li data-geraet="${g.id}">
+            <span class="geraetzeichen" style="--zeichen:url('${esc(g.zeichen)}')" aria-hidden="true"></span>
+            <span class="geraettext">
+                <span><strong>${esc(g.name)}</strong>${g.dieses ? ' <span class="geraetdieses">dieses Gerät</span>' : ''}</span>
+                <span class="tiny muted">angelegt ${esc(g.angelegt)} &middot; zuletzt benutzt ${esc(g.zuletzt)}</span>
+            </span>
+            <button class="geraetweg" type="button" data-frage="${esc(g.frage)}"
+                    title="Abschalten" aria-label="${esc(g.name)} abschalten">&#128465;&#65039;</button>
+        </li>`).join('')}</ul>`;
+}
+
 /** Ein Stück Home-Bildschirm: Hintergrund, Symbol, Name darunter. */
 function homescreen() {
     // Die Farben setzt symbolFaerben(), nachdem gezeichnet ist. Voki ist
@@ -41,7 +62,7 @@ function homescreen() {
 export async function profileView(zumPasswort = false) {
     render(loading());
 
-    const { profile, palette } = await api('profile', 'get');
+    const { profile, palette, geraete, geraeteText } = await api('profile', 'get');
 
     const farben = palette.map((c) => `
         <label class="swatch-pick" title="${esc(c)}">
@@ -118,6 +139,12 @@ export async function profileView(zumPasswort = false) {
             Dein Benutzername zum Anmelden ist
             <code>${esc(profile.username)}</code> und lässt sich nicht ändern.
         </p>
+
+        <h2 class="section">Deine Geräte</h2>
+        <div class="card" id="geraete">
+            <p class="tiny muted" style="margin-top:0">${esc(geraeteText)}</p>
+            <div id="geraeteliste">${geraeteListe(geraete)}</div>
+        </div>
     `);
 
     wireBack();
@@ -129,6 +156,19 @@ export async function profileView(zumPasswort = false) {
         feld?.focus();
     }
 
+
+    $('#geraete').addEventListener('click', async (e) => {
+        const knopf = e.target.closest('.geraetweg');
+        if (!knopf || !confirm(knopf.dataset.frage)) return;
+        clearError();
+        try {
+            const id = Number(knopf.closest('[data-geraet]').dataset.geraet);
+            const data = await api('profile', 'geraet_weg', { body: { id } });
+            $('#geraeteliste').innerHTML = geraeteListe(data.geraete);
+        } catch (err) {
+            showError(err.message);
+        }
+    });
 
     $('#save').addEventListener('click', async (e) => {
         clearError();

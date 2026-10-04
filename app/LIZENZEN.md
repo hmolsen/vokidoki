@@ -131,6 +131,14 @@ dar, sondern als die zwei Buchstaben des Länderkürzels — aus der britischen
 Fahne wird „GB". Das lässt sich mit keiner Schriftart ändern; das Bild muss
 mitgebracht werden.
 
+* **Simple Icons** — Simple-Icons-Mitwirkende.
+  Die Zeichen der Betriebssysteme unter „Deine Geräte“ (Apple, Android,
+  Linux, Windows, Chrome) liegen unter `assets/geraete/`. Sie stehen unter
+  **CC0 1.0** und sind damit gemeinfrei; die Marken selbst gehören ihren
+  Inhabern.
+  <https://simpleicons.org>
+  <https://creativecommons.org/publicdomain/zero/1.0/>
+
 Alle übrigen Sinnbilder der Oberfläche sind gewöhnliche Emoji aus dem
 Unicode-Zeichensatz. Sie werden vom Gerät dargestellt und nicht
 mitgeliefert.

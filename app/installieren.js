@@ -41,6 +41,27 @@ export function laeuftInstalliert() {
         || window.matchMedia('(display-mode: standalone)').matches;
 }
 
+/**
+ * Dem Server sagen, dass dieses Gerät Vokidoki als Symbol führt.
+ *
+ * Erst damit steht es unter "Deine Geräte" (lib/geraete.php): Ein
+ * Geräte-Token entsteht auch ohne Symbol, bei jeder Anmeldung. Gemeldet
+ * wird bei jedem Start als Symbol - auch für Symbole, die schon lagen, bevor
+ * es die Liste gab. Ohne Netz geht die Meldung verloren; der nächste Start
+ * holt sie nach.
+ *
+ * Die Finger verraten ein iPad, das sich als Mac ausgibt (siehe geraet()).
+ */
+export function installiertMelden(base) {
+    if (!laeuftInstalliert()) return;
+    fetch(`${base}/api/profile.php?action=installiert`, {
+        method: 'POST',
+        headers: { 'X-Vokabeltrainer': '1', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ beruehrbar: navigator.maxTouchPoints > 1 }),
+        credentials: 'same-origin',
+    }).catch(() => {});
+}
+
 function geraet() {
     const ua = navigator.userAgent;
     // iPadOS meldet sich als Mac - erkennbar nur an den Fingern.

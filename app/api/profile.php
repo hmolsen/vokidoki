@@ -6,6 +6,7 @@ require_once __DIR__ . '/../lib/colors.php';
 // Die Regeln selbst stehen in lib/profile.php - der
 // Lehrkraft-Bereich aendert dasselbe ueber ein Formular.
 require_once __DIR__ . '/../lib/profile.php';
+require_once __DIR__ . '/../lib/geraete.php';
 
 /*
  * Das eigene Konto - Name, Farbe, Passwort.
@@ -32,6 +33,8 @@ switch (action()) {
                 // noch nicht geändert, und genau das soll die Seite sagen.
                 'initial'  => profile_has_initial_password($user),
             ],
+            'geraete' => geraete_liste($uid),
+            'geraeteText' => GERAETE_ERKLAERUNG,
             'palette' => color_palette(),
         ]);
         // no break - json_out beendet den Request
@@ -75,6 +78,22 @@ switch (action()) {
         }
 
         json_out(['ok' => true]);
+
+    /*
+     * Die App läuft als Symbol vom Home-Bildschirm (installieren.js). Erst
+     * damit steht das Gerät unter "Deine Geräte" - siehe lib/geraete.php.
+     */
+    case 'installiert':
+        require_post();
+        geraet_installiert($uid, (bool) (json_body()['beruehrbar'] ?? false));
+        json_out(['ok' => true]);
+
+    case 'geraet_weg':
+        require_post();
+        if (!geraet_widerrufen($uid, (int) (json_body()['id'] ?? 0))) {
+            json_fail('Dieses Gerät gibt es nicht.', 404);
+        }
+        json_out(['ok' => true, 'geraete' => geraete_liste($uid)]);
 
     default:
         json_fail('Unbekannte Aktion.', 404);

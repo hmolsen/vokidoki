@@ -5,6 +5,7 @@ require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/colors.php';
 require_once __DIR__ . '/../lib/profile.php';
 require_once __DIR__ . '/../lib/letter.php';
+require_once __DIR__ . '/../lib/geraete.php';
 
 /*
  * Das eigene Konto - im Lehrkraft-Bereich.
@@ -85,6 +86,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['reset_letter'
     letter_save_own($uid, '');
     teacher_flash('Vorlage zurückgestellt - es gilt wieder die Voreinstellung.');
     teacher_redirect('konto.php#vorlage');
+}
+
+// Ein Symbol auf einem Home-Bildschirm abschalten (lib/geraete.php).
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['geraet_weg'])) {
+    teacher_csrf_check();
+
+    if (geraet_widerrufen($uid, (int) $_POST['geraet_weg'])) {
+        teacher_flash('Abgeschaltet. Das Symbol führt jetzt auf die Anmeldung.');
+    } else {
+        teacher_flash('Dieses Gerät gibt es nicht.', 'bad');
+    }
+    teacher_redirect('konto.php#geraete');
 }
 
 teacher_head('Mein Konto', $user);
@@ -208,5 +221,33 @@ teacher_flash_render();
     Benutzername <code><?= h((string) $user['username']) ?></code> &ndash; beides lässt sich nicht
     selbst ändern.
 </p>
+
+<h2 id="geraete">Deine Geräte</h2>
+
+<div class="card kontoform">
+    <p class="tiny muted" style="margin-top:0"><?= h(GERAETE_ERKLAERUNG) ?></p>
+    <?php $geraete = geraete_liste($uid); ?>
+    <?php if ($geraete === []): ?>
+        <p class="tiny muted">Noch keins. Legst du Vokidoki auf den Home-Bildschirm eines Geräts,
+            steht es hier.</p>
+    <?php else: ?>
+    <ul class="geraete">
+        <?php foreach ($geraete as $g): ?>
+        <li data-geraet="<?= $g['id'] ?>">
+            <span class="geraetzeichen" style="--zeichen:url('<?= h($g['zeichen']) ?>')" aria-hidden="true"></span>
+            <span class="geraettext">
+                <span><strong><?= h($g['name']) ?></strong><?= $g['dieses'] ? ' <span class="geraetdieses">dieses Gerät</span>' : '' ?></span>
+                <span class="tiny muted">angelegt <?= h($g['angelegt']) ?> &middot; zuletzt benutzt <?= h($g['zuletzt']) ?></span>
+            </span>
+            <form method="post">
+                <?= teacher_csrf_field() ?>
+                <button class="geraetweg" name="geraet_weg" value="<?= $g['id'] ?>" data-confirm="<?= h($g['frage']) ?>"
+                        title="Abschalten" aria-label="<?= h($g['name']) ?> abschalten">&#128465;&#65039;</button>
+            </form>
+        </li>
+        <?php endforeach; ?>
+    </ul>
+    <?php endif; ?>
+</div>
 
 <?php teacher_foot(); ?>

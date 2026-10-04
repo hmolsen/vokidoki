@@ -3061,3 +3061,49 @@ dialog.rueckfrage:has(.titelwahl) { width: min(100% - 32px, 420px); }
 }
 .kursstand-name { display: inline-flex; align-items: center; gap: 8px; }
 .kursflagge { width: 22px; height: 16px; object-fit: contain; }
+
+/* ---------------------------------------------------------------- Deine Geräte */
+
+/*
+ * Die Symbole auf Home-Bildschirmen (lib/geraete.php), in der App und im
+ * Lehrkraft-Bereich. Das Zeichen des Betriebssystems ist eine Maske, keine
+ * Grafik: So nimmt es die Textfarbe an und bleibt im dunklen Thema lesbar -
+ * die Dateien aus Simple Icons sind schwarz.
+ */
+.geraete { list-style: none; margin: 0; padding: 0; }
+.geraete li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-top: 1px solid var(--border);
+}
+.geraete li:first-child { border-top: 0; }
+.geraete form { margin: 0; }
+.geraetzeichen {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    background: var(--text);
+    -webkit-mask: var(--zeichen) center / contain no-repeat;
+    mask: var(--zeichen) center / contain no-repeat;
+}
+.geraettext { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.geraetdieses {
+    font-size: .75rem;
+    font-weight: 600;
+    color: var(--accent);
+    margin-left: 4px;
+}
+.geraetweg {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: none;
+    font-size: 1.15rem;
+    cursor: pointer;
+}
+.geraetweg:hover { background: var(--surface-2); border-color: var(--border); }
+.geraetweg:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

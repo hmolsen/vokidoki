@@ -207,8 +207,13 @@ SQL,
             static fn (): bool => !column_exists('schools', 'max_lehrkraefte'),
             'ALTER TABLE schools ADD COLUMN max_lehrkraefte SMALLINT UNSIGNED NOT NULL DEFAULT 50 AFTER kuerzel',
         ],
+        // Welche Geräte-Token als Symbol auf einem Home-Bildschirm liegen - siehe lib/geraete.php.
+        'device_tokens.installed_at' => [
+            static fn (): bool => !column_exists('device_tokens', 'installed_at'),
+            'ALTER TABLE device_tokens ADD COLUMN installed_at DATETIME NULL AFTER last_used_at,'
+                . ' ADD COLUMN system VARCHAR(16) NULL AFTER installed_at',
+        ],
         // Aus welcher Übung eine Meldung kam - siehe lib/meldungen.php.
-
         'vocab_flags.mode' => [
             static fn (): bool => !column_exists('vocab_flags', 'mode'),
             'ALTER TABLE vocab_flags ADD COLUMN mode VARCHAR(16) NULL AFTER typed',

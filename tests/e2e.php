@@ -11422,6 +11422,100 @@ q('DELETE FROM users WHERE school_id = ?', [$lkSchule]);
 q('DELETE FROM schools WHERE id = ?', [$lkSchule]);
 @unlink($lkJar);
 
+section('Deine Geräte');
+
+require_once __DIR__ . '/../app/lib/geraete.php';
+
+/*
+ * Unter "Mein Konto" stehen die Symbole auf Home-Bildschirmen, die ohne
+ * Anmeldung hineinführen - und nur die: Token entstehen auch bei jeder
+ * Anmeldung. Ein Gerät wird erst eines, wenn die App als Symbol läuft und
+ * das meldet (installieren.js, lib/geraete.php).
+ */
+$gIphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1';
+ok('Das Betriebssystem wird erkannt',
+   geraet_system($gIphone) === 'iphone'
+   && geraet_system('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/129 Mobile') === 'android'
+   && geraet_system('Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/129') === 'windows'
+   && geraet_system('Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) Chrome/129') === 'chromeos'
+   && geraet_system('Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Firefox/131.0') === 'linux'
+   && geraet_system('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605') === 'mac'
+   && geraet_system('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605', true) === 'ipad'
+   && geraet_system('') === 'anderes');
+
+[$gData] = apiCall('profile', 'get');
+$gVorher = count($gData['geraete'] ?? []);
+ok('Die Karte bringt ihren Text mit', str_contains((string) ($gData['geraeteText'] ?? ''), 'ohne Passwort'));
+ok('Eine Anmeldung allein ist noch kein Gerät',
+   !in_array(true, array_column($gData['geraete'] ?? [], 'dieses'), true));
+
+// Die App meldet: Ich laufe als Symbol - von einem iPhone.
+$res = http($base . '/api/profile.php?action=installiert', ['beruehrbar' => false],
+            ['X-Vokabeltrainer: 1', 'Content-Type: application/json', 'User-Agent: ' . $gIphone]);
+ok('Die Meldung wird angenommen', $res['status'] === 200, (string) $res['status']);
+[$gData] = apiCall('profile', 'get');
+$gDieses = array_values(array_filter($gData['geraete'] ?? [], static fn (array $g): bool => $g['dieses']));
+ok('Danach steht das Gerät da, als dieses Gerät', count($gData['geraete']) === $gVorher + 1 && count($gDieses) === 1);
+ok('Als iPhone, mit Apfel und beiden Zeitpunkten',
+   ($gDieses[0]['name'] ?? '') === 'iPhone' && str_ends_with((string) ($gDieses[0]['zeichen'] ?? ''), '/assets/geraete/apple.svg')
+   && str_starts_with((string) ($gDieses[0]['angelegt'] ?? ''), 'heute, ')
+   && str_starts_with((string) ($gDieses[0]['zuletzt'] ?? ''), 'heute, '),
+   json_encode($gDieses[0] ?? null, JSON_UNESCAPED_UNICODE));
+ok('Die Rückfrage sagt, was geschieht - und dass ein neues jederzeit geht',
+   str_contains((string) ($gDieses[0]['frage'] ?? ''), 'funktioniert danach nicht mehr')
+   && str_contains((string) ($gDieses[0]['frage'] ?? ''), 'jederzeit wieder anlegen'));
+ok('Das Zeichen gibt es', is_file(__DIR__ . '/../app/assets/geraete/apple.svg'));
+
+// Ein Gerät eines anderen Kontos lässt sich nicht abschalten.
+$gFremd = (int) qv("SELECT id FROM users WHERE id <> ? ORDER BY id LIMIT 1", [$userId]);
+device_token_create($gFremd, 'fremd');
+$gFremdId = (int) db()->lastInsertId();
+q('UPDATE device_tokens SET installed_at = NOW() WHERE id = ?', [$gFremdId]);
+[, $gStatus] = apiCall('profile', 'geraet_weg', ['id' => $gFremdId]);
+ok('Fremde Geräte bleiben unberührt', $gStatus === 404
+   && qv('SELECT revoked_at FROM device_tokens WHERE id = ?', [$gFremdId]) === null);
+q('DELETE FROM device_tokens WHERE id = ?', [$gFremdId]);
+
+// Abschalten.
+$gHash = (string) qv('SELECT token_hash FROM device_tokens WHERE id = ?', [(int) $gDieses[0]['id']]);
+[$gData, $gStatus] = apiCall('profile', 'geraet_weg', ['id' => (int) $gDieses[0]['id']]);
+ok('Abschalten nimmt das Gerät aus der Liste', $gStatus === 200 && count($gData['geraete']) === $gVorher);
+ok('Und das Symbol führt auf keine Anmeldung mehr',
+   qv('SELECT revoked_at FROM device_tokens WHERE token_hash = ?', [$gHash]) !== null
+   && ($gHash !== hash('sha256', $token) || device_token_user($token) === null));
+
+$gProfil = (string) file_get_contents(__DIR__ . '/../app/views/profile.js');
+ok('In der App fragt der Mülleimer vorher nach',
+   str_contains($gProfil, "confirm(knopf.dataset.frage)") && str_contains($gProfil, 'Deine Geräte'));
+$gInst = (string) file_get_contents(__DIR__ . '/../app/installieren.js');
+ok('Gemeldet wird nur, wenn die App als Symbol läuft',
+   preg_match('~export function installiertMelden\(base\) \{\s*if \(!laeuftInstalliert\(\)\) return;~', $gInst) === 1);
+
+// ---- Im Lehrkraft-Bereich dieselbe Liste - mit einer eigenen Lehrkraft, die
+// von oben ist hier schon gelöscht.
+$gLehrer = 'e2e_geraete_lehr';
+q('DELETE FROM users WHERE username = ?', [$gLehrer]);
+q("INSERT INTO users (school_id, username, display_name, role, password_hash, color, can_import)
+   VALUES (?, ?, 'Frau Gerät', 'teacher', ?, '#4f7cff', 1)",
+  [$testSchule, $gLehrer, password_hash('ein-langes-passwort', PASSWORD_DEFAULT)]);
+$gLehrerId = (int) db()->lastInsertId();
+teacherLogin($gLehrer, 'ein-langes-passwort');
+device_token_create($gLehrerId, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/129');
+$gLehrId = (int) db()->lastInsertId();
+q("UPDATE device_tokens SET installed_at = '2026-09-01 10:00:00', system = 'windows', last_used_at = NULL WHERE id = ?",
+  [$gLehrId]);
+$res = teacherGet('konto.php');
+ok('Unter "Mein Konto" der Lehrkraft stehen die Geräte',
+   str_contains($res['body'], 'Deine Geräte') && str_contains($res['body'], 'data-geraet="' . $gLehrId . '"')
+   && str_contains($res['body'], '/assets/geraete/windows.svg')
+   && str_contains($res['body'], 'angelegt 1.9.2026') && str_contains($res['body'], 'zuletzt benutzt noch nie'));
+ok('Mit Rückfrage am Mülleimer',
+   preg_match('~name="geraet_weg" value="' . $gLehrId . '" data-confirm="[^"]*funktioniert danach nicht mehr~', $res['body']) === 1);
+teacherRequest($base . '/teacher/konto.php', ['geraet_weg' => $gLehrId, 'csrf' => csrfFrom($res['body'])]);
+ok('Und der Mülleimer schaltet es ab',
+   qv('SELECT revoked_at FROM device_tokens WHERE id = ?', [$gLehrId]) !== null);
+q('DELETE FROM users WHERE id = ?', [$gLehrerId]);
+
 section('Abmelden und Token-Widerruf');
 
 apiCall('auth', 'logout', []);
