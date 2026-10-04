@@ -5,6 +5,7 @@ require_once __DIR__ . '/_boot.php';
 require_once __DIR__ . '/../lib/ai.php';
 require_once __DIR__ . '/../lib/sentences.php';
 require_once __DIR__ . '/../lib/vocab.php';
+require_once __DIR__ . '/../lib/erzeugung.php';
 
 admin_require();
 
@@ -208,6 +209,29 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             flash($text);
         }
         back_to_filter($scope);
+    }
+
+    /*
+     * Fehlendes erzeugen - für die ganze Auswahl: alle Schulen, eine Schule
+     * oder einen Kurs (eine Lerneinheit hat ihre eigenen Knöpfe weiter unten).
+     * Es kam vor, dass alles freigegeben war und trotzdem Sätze oder
+     * Aufnahmen fehlten. Läuft im Hintergrund; die Seite zeigt danach, was
+     * noch fehlt, und auf der Kursseite der Lehrkraft drehen sich die Ringe.
+     */
+    if (isset($_POST['make_missing'])) {
+        $offen = erzeugung_offen($schoolId, $courseId);
+        if ($offen['einheiten'] === []) {
+            flash('Hier fehlt nichts.');
+            back_to_filter($scope);
+        }
+        flash(sprintf('Läuft im Hintergrund: %d Lerneinheit(en) - %d Vokabel(n) ohne Satz, '
+            . '%d Aufnahme(n). Neu laden zeigt, was noch fehlt.',
+            count($offen['einheiten']), $offen['saetze'], $offen['ton']));
+        $query = http_build_query(admin_scope_query($scope));
+        redirect_and_continue(admin_url('vocab.php') . ($query !== '' ? '?' . $query : ''));
+        set_time_limit(1800);
+        erzeugung_nachholen($offen);
+        exit;
     }
 
     if (isset($_POST['fix_punctuation'])) {
@@ -518,6 +542,39 @@ flash_render();
 <div class="card filters">
     <?= admin_scope_chips($scope) ?>
 </div>
+
+<?php if ($unit === null): ?>
+<?php
+/*
+ * Fehlendes erzeugen - auf jeder Stufe der Auswahl über einer Lerneinheit
+ * (die hat ihre eigenen Knöpfe). Gezählt wie auf der Kursseite der
+ * Lehrkraft (lib/erzeugung.php).
+ */
+$fehlend = erzeugung_offen($schoolId, $courseId);
+$wo = $course !== null ? 'in diesem Kurs' : ($schoolId > 0 ? 'an dieser Schule' : 'in allen Schulen');
+?>
+<div class="card fehlend">
+    <strong>Sätze und Aufnahmen <?= h($wo) ?></strong>
+    <p class="tiny muted" style="margin:6px 0 12px">
+        <?php if ($fehlend['einheiten'] === []): ?>
+            Es fehlt nichts: Jede freigegebene Vokabel hat ihre Sätze, und alles hat seine Aufnahme.
+        <?php else: ?>
+            <?= count($fehlend['einheiten']) ?> Lerneinheit(en):
+            <?= $fehlend['saetze'] ?> freigegebene Vokabel(n) ohne Satz,
+            <?= $fehlend['ton'] ?> Aufnahme(n) fehlen.
+            Erzeugt wird im Hintergrund, auf Rechnung des jeweiligen Kurses;
+            fehlen Sätze, entstehen ihre Aufnahmen gleich mit.
+        <?php endif; ?>
+    </p>
+    <form method="post">
+        <?= csrf_field() ?>
+        <?= admin_scope_fields($scope) ?>
+        <button class="btn small" name="make_missing" value="1"<?= $fehlend['einheiten'] === [] ? ' disabled' : '' ?>>
+            <?= $fehlend['einheiten'] === [] ? 'Nichts zu erzeugen' : 'Fehlendes erzeugen' ?>
+        </button>
+    </form>
+</div>
+<?php endif; ?>
 
 <p class="tiny muted">
     <a href="<?= h(admin_url('sentences.php') . (admin_scope_query($scope) === [] ? ''

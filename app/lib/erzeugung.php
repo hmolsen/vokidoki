@@ -109,6 +109,84 @@ function erzeugung_kurs(int $courseId): array
 }
 
 /**
+ * Was in einer Auswahl fehlt: alle Schulen, eine Schule oder ein Kurs.
+ *
+ * Für den Knopf "Fehlendes erzeugen" im Admin (Unterlagen). Gezählt wird
+ * wie auf der Kursseite (erzeugung_stand()): Sätze für freigegebene
+ * Vokabeln, Aufnahmen für Sätze und Vokabeln. Was gerade entsteht, zählt
+ * nicht als fehlend.
+ *
+ * @return array{einheiten: list<array{unit: array, saetze: bool, ton: bool}>, saetze: int, ton: int}
+ */
+function erzeugung_offen(int $schoolId = 0, int $courseId = 0): array
+{
+    $wo = '';
+    $p  = [];
+    if ($courseId > 0) {
+        $wo  = ' WHERE t.course_id = ?';
+        $p[] = $courseId;
+    } elseif ($schoolId > 0) {
+        $wo  = ' WHERE co.school_id = ?';
+        $p[] = $schoolId;
+    }
+
+    $offen  = [];
+    $saetze = 0;
+    $ton    = 0;
+    foreach (qa(
+        'SELECT t.*,
+                (SELECT COUNT(*) FROM vocab v WHERE v.unit_id = t.id
+                    AND v.position < t.released_position) AS released_count
+           FROM units t
+           JOIN courses co ON co.id = t.course_id' . $wo . '
+          ORDER BY co.school_id, t.course_id, t.position, t.id',
+        $p,
+    ) as $u) {
+        if ((int) $u['released_count'] === 0) {
+            continue;
+        }
+        $st = erzeugung_stand($u);
+        $fehlenSaetze = in_array($st['saetze']['s'], ['fehlt', 'fehler'], true);
+        $fehlenToene  = $st['ton']['s'] === 'fehlt';
+        if (!$fehlenSaetze && !$fehlenToene) {
+            continue;
+        }
+        $offen[] = ['unit' => $u, 'saetze' => $fehlenSaetze, 'ton' => $fehlenToene];
+        $saetze += $fehlenSaetze ? $st['saetze']['n'] : 0;
+        $ton    += $st['ton']['n'];
+    }
+    return ['einheiten' => $offen, 'saetze' => $saetze, 'ton' => $ton];
+}
+
+/**
+ * Nachholen, was erzeugung_offen() gefunden hat - Lerneinheit für
+ * Lerneinheit, auf Rechnung ihres Kurses.
+ *
+ * Fehlen Sätze, macht der Satzlauf beides: erst die Sätze, dann ihre
+ * Aufnahmen (generate_sentences_tracked()). Sonst spricht ein eigener Lauf.
+ * Läuft schon einer, wird die Lerneinheit übersprungen (sentence_claim(),
+ * die Sperre in tts_nachtragen()) - zweimal gedrückt heisst nicht doppelt
+ * bezahlt. Gedacht für den Hintergrund: Es wird nichts ausgegeben.
+ */
+function erzeugung_nachholen(array $offen): void
+{
+    foreach ($offen['einheiten'] as $e) {
+        db_ensure();
+        $id = (int) $e['unit']['id'];
+        if ($e['saetze']) {
+            if (sentence_claim($id)) {
+                generate_sentences_tracked($id);
+            }
+            continue;
+        }
+        $zahler = course_billing_user((int) $e['unit']['course_id']);
+        if ($zahler !== null) {
+            sentence_audio_nachtragen($id, $zahler);
+        }
+    }
+}
+
+/**
  * Der Inhalt einer der beiden Zellen.
  *
  * Fehlt etwas, ist das Ausrufezeichen ein Knopf: Ein Druck holt nach, was

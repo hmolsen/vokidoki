@@ -99,34 +99,7 @@ function teacher_redirect(string $file): never
  */
 function teacher_redirect_and_continue(string $file): void
 {
-    $stray = ob_get_level() > 0 ? (string) ob_get_clean() : '';
-    if (trim($stray) !== '') {
-        error_log('[vokabeltrainer] Unerwartete Ausgabe vor der Weiterleitung: '
-            . substr(trim($stray), 0, 500));
-    }
-
-    ignore_user_abort(true);
-
-    http_response_code(303);
-    header('Location: ' . teacher_url($file));
-    header('Content-Length: 0');
-    // Kein "Connection: close" - der Grund steht in lib/json.php.
-
-    // Die Sitzung freigeben, sonst wartet die weitergeleitete Anfrage
-    // derselben Lehrkraft auf das Ende dieses Vorgangs.
-    if (session_status() === PHP_SESSION_ACTIVE) {
-        session_write_close();
-    }
-
-    if (function_exists('fastcgi_finish_request')) {
-        fastcgi_finish_request();
-        return;
-    }
-
-    while (ob_get_level() > 0) {
-        ob_end_flush();
-    }
-    flush();
+    redirect_and_continue(teacher_url($file));
 }
 
 /**

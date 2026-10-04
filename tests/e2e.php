@@ -6697,6 +6697,55 @@ q('DELETE FROM courses WHERE language_id = ?', [$pLang]);
 q('DELETE FROM languages WHERE id = ?', [$pLang]);
 tts_waisen_entfernen();
 
+section('Admin: Fehlendes erzeugen, für die ganze Auswahl');
+
+/*
+ * Unter "Unterlagen" steht auf jeder Stufe der Auswahl - alle Schulen,
+ * eine Schule, ein Kurs - eine Karte, die zählt, was an Sätzen und
+ * Aufnahmen fehlt, und es mit einem Knopf nachholt (lib/erzeugung.php).
+ */
+require_once __DIR__ . '/../app/lib/erzeugung.php';
+$feLang = makeLanguage($userId, 'Fehlfranzösisch', 'fr');
+$feUnit = makeUnit($userId, $feLang, 'Fehl-Unit');
+foreach (['la maison', 'le jardin'] as $i => $w) {
+    q('INSERT INTO vocab (unit_id, term_foreign, term_native, position) VALUES (?, ?, ?, ?)',
+      [$feUnit, $w, 'de-' . $i, $i]);
+}
+q("UPDATE units SET released_position = 2, sentences_status = 'done' WHERE id = ?", [$feUnit]);
+$feKurs   = (int) qv('SELECT course_id FROM units WHERE id = ?', [$feUnit]);
+$feSchule = (int) qv('SELECT school_id FROM courses WHERE id = ?', [$feKurs]);
+
+$feOffen = erzeugung_offen(0, $feKurs);
+ok('Gezählt wird, was fehlt: zwei Vokabeln ohne Satz, zwei ohne Aufnahme',
+   count($feOffen['einheiten']) === 1 && $feOffen['saetze'] === 2 && $feOffen['ton'] === 2,
+   json_encode([count($feOffen['einheiten']), $feOffen['saetze'], $feOffen['ton']]));
+
+foreach (['' => 'in allen Schulen', 'school=' . $feSchule => 'an dieser Schule',
+          'school=' . $feSchule . '&course=' . $feKurs => 'in diesem Kurs'] as $feFilter => $feWo) {
+    $feSeite = http($base . '/admin/vocab.php' . ($feFilter !== '' ? '?' . $feFilter : ''))['body'];
+    ok("Die Karte steht auch $feWo", str_contains($feSeite, 'Sätze und Aufnahmen ' . $feWo)
+       && str_contains($feSeite, 'name="make_missing"'));
+}
+
+adminPost('vocab.php', ['make_missing' => 1, 'school' => $feSchule, 'course' => $feKurs],
+          'school=' . $feSchule . '&course=' . $feKurs);
+if ($isFake) {
+    waitForSentences($feUnit);
+    ok('Der Knopf holt die Sätze nach', vocab_without_sentences($feUnit) === 0,
+       (string) vocab_without_sentences($feUnit));
+    ok('Und die Aufnahmen dazu - für Sätze und Vokabeln', tts_fehlend($feUnit) === 0,
+       (string) tts_fehlend($feUnit));
+    ok('Danach fehlt in diesem Kurs nichts mehr', erzeugung_offen(0, $feKurs)['einheiten'] === []);
+}
+ok('Eine Lerneinheit hat ihre eigenen Knöpfe - die Karte steht dort nicht',
+   !str_contains(http($base . '/admin/vocab.php?school=' . $feSchule . '&course=' . $feKurs
+                       . '&unit=' . $feUnit)['body'], 'name="make_missing"'));
+
+q('DELETE FROM units WHERE id = ?', [$feUnit]);
+q('DELETE FROM courses WHERE language_id = ?', [$feLang]);
+q('DELETE FROM languages WHERE id = ?', [$feLang]);
+tts_waisen_entfernen();
+
 section('Zettel mit den Zugangsdaten');
 
 require_once __DIR__ . '/../app/lib/letter.php';

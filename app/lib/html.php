@@ -2,6 +2,47 @@
 declare(strict_types=1);
 
 /**
+ * Weiterleiten und danach im selben Vorgang weiterarbeiten.
+ *
+ * Für Läufe, die länger dauern als eine Seite warten darf - Sätze und
+ * Aufnahmen im Hintergrund. Gebraucht vom Lehrkraft-Bereich
+ * (teacher_redirect_and_continue()) und vom Admin ("Fehlendes erzeugen");
+ * für JSON-Antworten dasselbe in json_out_and_continue() (lib/json.php).
+ * Nach dem Aufruf darf nichts mehr ausgegeben werden.
+ */
+function redirect_and_continue(string $ziel): void
+{
+    $stray = ob_get_level() > 0 ? (string) ob_get_clean() : '';
+    if (trim($stray) !== '') {
+        error_log('[vokabeltrainer] Unerwartete Ausgabe vor der Weiterleitung: '
+            . substr(trim($stray), 0, 500));
+    }
+
+    ignore_user_abort(true);
+
+    http_response_code(303);
+    header('Location: ' . $ziel);
+    header('Content-Length: 0');
+    // Kein "Connection: close" - der Grund steht in lib/json.php.
+
+    // Die Sitzung freigeben, sonst wartet die weitergeleitete Anfrage
+    // desselben Kontos auf das Ende dieses Vorgangs.
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+        return;
+    }
+
+    while (ob_get_level() > 0) {
+        ob_end_flush();
+    }
+    flush();
+}
+
+/**
  * Maskierung für HTML-Ausgaben.
  *
  * Eigene Datei, weil admin/_boot.php beim Laden die Schemapflege anstösst.
