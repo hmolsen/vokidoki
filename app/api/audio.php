@@ -19,20 +19,31 @@ require_once __DIR__ . '/../lib/tts.php';
  * nachzufragen.
  */
 
-$user = require_user();
-$id   = (int) ($_GET['s'] ?? 0);
+$id = (int) ($_GET['s'] ?? 0);
 
-$zeile = q1(
-    'SELECT a.file, a.hash
-       FROM sentence_audio a
-       JOIN sentences s ON s.id = a.sentence_id
-       JOIN vocab v ON v.id = s.vocab_id
-       JOIN units u ON u.id = v.unit_id
-       JOIN courses co ON co.id = u.course_id
-       JOIN course_members m ON m.course_id = co.id AND m.user_id = ?
-      WHERE a.sentence_id = ? AND v.position < u.released_position',
-    [(int) $user['id'], $id],
-);
+/*
+ * Die Meldungen (lib/meldungen.php) spielen die Aufnahme zum Anhören ab -
+ * der Lehrkraft des Kurses auch, wenn die Freigabe inzwischen
+ * zurückgenommen ist, und dem Admin, der kein Konto in der App hat.
+ */
+session_boot();
+if (!empty($_SESSION['is_admin'])) {
+    $zeile = q1('SELECT file, hash FROM sentence_audio WHERE sentence_id = ?', [$id]);
+} else {
+    $user  = require_user();
+    $zeile = q1(
+        "SELECT a.file, a.hash
+           FROM sentence_audio a
+           JOIN sentences s ON s.id = a.sentence_id
+           JOIN vocab v ON v.id = s.vocab_id
+           JOIN units u ON u.id = v.unit_id
+           JOIN courses co ON co.id = u.course_id
+           JOIN course_members m ON m.course_id = co.id AND m.user_id = ?
+          WHERE a.sentence_id = ?
+            AND (v.position < u.released_position OR m.member_role = 'teacher')",
+        [(int) $user['id'], $id],
+    );
+}
 
 // Dieselbe Antwort für "gibt es nicht" und "darfst du nicht" - wie überall.
 $pfad = $zeile === null ? null : storage_path((string) $zeile['file']);

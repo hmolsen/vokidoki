@@ -90,7 +90,7 @@ function nextQuestion(unitId) {
     wireBack();
 
     // Beim Auswählen ist das Wortpaar gemeint - einen Satz gibt es hier nicht.
-    meldenVerdrahten($('[data-melden]'), () => ({ vocabId: data.vocabId }));
+    meldenVerdrahten($('[data-melden]'), () => ({ vocabId: data.vocabId, modus: MODUS_WAHL }));
 
     const box = $('#options');
     let answered = false;

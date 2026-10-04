@@ -240,6 +240,7 @@ function zeigen(data) {
         vocabId: data.vocabId,
         satzId:  data.satzId,
         getippt: gelegteWoerter().join(' '),
+        modus:   MODUS_HOEREN,
     }));
 
     linieZeichnen();

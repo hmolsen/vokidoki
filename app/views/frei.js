@@ -494,7 +494,7 @@ function zeigeWahl(a) {
     `);
 
     verdrahten();
-    meldenVerdrahten($('[data-melden]'), () => ({ vocabId: a.vocabId }));
+    meldenVerdrahten($('[data-melden]'), () => ({ vocabId: a.vocabId, modus: MODUS_WAHL }));
 
     let beantwortet = false;
     $$('.option').forEach((knopf) => {

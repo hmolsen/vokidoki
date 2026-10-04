@@ -226,6 +226,7 @@ CREATE TABLE IF NOT EXISTS vocab_flags (
   sentence_id INT UNSIGNED NOT NULL DEFAULT 0,
   user_id     INT UNSIGNED NOT NULL,
   typed       VARCHAR(128) NULL,
+  mode        VARCHAR(16)  NULL,
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_vflag (vocab_id, sentence_id, user_id),
   CONSTRAINT fk_vflag_vocab FOREIGN KEY (vocab_id) REFERENCES vocab(id) ON DELETE CASCADE,

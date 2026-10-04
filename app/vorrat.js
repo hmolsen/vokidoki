@@ -1274,11 +1274,14 @@ export function freiMerken(vocabId, richtig) {
  * satzId ist der Lückensatz, an dem es auffiel, oder 0 beim Auswählen -
  * dann ist das Wortpaar selbst gemeint. Das Getippte kommt mit, weil es
  * beim Lückentext meist entscheidet, ob der Satz oder die Lösung schief war.
+ * Die Übung (modus) kommt mit, weil derselbe Satz im Einsetzen, im
+ * Lückentext und beim Hören vorkommt - und ein Fehler der Stimme nur beim
+ * Hören einer ist.
  */
-export function vokabelMelden(vocabId, satzId = 0, getippt = '') {
+export function vokabelMelden(vocabId, satzId = 0, getippt = '', modus = '') {
     warteschlangeAnhaengen({
         e: kennung(), k: 'melden', v: Number(vocabId), s: Number(satzId) || 0,
-        t: String(getippt).slice(0, 128),
+        t: String(getippt).slice(0, 128), m: String(modus),
     });
 }
 

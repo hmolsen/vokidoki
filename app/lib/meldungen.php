@@ -31,8 +31,10 @@ require_once __DIR__ . '/courses.php';
  * die Frage, ob der Satz zu ihr gehört: Sonst liesse sich mit einer
  * erlaubten Vokabel ein beliebiger fremder Satz auf die Liste setzen.
  */
-function meldung_aufnehmen(int $userId, int $vocabId, int $satzId, string $getippt): bool
+function meldung_aufnehmen(int $userId, int $vocabId, int $satzId, string $getippt,
+                           string $modus = ''): bool
 {
+    require_once __DIR__ . '/progress.php';
     if ($satzId < 0) {
         return false;
     }
@@ -42,14 +44,16 @@ function meldung_aufnehmen(int $userId, int $vocabId, int $satzId, string $getip
     }
 
     $getippt = mb_substr(trim($getippt), 0, 128);
+    // Nur eine der Übungen - was sonst ankommt, ist kein Hinweis, sondern Lärm.
+    $modus = in_array($modus, MODES, true) ? $modus : null;
 
     // Zweimal melden ändert nichts - der eindeutige Schlüssel fängt das ab.
     // Vermerkt wird nur der letzte Versuch.
     q(
-        'INSERT INTO vocab_flags (vocab_id, sentence_id, user_id, typed)
-         VALUES (?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE typed = VALUES(typed), created_at = NOW()',
-        [$vocabId, $satzId, $userId, $getippt === '' ? null : $getippt],
+        'INSERT INTO vocab_flags (vocab_id, sentence_id, user_id, typed, mode)
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE typed = VALUES(typed), mode = VALUES(mode), created_at = NOW()',
+        [$vocabId, $satzId, $userId, $getippt === '' ? null : $getippt, $modus],
     );
     return true;
 }
@@ -172,16 +176,17 @@ function meldung_laden(int $vocabId, ?int $lehrerId): ?array
      * verrät niemanden.
      */
     foreach (qa(
-        'SELECT f.sentence_id, f.typed, f.user_id,
-                s.native_text, s.foreign_text, s.answer
+        'SELECT f.sentence_id, f.typed, f.user_id, f.mode,
+                s.native_text, s.foreign_text, s.answer, a.hash AS ton
            FROM vocab_flags f
            LEFT JOIN sentences s ON s.id = f.sentence_id
+           LEFT JOIN sentence_audio a ON a.sentence_id = s.id
           WHERE f.vocab_id = ? AND (f.sentence_id = 0 OR s.id IS NOT NULL)
           ORDER BY f.created_at',
         [$vocabId],
     ) as $f) {
         $kinder[(int) $f['user_id']] = true;
-        $wer = ['typed' => (string) ($f['typed'] ?? '')];
+        $wer = ['typed' => (string) ($f['typed'] ?? ''), 'modus' => $f['mode'] ?? null];
 
         $sid = (int) $f['sentence_id'];
         if ($sid === 0) {
@@ -193,6 +198,7 @@ function meldung_laden(int $vocabId, ?int $lehrerId): ?array
             'native'  => (string) $f['native_text'],
             'foreign' => (string) $f['foreign_text'],
             'answer'  => (string) $f['answer'],
+            'ton'     => $f['ton'] ?? null,
             'wer'     => [],
         ];
         $saetze[$sid]['wer'][] = $wer;
@@ -290,7 +296,8 @@ function meldung_bearbeiten(?int $lehrerId, array $post): array
  */
 function meldung_html(array $m, int $offen, string $csrfFeld): string
 {
-    // Wie oft, und was getippt wurde - aber nicht, von wem (siehe meldung_laden()).
+    // Wie oft, aus welcher Übung, und was getippt wurde - aber nicht, von
+    // wem (siehe meldung_laden()).
     $wer = static function (array $liste, bool $mitGetipptem): string {
         if (!$mitGetipptem) {
             return sprintf('<p class="wer tiny muted">%s gemeldet</p>',
@@ -298,9 +305,10 @@ function meldung_html(array $m, int $offen, string $csrfFeld): string
         }
         $zeilen = '';
         foreach ($liste as $w) {
-            $zeilen .= '<li>' . ($w['typed'] !== ''
-                    ? 'Getippt: &bdquo;' . h($w['typed']) . '&ldquo;'
-                    : 'Ohne Eingabe gemeldet') . '</li>';
+            $wo = $w['modus'] !== null ? MELDUNG_UEBUNG[$w['modus']] . ': ' : '';
+            $zeilen .= '<li>' . $wo . ($w['typed'] !== ''
+                    ? 'getippt &bdquo;' . h($w['typed']) . '&ldquo;'
+                    : 'ohne Eingabe gemeldet') . '</li>';
         }
         return '<ul class="wer tiny muted">' . $zeilen . '</ul>';
     };
@@ -322,7 +330,7 @@ function meldung_html(array $m, int $offen, string $csrfFeld): string
 
     <?php if ($m['wahl'] !== []): ?>
         <div class="stelle">
-            <h3>Beim Auswählen</h3>
+            <h3><?= h(MELDUNG_UEBUNG['mc']) ?></h3>
             <?= $wer($m['wahl'], false) ?>
             <label for="mf"><?= h($m['sprache']) ?></label>
             <input type="text" id="mf" name="f" value="<?= h($m['foreign']) ?>"
@@ -336,8 +344,24 @@ function meldung_html(array $m, int $offen, string $csrfFeld): string
     <?php foreach ($m['saetze'] as $s): ?>
         <?php $id = (int) $s['id']; ?>
         <div class="stelle">
-            <h3>Im Lückentext</h3>
+            <h3><?= h(meldung_uebungen($s['wer'])) ?></h3>
             <?= $wer($s['wer'], true) ?>
+            <?php if ($s['ton'] !== null): ?>
+                <?php
+                /*
+                 * Anhören, wie es die Kinder hören - gerade wenn beim Hören
+                 * gemeldet wurde: Spricht die Stimme ein Wort falsch, sieht
+                 * man das dem Satz nicht an.
+                 */
+                $ton = url('/api/audio.php?s=' . $id . '&h=' . rawurlencode((string) $s['ton']));
+                ?>
+                <div class="hoerprobe">
+                    <button type="button" class="btn secondary small" data-hoerprobe="<?= h($ton) ?>"
+                            data-tempo="1">&#128266; Anhören</button>
+                    <button type="button" class="btn secondary small" data-hoerprobe="<?= h($ton) ?>"
+                            data-tempo="<?= MELDUNG_LANGSAM ?>">&#128034; Langsam</button>
+                </div>
+            <?php endif; ?>
             <label for="sn<?= $id ?>">Deutscher Satz</label>
             <input type="text" id="sn<?= $id ?>" name="s[<?= $id ?>][n]"
                    value="<?= h($s['native']) ?>" maxlength="255" required>
@@ -355,6 +379,49 @@ function meldung_html(array $m, int $offen, string $csrfFeld): string
         <button class="btn secondary" name="stimmt" value="1" formnovalidate>Stimmt so</button>
     </div>
 </form>
+<script>
+// Die Knöpfe zum Anhören. Hier und nicht in teacher.js: Der Admin sieht
+// dieselbe Karte und lädt teacher.js nicht.
+(() => {
+    let ton = null;
+    document.querySelectorAll('[data-hoerprobe]').forEach((k) => k.addEventListener('click', () => {
+        ton?.pause();
+        ton = new Audio(k.dataset.hoerprobe);
+        ton.preservesPitch = true;
+        ton.playbackRate = Number(k.dataset.tempo) || 1;
+        ton.play().catch(() => { k.disabled = true; k.title = 'Die Aufnahme lässt sich nicht abspielen.'; });
+    }));
+})();
+</script>
     <?php
     return (string) ob_get_clean();
+}
+
+/*
+ * Die Übungen, wie sie in der Karte heissen - die Schlüssel sind MODES
+ * (lib/progress.php).
+ */
+const MELDUNG_UEBUNG = [
+    'mc'     => 'Beim Auswählen',
+    'pick'   => 'Beim Einsetzen',
+    'cloze'  => 'Im Lückentext',
+    'listen' => 'Beim Hören',
+];
+
+/* So langsam wie der Schildkrötenknopf beim Hören (LANGSAM in views/hoeren.js). */
+const MELDUNG_LANGSAM = 0.7;
+
+/**
+ * Die Überschrift über einem gemeldeten Satz: aus welchen Übungen.
+ *
+ * Meldungen von vor der Zeit, als die Übung mitkam, wissen es nicht -
+ * sie standen alle unter "Im Lückentext", auch die aus dem Einsetzen.
+ */
+function meldung_uebungen(array $wer): string
+{
+    $modi = array_values(array_unique(array_filter(array_column($wer, 'modus'))));
+    if ($modi === []) {
+        return 'In einem Satz';
+    }
+    return implode(' · ', array_map(static fn (string $m): string => MELDUNG_UEBUNG[$m], $modi));
 }

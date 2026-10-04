@@ -95,7 +95,7 @@ export function meldenVerdrahten(knopf, aufgabe) {
         const a = aufgabe();
         if (!(await nachfragen())) return;
 
-        vokabelMelden(a.vocabId, a.satzId ?? 0, a.getippt ?? '');
+        vokabelMelden(a.vocabId, a.satzId ?? 0, a.getippt ?? '', a.modus ?? '');
 
         knopf.disabled = true;
         knopf.classList.add('done');

@@ -150,6 +150,11 @@ SQL,
                  ELSE v END
               WHERE k IN ('prices_json', 'vision_model', 'sentence_model')",
         ],
+        // Aus welcher Übung eine Meldung kam - siehe lib/meldungen.php.
+        'vocab_flags.mode' => [
+            static fn (): bool => !column_exists('vocab_flags', 'mode'),
+            'ALTER TABLE vocab_flags ADD COLUMN mode VARCHAR(16) NULL AFTER typed',
+        ],
     ];
 }
 

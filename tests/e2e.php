@@ -1900,8 +1900,8 @@ ok('Ein Satz zum Melden ist da', $mSatz !== null);
 $mVokabel = (int) ($mSatz['vocab_id'] ?? 0);
 $mSatzId  = (int) ($mSatz['id'] ?? 0);
 $mMarke   = bin2hex(random_bytes(6));
-$mEreignis = static fn (string $n, int $v, int $s, string $t): array =>
-    ['e' => $mMarke . '-' . $n, 'k' => 'melden', 'v' => $v, 's' => $s, 't' => $t];
+$mEreignis = static fn (string $n, int $v, int $s, string $t, string $m = ''): array =>
+    ['e' => $mMarke . '-' . $n, 'k' => 'melden', 'v' => $v, 's' => $s, 't' => $t, 'm' => $m];
 
 [$res, $code] = apiCall('bundle', 'push', ['ereignisse' => [
     $mEreignis('1', $mVokabel, $mSatzId, 'mein Versuch'),
@@ -1924,7 +1924,7 @@ ok('Die aus dem Auswaehlen meint das Wortpaar - ohne Satz',
 // veraergertes Kind zehn Meldungen fuer denselben Satz. Eine neue Kennung,
 // weil es ein neuer Druck ist und kein wiederholter Stapel.
 apiCall('bundle', 'push', ['ereignisse' => [
-    $mEreignis('3', $mVokabel, $mSatzId, 'zweiter Versuch'),
+    $mEreignis('3', $mVokabel, $mSatzId, 'zweiter Versuch', 'listen'),
 ]]);
 ok('Zweimal melden zaehlt nur einmal',
    (int) qv('SELECT COUNT(*) FROM vocab_flags WHERE vocab_id = ? AND sentence_id = ?',
@@ -1932,6 +1932,20 @@ ok('Zweimal melden zaehlt nur einmal',
 ok('Der letzte Versuch wird aber vermerkt',
    qv('SELECT typed FROM vocab_flags WHERE vocab_id = ? AND sentence_id = ?',
       [$mVokabel, $mSatzId]) === 'zweiter Versuch');
+ok('Mit der Uebung, aus der er kam',
+   qv('SELECT mode FROM vocab_flags WHERE vocab_id = ? AND sentence_id = ?',
+      [$mVokabel, $mSatzId]) === 'listen');
+apiCall('bundle', 'push', ['ereignisse' => [
+    $mEreignis('3b', $mVokabel, 0, '', 'irgendwas'),
+]]);
+ok('Eine Uebung, die es nicht gibt, wird nicht vermerkt',
+   qv('SELECT mode FROM vocab_flags WHERE vocab_id = ? AND sentence_id = 0', [$mVokabel]) === null);
+foreach (['quiz' => 'MODUS_WAHL', 'cloze' => 'MODUS_LUECKE', 'einsetzen' => 'MODUS_EINSETZEN',
+          'hoeren' => 'MODUS_HOEREN', 'frei' => 'MODUS_WAHL'] as $mAnsicht => $mKonst) {
+    ok("Die Meldung aus $mAnsicht sagt, aus welcher Uebung",
+       preg_match('/meldenVerdrahten\(.*?modus:\s*' . $mKonst . '\b/s',
+                  (string) file_get_contents(__DIR__ . "/../app/views/$mAnsicht.js")) === 1);
+}
 
 $mStand = meldung_laden($mVokabel, null);
 ok('Zusammen ist das EINE gemeldete Vokabel von einem Kind',
@@ -2008,6 +2022,32 @@ ok('Aber nicht, wer es war', $mWer !== [] && !str_contains($mWer[1], 'Testkind')
    'sonst saehe die Lehrkraft, welches Kind die App benutzt');
 ok('Mit dem Satz zum Aendern und dem Wortpaar dazu',
    str_contains($seite, 'name="s[' . $mSatzId . '][f]"') && str_contains($seite, 'name="f"'));
+ok('Ueber dem Satz steht, aus welcher Uebung gemeldet wurde',
+   str_contains($seite, '<h3>Beim Hören</h3>') && str_contains($seite, 'Beim Hören: getippt'));
+
+/*
+ * Mit Aufnahme: anhoeren, normal und langsam. Der Admin hat kein Konto in
+ * der App und darf sie trotzdem abspielen. Hat der Satz noch keine (lokal
+ * spricht der Azure-Simulator beim Freigeben), bekommt er eine zum Schein.
+ */
+$mHatTon = qv('SELECT 1 FROM sentence_audio WHERE sentence_id = ?', [$mSatzId]) !== null;
+if (!$mHatTon) {
+    ok('Ohne Aufnahme gibt es nichts zum Anhoeren', !str_contains($seite, 'data-hoerprobe'));
+    @mkdir(storage_path('audio'), 0775, true);
+    file_put_contents(storage_path('audio/e2e-meldung.mp3'), 'ID3-probe');
+    q("INSERT INTO sentence_audio (sentence_id, voice, hash, file, bytes)
+       VALUES (?, 'probe', 'e2emeldung01', 'audio/e2e-meldung.mp3', 9)", [$mSatzId]);
+}
+$seite = http($base . '/admin/meldungen.php')['body'];
+ok('Mit Aufnahme: ein Knopf zum Anhoeren und einer fuer langsam',
+   substr_count($seite, 'data-hoerprobe="') === 2 && str_contains($seite, 'data-tempo="0.7"'));
+preg_match('/data-hoerprobe="([^"]+)"/', $seite, $mTon);
+$mAntwort = http($base . str_replace(['/app', '&amp;'], ['', '&'], $mTon[1] ?? ''));
+ok('Und der Admin darf sie abspielen', $mAntwort['status'] === 200, (string) $mAntwort['status']);
+if (!$mHatTon) {
+    q('DELETE FROM sentence_audio WHERE sentence_id = ?', [$mSatzId]);
+    @unlink(storage_path('audio/e2e-meldung.mp3'));
+}
 ok('Die Leiste traegt die Zahl in Rot', str_contains($seite, 'class="zaehler"'));
 ok('Die Lueckensaetze haben keine eigene Meldeverwaltung mehr',
    !str_contains(http($base . '/admin/sentences.php')['body'], 'clear_flags'));
@@ -4680,7 +4720,7 @@ ok('Das Wortpaar zum Aendern, weil beim Auswaehlen gemeldet wurde',
    str_contains($res['body'], 'name="f" value="alpha"'));
 ok('Und der Satz zum Aendern, samt dem Getippten',
    str_contains($res['body'], 'name="s[' . $lmSatz('alpha') . '][f]"')
-   && str_contains($res['body'], 'Getippt: &bdquo;alfa&ldquo;'));
+   && str_contains($res['body'], 'getippt &bdquo;alfa&ldquo;'));
 
 preg_match('/name="csrf" value="([a-f0-9]+)"/', $res['body'], $lmM);
 $lmCsrf = $lmM[1] ?? '';
@@ -6444,7 +6484,13 @@ ok('Und die Lerneinheit nennt den Stand je Vokabel - übbar, weil es eine Aufnah
    && ($hErste['modes']['listen']['correct'] ?? null) === 1, json_encode($hErste['modes']['listen'] ?? null));
 
 q('UPDATE units SET released_position = 0 WHERE id = ?', [$hUnit]);
-ok('Und ein noch nicht freigegebener Satz bleibt zu', http($hUrl)['status'] === 404);
+// In einem eigenen Topf: In $jar ist auch der Admin angemeldet, und der darf
+// jede Aufnahme hören (die Meldungen spielen sie ab).
+$hZuStatus = apiAls(tempnam(sys_get_temp_dir(), 'vt'), function () use ($hUrl, $username) {
+    apiCall('auth', 'login', ['username' => $username, 'password' => 'geheim123']);
+    return http($hUrl)['status'];
+});
+ok('Und ein noch nicht freigegebener Satz bleibt zu', $hZuStatus === 404, (string) $hZuStatus);
 
 // ---- Latein: keine Stimme, keine Aufnahmen.
 

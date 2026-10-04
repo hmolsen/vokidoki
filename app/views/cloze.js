@@ -324,6 +324,7 @@ function showCard(data) {
         vocabId: data.vocabId,
         satzId:  data.satzId,
         getippt: input.value.trim(),
+        modus:   MODUS_LUECKE,
     }));
 
     const verdict = $('#verdict');

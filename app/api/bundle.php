@@ -372,7 +372,8 @@ switch (action()) {
                     continue;
                 }
                 if (meldung_aufnehmen($uid, $vocabId, (int) ($e['s'] ?? 0),
-                                      mb_substr((string) ($e['t'] ?? ''), 0, 128))) {
+                                      mb_substr((string) ($e['t'] ?? ''), 0, 128),
+                                      (string) ($e['m'] ?? ''))) {
                     $genommen++;
                 } else {
                     $fremd++;

@@ -229,6 +229,7 @@ function zeigen(data) {
         vocabId: data.vocabId,
         satzId:  data.satzId,
         getippt: zustand?.gewaehlt ?? '',
+        modus:   MODUS_EINSETZEN,
     }));
 }
 
