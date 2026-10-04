@@ -17,6 +17,7 @@ require_once __DIR__ . '/../lib/settings.php';
 require_once __DIR__ . '/../lib/errors.php';
 require_once __DIR__ . '/../lib/schema.php';
 require_once __DIR__ . '/../lib/version.php';
+require_once __DIR__ . '/../lib/lehrkraefte.php';
 
 boot_error_handling();
 session_boot();
@@ -232,29 +233,35 @@ function teacher_require(): array
     }
 
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['teacher_login'])) {
-        $username = strtolower(trim((string) ($_POST['username'] ?? '')));
         $password = (string) ($_POST['password'] ?? '');
 
+        // Dieselbe Regel wie in der App (lib/schulkuerzel.php).
+        ['konto' => $row, 'schluessel' => $schluessel] = konto_zur_anmeldung(
+            (string) ($_POST['school'] ?? ''), (string) ($_POST['username'] ?? ''));
+
         $ip    = login_client_ip();
-        $sperr = login_guard($username, $ip);
+        $sperr = login_guard($schluessel, $ip);
         if ($sperr !== null) {
             teacher_login_page($sperr);
         }
-
-        $row = q1('SELECT * FROM users WHERE username = ? AND active = 1', [$username]);
 
         // password_verify auch ohne Treffer aufrufen, damit die Antwortzeit
         // nichts über vorhandene Konten verrät.
         $hash = $row['password_hash'] ?? '$2y$12$' . str_repeat('.', 53);
         if ($row === null || !password_verify($password, $hash) || !user_is_teacher($row)) {
-            login_attempt_record($username, $ip);
+            login_attempt_record($schluessel, $ip);
             usleep(random_int(200_000, 500_000));
-            teacher_login_page('Benutzername oder Passwort stimmt nicht.');
+            teacher_login_page('Schulkürzel, Benutzername oder Passwort stimmt nicht.');
         }
 
-        login_attempts_reset($username);
+        login_attempts_reset($schluessel);
 
         login_user((int) $row['id']);
+        // Das Kürzel für die nächste Anmeldung merken - ein Jahr, nur dieser Pfad.
+        setcookie('vt_schule', schulkuerzel_von((int) $row['school_id']), [
+            'expires' => time() + 365 * 86400, 'path' => url('/'), 'samesite' => 'Lax',
+            'secure' => (($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off'),
+        ]);
         teacher_redirect('index.php');
     }
 
@@ -285,7 +292,61 @@ function teacher_require(): array
         teacher_redirect('einwilligung.php');
     }
 
+    /*
+     * Die erhöhte Sitzung (lib/lehrkraefte.php) verlängern oder beenden -
+     * aus dem gelben Band, das auf jeder Seite des Bereichs steht. Danach
+     * dieselbe Seite noch einmal; nach "Beenden" von der Seite der
+     * Lehrkräfte aus aber nach Hause, denn dort ist ohne sie nichts mehr zu
+     * sehen.
+     */
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST'
+        && (isset($_POST['erhoeht_verlaengern']) || isset($_POST['erhoeht_beenden']))) {
+        teacher_csrf_check();
+        if (isset($_POST['erhoeht_beenden'])) {
+            erhoeht_beenden();
+            if (in_array(basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')), ERHOEHT_SEITEN, true)) {
+                teacher_redirect('index.php');
+            }
+        } elseif (!erhoeht_verlaengern($user)) {
+            teacher_flash('Die Verwaltungssitzung war schon abgelaufen.', 'bad');
+        }
+        header('Location: ' . (string) ($_SERVER['REQUEST_URI'] ?? teacher_url('index.php')), true, 303);
+        exit;
+    }
+
     return $user;
+}
+
+/* Seiten, die es nur in der erhöhten Sitzung gibt - nach ihrem Ende geht es von dort nach Hause. */
+const ERHOEHT_SEITEN = ['lehrkraefte.php'];
+
+/**
+ * Das gelbe Band der erhöhten Sitzung - oben auf jeder Seite, solange sie gilt.
+ *
+ * Mit der Zeit, die bleibt (m:ss, teacher.js zählt herunter), und zwei
+ * Knöpfen: noch einmal fünf Minuten, oder gleich beenden. Läuft sie ab,
+ * verschwindet das Band; wer dann auf der Seite der Lehrkräfte steht, kommt
+ * nach Hause.
+ */
+function erhoeht_band_html(array $user): string
+{
+    $rest = erhoeht_rest($user);
+    if ($rest <= 0) {
+        return '';
+    }
+    $zuhause = in_array(basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')), ERHOEHT_SEITEN, true);
+    return sprintf(
+        '<div class="erhoeht" id="erhoeht" role="status" data-rest="%d"%s>'
+        . '<span class="erhoeht-text"><span aria-hidden="true">&#128273;</span> Du bist in einer '
+        . '<strong>Verwaltungssitzung</strong> &ndash; noch <strong class="erhoeht-uhr">%d:%02d</strong></span>'
+        . '<form method="post" class="erhoeht-knoepfe">%s'
+        . '<button class="btn small secondary" name="erhoeht_verlaengern" value="1">&#8635; 5 Minuten</button>'
+        . '<button class="btn small secondary" name="erhoeht_beenden" value="1">Beenden</button></form></div>',
+        $rest,
+        $zuhause ? ' data-zuhause="' . h(teacher_url('index.php')) . '"' : '',
+        intdiv($rest, 60), $rest % 60,
+        teacher_csrf_field(),
+    );
 }
 
 function teacher_login_page(?string $error): never
@@ -304,10 +365,23 @@ function teacher_login_page(?string $error): never
 <?php if ($error !== null): ?><div class="notice"><?= h($error) ?></div><?php endif; ?>
 <form method="post" class="card">
     <?= teacher_csrf_field() ?>
+    <?php
+    /*
+     * Das Kürzel der Schule zuerst - Benutzernamen sind nur innerhalb ihrer
+     * Schule eindeutig. Das zuletzt benutzte steht schon da (Cookie, siehe
+     * unten): Eine Lehrkraft wechselt ihre Schule selten.
+     */
+    // Der Code auf dem Zettel einer neuen Lehrkraft bringt beides mit (?schule=&name=).
+    $kuerzelVorher = schulkuerzel_normal((string) ($_POST['school'] ?? $_GET['schule'] ?? $_COOKIE['vt_schule'] ?? ''));
+    ?>
+    <label for="s">Schulkürzel</label>
+    <input type="text" id="s" name="school" autocapitalize="off" autocorrect="off" spellcheck="false"
+           maxlength="12" value="<?= h($kuerzelVorher) ?>" placeholder="z. B. opsk"<?= $kuerzelVorher === '' ? ' autofocus' : '' ?>>
     <label for="u">Benutzername</label>
-    <input type="text" id="u" name="username" autocapitalize="off" autocomplete="username" autofocus>
+    <input type="text" id="u" name="username" autocapitalize="off" autocomplete="username"
+           value="<?= h($nameVorher = strtolower(trim((string) ($_POST['username'] ?? $_GET['name'] ?? '')))) ?>"<?= $kuerzelVorher !== '' && $nameVorher === '' ? ' autofocus' : '' ?>>
     <label for="p">Passwort</label>
-    <input type="password" id="p" name="password" autocomplete="current-password">
+    <input type="password" id="p" name="password" autocomplete="current-password"<?= $kuerzelVorher !== '' && $nameVorher !== '' ? ' autofocus' : '' ?>>
     <button class="btn" name="teacher_login" value="1">Anmelden</button>
 </form>
 <?= legal_links_html('teacher') ?>
@@ -514,6 +588,14 @@ function teacher_nav(array $user, ?int $kursId = null): void
                     <span class="mzahl">0</span>
                 </span>
             <?php endif; ?>
+
+            <hr class="mtrenner">
+
+            <?php // Konten der Kolleginnen - nur in der erhöhten Sitzung (lehrkraefte.php). ?>
+            <a class="mitem" href="<?= h(teacher_url('lehrkraefte.php')) ?>">
+                <span class="micon" aria-hidden="true">&#129489;&#8205;&#127979;</span>
+                <span>Lehrkräfte</span>
+            </a>
         </nav>
     </details>
 
@@ -814,6 +896,7 @@ $installToken = install_token($user);
 </head><body class="admin" data-base="<?= h(base_path()) ?>">
 <?php teacher_nav($user, $kursId); ?>
 <main class="adminmain">
+<?= erhoeht_band_html($user) ?>
 <?php
 /*
  * Die Ueberschrift, und daneben Platz fuer einen Knopf.

@@ -18,7 +18,7 @@ export async function pruefe(f, aus) {
     try {
         // ---- Die Anmeldung führt auf die eigenen Kurse.
 
-        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort);
+        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort, f.kuerzel);
 
         const start = await b.js(`({
             ort:    location.pathname,

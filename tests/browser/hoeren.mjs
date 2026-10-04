@@ -49,7 +49,7 @@ export async function pruefe(f, aus, wurzel) {
 
     const b = await browser({ port: 9423, breite: 390, hoehe: 844, handy: true, aus });
     try {
-        await alsKind(b, f.basis, f.kind, f.passwort);
+        await alsKind(b, f.basis, f.kind, f.passwort, f.kuerzel);
         const auffrischen = () => b.js(`(async () => { const v = await import('${f.basis}/vorrat.js'); await v.vorratAuffrischen(); })()`);
         await auffrischen();
 
@@ -265,9 +265,11 @@ export async function pruefe(f, aus, wurzel) {
         const fokus = () => b.js(`({ id: document.activeElement?.id ?? '', halter: !!document.getElementById('tastaturhalter'),
             luecke: !!document.getElementById('answer'), weiter: (document.getElementById('weiter')?.offsetParent ?? null) !== null })`);
         let uebergang = null;
+        const verlauf = [];   // für die Meldung, falls kein Übergang kommt
         for (let i = 0; i < 40 && uebergang === null; i++) {
             const art = await antworteIrgendwie();
             const sofort = await fokus();
+            verlauf.push(`${art}:${sofort.id || '-'}`);
             if (art !== 'luecke' && sofort.id === 'tastaturhalter') {
                 await schlafe(2200);
                 let danach = await fokus();
@@ -282,7 +284,8 @@ export async function pruefe(f, aus, wurzel) {
             }
         }
         ok('Folgt ein Lückentext, hält schon beim Antworten ein Feld die Tastatur offen',
-           uebergang !== null && uebergang.sofort.id === 'tastaturhalter', JSON.stringify(uebergang));
+           uebergang !== null && uebergang.sofort.id === 'tastaturhalter',
+           JSON.stringify(uebergang ?? verlauf.join(' ')));
         ok('Und erscheint er, ist sein Feld im Fokus - die Tastatur ist schon da',
            uebergang?.danach.luecke && uebergang.danach.id === 'answer' && !uebergang.danach.halter,
            JSON.stringify(uebergang));
@@ -352,7 +355,7 @@ export async function pruefeOhneNetz(f, aus, wurzel) {
 
     const b = await browser({ port: 9424, breite: 390, hoehe: 844, handy: true, aus });
     try {
-        await alsKind(b, basis, f.kind, f.passwort);
+        await alsKind(b, basis, f.kind, f.passwort, f.kuerzel);
         await b.geh(basis + '/', 2200);
         await b.js(`(async () => { const v = await import('${basis}/vorrat.js'); await v.vorratAuffrischen(); })()`);
 

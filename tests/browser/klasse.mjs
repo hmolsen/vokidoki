@@ -19,7 +19,7 @@ export async function pruefe(f, aus) {
 
     const b = await browser({ port: 9403, breite: 1200, hoehe: 1100, aus });
     try {
-        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort);
+        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort, f.kuerzel);
         await b.geh(f.basis + '/teacher/class.php?id=' + f.leereKlasse, 1400);
 
         const vorher = await b.js(`({

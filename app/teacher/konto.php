@@ -166,9 +166,9 @@ teacher_flash_render();
 
     <button class="btn secondary" name="change_password" value="1">Passwort ändern</button>
     <p class="tiny muted">
-        Mindestens sechs Zeichen. Wenn du es vergisst, kann dir nur der
-        Betreiber ein neues geben &ndash; anders als bei den Kindern, denen
-        du selbst eines geben kannst.
+        Mindestens zehn Zeichen, am besten ein ganzer Satz. Wenn du es
+        vergisst, gibt dir eine Kollegin unter &bdquo;Lehrkräfte&ldquo; ein
+        neues &ndash; deshalb darf es niemand erraten können.
     </p>
 </form>
 
@@ -203,9 +203,10 @@ teacher_flash_render();
 </form>
 
 <p class="tiny muted">
-    Dein Benutzername zum Anmelden ist
-    <code><?= h((string) $user['username']) ?></code> und lässt sich nicht
-    ändern.
+    Zum Anmelden: Schulkürzel
+    <code><?= h(schulkuerzel_von(isset($user['school_id']) ? (int) $user['school_id'] : null)) ?></code>,
+    Benutzername <code><?= h((string) $user['username']) ?></code> &ndash; beides lässt sich nicht
+    selbst ändern.
 </p>
 
 <?php teacher_foot(); ?>

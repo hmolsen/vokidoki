@@ -56,8 +56,14 @@ function profile_change_password(array $user, string $alt, string $neu): ?string
         usleep(random_int(200_000, 500_000));
         return 'Das bisherige Passwort stimmt nicht.';
     }
-    if (mb_strlen($neu) < 6) {
-        return 'Das neue Passwort braucht mindestens 6 Zeichen.';
+    /*
+     * Lehrkräfte brauchen ein stärkeres: Jede Kollegin kann ihnen ein neues
+     * Passwort geben (lib/lehrkraefte.php), und ihr Konto sieht alle Klassen
+     * der Schule. Kinder tippen ihres auf dem Handy - dort genügen sechs.
+     */
+    $mindestens = ($user['role'] ?? '') === 'teacher' ? 10 : 6;
+    if (mb_strlen($neu) < $mindestens) {
+        return sprintf('Das neue Passwort braucht mindestens %d Zeichen.', $mindestens);
     }
     if ($neu === $alt) {
         return 'Das ist das bisherige Passwort.';

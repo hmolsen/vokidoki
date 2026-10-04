@@ -37,7 +37,7 @@ export async function pruefe(f, aus, wurzel) {
 
     const b = await browser({ port: 9419, breite: 390, hoehe: 840, aus });
     try {
-        await alsKind(b, f.basis, f.kind, f.passwort);
+        await alsKind(b, f.basis, f.kind, f.passwort, f.kuerzel);
 
         // ---- Auswählen
         await b.hash('/quiz/' + f.unit, 2500);
@@ -111,7 +111,7 @@ export async function pruefe(f, aus, wurzel) {
 
     const l = await browser({ port: 9420, breite: 390, hoehe: 840, aus });
     try {
-        await alsLehrkraft(l, f.basis, f.lehrer, f.passwort);
+        await alsLehrkraft(l, f.basis, f.lehrer, f.passwort, f.kuerzel);
         await l.geh(f.basis + '/teacher/', 1200);
 
         ok('Am Zahnrad steht rot die Zahl der gemeldeten Vokabeln',

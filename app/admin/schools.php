@@ -23,7 +23,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     csrf_check();
 
     if (isset($_POST['create'])) {
-        $name = trim(preg_replace('/\s+/u', ' ', (string) ($_POST['name'] ?? '')) ?? '');
+        $name    = trim(preg_replace('/\s+/u', ' ', (string) ($_POST['name'] ?? '')) ?? '');
+        // Ohne Kürzel könnte sich niemand anmelden - also gleich beim Anlegen.
+        $kuerzel = schulkuerzel_normal((string) ($_POST['kuerzel'] ?? ''));
 
         if ($name === '') {
             flash('Die Schule braucht einen Namen.', 'bad');
@@ -31,9 +33,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             flash('Der Name ist zu lang.', 'bad');
         } elseif (q1('SELECT id FROM schools WHERE name = ?', [$name]) !== null) {
             flash('Diese Schule gibt es schon.', 'bad');
+        } elseif (($grund = schulkuerzel_pruefen($kuerzel)) !== null) {
+            flash($grund, 'bad');
         } else {
-            q('INSERT INTO schools (name) VALUES (?)', [$name]);
-            flash('Schule "' . $name . '" angelegt.');
+            // Wie viele Lehrkräfte sie haben darf - Lehrkräfte legen einander an (lib/lehrkraefte.php).
+            $grenze = max(1, min(1000, (int) ($_POST['max_lehrkraefte'] ?? LEHRKRAEFTE_VOREINSTELLUNG)));
+            q('INSERT INTO schools (name, kuerzel, max_lehrkraefte) VALUES (?, ?, ?)', [$name, $kuerzel, $grenze]);
+            flash('Schule "' . $name . '" mit dem Kürzel "' . $kuerzel . '" angelegt.');
         }
         redirect('schools.php');
     }
@@ -44,23 +50,33 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $cap  = trim((string) ($_POST['cap'] ?? ''));
 
         $andere = q1('SELECT id FROM schools WHERE name = ? AND id <> ?', [$name, $id]);
+        $kuerzel = schulkuerzel_normal((string) ($_POST['kuerzel'] ?? ''));
 
         if ($name === '') {
             flash('Die Schule braucht einen Namen.', 'bad');
         } elseif ($andere !== null) {
             flash('Diesen Namen trägt schon eine andere Schule.', 'bad');
+        } elseif (($grund = schulkuerzel_pruefen($kuerzel, $id)) !== null) {
+            flash($grund, 'bad');
         } else {
+            /*
+             * Ein neues Kürzel gilt sofort: Wer angemeldet ist, bleibt es;
+             * wer sich neu anmeldet, braucht das neue. Gedruckte Zettel
+             * tragen dann noch das alte.
+             */
+            q('UPDATE schools SET kuerzel = ? WHERE id = ?', [$kuerzel, $id]);
             /*
              * Leeres Feld heisst "kein eigenes Limit" und nicht "null Dollar".
              * Der Unterschied ist erheblich: NULL laesst nur das Budget des
              * Betreibers greifen, 0.00 wuerde die Schule sofort aussperren.
              */
             q(
-                'UPDATE schools SET name = ?, active = ?, monthly_cost_cap_usd = ? WHERE id = ?',
+                'UPDATE schools SET name = ?, active = ?, monthly_cost_cap_usd = ?, max_lehrkraefte = ? WHERE id = ?',
                 [
                     mb_substr($name, 0, 128),
                     isset($_POST['active']) ? 1 : 0,
                     $cap === '' ? null : number_format((float) str_replace(',', '.', $cap), 2, '.', ''),
+                    max(1, min(1000, (int) ($_POST['max_lehrkraefte'] ?? LEHRKRAEFTE_VOREINSTELLUNG))),
                     $id,
                 ],
             );
@@ -138,6 +154,17 @@ flash_render();
     <label for="name">Name der Schule</label>
     <input type="text" id="name" name="name" maxlength="128"
            placeholder="Gymnasium Musterstadt" required autofocus>
+    <label for="kuerzel">Kürzel zum Anmelden</label>
+    <input type="text" id="kuerzel" name="kuerzel" maxlength="12" autocapitalize="off"
+           placeholder="gm" required pattern="[a-z0-9]{2,12}"
+           title="2 bis 12 Kleinbuchstaben oder Ziffern">
+    <p class="tiny muted" style="margin:-4px 0 10px">Kinder und Lehrkräfte tippen es bei der
+        Anmeldung ein; es steht auf jedem Zettel.</p>
+    <label for="maxlk">Höchstens so viele Lehrkräfte</label>
+    <input type="number" id="maxlk" name="max_lehrkraefte" min="1" max="1000"
+           value="<?= LEHRKRAEFTE_VOREINSTELLUNG ?>" style="width:120px">
+    <p class="tiny muted" style="margin:-4px 0 10px">Lehrkräfte legen einander selbst an
+        (&bdquo;Lehrkräfte&ldquo; im Menü) &ndash; bis zu dieser Zahl.</p>
     <button class="btn small" name="create" value="1">Schule anlegen</button>
 </form>
 
@@ -150,7 +177,7 @@ flash_render();
             <?= h($s['name']) ?>
             <span class="muted" style="font-weight:400">
                 &middot; <?= (int) $s['konten'] ?> Konten
-                (<?= (int) $s['lehrkraefte'] ?> Lehrkräfte)
+                (<?= (int) $s['lehrkraefte'] ?> von höchstens <?= (int) $s['max_lehrkraefte'] ?> Lehrkräften)
                 &middot; <?= (int) $s['klassen'] ?> Klassen
                 &middot; <?= (int) $s['kurse'] ?> Kurse
                 &middot; <?= $eur((float) $s['kosten']) ?> diesen Monat
@@ -163,11 +190,17 @@ flash_render();
             <input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
             <input type="text" name="name" value="<?= h($s['name']) ?>" maxlength="128"
                    style="width:240px;margin:0">
+            <input type="text" name="kuerzel" value="<?= h((string) ($s['kuerzel'] ?? '')) ?>" maxlength="12"
+                   placeholder="Kürzel" title="Kürzel zum Anmelden" autocapitalize="off"
+                   style="width:100px;margin:0" required>
             <input type="text" name="cap" inputmode="decimal"
                    value="<?= $s['monthly_cost_cap_usd'] === null
                               ? '' : h((string) (float) $s['monthly_cost_cap_usd']) ?>"
                    placeholder="Limit USD" title="Monatslimit dieser Schule in USD. Leer = kein eigenes Limit."
                    style="width:110px;margin:0">
+            <input type="number" name="max_lehrkraefte" min="1" max="1000"
+                   value="<?= (int) $s['max_lehrkraefte'] ?>" title="Höchstens so viele Lehrkräfte"
+                   style="width:90px;margin:0">
             <label style="display:flex;align-items:center;gap:6px;margin:0;font-weight:500">
                 <input type="checkbox" name="active" value="1"<?= $s['active'] ? ' checked' : '' ?>
                        style="width:auto;min-height:auto;margin:0"> aktiv

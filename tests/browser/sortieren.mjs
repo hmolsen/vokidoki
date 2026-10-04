@@ -18,7 +18,7 @@ export async function pruefe(f, aus, wurzel) {
 
     const b = await browser({ port: 9416, breite: 1100, hoehe: 900, aus });
     try {
-        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort);
+        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort, f.kuerzel);
 
         /*
          * Zwei weitere Lerneinheiten anlegen - mit einer einzigen lässt

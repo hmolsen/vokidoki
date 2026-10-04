@@ -35,7 +35,7 @@ export async function pruefe(f, aus, wurzel) {
 
     const b = await browser({ port: 9419, breite: 1100, hoehe: 900, aus });
     try {
-        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort);
+        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort, f.kuerzel);
         await b.geh(f.basis + '/teacher/unit.php?id=' + einheit, 1500);
 
         // ---- Zeilen aus Wörtern: zwei Spalten, die Tesseract getrennt liest.

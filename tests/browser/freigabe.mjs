@@ -19,7 +19,7 @@ export async function pruefe(f, aus) {
     // Fensterrand wird eigens geprüft und soll hier nicht dazwischenfunken.
     const b = await browser({ port: 9401, breite: 1200, hoehe: 1500, aus });
     try {
-        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort);
+        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort, f.kuerzel);
 
         // Das Formular darf nicht wirklich abschicken - sonst navigiert die
         // Seite weg und wir sehen nichts mehr. Statt dessen merken wir uns,

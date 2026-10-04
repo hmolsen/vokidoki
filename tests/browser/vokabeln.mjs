@@ -19,7 +19,7 @@ export async function pruefe(f, aus) {
     // Tabellenkopf laesst sich nur an einer Seite pruefen, die rollt.
     const b = await browser({ port: 9407, breite: 1300, hoehe: 900, aus });
     try {
-        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort);
+        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort, f.kuerzel);
         await b.geh(f.basis + '/teacher/unit.php?id=' + f.unit, 1500);
 
         // ---- Der Ruhezustand.

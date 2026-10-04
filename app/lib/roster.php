@@ -197,22 +197,26 @@ function roster_username_base(string $first, string $initial): string
 }
 
 /**
- * Macht aus der Grundform einen freien Benutzernamen.
+ * Macht aus der Grundform einen freien Benutzernamen - in dieser Schule.
  *
- * Benutzernamen sind über alle Schulen hinweg eindeutig - so steht es in der
- * Tabelle, und so soll es bleiben: Ein Kind tippt seinen Namen ein, ohne
- * vorher eine Schule zu wählen. Bei einer zweiten "lilli.m" wird also
- * durchgezählt.
+ * Benutzernamen sind nur innerhalb ihrer Schule eindeutig: Angemeldet wird
+ * mit Schulkürzel, Benutzername und Passwort (lib/schulkuerzel.php). Über
+ * alle Schulen hinweg gezählt hiess die zweite "lilli.m" an einer ganz
+ * anderen Schule "lilli.m2" - und kein Kind konnte erraten, welche Ziffer
+ * seine war. Durchgezählt wird jetzt nur noch innerhalb der Schule.
  */
-function roster_free_username(string $base): string
+function roster_free_username(string $base, int $schoolId): string
 {
-    if (q1('SELECT id FROM users WHERE username = ?', [$base]) === null) {
+    $frei = static fn (string $name): bool =>
+        q1('SELECT id FROM users WHERE school_id = ? AND username = ?', [$schoolId, $name]) === null;
+
+    if ($frei($base)) {
         return $base;
     }
 
     for ($n = 2; $n < 200; $n++) {
         $kandidat = $base . $n;
-        if (q1('SELECT id FROM users WHERE username = ?', [$kandidat]) === null) {
+        if ($frei($kandidat)) {
             return $kandidat;
         }
     }
@@ -245,7 +249,7 @@ function student_create(
         return null;
     }
 
-    $username = roster_free_username(roster_username_base($first, $initial));
+    $username = roster_free_username(roster_username_base($first, $initial), $schoolId);
 
     q(
         'INSERT INTO users (school_id, username, display_name, role, password_hash,
@@ -325,7 +329,7 @@ function students_bulk_create(int $schoolId, int $classId, string $text): array
  */
 function student_reset_password(int $userId): ?string
 {
-    $konto = q1('SELECT username FROM users WHERE id = ?', [$userId]);
+    $konto = q1('SELECT username, school_id FROM users WHERE id = ?', [$userId]);
     if ($konto === null) {
         return null;
     }
@@ -338,7 +342,7 @@ function student_reset_password(int $userId): ?string
     q('UPDATE users SET password_hash = ?, initial_password = ? WHERE id = ?',
       [password_hash($passwort, PASSWORD_DEFAULT), $passwort, $userId]);
 
-    login_attempts_reset((string) $konto['username']);
+    login_attempts_reset(login_schluessel((int) $konto['school_id'], (string) $konto['username']));
 
     return $passwort;
 }

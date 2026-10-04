@@ -28,7 +28,9 @@ CREATE TABLE IF NOT EXISTS users (
   letter_template TEXT       NULL,
   active        TINYINT(1)   NOT NULL DEFAULT 1,
   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_users_username (username),
+  -- Eindeutig nur innerhalb der Schule: Angemeldet wird mit Schulkuerzel,
+  -- Benutzername und Passwort (lib/schulkuerzel.php).
+  UNIQUE KEY uq_users_school_username (school_id, username),
   KEY idx_users_school (school_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -164,8 +166,13 @@ CREATE TABLE IF NOT EXISTS schools (
   name       VARCHAR(128) NOT NULL,
   active     TINYINT(1) NOT NULL DEFAULT 1,
   monthly_cost_cap_usd DECIMAL(10,2) NULL,
+  -- Das Kuerzel zum Anmelden ("opsk") - siehe lib/schulkuerzel.php.
+  kuerzel    VARCHAR(12) NULL,
+  -- So viele Lehrkraefte darf die Schule haben - siehe lib/lehrkraefte.php.
+  max_lehrkraefte SMALLINT UNSIGNED NOT NULL DEFAULT 50,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_school_name (name)
+  UNIQUE KEY uq_school_name (name),
+  UNIQUE KEY uq_school_kuerzel (kuerzel)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS classes (

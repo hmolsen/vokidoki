@@ -23,7 +23,7 @@ export async function pruefe(f, aus) {
 
     const b = await browser({ port: 9412, breite: 420, hoehe: 900, aus });
     try {
-        await alsKind(b, f.basis, f.kind, f.passwort);
+        await alsKind(b, f.basis, f.kind, f.passwort, f.kuerzel);
         await b.geh(f.basis + '/', 2000);
 
         // ---- Der Vorrat liegt im Gerät.
@@ -275,7 +275,7 @@ export async function pruefeKaltstart(f, aus) {
 
     const b = await browser({ port: 9413, breite: 420, hoehe: 900, aus });
     try {
-        await alsKind(b, basis, f.kind, f.passwort);
+        await alsKind(b, basis, f.kind, f.passwort, f.kuerzel);
         await b.geh(basis + '/', 2200);
 
         const bereit = await b.js(`navigator.serviceWorker.ready
@@ -346,7 +346,7 @@ export async function pruefeFreigabeKommtAn(f, aus) {
 
     const b = await browser({ port: 9418, breite: 1100, hoehe: 900, aus });
     try {
-        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort);
+        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort, f.kuerzel);
 
         const zaehle = async () => {
             await b.geh(f.basis + '/#/unit/' + f.unit, 2500);

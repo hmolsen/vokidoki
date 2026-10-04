@@ -33,6 +33,7 @@ require_once $root . '/lib/tts.php';
 
 const DEMO_SCHULE   = 'VORFUEHRUNG Gymnasium am See';
 const DEMO_PASSWORT = 'vorfuehrung';
+const DEMO_KUERZEL  = 'gas';    // Gymnasium am See
 
 function demo_weg(): void
 {
@@ -57,7 +58,7 @@ if (($argv[1] ?? '') === 'weg') {
 
 demo_weg();
 
-q('INSERT INTO schools (name, active) VALUES (?, 1)', [DEMO_SCHULE]);
+q('INSERT INTO schools (name, kuerzel, active) VALUES (?, ?, 1)', [DEMO_SCHULE, DEMO_KUERZEL]);
 $schuleId = (int) db()->lastInsertId();
 
 q('INSERT INTO users (school_id, username, display_name, password_hash, color, role, can_import)
@@ -280,6 +281,7 @@ echo json_encode([
     'lehrer'   => 'vorfuehrung.berger',
     'kind'     => (string) qv('SELECT username FROM users WHERE id = ?', [$lina]),
     'passwort' => DEMO_PASSWORT,
+    'kuerzel'  => DEMO_KUERZEL,
     'kursFr'   => (int) $fr['id'],
     'kursEn'   => (int) $en['id'],
     'klasse'   => $klasseId,

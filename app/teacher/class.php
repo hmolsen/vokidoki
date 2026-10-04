@@ -172,7 +172,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['unlock'])) {
      * und sein Passwort kennt, soll nicht eine Viertelstunde warten und auch
      * kein neues Passwort abtippen muessen.
      */
-    login_attempts_reset((string) $gehoert['username']);
+    login_attempts_reset(login_schluessel($schoolId, (string) $gehoert['username']));
     teacher_flash(sprintf('%s kann sich wieder anmelden.', $gehoert['display_name']));
     teacher_redirect($zurück);
 }
@@ -311,7 +311,15 @@ $kinder    = array_values(array_filter(
     static fn (array $m): bool => $m['role'] !== 'teacher',
 ));
 $kurse     = courses_for_class($classId);
-$gesperrt  = login_locked_usernames(array_column($kinder, 'username'));
+// Die Bremse zählt je Schule und Benutzername (login_schluessel()).
+$gesperrtSchluessel = login_locked_usernames(array_map(
+    static fn (array $k): string => login_schluessel($schoolId, (string) $k['username']), $kinder));
+$gesperrt  = [];
+foreach ($kinder as $k) {
+    if (isset($gesperrtSchluessel[login_schluessel($schoolId, (string) $k['username'])])) {
+        $gesperrt[$k['username']] = true;
+    }
+}
 $frisch    = array_flip((array) ($_SESSION['teacher_fresh'] ?? []));
 unset($_SESSION['teacher_fresh']);
 $druckbar  = teacher_druckbar();
@@ -413,6 +421,8 @@ teacher_flash_render();
 </p>
 
 <h2>Kinder dieser Klasse</h2>
+<?php // Angemeldet wird mit drei Angaben - das Kürzel ist für die ganze Schule dasselbe. ?>
+<p class="tiny muted">Zum Anmelden: Schulkürzel <code class="token"><?= h(schulkuerzel_von($schoolId)) ?></code>, dazu Benutzername und Passwort. Alles drei steht auf dem Zettel; der Code darauf füllt Kürzel und Benutzername schon aus.</p>
 
 <table class="data courses" id="kinder">
     <tr>

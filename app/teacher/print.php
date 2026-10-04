@@ -20,14 +20,32 @@ $schoolId = (int) ($user['school_id'] ?? 0);
 $classId = (int) ($_GET['class'] ?? 0);
 $userId  = (int) ($_GET['user'] ?? 0);
 
-$klasse = $classId > 0 ? class_in_school($classId, $schoolId) : null;
+/*
+ * Dieselben Zettel für neue Lehrkräfte (?lehrkraefte=1) - mit der Vorlage
+ * des Betreibers (letter_lehrkraft()), der Adresse des Lehrkraft-Bereichs
+ * und nur in der erhöhten Sitzung: Auf den Blättern stehen Passwörter von
+ * Kolleginnen (lib/lehrkraefte.php).
+ */
+$fuerLehrkraefte = isset($_GET['lehrkraefte']);
 
-if ($klasse === null) {
-    teacher_flash('Diese Klasse gibt es nicht.', 'bad');
-    teacher_redirect('classes.php');
+if ($fuerLehrkraefte) {
+    if (!erhoeht_aktiv($user)) {
+        teacher_flash('Zettel für Lehrkräfte gibt es nur in der Verwaltungssitzung.', 'bad');
+        teacher_redirect('lehrkraefte.php');
+    }
+    $klasse = null;
+    $kinder = array_map(static fn (array $l): array => $l + ['role' => 'student'],
+                        lehrkraefte_der_schule($schoolId));
+} else {
+    $klasse = $classId > 0 ? class_in_school($classId, $schoolId) : null;
+
+    if ($klasse === null) {
+        teacher_flash('Diese Klasse gibt es nicht.', 'bad');
+        teacher_redirect('classes.php');
+    }
+
+    $kinder = class_members_list($classId);
 }
-
-$kinder = class_members_list($classId);
 
 /*
  * Ein einzelnes Blatt - nach einem zurueckgesetzten Passwort soll nicht die
@@ -56,13 +74,25 @@ $kinder   = array_values(array_filter(
         && (string) ($k['initial_password'] ?? '') !== '',
 ));
 
-$schule   = q1('SELECT name FROM schools WHERE id = ?', [$schoolId]);
-// Die Vorlage der Lehrkraft, die druckt - sonst die des Betreibers.
-$vorlage  = letter_template($user);
+$schule   = q1('SELECT name, kuerzel FROM schools WHERE id = ?', [$schoolId]);
+$kuerzel  = (string) ($schule['kuerzel'] ?? '');
+// Die Vorlage der Lehrkraft, die druckt - sonst die des Betreibers. Der
+// Zettel für Lehrkräfte hat nur die des Betreibers.
+$vorlage  = $fuerLehrkraefte ? letter_lehrkraft() : letter_template($user);
 // Mit Schema und Host: Der Zettel verlaesst die Anwendung, und ein QR-Code
 // mit einem blossen Pfad darin ist kein Link, sondern eine Zeichenkette.
-$adresse  = public_url('/');
-$qrSvg    = qr_svg($adresse, 4, 'Adresse der App');
+$adresse  = public_url($fuerLehrkraefte ? '/teacher/' : '/');
+
+/*
+ * Der QR-Code bringt Schulkürzel und Benutzernamen mit (views/login.js
+ * liest ?schule= und ?name=): Wer ihn abfotografiert, tippt nur noch das
+ * Passwort. Das Passwort selbst steht nicht darin - ein abfotografierter
+ * Zettel soll kein Schlüssel sein.
+ */
+$qrFuer = static fn (array $k): ?string => qr_svg(
+    public_url(($fuerLehrkraefte ? '/teacher/' : '/') . '?'
+        . http_build_query(['schule' => $kuerzel, 'name' => (string) $k['username']])),
+    4, 'Anmeldung in der App');
 
 /**
  * Der Brief als Absätze.
@@ -95,7 +125,7 @@ function brief_html(string $text): string
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Zugangsdaten <?= h($klasse['name']) ?></title>
+<title>Zugangsdaten <?= h($fuerLehrkraefte ? 'Lehrkräfte' : $klasse['name']) ?></title>
 <?= favicon_html() ?>
 <style>
 /*
@@ -240,10 +270,15 @@ body {
 
 <div class="bar">
     <button onclick="window.print()">Drucken</button>
-    <a href="<?= h(teacher_url('class.php') . '?id=' . $classId) ?>">zurück zur Klasse</a>
-    <a href="<?= h(teacher_url('konto.php') . '#vorlage') ?>">Text anpassen</a>
+    <?php if ($fuerLehrkraefte): ?>
+        <?php // Den Text für Lehrkräfte pflegt der Betreiber, nicht die Lehrkraft (lib/letter.php). ?>
+        <a href="<?= h(teacher_url('lehrkraefte.php')) ?>">zurück zu den Lehrkräften</a>
+    <?php else: ?>
+        <a href="<?= h(teacher_url('class.php') . '?id=' . $classId) ?>">zurück zur Klasse</a>
+        <a href="<?= h(teacher_url('konto.php') . '#vorlage') ?>">Text anpassen</a>
+    <?php endif; ?>
     <span class="grow">
-        <?= count($kinder) ?> Zettel, einer je Kind.
+        <?= count($kinder) ?> Zettel, <?= $fuerLehrkraefte ? 'einer je Lehrkraft' : 'einer je Kind' ?>.
         Im Druckdialog lässt sich das auch als PDF sichern.
     </span>
 </div>
@@ -262,9 +297,10 @@ body {
     $passwort = (string) $k['initial_password'];
     $brief    = letter_render($vorlage, [
         'name'         => (string) $k['display_name'],
+        'kuerzel'      => $kuerzel,
         'benutzername' => (string) $k['username'],
         'passwort'     => $passwort,
-        'klasse'       => (string) $klasse['name'],
+        'klasse'       => (string) ($klasse['name'] ?? ''),
         'schule'       => (string) ($schule['name'] ?? ''),
         'url'          => $adresse,
         'datenschutz'  => public_url('/rechtliches.php?d=datenschutz'),
@@ -278,13 +314,18 @@ body {
         </div>
 
         <h1 class="fuer">
-            <small>Dein Zugang zu Vokidoki</small>
+            <small><?= $fuerLehrkraefte ? 'Ihr Zugang zu Vokidoki' : 'Dein Zugang zu Vokidoki' ?></small>
             <strong><?= h($k['display_name']) ?></strong>
-            <span>Klasse <?= h($klasse['name']) ?><?= ($schule['name'] ?? '') !== ''
-                ? ' &middot; ' . h($schule['name']) : '' ?></span>
+            <?php if ($fuerLehrkraefte): ?>
+                <span>Lehrkraft<?= ($schule['name'] ?? '') !== '' ? ' &middot; ' . h($schule['name']) : '' ?></span>
+            <?php else: ?>
+                <span>Klasse <?= h($klasse['name']) ?><?= ($schule['name'] ?? '') !== ''
+                    ? ' &middot; ' . h($schule['name']) : '' ?></span>
+            <?php endif; ?>
         </h1>
 
         <div class="zugang">
+            <?php $qrSvg = $qrFuer($k); ?>
             <?php if ($qrSvg !== null): ?>
             <div class="qr">
                 <?= $qrSvg ?>
@@ -293,6 +334,7 @@ body {
             <?php endif; ?>
             <dl>
                 <dt>Adresse</dt><dd><?= h($adresse) ?></dd>
+                <dt>Schulkürzel</dt><dd><?= h($kuerzel) ?></dd>
                 <dt>Benutzername</dt><dd><?= h($k['username']) ?></dd>
                 <dt>Passwort</dt><dd class="pw"><?= h($passwort) ?></dd>
             </dl>

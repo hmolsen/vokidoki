@@ -48,7 +48,7 @@ export async function pruefe(f, aus) {
 
     const b = await browser({ port: 9410, breite: 1200, hoehe: 1000, aus });
     try {
-        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort);
+        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort, f.kuerzel);
         await b.geh(f.basis + '/teacher/course.php?id=' + f.kurs, 1500);
 
         const start = await b.js(`({

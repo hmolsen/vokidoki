@@ -48,7 +48,7 @@ export async function pruefe(f, aus, wurzel) {
 
     const b = await browser({ port: 9419, breite: 390, hoehe: 840, aus });
     try {
-        await alsKind(b, f.basis, f.kind, f.passwort);
+        await alsKind(b, f.basis, f.kind, f.passwort, f.kuerzel);
 
         /** Den Stand ins Gerät holen, die Übung öffnen, den Knopf ansehen. */
         const endeVon = async (uebung) => {

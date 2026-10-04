@@ -17,7 +17,7 @@ export async function pruefe(f, aus) {
 
     const b = await browser({ port: 9406, breite: 900, hoehe: 1100, aus });
     try {
-        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort);
+        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort, f.kuerzel);
 
         /*
          * Direkt in den Prüfschritt: Fotografieren lässt sich hier nicht,

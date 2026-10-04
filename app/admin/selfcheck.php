@@ -48,6 +48,39 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['run_migration
     redirect('selfcheck.php');
 }
 
+/*
+ * Die Kürzel der Schulen vergeben - nach dem Update, mit dem sie kamen,
+ * hat noch keine Schule eines, und ohne Kürzel kann sich dort niemand
+ * anmelden (lib/schulkuerzel.php). Vorgeschlagen werden die
+ * Anfangsbuchstaben; gespeichert wird, was hier steht.
+ */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['set_kuerzel'])) {
+    csrf_check();
+    $gesetzt = [];
+    $fehler  = [];
+    foreach ((array) ($_POST['kuerzel'] ?? []) as $id => $roh) {
+        $id      = (int) $id;
+        $kuerzel = schulkuerzel_normal((string) $roh);
+        $name    = (string) (qv('SELECT name FROM schools WHERE id = ?', [$id]) ?? '');
+        if ($kuerzel === '' || $name === '') {
+            continue;
+        }
+        $grund = schulkuerzel_pruefen($kuerzel, $id);
+        if ($grund !== null) {
+            $fehler[] = sprintf('%s: %s', $name, $grund);
+            continue;
+        }
+        q('UPDATE schools SET kuerzel = ? WHERE id = ?', [$kuerzel, $id]);
+        $gesetzt[] = sprintf('%s = %s', $name, $kuerzel);
+    }
+    if ($fehler !== []) {
+        flash(($gesetzt !== [] ? 'Gesetzt: ' . implode(', ', $gesetzt) . '. ' : '') . implode(' ', $fehler), 'bad');
+    } else {
+        flash($gesetzt !== [] ? 'Gesetzt: ' . implode(', ', $gesetzt) . '.' : 'Es wurde nichts eingetragen.');
+    }
+    redirect('selfcheck.php#kuerzel');
+}
+
 $checks = [];
 
 /** @param callable():array{bool,string} $test */
@@ -183,6 +216,17 @@ check($checks, 'Schema auf dem Stand des Codes', static function (): array {
     return [$pending === [], $pending === []
         ? 'keine offenen Änderungen'
         : count($pending) . ' ausstehend: ' . implode(', ', $pending)];
+});
+
+check($checks, 'Schulkürzel', static function (): array {
+    if (!column_exists('schools', 'kuerzel')) {
+        return [false, 'Spalte fehlt - Schemaänderung ausführen'];
+    }
+    $ohne = count(schulen_ohne_kuerzel());
+    $alle = (int) qv('SELECT COUNT(*) FROM schools');
+    return [$ohne === 0, $ohne === 0
+        ? $alle . ' Schulen, alle mit Kürzel'
+        : sprintf('%d von %d ohne Kürzel - dort kann sich niemand anmelden (oben vergeben)', $ohne, $alle)];
 });
 
 check($checks, 'Kategorien der Vokabeln', static function (): array {
@@ -448,6 +492,34 @@ $offen = schema_pending();
     <form method="post">
         <?= csrf_field() ?>
         <button class="btn small" name="run_migrations" value="1">Jetzt ausführen</button>
+    </form>
+</div>
+<?php endif; ?>
+
+<?php $ohneKuerzel = column_exists('schools', 'kuerzel') ? schulen_ohne_kuerzel() : []; ?>
+<?php if ($ohneKuerzel !== []): ?>
+<div class="card" id="kuerzel" style="border-left:4px solid var(--bad)">
+    <strong><?= count($ohneKuerzel) ?> Schule<?= count($ohneKuerzel) === 1 ? '' : 'n' ?> ohne Kürzel</strong>
+    <p class="tiny muted" style="margin:6px 0 10px">
+        Angemeldet wird mit Schulkürzel, Benutzername und Passwort. Ohne Kürzel kann
+        sich an einer Schule niemand anmelden &ndash; wer schon angemeldet ist, bleibt es.
+        Vorgeschlagen sind die Anfangsbuchstaben; 2 bis 12 Kleinbuchstaben oder Ziffern.
+        Danach steht das Kürzel auf jedem Zettel, und die Lehrkräfte sehen es in ihrem Bereich.
+    </p>
+    <form method="post">
+        <?= csrf_field() ?>
+        <table class="data">
+            <tr><th>Schule</th><th>Kürzel</th></tr>
+            <?php foreach ($ohneKuerzel as $s): ?>
+                <tr>
+                    <td><?= h($s['name']) ?></td>
+                    <td><input type="text" name="kuerzel[<?= (int) $s['id'] ?>]" maxlength="12"
+                               value="<?= h(schulkuerzel_vorschlag((string) $s['name'])) ?>"
+                               autocapitalize="off" style="width:140px;margin:0"></td>
+                </tr>
+            <?php endforeach; ?>
+        </table>
+        <button class="btn small" name="set_kuerzel" value="1">Kürzel speichern</button>
     </form>
 </div>
 <?php endif; ?>

@@ -111,7 +111,7 @@ export async function pruefe(f, aus) {
 
     const b = await browser({ port: 9404, breite: 390, hoehe: 844, handy: true, aus });
     try {
-        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort);
+        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort, f.kuerzel);
 
         for (const [name, pfad] of SEITEN(f)) {
             await b.geh(f.basis + pfad, 1200);

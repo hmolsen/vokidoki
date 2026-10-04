@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/schulkuerzel.php';
 
 /** Ein Jahr - das Homescreen-Symbol soll dauerhaft angemeldet bleiben. */
 const SESSION_LIFETIME = 60 * 60 * 24 * 365;

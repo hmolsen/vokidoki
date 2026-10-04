@@ -46,7 +46,7 @@ export async function pruefe(f, aus, wurzel) {
 
     const b = await browser({ port: 9485, breite: 390, hoehe: 844, handy: true, aus });
     try {
-        await alsKind(b, f.basis, f.kind, f.passwort);
+        await alsKind(b, f.basis, f.kind, f.passwort, f.kuerzel);
         const topf = () => b.js(`(async () => {
             const v = await import('${f.basis}/vorrat.js');
             return v.fehlerTopf([${d.unit}]).map((a) => a.karte.f + ':' + a.art);

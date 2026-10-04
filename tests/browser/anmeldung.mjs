@@ -28,8 +28,21 @@ export async function pruefe(f, aus) {
         ok('Ohne Anmeldung zeigt die App die Anmeldung',
            vorher.formular && vorher.ort.includes('/login'), JSON.stringify(vorher));
 
+        /*
+         * Wie vom QR-Code auf dem Zettel: Schulkürzel und Benutzername kommen
+         * mit der Adresse (?schule=...&name=...), es fehlt nur das Passwort.
+         */
+        await b.geh(`${f.basis}/?schule=${f.kuerzel}&name=${encodeURIComponent(f.lehrer)}`, 1500);
+        const vorbelegt = await b.js(`({
+            schule: document.getElementById('school')?.value,
+            name:   document.getElementById('username')?.value,
+            fokus:  document.activeElement?.id,
+        })`);
+        ok('Der Link vom Zettel füllt Schulkürzel und Benutzername aus',
+           vorbelegt.schule === f.kuerzel && vorbelegt.name === f.lehrer, JSON.stringify(vorbelegt));
+        ok('Und setzt den Cursor ins Passwort', vorbelegt.fokus === 'password', vorbelegt.fokus);
+
         await b.js(`(() => {
-            document.getElementById('username').value = ${JSON.stringify(f.lehrer)};
             document.getElementById('password').value = ${JSON.stringify(f.passwort)};
             document.getElementById('form')
                 .dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));

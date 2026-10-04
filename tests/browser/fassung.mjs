@@ -21,7 +21,7 @@ export async function pruefe(f, aus, wurzel) {
 
     const b = await browser({ port: 9418, breite: 1100, hoehe: 800, aus });
     try {
-        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort);
+        await alsLehrkraft(b, f.basis, f.lehrer, f.passwort, f.kuerzel);
         await b.geh(f.basis + '/teacher/index.php', 1500);
 
         await b.js(`window.dispatchEvent(new Event('focus'))`);
@@ -73,7 +73,7 @@ export async function pruefe(f, aus, wurzel) {
      */
     const app = await browser({ port: 9421, breite: 390, hoehe: 844, handy: true, aus });
     try {
-        await alsLehrkraft(app, f.basis, f.lehrer, f.passwort);
+        await alsLehrkraft(app, f.basis, f.lehrer, f.passwort, f.kuerzel);
         await app.send('Page.addScriptToEvaluateOnNewDocument', {
             source: "Object.defineProperty(navigator, 'standalone', { get: () => true });",
         });
@@ -103,7 +103,7 @@ export async function pruefe(f, aus, wurzel) {
     // Im Browser bleibt es beim Abmelden.
     const web = await browser({ port: 9422, breite: 1100, hoehe: 800, aus });
     try {
-        await alsLehrkraft(web, f.basis, f.lehrer, f.passwort);
+        await alsLehrkraft(web, f.basis, f.lehrer, f.passwort, f.kuerzel);
         await web.geh(f.basis + '/teacher/index.php', 1200);
         await web.js(`document.getElementById('menuRechts').open = true`);
         await schlafe(300);

@@ -2406,3 +2406,33 @@ td.erzzelle.eben .erz.fertig { animation: erzFertig .45s cubic-bezier(.3, 1.6, .
 .meldung details.aussprache summary { cursor: pointer; color: var(--text-soft); }
 .meldung .ausspracheform { display: grid; gap: 6px; margin-top: 8px; }
 .meldung .ausspracheform button { justify-self: start; }
+
+/*
+ * Die erhöhte Sitzung (lib/lehrkraefte.php): ein gelbes Band oben auf jeder
+ * Seite des Lehrkraft-Bereichs, mit der Zeit, die bleibt, und zwei Knöpfen.
+ * Gelb, nicht rot - es ist kein Fehler, nur ein Zustand, den man nicht
+ * vergessen soll.
+ */
+.erhoeht {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 14px;
+    margin: 0 0 16px;
+    padding: 10px 14px;
+    border: 1px solid #e8c547;
+    border-radius: var(--radius-sm);
+    background: #fff4c2;
+    color: #5c4700;
+}
+.erhoeht-uhr { font-variant-numeric: tabular-nums; }
+.erhoeht-knoepfe { display: flex; gap: 8px; margin: 0; }
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .erhoeht { background: #3a3110; border-color: #8a7420; color: #f3e3a0; }
+}
+:root[data-theme="dark"] .erhoeht { background: #3a3110; border-color: #8a7420; color: #f3e3a0; }
+
+/* Zwei Felder in der Anlegezeile der Lehrkräfte: Name und Kürzel. */
+.lehrkraftfelder { display: flex; flex-wrap: wrap; gap: 8px; }
+.lehrkraftfelder input { flex: 1 1 180px; min-width: 0; margin: 0; }
