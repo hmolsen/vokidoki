@@ -2384,6 +2384,9 @@ th.erzspalte { font-size: 1rem; }
 .erz.fehlt  { background: var(--warn-bg); color: var(--warn); }
 .erz.fehler { background: var(--bad-bg); color: var(--bad); }
 .erz.keine  { color: var(--text-soft); font-weight: 400; }
+/* Fehlt etwas, ist das Ausrufezeichen ein Knopf: Ein Druck holt es nach. */
+button.erz { border: 0; padding: 0; font-family: inherit; cursor: pointer; }
+button.erz:hover { box-shadow: 0 0 0 2px currentColor; }
 /* Eben fertig geworden: Der Haken springt einmal auf. */
 td.erzzelle.eben .erz.fertig { animation: erzFertig .45s cubic-bezier(.3, 1.6, .5, 1); }
 

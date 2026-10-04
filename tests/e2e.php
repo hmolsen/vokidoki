@@ -8857,8 +8857,11 @@ ok('Die Tabelle kennt die Adresse ihres Stroms',
 ok('Noch nichts freigegeben: In der Spalte der Saetze steht nichts',
    preg_match('/data-unit="' . $efZu . '".*?data-erz="saetze"\s+data-stand="leer"><\/td>/s', $etab) === 1);
 ok('Freigegeben, aber ohne Saetze und ohne Lauf: ein Ausrufezeichen mit Grund',
-   preg_match('/data-unit="' . $efHalb . '".*?data-erz="saetze"\s+data-stand="fehlt"><span class="erz fehlt"[^>]*title="2 Vokabeln ohne Lückensatz/s',
+   preg_match('/data-unit="' . $efHalb . '".*?data-erz="saetze"\s+data-stand="fehlt"><button class="erz fehlt"[^>]*title="2 Vokabeln ohne Lückensatz/s',
               $etab) === 1);
+ok('Es ist ein Knopf, der nachholt - mit seinem Formular neben der Tabelle',
+   str_contains($etab, 'form="nachholen" name="nachholen" value="' . $efHalb . ':saetze"')
+   && str_contains($res['body'], '<form method="post" id="nachholen" hidden>'));
 
 $strom = teacherGet('erzeugung.php?id=' . $efKursId);
 preg_match('/^event: stand\ndata: (.+)$/m', $strom['body'], $sm);
@@ -8873,6 +8876,21 @@ ok('Und sagt, wann wieder gefragt wird: in vier Sekunden, weil nichts laeuft',
    ($stromStand['laeuft'] ?? null) === false && str_contains($strom['body'], "retry: 4000\n"));
 ok('Ein fremder Kurs hat keinen Strom',
    teacherGet('erzeugung.php?id=999999999')['status'] === 404);
+
+// Der Druck auf das Ausrufezeichen: Die fehlenden Saetze entstehen.
+preg_match('/name="csrf" value="([a-f0-9]+)"/', $res['body'], $efCsrf);
+$efFremd = (int) qv('SELECT id FROM units WHERE course_id <> ? LIMIT 1', [$efKursId]);
+teacherRequest($base . '/teacher/course.php?id=' . $efKursId,
+               ['nachholen' => $efFremd . ':saetze', 'csrf' => $efCsrf[1] ?? '']);
+ok('Eine Lerneinheit eines anderen Kurses holt es nicht nach',
+   qv('SELECT sentences_status FROM units WHERE id = ?', [$efFremd]) !== 'running');
+$efNach = teacherRequest($base . '/teacher/course.php?id=' . $efKursId,
+                         ['nachholen' => $efHalb . ':saetze', 'csrf' => $efCsrf[1] ?? '']);
+$efStand = $isFake ? waitForSentences($efHalb) : 'done';
+ok('Ein Druck auf "!" holt die fehlenden Lueckensaetze nach',
+   str_contains($efNach['body'], 'Die fehlenden Lückensätze entstehen jetzt')
+   && (!$isFake || ($efStand === 'done' && vocab_without_sentences($efHalb) === 0)),
+   $efStand . ' / ' . vocab_without_sentences($efHalb));
 
 /*
  * Und der Titel: Die Sprache stand als eigene Zeile unter dem Kursnamen -

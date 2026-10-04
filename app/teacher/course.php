@@ -158,6 +158,58 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_member_by
     teacher_redirect($zurueck);
 }
 
+/*
+ * Nachholen, was fehlt - ein Druck auf das Ausrufezeichen in den
+ * Lerneinheiten (lib/erzeugung.php).
+ *
+ * Fehlen Sätze, macht der Satzlauf beides: erst die Sätze, dann ihre
+ * Aufnahmen (generate_sentences_tracked()). Fehlen nur Aufnahmen, spricht
+ * ein eigener Lauf. Geantwortet wird zuerst; den Ring zeigt die Seite
+ * danach von selbst (teacher/erzeugung.php).
+ */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['nachholen'])) {
+    teacher_csrf_check();
+    require_once __DIR__ . '/../lib/sentences.php';
+
+    [$unitId, $art] = array_pad(explode(':', (string) $_POST['nachholen'], 2), 2, '');
+    $unitId = (int) $unitId;
+    // Nur eine Lerneinheit dieses Kurses - die Kennung kommt aus dem Formular.
+    $einheit = q1('SELECT * FROM units WHERE id = ? AND course_id = ?', [$unitId, $courseId]);
+    if ($einheit === null || !in_array($art, ['saetze', 'ton'], true)) {
+        teacher_flash('Diese Lerneinheit gibt es hier nicht.', 'bad');
+        teacher_redirect($zurueck);
+    }
+
+    $blockiert = budget_block_reason((int) $user['id']);
+    if ($art === 'saetze' && vocab_without_sentences($unitId) > 0) {
+        if ($blockiert !== null) {
+            teacher_flash($blockiert, 'bad');
+            teacher_redirect($zurueck);
+        }
+        if (!sentence_claim($unitId)) {
+            teacher_flash('Für diese Lerneinheit läuft schon ein Satzlauf.', 'bad');
+            teacher_redirect($zurueck);
+        }
+        teacher_flash(sprintf('„%s": Die fehlenden Lückensätze entstehen jetzt.', $einheit['title']));
+        teacher_redirect_and_continue($zurueck);
+        set_time_limit(900);
+        generate_sentences_tracked($unitId);
+        exit;
+    }
+
+    $zahler = course_billing_user($courseId);
+    if (tts_aktiv() && tts_fehlend($unitId) > 0 && $zahler !== null) {
+        teacher_flash(sprintf('„%s": Die fehlenden Aufnahmen entstehen jetzt.', $einheit['title']));
+        teacher_redirect_and_continue($zurueck);
+        set_time_limit(900);
+        sentence_audio_nachtragen($unitId, $zahler);
+        exit;
+    }
+
+    teacher_flash('Es fehlt nichts mehr.');
+    teacher_redirect($zurueck);
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_member'])) {
     teacher_csrf_check();
 
@@ -303,6 +355,8 @@ teacher_flash_render();
 ) ?>
 <?php endif; ?>
 <?php // Die Tabelle steht auch leer da: Ihre Anlegezeile ist der Weg zur ersten. ?>
+<?php // Das Formular der Ausrufezeichen in den beiden schmalen Spalten. ?>
+<form method="post" id="nachholen" hidden><?= teacher_csrf_field() ?></form>
 <table class="data courses rowlink kompakt" id="einheiten"
        data-erzeugung="<?= h(teacher_url('erzeugung.php') . '?id=' . $courseId) ?>">
     <?php

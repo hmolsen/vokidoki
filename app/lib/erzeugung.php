@@ -97,15 +97,27 @@ function erzeugung_kurs(int $courseId): array
             $laeuft = $laeuft || in_array($st[$art]['s'], ['laeuft', 'wartet'], true);
         }
         $einheiten[(int) $u['id']] = [
-            'saetze' => ['s' => $st['saetze']['s'], 'html' => erzeugung_zelle_html('saetze', $st['saetze'])],
-            'ton'    => ['s' => $st['ton']['s'],    'html' => erzeugung_zelle_html('ton', $st['ton'])],
+            'saetze' => ['s' => $st['saetze']['s'],
+                         'html' => erzeugung_zelle_html('saetze', $st['saetze'], (int) $u['id'])],
+            'ton'    => ['s' => $st['ton']['s'],
+                         'html' => erzeugung_zelle_html('ton', $st['ton'], (int) $u['id'])],
         ];
     }
     return ['einheiten' => $einheiten, 'laeuft' => $laeuft];
 }
 
-/** Der Inhalt einer der beiden Zellen. */
-function erzeugung_zelle_html(string $art, array $st): string
+/**
+ * Der Inhalt einer der beiden Zellen.
+ *
+ * Fehlt etwas, ist das Ausrufezeichen ein Knopf: Ein Druck holt nach, was
+ * fehlt (teacher/course.php, "nachholen"). Es kam vor, dass alles
+ * freigegeben war und trotzdem Sätze oder Aufnahmen fehlten - ein Lauf war
+ * am Budget oder am Freikontingent hängengeblieben -, und dann gab es keine
+ * Freigabe mehr, die es noch einmal versucht hätte.
+ *
+ * @param int $unitId die Lerneinheit - für den Knopf
+ */
+function erzeugung_zelle_html(string $art, array $st, int $unitId = 0): string
 {
     $was = $art === 'saetze' ? 'Lückensätze' : 'Aufnahmen';
     $n   = (int) ($st['n'] ?? 0);
@@ -115,16 +127,22 @@ function erzeugung_zelle_html(string $art, array $st): string
         'wartet' => ['laeuft wartet', '', 'Aufnahmen kommen gleich nach den Lückensätzen'],
         'fertig' => ['fertig', '&#10003;', $was . ' sind fertig'],
         'fehlt'  => ['fehlt', '!', $art === 'saetze'
-                        ? sprintf('%d %s ohne Lückensatz - entstehen beim nächsten Freigeben',
+                        ? sprintf('%d %s ohne Lückensatz - antippen, um sie jetzt zu erzeugen',
                                   $n, $n === 1 ? 'Vokabel' : 'Vokabeln')
-                        : sprintf('%d %s ohne Aufnahme - entstehen beim nächsten Freigeben',
+                        : sprintf('%d %s ohne Aufnahme - antippen, um sie jetzt zu erzeugen',
                                   $n, $n === 1 ? 'Satz' : 'Sätze')],
-        'fehler' => ['fehler', '!', 'Lückensätze: ' . ((string) ($st['fehler'] ?? '') ?: 'fehlgeschlagen')],
+        'fehler' => ['fehler', '!', 'Lückensätze: ' . ((string) ($st['fehler'] ?? '') ?: 'fehlgeschlagen')
+                                    . ' - antippen, um es noch einmal zu versuchen'],
         'keine'  => ['keine', '&ndash;', 'Für diese Sprache gibt es keine Aufnahmen'],
         default  => ['', '', ''],
     };
     if ($klasse === '') {
         return '';
+    }
+    if (in_array($st['s'], ['fehlt', 'fehler'], true) && $unitId > 0) {
+        return sprintf('<button class="erz %s" form="nachholen" name="nachholen" value="%d:%s"'
+                       . ' title="%s" aria-label="%s">%s</button>',
+                       $klasse, $unitId, $art, h($text), h($text), $zeichen);
     }
     return sprintf('<span class="erz %s" role="img" title="%s" aria-label="%s">%s</span>',
                    $klasse, h($text), h($text), $zeichen);
