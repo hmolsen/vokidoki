@@ -22,6 +22,7 @@ require_once __DIR__ . '/../lib/lehrkraefte.php';
 require_once __DIR__ . '/../lib/passwords.php';
 require_once __DIR__ . '/../lib/tts.php';
 require_once __DIR__ . '/../lib/schulkuerzel.php';
+require_once __DIR__ . '/../lib/access.php';
 require_once __DIR__ . '/../lib/thema.php';
 require_once __DIR__ . '/../lib/markdown.php';
 require_once __DIR__ . '/../lib/version.php';
@@ -357,6 +358,142 @@ function admin_scope_chips(array $scope, array $extra = [], bool $alle = false):
     return $html;
 }
 
+// ---------------------------------------------------------------- Was zu tun ist
+
+/**
+ * Die Farbe einer Schule - immer dieselbe, damit man sie im Vorbeigehen
+ * wiedererkennt (Übersicht, Menü). Aus der Kennung, nicht gespeichert:
+ * Sie bedeutet nichts, sie unterscheidet nur.
+ */
+function schule_farbe(int $schuleId): string
+{
+    $farben = ['#4f7cff', '#1c9d5c', '#e0559a', '#f08c2e', '#8a5cf6', '#159fb5', '#d8402f'];
+    return $farben[$schuleId % count($farben)];
+}
+
+/** Ein Betrag in Euro, wie ihn ein Mensch liest: "8,30 €". */
+function admin_euro(float $usd): string
+{
+    return number_format(usd_to_eur($usd), 2, ',', '.') . ' €';
+}
+
+/**
+ * Was der Betreiber gerade erledigen sollte - für die Übersicht.
+ *
+ * Vorher stand das an drei Orten: ein Band über jeder Seite für das
+ * Datenbank-Update und die Kürzel, eine Zahl hinter "Meldungen" und das
+ * aufgebrauchte Budget nur auf der Kostenseite. Wer nicht zufällig dort
+ * vorbeikam, erfuhr vom leeren Freikontingent erst, als keine Aufnahmen
+ * mehr kamen. Jetzt steht es oben auf der ersten Seite, mit dem Weg dorthin.
+ *
+ * @return list<array{art: string, symbol: string, titel: string, text: string, ziel: string, knopf?: string}>
+ *         art: rot (blockiert etwas), gelb (bald), blau (zur Kenntnis)
+ */
+function admin_zu_tun(): array
+{
+    $liste = [];
+
+    $offen = schema_pending();
+    if ($offen !== []) {
+        $liste[] = ['art' => 'rot', 'symbol' => '&#128736;&#65039;', 'titel' => 'Update einspielen',
+                    'text' => count($offen) === 1 ? '1 Datenbankänderung wartet'
+                                                  : count($offen) . ' Datenbankänderungen warten',
+                    'ziel' => 'selfcheck.php#schema', 'knopf' => 'run_migrations'];
+        // Ohne das Update fehlen womöglich Spalten, die alles Weitere abfragt.
+        return $liste;
+    }
+
+    $ohne = schulen_ohne_kuerzel();
+    if ($ohne !== []) {
+        $liste[] = ['art' => 'rot', 'symbol' => '&#128273;',
+                    'titel' => count($ohne) === 1 ? '1 Schule ohne Kürzel' : count($ohne) . ' Schulen ohne Kürzel',
+                    'text' => 'Dort kann sich niemand anmelden.', 'ziel' => 'selfcheck.php#kuerzel'];
+    }
+
+    $je = meldungen_je_schule();
+    if ($je !== []) {
+        $namen = array_column(qa('SELECT id, name FROM schools'), 'name', 'id');
+        arsort($je);
+        $teile = [];
+        foreach ($je as $schule => $n) {
+            $teile[] = $n . ' an ' . ($namen[$schule] ?? 'einer gelöschten Schule');
+        }
+        $summe = array_sum($je);
+        $liste[] = ['art' => 'rot', 'symbol' => '&#128681;',
+                    'titel' => $summe === 1 ? '1 Meldung offen' : $summe . ' Meldungen offen',
+                    'text' => count($je) === 1 ? 'An ' . ($namen[array_key_first($je)] ?? '') : implode(', ', $teile),
+                    'ziel' => 'meldungen.php'];
+    }
+
+    $budget = (float) setting('monthly_cost_cap_usd', '10.00');
+    $monat  = cost_this_month();
+    if ($budget > 0 && $monat >= $budget) {
+        $liste[] = ['art' => 'rot', 'symbol' => '&#128182;', 'titel' => 'Monatsbudget aufgebraucht',
+                    'text' => 'Einlesen und neue Sätze sind gesperrt, bis zum 1. oder bis das Budget steigt.',
+                    'ziel' => 'settings.php'];
+    } elseif ($budget > 0 && $monat >= $budget * 0.8) {
+        $liste[] = ['art' => 'gelb', 'symbol' => '&#128182;',
+                    'titel' => sprintf('Monatsbudget zu %d %% verbraucht', (int) floor($monat / $budget * 100)),
+                    'text' => admin_euro($monat) . ' von ' . admin_euro($budget), 'ziel' => 'kosten.php'];
+    }
+
+    foreach (cost_this_month_by_school() as $s) {
+        $grenze = $s['monthly_cost_cap_usd'];
+        if ($grenze !== null && (float) $grenze > 0 && (float) $s['cost_usd'] >= (float) $grenze) {
+            $liste[] = ['art' => 'rot', 'symbol' => '&#127979;', 'titel' => $s['name'] . ': Kostenlimit erreicht',
+                        'text' => 'Die Schule kann bis zum 1. nichts mehr einlesen.',
+                        'ziel' => 'schools.php#schule' . (int) $s['id']];
+        }
+    }
+
+    /*
+     * Das Freikontingent der Aufnahmen - mit einer Schätzung, wann es
+     * reicht. Bei diesem Tempo heisst: so viele Zeichen je Tag wie bisher in
+     * diesem Monat. Ab 70 % steht es hier; vorher wäre es Lärm.
+     */
+    $frei = tts_tarif_frei() ? tts_freikontingent() : 0;
+    if ($frei > 0) {
+        $zeichen = tts_zeichen_monat();
+        $anteil  = $zeichen / $frei;
+        if ($anteil >= TTS_KONTINGENT_RAND) {
+            $liste[] = ['art' => 'rot', 'symbol' => '&#127911;', 'titel' => 'Freikontingent der Aufnahmen aufgebraucht',
+                        'text' => 'Neue Aufnahmen entstehen erst ab dem 1. wieder.', 'ziel' => 'kosten.php#aufnahmen'];
+        } elseif ($anteil >= 0.7) {
+            $jeTag = $zeichen / max(1, (int) date('j'));
+            $tage  = $jeTag > 0 ? (int) floor(($frei * TTS_KONTINGENT_RAND - $zeichen) / $jeTag) : 99;
+            $bis   = (int) date('j') + $tage;
+            $liste[] = ['art' => 'gelb', 'symbol' => '&#127911;',
+                        'titel' => sprintf('Aufnahmen: %d %% des Freikontingents', (int) floor($anteil * 100)),
+                        'text' => $bis >= (int) date('t') ? 'Reicht bei diesem Tempo bis zum Monatsende.'
+                                                           : 'Reicht bei diesem Tempo bis etwa zum ' . $bis . '.',
+                        'ziel' => 'kosten.php#aufnahmen'];
+        }
+    }
+
+    return $liste;
+}
+
+/** Die Liste als Karten - Symbol, Titel, eine Zeile dazu, und der Weg dorthin. */
+function admin_zu_tun_html(array $liste): string
+{
+    $html = '<div class="aufgaben">';
+    foreach ($liste as $a) {
+        $inhalt = '<span class="ic ' . $a['art'] . '" aria-hidden="true">' . $a['symbol'] . '</span>'
+                . '<span class="t"><strong>' . h($a['titel']) . '</strong><span class="tiny muted">'
+                . h($a['text']) . '</span></span>';
+        if (isset($a['knopf'])) {
+            // Der Knopf tut es gleich - dieselbe Anfrage wie im Selbsttest.
+            $html .= '<form method="post" action="' . h(admin_url(strtok($a['ziel'], '#'))) . '" class="aufgabe">'
+                   . csrf_field() . $inhalt
+                   . '<button class="btn small" name="' . h($a['knopf']) . '" value="1">Jetzt ausführen</button></form>';
+        } else {
+            $html .= '<a class="aufgabe" href="' . h(admin_url($a['ziel'])) . '">' . $inhalt
+                   . '<span class="pfeil" aria-hidden="true">&#8250;</span></a>';
+        }
+    }
+    return $html . '</div>';
+}
+
 // ---------------------------------------------------------------- Layout
 
 /**
@@ -428,7 +565,7 @@ function admin_nav(string $aktiv): void
             <?= admin_menuepunkt('sentences.php', '&#128269;', 'Lückensätze durchsuchen', $aktiv) ?>
 
             <p class="mueber">Betrieb</p>
-            <?= admin_menuepunkt('index.php#kosten', '&#128182;', 'Kosten', '') ?>
+            <?= admin_menuepunkt('kosten.php', '&#128182;', 'Kosten', $aktiv) ?>
             <?= admin_menuepunkt('users.php', '&#128101;', 'Konten', $aktiv) ?>
             <?= admin_menuepunkt('vocab.php', '&#128218;', 'Unterlagen', $aktiv) ?>
             <?= admin_menuepunkt('settings.php', '&#9881;&#65039;', 'Einstellungen', $aktiv) ?>
@@ -495,7 +632,8 @@ function admin_head(string $title, string $active): void
      * einem Upload auf einem Schema, das nicht zum Code passt, und niemand
      * wuesste warum.
      */
-    if ($active !== 'selfcheck.php') {
+    // Auf der Übersicht steht dasselbe in "Zu tun" (admin_zu_tun()) - zweimal wäre Lärm.
+    if ($active !== 'selfcheck.php' && $active !== 'index.php') {
         $offen = schema_pending();
         if ($offen !== []) {
             printf(

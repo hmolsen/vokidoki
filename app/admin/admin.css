@@ -2445,3 +2445,137 @@ td.erzzelle.eben .erz.fertig { animation: erzFertig .45s cubic-bezier(.3, 1.6, .
 /* Zwei Felder in der Anlegezeile der Lehrkräfte: Name und Kürzel. */
 .lehrkraftfelder { display: flex; flex-wrap: wrap; gap: 8px; }
 .lehrkraftfelder input { flex: 1 1 180px; min-width: 0; margin: 0; }
+
+/* ---------------------------------------------------------------- Übersicht
+ *
+ * Die erste Seite des Admins (admin/index.php): was zu tun ist, der Monat,
+ * die Schulen. Karten statt Tabellen - hier wird geschaut, nicht verglichen.
+ */
+.unterzeile { margin: -10px 0 0; color: var(--text-soft); }
+
+.aufgaben { display: grid; gap: 8px; }
+.aufgabe {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    text-decoration: none;
+}
+a.aufgabe:hover { border-color: var(--text-soft); }
+.aufgabe .ic {
+    flex: none;
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+    display: grid;
+    place-items: center;
+    font-size: 1.15rem;
+}
+.aufgabe .ic.rot  { background: var(--bad-bg); }
+.aufgabe .ic.gelb { background: var(--warn-bg); }
+.aufgabe .ic.blau { background: var(--surface-2); }
+.aufgabe .t { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.aufgabe .t strong { font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; }
+.aufgabe .btn { width: auto; flex: none; }
+.pfeil { flex: none; color: var(--text-soft); font-size: 1.4rem; line-height: 1; }
+
+.allesgut { display: flex; align-items: center; gap: 14px; }
+.allesgut > div { display: grid; gap: 2px; }
+
+.monatkarten { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.card.monat {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 0;
+    color: var(--text);
+    text-decoration: none;
+}
+.card.monat > span:last-child { display: grid; gap: 1px; }
+.card.monat .zahl { font-family: 'Fredoka', 'Nunito', sans-serif; font-size: 1.5rem; font-weight: 600; line-height: 1.15; }
+
+/* Ein Anteil als Ring: 0 bis 100 in --p. */
+.anteil {
+    --farbe: var(--accent);
+    flex: none;
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: conic-gradient(var(--farbe) calc(var(--p) * 1%), var(--surface-2) 0);
+}
+.anteil.gelb { --farbe: #e0a21a; }
+.anteil > span {
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--surface);
+    font-family: 'Fredoka', 'Nunito', sans-serif;
+    font-weight: 600;
+    font-size: .9rem;
+}
+
+.schulkarten { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); }
+.schulkarte {
+    display: grid;
+    gap: 12px;
+    align-content: start;
+    margin: 0;
+    color: var(--text);
+    text-decoration: none;
+}
+.schulkarte:hover { border-color: var(--text-soft); }
+.schulkarte.aus { opacity: .65; }
+.schulkarte .kopf { display: flex; align-items: center; gap: 12px; }
+.schulkarte .name { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.schulkarte .name strong { font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; font-size: 1.05rem; line-height: 1.2; }
+.wappen {
+    --c: var(--accent);
+    flex: none;
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    display: grid;
+    place-items: center;
+    background: var(--c);
+    color: #fff;
+    font-family: 'Fredoka', 'Nunito', sans-serif;
+    font-weight: 700;
+    font-size: 1.15rem;
+}
+.schulkarte .zahlen { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.schulkarte .zahlen > span {
+    display: grid;
+    padding: 6px 9px;
+    border-radius: 10px;
+    background: var(--bg);
+    font-size: .74rem;
+    color: var(--text-soft);
+}
+.schulkarte .zahlen b { font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; font-size: 1.05rem; color: var(--text); }
+.schulkarte .zahlen small { font-size: .7rem; color: var(--text-soft); }
+.schulkarte.neu { display: flex; align-items: center; gap: 12px; border-style: dashed; box-shadow: none; }
+.schulkarte.neu .wappen { background: var(--surface-2); color: var(--text-soft); }
+.schulkarte.neu > span:last-child { display: grid; gap: 2px; }
+
+.pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-soft);
+    font-size: .76rem;
+    font-weight: 700;
+}
+.pill.code { font-family: ui-monospace, Consolas, monospace; font-weight: 600; color: var(--accent); }
+.pill.rot { background: var(--bad-bg); color: var(--bad); }

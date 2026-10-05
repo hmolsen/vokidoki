@@ -323,7 +323,7 @@ $res = adminPost('index.php', ['admin_password' => 'garantiert-falsch-' . bin2he
 ok('Falsches Admin-Passwort wird abgelehnt', str_contains($res['body'], 'name="admin_password"'));
 
 $res = adminPost('index.php', ['admin_password' => $adminPass]);
-$adminOk = str_contains($res['body'], 'Diesen Monat');
+$adminOk = str_contains($res['body'], '<h2>Zu tun</h2>');
 ok('Admin-Anmeldung', $adminOk, 'Dashboard nicht erreicht - Passwort als 2. Argument übergeben');
 ok('Passwort liegt als Hash in der Datenbank',
    str_starts_with((string) qv("SELECT v FROM settings WHERE k = 'admin_password_hash'"), '$'));
@@ -1979,6 +1979,15 @@ ok('Den alten Weg ueber die Lueckentext-API gibt es nicht mehr',
    !str_contains((string) file_get_contents(__DIR__ . '/../app/api/cloze.php'), "case 'flag'"));
 
 section('Meldungen im Admin');
+
+// Die Übersicht nennt sie unter "Zu tun", mit der Schule - und das Menü zählt sie.
+$mUebersicht = http($base . '/admin/index.php')['body'];
+$mSchulName  = (string) qv('SELECT name FROM schools WHERE id = ?', [$testSchule]);
+ok('Die Übersicht nennt offene Meldungen unter "Zu tun"',
+   preg_match('~<a class="aufgabe" href="[^"]*meldungen\.php">.*?Meldung(en)? offen.*?'
+              . preg_quote(h($mSchulName), '~') . '~s', $mUebersicht) === 1);
+ok('Und das Menü zählt sie bei der Schule',
+   preg_match('~schools\.php#schule' . $testSchule . '"[^>]*>.*?<span class="zaehler"~s', $mUebersicht) === 1);
 
 $seite = http($base . '/admin/meldungen.php')['body'];
 $mWort = (string) qv('SELECT term_foreign FROM vocab WHERE id = ?', [$mVokabel]);
@@ -6599,7 +6608,7 @@ ok('Und ist es aufgebraucht, fragt der nächste Lauf gar nicht erst an',
    $hVoll['erzeugt'] === 0 && str_contains((string) $hVoll['fehler'], 'aufgebraucht'),
    json_encode($hVoll, JSON_UNESCAPED_UNICODE));
 
-$hKosten = http($base . '/admin/index.php')['body'];
+$hKosten = http($base . '/admin/kosten.php')['body'];
 ok('Die Kostenseite zeigt die Zeichen des Monats gegen das Freikontingent',
    str_contains($hKosten, 'id="aufnahmen"') && str_contains($hKosten, 'class="zeichenkurve"')
    && str_contains($hKosten, 'Freikontingent'));
@@ -6607,6 +6616,17 @@ ok('Und zählt sie nicht als Token mit',
    preg_match('/Token diesen Monat/', $hKosten) === 1
    && !str_contains(substr($hKosten, (int) strpos($hKosten, 'Nach Modell'),
        (int) strpos($hKosten, 'Letzte Anfragen') - (int) strpos($hKosten, 'Nach Modell')), 'Neural</td>'));
+
+/*
+ * Und die Übersicht sagt es, ohne dass jemand auf die Kostenseite geht:
+ * Vom leeren Freikontingent erfuhr man sonst erst, wenn keine Aufnahmen
+ * mehr kamen (admin_zu_tun()).
+ */
+$hUebersicht = http($base . '/admin/index.php')['body'];
+ok('Die Übersicht meldet das knappe Freikontingent unter "Zu tun"',
+   preg_match('~<a class="aufgabe" href="[^"]*kosten\.php#aufnahmen">.*?Freikontingent~s', $hUebersicht) === 1);
+ok('Und zeigt den Monat als Ring gegen das Freikontingent',
+   preg_match('~class="anteil gelb" style="--p:(9\d|100)"~', $hUebersicht) === 1, substr($hUebersicht, (int) strpos($hUebersicht, '<h2>Zu tun'), 2500));
 
 setting_set('tts_tarif', $hTarifVorher);
 setting_set('tts_free_chars', $hFreiVorher);
