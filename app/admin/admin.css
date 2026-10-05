@@ -2754,3 +2754,19 @@ a.zeile:hover, .kontozeile > summary:hover { background: var(--bg); }
     background: var(--surface);
     font-size: 1.05rem;
 }
+
+/* Die Einzelheiten der Kosten - zugeklappt, bis eine Zahl nicht stimmt. */
+.card.einzeln { margin-top: 22px; }
+.card.einzeln > summary { cursor: pointer; font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; }
+.card.einzeln[open] > summary { margin-bottom: 8px; }
+.card.einzeln h3 { margin: 18px 0 8px; }
+.card.einzeln table.data { display: block; overflow-x: auto; }
+.monatsreihe { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; margin: 12px 0; }
+.monatsreihe > span { display: grid; padding: 6px 10px; border-radius: 10px; background: var(--bg); }
+.monatsreihe b { font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; }
+.monatsreihe small { font-size: .72rem; color: var(--text-soft); }
+/* Am Telefon passen vierzehn Daten nicht nebeneinander - jedes zweite reicht. */
+@media (max-width: 600px) {
+    .chart { gap: 3px; padding: 10px 8px; }
+    .chart .col:nth-child(even) span { visibility: hidden; }
+}

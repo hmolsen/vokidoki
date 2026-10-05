@@ -10,11 +10,8 @@ require_once __DIR__ . '/_boot.php';
 
 admin_require();
 
-$rate = (float) setting('usd_eur', '0.92');
 $cap  = (float) setting('monthly_cost_cap_usd', '10.00');
 
-$eur = static fn (float $usd): string => number_format($usd * $rate, 2, ',', '.') . ' EUR';
-$usd = static fn (float $u): string => '$' . number_format($u, 4, '.', ',');
 
 // Token ohne die Aufnahmen - dort stehen Zeichen, und die haben unten einen
 // eigenen Abschnitt.
@@ -97,29 +94,25 @@ admin_head('Kosten', 'kosten.php');
 flash_render();
 ?>
 
-<div class="stats">
-    <div class="stat">
-        <div class="k">Diesen Monat</div>
-        <div class="v"><?= $eur($monthCost) ?></div>
-        <div class="n"><?= (int) $month['n'] ?> Anfragen &middot; <?= $usd($monthCost) ?></div>
+<?php $anteil = $cap > 0 ? $monthCost / $cap * 100 : 0; ?>
+<div class="monatkarten">
+    <div class="card monat">
+        <?php if ($cap > 0): ?>
+            <span class="anteil<?= $anteil >= 80 ? ' gelb' : '' ?>" style="--p:<?= (int) min(100, round($anteil)) ?>" aria-hidden="true"><span><?= (int) round($anteil) ?>&nbsp;%</span></span>
+        <?php endif; ?>
+        <span>
+            <span class="tiny muted">Diesen Monat</span>
+            <span class="zahl"><?= admin_euro($monthCost) ?></span>
+            <span class="tiny muted"><?= $cap > 0 ? 'noch ' . admin_euro($remaining) . ' von ' . admin_euro($cap) : 'ohne Monatsbudget' ?>
+                &middot; <?= (int) $month['n'] ?> Anfragen</span>
+        </span>
     </div>
-    <div class="stat">
-        <div class="k">Budget übrig</div>
-        <div class="v"><?= $cap > 0 ? $eur($remaining) : '&#8734;' ?></div>
-        <div class="n"><?= $cap > 0
-            ? 'Limit ' . $eur($cap) . ' pro Monat'
-            : 'Kein Monatslimit gesetzt' ?></div>
-    </div>
-    <div class="stat">
-        <div class="k">Insgesamt</div>
-        <div class="v"><?= $eur((float) $all['c']) ?></div>
-        <div class="n"><?= (int) $all['n'] ?> Anfragen seit Beginn</div>
-    </div>
-    <div class="stat">
-        <div class="k">Token diesen Monat</div>
-        <div class="v"><?= number_format((int) $month['ti'] + (int) $month['to_'], 0, ',', '.') ?></div>
-        <div class="n"><?= number_format((int) $month['ti'], 0, ',', '.') ?> ein,
-            <?= number_format((int) $month['to_'], 0, ',', '.') ?> aus</div>
+    <div class="card monat">
+        <span>
+            <span class="tiny muted">Seit Beginn</span>
+            <span class="zahl"><?= admin_euro((float) $all['c']) ?></span>
+            <span class="tiny muted"><?= number_format((int) $all['n'], 0, ',', '.') ?> Anfragen</span>
+        </span>
     </div>
 </div>
 
@@ -132,13 +125,13 @@ flash_render();
 <h2>Letzte 14 Tage</h2>
 <div class="chart">
     <?php foreach ($daily as $day => $cost): ?>
-        <div class="col" title="<?= h($day) ?>: <?= $eur($cost) ?>">
+        <div class="col" title="<?= h($day) ?>: <?= admin_euro($cost) ?>">
             <i style="height: <?= round(($cost / $maxDaily) * 100, 1) ?>%"></i>
             <span><?= h(date('d.m.', strtotime($day))) ?></span>
         </div>
     <?php endforeach; ?>
 </div>
-<p class="tiny muted">Höchster Tageswert: <?= $eur($maxDaily) ?></p>
+<p class="tiny muted">Höchster Tageswert: <?= admin_euro($maxDaily) ?></p>
 
 <?php
 /*
@@ -188,7 +181,7 @@ $flaeche = sprintf('%.1f,%.1f ', $x(1), $y(0)) . implode(' ', $punkte)
                 ? '<strong>aufgebraucht</strong>, weiter ab dem 1.'
                 : 'noch ' . $zahl(max(0, $ttsGrenze - $ttsSumme)) . ' übrig' ?>
         <?php else: ?>
-            &ndash; Standardtarif, <?= $eur(tts_kosten($ttsSumme)) ?>
+            &ndash; Standardtarif, <?= admin_euro(tts_kosten($ttsSumme)) ?>
         <?php endif; ?>
     </p>
     <svg class="zeichenkurve" viewBox="0 0 <?= $b ?> <?= $hoehe ?>" role="img"
@@ -209,18 +202,20 @@ $flaeche = sprintf('%.1f,%.1f ', $x(1), $y(0)) . implode(' ', $punkte)
             <text x="<?= $x($t) ?>" y="<?= $hoehe - 6 ?>" text-anchor="middle"><?= $t ?>.</text>
         <?php endforeach; ?>
     </svg>
-    <table class="data" style="margin-top:12px">
-        <tr><th>Monat</th><th class="num">Zeichen</th><?php if ($ttsFrei && $ttsGrenze > 0): ?><th class="num">vom Freikontingent</th><?php endif; ?></tr>
+    <?php
+    /*
+     * Die letzten Monate als Reihe kleiner Kästchen statt als Tabelle: Am
+     * Telefon wurde jede Tabellenzeile zu einer eigenen Karte, sechs Karten
+     * für sechs Zahlen.
+     */
+    ?>
+    <div class="monatsreihe">
         <?php foreach (array_reverse($ttsMonate, true) as $m => $z): ?>
-            <tr>
-                <td><?= h(date('m/Y', strtotime($m . '-01'))) ?></td>
-                <td class="num"><?= $zahl($z) ?></td>
-                <?php if ($ttsFrei && $ttsGrenze > 0): ?>
-                    <td class="num"><?= (int) round($z / $ttsGrenze * 100) ?>&nbsp;%</td>
-                <?php endif; ?>
-            </tr>
+            <span><small><?= h(date('m/Y', strtotime($m . '-01'))) ?></small>
+                <b><?= $zahl($z) ?></b><?php if ($ttsFrei && $ttsGrenze > 0): ?>
+                <small><?= (int) round($z / $ttsGrenze * 100) ?>&nbsp;% frei verbraucht</small><?php endif; ?></span>
         <?php endforeach; ?>
-    </table>
+    </div>
     <p class="tiny muted" style="margin-bottom:0">
         Gezählt wird der gesprochene Satz &ndash; Azure zählt selbst nach und kann
         leicht abweichen. Deshalb hören die Läufe kurz vor der Grenze auf.
@@ -230,33 +225,30 @@ $flaeche = sprintf('%.1f,%.1f ', $x(1), $y(0)) . implode(' ', $punkte)
 </div>
 <?php endif; ?>
 
-<h2>Nach Schule (dieser Monat)</h2>
+<h2>Nach Schule</h2>
 <?php $proSchule = cost_this_month_by_school(); ?>
 <?php if ($proSchule === []): ?>
     <p class="muted">Es gibt noch keine Schule.</p>
 <?php else: ?>
-<table class="data">
-    <tr><th>Schule</th><th class="num">Anfragen</th><th class="num">Kosten</th>
-        <th class="num">Eigenes Limit</th><th></th></tr>
+<div class="card liste">
     <?php foreach ($proSchule as $s): ?>
         <?php
         $eigen  = $s['monthly_cost_cap_usd'] === null ? null : (float) $s['monthly_cost_cap_usd'];
         $kosten = (float) $s['cost_usd'];
         $voll   = $eigen !== null && $eigen > 0 && $kosten >= $eigen;
         ?>
-        <tr<?= $voll ? ' class="dim"' : '' ?>>
-            <td><?= h($s['name']) ?></td>
-            <td class="num"><?= (int) $s['requests'] ?></td>
-            <td class="num"><?= $eur($kosten) ?></td>
-            <td class="num">
-                <?= $eigen === null ? '<span class="muted">&ndash;</span>' : $usd($eigen) ?>
-            </td>
-            <td class="tiny">
-                <?= $voll ? '<strong>aufgebraucht</strong>' : '' ?>
-            </td>
-        </tr>
+        <a class="zeile" href="<?= h(admin_url('schule.php') . '?id=' . (int) $s['id'] . '&r=kosten') ?>">
+            <span class="wappen" style="--c:<?= h(schule_farbe((int) $s['id'])) ?>" aria-hidden="true"><?=
+                h(mb_strtoupper(mb_substr((string) $s['name'], 0, 1))) ?></span>
+            <span class="wer"><strong><?= h($s['name']) ?></strong>
+                <span class="tiny muted"><?= (int) $s['requests'] ?> Anfragen &middot;
+                    <?= $eigen === null ? 'ohne eigenes Limit' : 'Limit ' . admin_euro($eigen) ?>
+                    <?= $voll ? '&middot; <strong>aufgebraucht</strong>' : '' ?></span></span>
+            <span class="betrag"><?= admin_euro($kosten) ?></span>
+            <span class="pfeil" aria-hidden="true">&#8250;</span>
+        </a>
     <?php endforeach; ?>
-</table>
+</div>
 <p class="tiny muted">
     Ohne eigenes Limit gilt nur das Monatsbudget des Betreibers. Ein eigenes
     Limit begrenzt zusätzlich, was eine einzelne Schule verbrauchen kann -
@@ -273,7 +265,16 @@ $flaeche = sprintf('%.1f,%.1f ', $x(1), $y(0)) . implode(' ', $punkte)
 </div>
 <?php endif; ?>
 
-<h2>Nach Konto (dieser Monat)</h2>
+<?php
+/*
+ * Die Einzelheiten zugeklappt. Gebraucht werden sie, wenn eine Zahl oben
+ * nicht stimmt - dann aber alle drei. Offen standen sie als drei lange
+ * Tabellen vor allem anderen und machten die Seite zum Protokoll.
+ */
+?>
+<details class="card einzeln">
+<summary>Im Einzelnen: nach Konto, nach Modell, letzte Anfragen</summary>
+<h3>Nach Konto</h3>
 <?php if ($perUser === []): ?>
     <p class="muted">In diesem Monat gab es noch keine Anfragen.</p>
 <?php else: ?>
@@ -287,13 +288,15 @@ $flaeche = sprintf('%.1f,%.1f ', $x(1), $y(0)) . implode(' ', $punkte)
             <td class="num"><?= (int) $r['n'] ?></td>
             <td class="num"><?= (int) $r['imgs'] ?></td>
             <td class="num"><?= (int) $r['entries'] ?></td>
-            <td class="num"><?= $eur((float) $r['c']) ?></td>
+            <td class="num"><?= admin_euro((float) $r['c']) ?></td>
         </tr>
     <?php endforeach; ?>
 </table>
 <?php endif; ?>
 
-<h2>Nach Modell (dieser Monat)</h2>
+<h3>Nach Modell</h3>
+<p class="tiny muted">Token diesen Monat: <?= number_format((int) $month['ti'], 0, ',', '.') ?> ein,
+    <?= number_format((int) $month['to_'], 0, ',', '.') ?> aus &ndash; ohne die Aufnahmen, die in Zeichen zählen.</p>
 <?php if ($perModel === []): ?>
     <p class="muted">Noch keine Daten.</p>
 <?php else: ?>
@@ -306,13 +309,13 @@ $flaeche = sprintf('%.1f,%.1f ', $x(1), $y(0)) . implode(' ', $punkte)
             <td class="num"><?= (int) $r['n'] ?></td>
             <td class="num"><?= number_format((int) $r['ti'], 0, ',', '.') ?></td>
             <td class="num"><?= number_format((int) $r['tokens_out'], 0, ',', '.') ?></td>
-            <td class="num"><?= $eur((float) $r['c']) ?></td>
+            <td class="num"><?= admin_euro((float) $r['c']) ?></td>
         </tr>
     <?php endforeach; ?>
 </table>
 <?php endif; ?>
 
-<h2>Letzte Anfragen</h2>
+<h3>Letzte Anfragen</h3>
 <?php if ($recent === []): ?>
     <p class="muted">Noch keine Anfragen protokolliert.</p>
 <?php else: ?>
@@ -328,7 +331,7 @@ $flaeche = sprintf('%.1f,%.1f ', $x(1), $y(0)) . implode(' ', $punkte)
             <td class="num"><?= (int) $r['image_count'] ?></td>
             <td class="num"><?= (int) $r['entry_count'] ?></td>
             <td class="num"><?= $r['duration_ms'] > 0 ? round($r['duration_ms'] / 1000, 1) . ' s' : '-' ?></td>
-            <td class="num"><?= $eur((float) $r['cost_usd']) ?></td>
+            <td class="num"><?= admin_euro((float) $r['cost_usd']) ?></td>
             <td title="<?= h((string) ($r['error'] ?? '')) ?>">
                 <?= $r['status'] === 'ok' ? 'ok' : h($r['status']) ?>
             </td>
@@ -336,5 +339,7 @@ $flaeche = sprintf('%.1f,%.1f ', $x(1), $y(0)) . implode(' ', $punkte)
     <?php endforeach; ?>
 </table>
 <?php endif; ?>
+
+</details>
 
 <?php admin_foot(); ?>
