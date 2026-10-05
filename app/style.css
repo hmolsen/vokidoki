@@ -124,7 +124,16 @@
 
 * { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+/*
+ * Der Seitengrund auch auf <html>, nicht nur auf <body>.
+ *
+ * Als App auf dem Home-Bildschirm (Statusleiste black-translucent) misst iOS
+ * auf einer Seite, die nicht rollt, den Viewport um die Höhe der
+ * Statusleiste zu kurz. Darunter stand der nackte Hintergrund des
+ * Dokuments - ein dunkler Streifen am unteren Rand, gemeldet auf "Meine
+ * Kurse" mit nur einem Kurs.
+ */
+html { -webkit-text-size-adjust: 100%; background: var(--bg); }
 
 body {
     margin: 0;
@@ -385,6 +394,25 @@ p  { margin: 0 0 12px; }
  */
 .menue > .schublade { overscroll-behavior: contain; }
 html:has(.menue[open]) { overscroll-behavior: none; }
+
+/*
+ * Und die Schubladen samt Schleier reichen bis ganz unten.
+ *
+ * Derselbe Fehler: Mit top: 0 und bottom: 0 endeten sie auf einer kurzen
+ * Seite eine Statusleiste über dem unteren Rand, darunter lag die Seite
+ * offen. 100lvh ist die grösste Höhe, die der Bildschirm hergibt - als
+ * App auf dem Home-Bildschirm der ganze Bildschirm.
+ *
+ * Nur dort: Im Safari mit sichtbarer Leiste unten ist 100lvh höher als
+ * das, was man sieht, und der letzte Eintrag (Abmelden) läge unter der
+ * Leiste. Wo es lvh nicht gibt, bleibt es bei bottom: 0.
+ */
+@media (display-mode: standalone) {
+    @supports (height: 100lvh) {
+        .menue > .schublade,
+        .menue > .schleier { bottom: auto; height: 100lvh; }
+    }
+}
 
 /*
  * Als Animation, nicht als Übergang: <details> blendet seinen Inhalt beim
