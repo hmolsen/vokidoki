@@ -3786,9 +3786,11 @@ section('Schulen im Admin');
  * Schulen.
  */
 
-$schulQuelle = (string) file_get_contents(__DIR__ . '/../app/admin/_boot.php');
-ok('Die Schulen stehen im Admin-Menue',
-   str_contains($schulQuelle, "'schools.php'   => 'Schulen'"));
+$schulMenue = http($base . '/admin/index.php')['body'];
+ok('Die Schulen stehen im Admin-Menue - jede einzeln, dazu "Neue Schule"',
+   str_contains($schulMenue, '<p class="mueber">Schulen</p>')
+   && str_contains($schulMenue, 'schools.php#schule' . $testSchule . '"')
+   && str_contains($schulMenue, '<span>Neue Schule</span>'));
 
 /*
  * Eine Schule entsteht nur, wo jemand sie anlegt.
@@ -6676,7 +6678,7 @@ ok('An Azure geht der Satz ohne Punkt, in <s>',
 // ---- Die Liste im Admin
 $pSeite = http($base . '/admin/aussprache.php')['body'];
 ok('Der Admin hat eine Seite "Aussprache"',
-   str_contains($pSeite, '<h1>Aussprache</h1>') && str_contains($pSeite, 'aussprache.php" class="on"'));
+   str_contains($pSeite, '<h1>Aussprache</h1>') && preg_match('~class="mitem on" href="[^"]*aussprache\.php"~', $pSeite) === 1);
 $pHashVorher = (string) qv('SELECT hash FROM sentence_audio WHERE sentence_id = ?', [$pSaetze[1]]);
 @unlink(sys_get_temp_dir() . '/vt-fake-tts.log');
 adminPost('aussprache.php', ['add' => 1, 'sprache' => 'da', 'wort' => 'fx', 'aussprache' => 'for eksempel']);

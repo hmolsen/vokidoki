@@ -14,7 +14,12 @@ import { browser, alsLehrkraft, ok, abschnitt, schlafe } from './browser.mjs';
 export async function pruefe(f, aus) {
     abschnitt('Navigation');
 
-    const b = await browser({ port: 9405, breite: 1200, hoehe: 1000, aus });
+    /*
+     * Knapp unter der Breite, ab der das Menü fest links steht
+     * (SEITENLEISTE_AB in lib/html.php): Hier geht es um die Schublade, die
+     * hereinfliegt. Die feste Leiste prüft seitenleiste.mjs.
+     */
+    const b = await browser({ port: 9405, breite: 1000, hoehe: 1000, aus });
     try {
         // ---- Die Anmeldung führt auf die eigenen Kurse.
 

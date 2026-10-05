@@ -22,28 +22,38 @@ body.admin { background: var(--bg); }
     flex-wrap: wrap;
 }
 
-/*
- * Dieselbe Leiste benutzt auch der Betreiber-Admin - dort mit festen
- * Reitern, weil es dort wirklich Bereiche gibt (Konten, Schulen, Kosten,
- * Saetze) und keinen Ort, an dem man steht.
- *
- * Als DIREKTES Kind, und das ist kein Schoenheitsfehler: Die Schubladen
- * der Lehrkraft sind ebenfalls <nav> und liegen in derselben Leiste. Ohne
- * das > wurden sie zu Flex-Reihen mit Reiter-Innenabstand - die Eintraege
- * standen weit auseinander und nicht mehr oben.
- */
-.adminbar > nav { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
-.adminbar > nav a {
-    padding: 8px 13px;
-    border-radius: 9px;
-    color: var(--text-soft);
-    text-decoration: none;
-    font-weight: 600;
-    font-size: .95rem;
-}
-.adminbar > nav a:hover { background: var(--surface-2); color: var(--text); }
-.adminbar > nav a.on    { background: var(--accent); color: #fff; }
 .adminbar > .logout { margin: 0; }
+
+/*
+ * Am Rechner steht die linke Schublade fest da - dasselbe Menü wie am
+ * Telefon, nur offen (seitenleiste_skript() in lib/html.php setzt .fest).
+ * Ohne Knopf, ohne Schleier, ohne Hereinfliegen; die Seite rückt um die
+ * Breite der Leiste nach rechts. Die Grenze (1100 px) steht dort als
+ * SEITENLEISTE_AB.
+ */
+:root { --seitenleiste: 272px; }
+.menue.fest > .burger,
+.menue.fest > .schleier { display: none; }
+.menue.fest > .schublade {
+    width: var(--seitenleiste);
+    z-index: 6;
+    box-shadow: none;
+    animation: none;
+    background: var(--surface);
+}
+html.seitenleiste body.admin { padding-left: var(--seitenleiste); }
+
+/* Eine Gruppe im Menü des Admins: Schulen, Qualität, Betrieb. Ohne Strich -
+   die kleine Überschrift trennt schon, ein Strich dazu war doppelt. */
+.mueber {
+    margin: 16px 10px 4px;
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+}
+.mitem .zaehler { margin-left: auto; }
 .barname {
     margin-left: auto;
     color: var(--text-soft);
@@ -528,7 +538,6 @@ img.chipflag { width: 18px; height: 13px; object-fit: contain; vertical-align: -
 }
 .mitem.meldungen { color: var(--bad); font-weight: 700; }
 .mitem.meldungen .zaehler { margin-left: auto; }
-.adminbar nav .zaehler { margin-left: 5px; }
 
 /*
  * Eine Meldung nach der anderen.

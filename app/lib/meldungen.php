@@ -97,6 +97,22 @@ function meldungen_zahl(?int $lehrerId): int
 }
 
 /**
+ * Gemeldete Vokabeln je Schule - die Zahlen im Menü des Admins.
+ *
+ * @return array<int, int> Schule => Anzahl, nur Schulen mit Meldungen
+ */
+function meldungen_je_schule(): array
+{
+    [$von, $p] = meldungen_von(null);
+    $zahlen = [];
+    foreach (qa('SELECT (SELECT co.school_id FROM courses co WHERE co.id = t.course_id) AS school_id,'
+                . ' COUNT(DISTINCT f.vocab_id) AS n' . $von . ' GROUP BY school_id', $p) as $r) {
+        $zahlen[(int) $r['school_id']] = (int) $r['n'];
+    }
+    return $zahlen;
+}
+
+/**
  * Die offenen Meldungen, die dringendste zuerst.
  *
  * Dringend heisst: von den meisten Kindern gemeldet. Bei gleich vielen kommt

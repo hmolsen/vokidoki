@@ -172,7 +172,7 @@ flash_render();
 <h2>Vorhandene Schulen</h2>
 
 <?php foreach ($schulen as $s): ?>
-    <div class="card">
+    <div class="card" id="schule<?= (int) $s['id'] ?>">
         <h3 style="margin:0 0 12px">
             <?= h($s['name']) ?>
             <span class="muted" style="font-weight:400">

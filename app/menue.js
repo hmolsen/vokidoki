@@ -164,7 +164,9 @@ export function menueAktivieren(wurzel = document) {
      * starten, und er ist so alt wie CSS-Animationen.
      */
     const oeffnen = (m) => {
-        menues.forEach((a) => { if (a !== m && a.open) schliessen(a, true); });
+        // Ein festes Menü (die Seitenleiste am Rechner, seitenleiste_skript())
+        // bleibt offen, wenn das rechte aufgeht.
+        menues.forEach((a) => { if (a !== m && a.open && !a.classList.contains('fest')) schliessen(a, true); });
         m.classList.remove('zu');
         m.open = true;
         teile(m).forEach((el) => {
@@ -185,7 +187,7 @@ export function menueAktivieren(wurzel = document) {
      * springt.
      */
     const schliessen = (m, sofort = false) => {
-        if (!m.open || m.dataset.schliesst === '1') return;
+        if (!m.open || m.dataset.schliesst === '1' || m.classList.contains('fest')) return;
 
         const fertig = () => {
             m.classList.remove('zu');
@@ -244,7 +246,8 @@ export function menueAktivieren(wurzel = document) {
         document.documentElement.dataset.menueEscape = '1';
         document.addEventListener('keydown', (e) => {
             if (e.key !== 'Escape') return;
-            const offen = [...document.querySelectorAll('details.menue')].find((m) => m.open);
+            const offen = [...document.querySelectorAll('details.menue')]
+                .find((m) => m.open && !m.classList.contains('fest'));
             if (!offen) return;
             offen.classList.add('zu');
             const laeuft = [offen.querySelector('.schublade'), offen.querySelector('.schleier')]

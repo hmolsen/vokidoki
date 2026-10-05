@@ -22,6 +22,9 @@ require_once __DIR__ . '/../lib/lehrkraefte.php';
 require_once __DIR__ . '/../lib/passwords.php';
 require_once __DIR__ . '/../lib/tts.php';
 require_once __DIR__ . '/../lib/schulkuerzel.php';
+require_once __DIR__ . '/../lib/thema.php';
+require_once __DIR__ . '/../lib/markdown.php';
+require_once __DIR__ . '/../lib/version.php';
 
 boot_error_handling();
 
@@ -356,26 +359,116 @@ function admin_scope_chips(array $scope, array $extra = [], bool $alle = false):
 
 // ---------------------------------------------------------------- Layout
 
+/**
+ * Ein Eintrag im Menü - dieselbe Gestalt wie im Lehrkraft-Bereich.
+ *
+ * @param string $ziel   Datei samt Anfrage, etwa 'schools.php#schule3'
+ * @param string $aktiv  die Datei der Seite, auf der man steht
+ */
+function admin_menuepunkt(string $ziel, string $symbol, string $text, string $aktiv, int $zahl = 0): string
+{
+    $an = strtok($ziel, '?#') === $aktiv;
+    return sprintf(
+        '<a class="mitem%s" href="%s"%s><span class="micon" aria-hidden="true">%s</span><span>%s</span>%s</a>',
+        $an ? ' on' : '',
+        h(admin_url($ziel)),
+        $an ? ' aria-current="page"' : '',
+        $symbol,
+        h($text),
+        $zahl > 0 ? '<span class="zaehler" aria-label="' . $zahl . ' offen">' . $zahl . '</span>' : '',
+    );
+}
+
+/**
+ * Die Leiste und ihre beiden Schubladen.
+ *
+ * Hier standen acht gleichrangige Reiter in einer Zeile. Am Telefon brachen
+ * sie über drei Zeilen und füllten den Bildschirm, bevor eine Zahl zu sehen
+ * war. Jetzt dieselbe Hülle wie im Lehrkraft-Bereich: links die Navigation,
+ * am Rechner fest stehend (seitenleiste_skript()), rechts Farben und
+ * Abmelden. Wer zwischen beiden Bereichen wechselt, bedient beide gleich.
+ *
+ * Gegliedert, wie der Betreiber arbeitet: die Schulen einzeln - fast alles
+ * betrifft genau eine -, dann was quer über alle geht (Qualität), dann der
+ * Betrieb.
+ */
+function admin_nav(string $aktiv): void
+{
+    $schulen  = qa('SELECT id, name, active FROM schools ORDER BY active DESC, name');
+    $je       = meldungen_je_schule();
+    $gemeldet = array_sum($je);
+    ?>
+<div class="adminbar" data-menue="<?= h(url('/menue.js') . '?v=' . app_version()) ?>">
+    <details class="menue" id="menuLinks">
+        <summary class="burger" aria-label="Menü" title="Menü">
+            <span aria-hidden="true">&#9776;</span>
+            <?php if ($gemeldet > 0): ?><span class="zaehler" aria-hidden="true"><?= $gemeldet ?></span><?php endif; ?>
+        </summary>
+        <span class="schleier" data-zu></span>
+        <nav class="schublade" aria-label="Navigation">
+            <div class="mkopf">
+                <a href="<?= h(admin_url('index.php')) ?>" class="mlogo" aria-label="Vokidoki Admin - zur Übersicht">
+                    <img src="<?= h(url('/assets/vokidoki_logo.svg')) ?>" alt="Vokidoki" width="768" height="256">
+                </a>
+                <span class="mschule">Admin</span>
+            </div>
+            <?= admin_menuepunkt('index.php', '&#127968;', 'Übersicht', $aktiv) ?>
+
+            <p class="mueber">Schulen</p>
+            <?php foreach ($schulen as $s): ?>
+                <?= admin_menuepunkt('schools.php#schule' . (int) $s['id'],
+                                     $s['active'] ? '&#127979;' : '&#128164;',
+                                     (string) $s['name'], '', $je[(int) $s['id']] ?? 0) ?>
+            <?php endforeach; ?>
+            <?= admin_menuepunkt('schools.php', '&#10133;', 'Neue Schule', $aktiv) ?>
+
+            <p class="mueber">Qualität</p>
+            <?= admin_menuepunkt('meldungen.php', '&#128681;', 'Meldungen', $aktiv, $gemeldet) ?>
+            <?= admin_menuepunkt('aussprache.php', '&#128483;&#65039;', 'Aussprache', $aktiv) ?>
+            <?= admin_menuepunkt('sentences.php', '&#128269;', 'Lückensätze durchsuchen', $aktiv) ?>
+
+            <p class="mueber">Betrieb</p>
+            <?= admin_menuepunkt('index.php#kosten', '&#128182;', 'Kosten', '') ?>
+            <?= admin_menuepunkt('users.php', '&#128101;', 'Konten', $aktiv) ?>
+            <?= admin_menuepunkt('vocab.php', '&#128218;', 'Unterlagen', $aktiv) ?>
+            <?= admin_menuepunkt('settings.php', '&#9881;&#65039;', 'Einstellungen', $aktiv) ?>
+            <?= admin_menuepunkt('selfcheck.php', '&#129658;', 'Selbsttest und Updates', $aktiv) ?>
+        </nav>
+    </details>
+    <?= seitenleiste_skript() ?>
+
+    <span class="barname">Admin</span>
+
+    <details class="menue rechts" id="menuRechts">
+        <summary class="burger" aria-label="Einstellungen" title="Einstellungen">
+            <span aria-hidden="true">&#9881;</span>
+        </summary>
+        <span class="schleier" data-zu></span>
+        <nav class="schublade" aria-label="Einstellungen">
+            <?= thema_wahl_html() ?>
+            <hr class="mtrenner">
+            <?php foreach (legal_documents() as $k => $d): ?>
+                <a class="mitem" href="<?= h(url('/rechtliches.php') . '?d=' . $k) ?>">
+                    <span class="micon" aria-hidden="true">&#167;</span>
+                    <span><?= h($d['kurz']) ?></span>
+                </a>
+            <?php endforeach; ?>
+            <hr class="mtrenner">
+            <form method="post" action="<?= h(admin_url('index.php')) ?>">
+                <?= csrf_field() ?>
+                <button class="mitem" name="admin_logout" value="1">
+                    <span class="micon" aria-hidden="true">&#9099;</span>
+                    <span>Abmelden</span>
+                </button>
+            </form>
+        </nav>
+    </details>
+</div>
+    <?php
+}
+
 function admin_head(string $title, string $active): void
 {
-    $nav = [
-        'index.php'     => 'Kosten',
-        'schools.php'   => 'Schulen',
-        'users.php'     => 'Accounts',
-        /*
-         * Ein Eintrag fuer Vokabeln und Saetze. Die Saetze einer Lerneinheit
-         * stehen jetzt unter ihren Vokabeln; die Liste ueber alle Kurse ist
-         * von dort aus verlinkt und markiert diesen Eintrag mit.
-         */
-        'vocab.php'     => 'Unterlagen',
-        'meldungen.php' => 'Meldungen',
-        'aussprache.php' => 'Aussprache',
-        'settings.php'  => 'Einstellungen',
-        'selfcheck.php' => 'Selbsttest',
-    ];
-    // Rot hinter "Meldungen", solange etwas wartet - dieselbe Zahl, die die
-    // Lehrkraft an ihrem Zahnrad sieht, nur ueber alle Schulen.
-    $gemeldet = meldungen_zahl(null);
     ?>
     <!doctype html>
     <html lang="de">
@@ -386,22 +479,10 @@ function admin_head(string $title, string $active): void
         <title><?= h($title) ?> - Vokidoki Admin</title>
         <?= favicon_html() ?>
         <?= verwaltung_stile_html() ?>
+        <?= thema_kopf_skript() ?>
     </head>
     <body class="admin">
-    <header class="adminbar">
-        <strong>Vokidoki</strong>
-        <nav>
-            <?php foreach ($nav as $file => $label): ?>
-                <a href="<?= h(admin_url($file)) ?>"<?= $file === $active ? ' class="on"' : '' ?>><?= h($label) ?><?=
-                    $file === 'meldungen.php' && $gemeldet > 0
-                        ? '<span class="zaehler">' . $gemeldet . '</span>' : '' ?></a>
-            <?php endforeach; ?>
-        </nav>
-        <form method="post" action="<?= h(admin_url('index.php')) ?>" class="logout">
-            <?= csrf_field() ?>
-            <button name="admin_logout" value="1" class="linkbtn">Abmelden</button>
-        </form>
-    </header>
+    <?php admin_nav($active); ?>
     <main class="adminmain">
         <h1><?= h($title) ?></h1>
     <?php
@@ -448,6 +529,10 @@ function admin_foot(): void
 {
     // Das Band "Es gibt eine neue Fassung" - wie in der App.
     echo fassung_skript_html(), "\n";
+    // Die Schubladen - dasselbe Verhalten wie im Lehrkraft-Bereich (menue.js).
+    printf('<script type="module">import { menueAktivieren, themaWahlAktivieren } from %s;'
+           . ' menueAktivieren(); themaWahlAktivieren();</script>' . "\n",
+           json_encode(url('/menue.js') . '?v=' . app_version(), JSON_UNESCAPED_SLASHES));
     // Kleine Zugabe: Nach der Wahl klappt das Farbfeld zu und der Knopf zeigt
     // die neue Farbe. Ohne dieses Skript funktioniert die Wahl trotzdem - dann
     // bleibt das Feld eben offen stehen, bis gespeichert wird.
