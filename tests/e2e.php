@@ -328,7 +328,8 @@ ok('Admin-Anmeldung', $adminOk, 'Dashboard nicht erreicht - Passwort als 2. Argu
 ok('Passwort liegt als Hash in der Datenbank',
    str_starts_with((string) qv("SELECT v FROM settings WHERE k = 'admin_password_hash'"), '$'));
 
-foreach (['users.php' => 'Neuen Account anlegen',
+foreach (['index.php' => 'Zu tun',
+          'schools.php' => 'Schule anlegen',
           'vocab.php' => 'Schule',
           'settings.php' => 'Schritt 1: Fehlerkorrektur',
           'selfcheck.php' => 'Prüfung'] as $file => $needle) {
@@ -348,7 +349,7 @@ ok('Selbsttest meldet keine Fehler bei DB und Schema',
  */
 q("DELETE FROM users WHERE username = 'e2e_other'");
 $testSchule = (int) qv('SELECT school_id FROM users WHERE id = ?', [$userId]);
-$res = adminPost('users.php', [
+$res = adminPost('schule.php?id=' . $testSchule, [
     'create'       => '1',
     'username'     => 'e2e_other',
     'display_name' => 'Zweitkind',
@@ -359,9 +360,9 @@ $res = adminPost('users.php', [
 $otherId = (int) qv("SELECT id FROM users WHERE username = 'e2e_other'");
 ok('Admin legt einen zweiten Account an', $otherId > 0);
 
-$res = adminPost('users.php', ['create' => '1', 'username' => 'UNGUELTIG!',
+$res = adminPost('schule.php?id=' . $testSchule, ['create' => '1', 'username' => 'UNGUELTIG!',
                                'display_name' => 'X', 'password' => 'geheim123']);
-ok('Ungültiger Benutzername wird abgelehnt', str_contains($res['body'], 'Benutzername: 3-64'));
+ok('Ungültiger Benutzername wird abgelehnt', str_contains($res['body'], 'Benutzername: 2 bis 64'));
 
 // Fremddaten anlegen, gegen die der Zugriffsschutz gleich geprüft wird.
 $otherLang   = makeLanguage($otherId, 'Fremdisch');
@@ -1987,7 +1988,7 @@ ok('Die Übersicht nennt offene Meldungen unter "Zu tun"',
    preg_match('~<a class="aufgabe" href="[^"]*meldungen\.php">.*?Meldung(en)? offen.*?'
               . preg_quote(h($mSchulName), '~') . '~s', $mUebersicht) === 1);
 ok('Und das Menü zählt sie bei der Schule',
-   preg_match('~schools\.php#schule' . $testSchule . '"[^>]*>.*?<span class="zaehler"~s', $mUebersicht) === 1);
+   preg_match('~schule\.php\?id=' . $testSchule . '"[^>]*>.*?<span class="zaehler"~s', $mUebersicht) === 1);
 
 $seite = http($base . '/admin/meldungen.php')['body'];
 $mWort = (string) qv('SELECT term_foreign FROM vocab WHERE id = ?', [$mVokabel]);
@@ -2279,44 +2280,57 @@ ok('Filter per URL wirken weiterhin', $res['status'] === 200
 ok('Und die Einheit fuehrt zu ihren Vokabeln',
    str_contains($res['body'], 'unit=' . $unitId));
 
-section('Accounts nach Schule und Klasse');
+section('Die Konten einer Schule');
 
 /*
- * Eine Karte je Konto mit allen Formularen offen - bei drei Kindern ging
- * das, bei einer Schule mit dreihundert nicht mehr. Jetzt: Filter, eine
- * Zeile je Konto, die Formulare aufklappbar.
+ * Die Konten stehen auf der Seite ihrer Schule (admin/schule.php), nicht
+ * mehr in einer Liste über alle Schulen. Gruppiert nach Lehrkräften und
+ * Klassen, eine Zeile je Konto, die Formulare aufklappbar.
  */
-$res = http($base . '/admin/users.php?school=' . $testSchule);
-ok('Die Kontenliste laesst sich nach Schule filtern',
-   str_contains($res['body'], 'class="chip on"') && str_contains($res['body'], 'Testkind'));
+$tkKlasse = qv('SELECT class_id FROM class_members WHERE user_id = ? LIMIT 1', [$userId]);
+$tkGruppe = $tkKlasse === null ? 'ohne' : (string) (int) $tkKlasse;
+$tkSeite  = 'schule.php?' . http_build_query(['id' => $testSchule, 'r' => 'konten', 'g' => $tkGruppe]);
+$res = http($base . '/admin/' . $tkSeite);
+ok('Die Seite der Schule zeigt ihre Konten, nach Gruppe',
+   str_contains($res['body'], 'aria-label="Welche Konten"') && str_contains($res['body'], '>Testkind<'));
 ok('Mit einer Zeile je Konto, zum Aufklappen',
-   str_contains($res['body'], '<details class="konto'));
-ok('Sie nennt Kurse statt Sprachen',
-   str_contains($res['body'], 'Kurs') && !preg_match('/\d+ Sprachen,/', $res['body']));
-ok('Und die Sofortsuche findet auch die Zeilen dort',
-   str_contains($res['body'], 'data-filter-ziel="kontenliste"'));
+   str_contains($res['body'], '<details class="kontozeile'));
+ok('Und einem Knopf für ein neues Passwort',
+   str_contains($res['body'], 'name="reset_password" value="' . $userId . '"'));
 
 $andereSchule = (int) (qv('SELECT id FROM schools WHERE id <> ? ORDER BY id LIMIT 1', [$testSchule]) ?? 0);
 if ($andereSchule > 0) {
-    $res = http($base . '/admin/users.php?school=' . $andereSchule);
-    ok('In einer anderen Schule steht das Testkind nicht',
-       !str_contains($res['body'], '>Testkind<'));
+    $res = http($base . '/admin/schule.php?id=' . $andereSchule . '&r=konten&g=' . $tkGruppe);
+    ok('In einer anderen Schule steht das Testkind nicht', !str_contains($res['body'], '>Testkind<'));
+    $vorher = (string) qv('SELECT password_hash FROM users WHERE id = ?', [$userId]);
+    adminPost('schule.php?id=' . $andereSchule, ['set_password' => '1', 'id' => $userId, 'password' => 'fremd123']);
+    ok('Und über eine fremde Schule lässt sich sein Passwort nicht ändern',
+       (string) qv('SELECT password_hash FROM users WHERE id = ?', [$userId]) === $vorher);
 }
 
-$res = http($base . '/admin/users.php?' . http_build_query(['school' => $testSchule, 'rolle' => 1]));
-ok('Der Filter Lehrkraefte laesst Kinder weg', !str_contains($res['body'], '>Testkind<'));
+$res = http($base . '/admin/schule.php?id=' . $testSchule . '&r=konten&g=lk');
+ok('Die Gruppe Lehrkräfte lässt Kinder weg', !str_contains($res['body'], '>Testkind<'));
 
-$res = adminPost('users.php', ['set_password' => '1', 'id' => $userId, 'password' => 'geheim123',
-                               'school' => $testSchule],
-                 'school=' . $testSchule);
-ok('Nach dem Speichern bleibt der Filter stehen',
+$res = adminPost($tkSeite, ['set_password' => '1', 'id' => $userId, 'password' => 'geheim123']);
+ok('Nach dem Speichern bleibt man in derselben Gruppe',
    str_contains($res['body'], 'Passwort gesetzt')
-   && preg_match('#users\.php\?school=' . $testSchule . '&amp;rolle=#', $res['body']) === 1,
-   'die Rollen-Knoepfe tragen die Schule weiter');
+   && str_contains($res['body'], 'class="on">') && str_contains($res['body'], '>Testkind<'));
 
-$res = http($base . '/admin/users.php');
-ok('Die Rueckfrage beim Loeschen verspricht nicht mehr "alle Vokabeln"',
-   !str_contains($res['body'], 'mit allen Sprachen und Vokabeln'));
+$res = adminPost($tkSeite, ['reset_password' => $userId]);
+$tkNeu = (string) qv('SELECT initial_password FROM users WHERE id = ?', [$userId]);
+ok('"Neues Passwort" erzeugt eines und zeigt es einmal',
+   $tkNeu !== '' && str_contains($res['body'], $tkNeu));
+adminPost($tkSeite, ['set_password' => '1', 'id' => $userId, 'password' => 'geheim123']);
+ok('Selbst gesetzt gilt es, und das Anfangspasswort ist weg',
+   qv('SELECT initial_password FROM users WHERE id = ?', [$userId]) === null);
+
+ok('Die Rueckfrage beim Loeschen verspricht nicht "alle Vokabeln"',
+   !str_contains($res['body'], 'mit allen Sprachen und Vokabeln')
+   && str_contains($res['body'], 'die Unterlagen der Kurse bleiben'));
+
+$res = http($base . '/admin/users.php?school=' . $testSchule, null, [], true);
+ok('Alte Lesezeichen auf die Kontenliste führen zur Schule',
+   str_contains($res['body'], 'aria-label="Bereiche der Schule"'));
 
 
 section('Farbwahl im Admin');
@@ -2334,7 +2348,7 @@ ok('Und alle verschieden', count(array_unique(color_palette())) === 49);
 [$rb, $gb, $bb] = sscanf(color_default(), '#%02x%02x%02x');
 ok('Die Standardfarbe ist ein Blau', $bb > $rb && $bb > $gb, color_default());
 
-$res = http($base . '/admin/users.php');
+$res = http($base . '/admin/' . $tkSeite);
 ok('Die Seite zeigt das Farbfeld', str_contains($res['body'], 'class="palette"'));
 ok('Kein Auswahlfeld mehr für die Farbe', !str_contains($res['body'], '<select name="color"'));
 ok('49 Kacheln stehen zur Wahl',
@@ -2349,18 +2363,18 @@ ok('Und ist zugeklappt', !preg_match('/<details class="colorpick" open/', $res['
 
 // Eine Farbe aus dem Feld setzen.
 $farbe = color_palette()[40];
-adminPost('users.php', ['update' => '1', 'id' => $userId, 'school_id' => $testSchule,
+adminPost($tkSeite, ['update' => '1', 'id' => $userId, 'school_id' => $testSchule,
                         'display_name' => 'Testkind', 'color' => $farbe, 'active' => '1']);
 ok('Gewählte Farbe wird gespeichert',
    qv('SELECT color FROM users WHERE id = ?', [$userId]) === $farbe,
    (string) qv('SELECT color FROM users WHERE id = ?', [$userId]));
 
-$res = http($base . '/admin/users.php');
+$res = http($base . '/admin/' . $tkSeite);
 ok('Und ist im Feld als gewählt markiert',
    str_contains($res['body'], 'value="' . $farbe . '" checked'));
 
 // Unsinn darf nicht durchrutschen.
-adminPost('users.php', ['update' => '1', 'id' => $userId, 'school_id' => $testSchule,
+adminPost($tkSeite, ['update' => '1', 'id' => $userId, 'school_id' => $testSchule,
                         'display_name' => 'Testkind', 'color' => 'rot; drop table', 'active' => '1']);
 ok('Ungültige Farbe wird abgefangen',
    preg_match('/^#[0-9a-f]{6}$/', (string) qv('SELECT color FROM users WHERE id = ?', [$userId])) === 1,
@@ -3798,7 +3812,7 @@ section('Schulen im Admin');
 $schulMenue = http($base . '/admin/index.php')['body'];
 ok('Die Schulen stehen im Admin-Menue - jede einzeln, dazu "Neue Schule"',
    str_contains($schulMenue, '<p class="mueber">Schulen</p>')
-   && str_contains($schulMenue, 'schools.php#schule' . $testSchule . '"')
+   && str_contains($schulMenue, 'schule.php?id=' . $testSchule . '"')
    && str_contains($schulMenue, '<span>Neue Schule</span>'));
 
 /*
@@ -3831,8 +3845,8 @@ $res = adminPost('schools.php', ['create' => '1', 'name' => $schulName, 'kuerzel
 ok('Zweimal derselbe Name geht nicht', str_contains($res['body'], 'gibt es schon'));
 
 // Umbenennen und ein eigenes Monatslimit setzen.
-$res = adminPost('schools.php', [
-    'update' => '1', 'id' => $neueSchule,
+$res = adminPost('schule.php?id=' . $neueSchule, [
+    'save_school' => '1',
     'name'   => $schulName . ' II', 'cap' => '3,50', 'active' => '1', 'kuerzel' => $schulKuerzel,
 ]);
 ok('Der Name laesst sich aendern',
@@ -3847,8 +3861,8 @@ ok('Und ein eigenes Monatslimit setzen',
  * Unterschied ist erheblich: NULL laesst nur das Budget des Betreibers
  * greifen, 0.00 sperrte die Schule sofort aus.
  */
-adminPost('schools.php', [
-    'update' => '1', 'id' => $neueSchule,
+adminPost('schule.php?id=' . $neueSchule, [
+    'save_school' => '1',
     'name'   => $schulName . ' II', 'cap' => '', 'active' => '1', 'kuerzel' => $schulKuerzel,
 ]);
 ok('Ein leeres Limit bedeutet "keines", nicht "null"',
@@ -3858,13 +3872,13 @@ ok('Ein leeres Limit bedeutet "keines", nicht "null"',
 $schulKind = makeUser('e2e_schulkind', 'Schulkind');
 q('UPDATE users SET school_id = ? WHERE id = ?', [$neueSchule, $schulKind]);
 
-$res = adminPost('schools.php', ['delete' => $neueSchule]);
+$res = adminPost('schule.php?id=' . $neueSchule, ['delete_school' => '1']);
 ok('Eine Schule mit Konten wird nicht geloescht',
    q1('SELECT id FROM schools WHERE id = ?', [$neueSchule]) !== null
    && str_contains($res['body'], 'Nicht gelöscht'));
 
 q('DELETE FROM users WHERE id = ?', [$schulKind]);
-$res = adminPost('schools.php', ['delete' => $neueSchule]);
+$res = adminPost('schule.php?id=' . $neueSchule, ['delete_school' => '1']);
 ok('Eine leere Schule dagegen schon',
    q1('SELECT id FROM schools WHERE id = ?', [$neueSchule]) === null);
 
@@ -3875,7 +3889,7 @@ adminPost('schools.php', ['create' => '1', 'name' => $zuordSchule, 'kuerzel' => 
 $zuordId = (int) qv('SELECT id FROM schools WHERE name = ?', [$zuordSchule]);
 
 $lehrName = 'e2e_lehr_' . bin2hex(random_bytes(3));
-$res = adminPost('users.php', [
+$res = adminPost('schule.php?id=' . $zuordId, [
     'create'       => '1',
     'username'     => $lehrName,
     'display_name' => 'Frau Zuordnung',
@@ -3894,7 +3908,7 @@ ok('Lehrkraefte duerfen einlesen, ohne dass jemand daran denkt',
 
 // Ohne Schule wird abgelehnt statt ein Konto anzulegen, das nichts sieht.
 $ohneName = 'e2e_ohne_' . bin2hex(random_bytes(3));
-$res = adminPost('users.php', [
+$res = adminPost('schule.php?id=0', [
     'create'       => '1',
     'username'     => $ohneName,
     'display_name' => 'Ohne Schule',
@@ -6223,7 +6237,7 @@ ok('Auch ein untergeschobenes Formular nimmt sie nicht heraus',
 ok('Der Admin zieht sie nicht in eine andere Schule um, und loescht sie nicht',
    courses_where_last_teacher($lehrerId) !== []
    && in_array('Letzte-Lehrkraft-Probe', courses_where_last_teacher($lehrerId), true));
-adminPost('users.php', ['delete' => $lehrerId], 'school=' . $lkSchule);
+adminPost('schule.php?id=' . $lkSchule, ['delete' => $lehrerId]);
 ok('Ein Loeschen ueber den Admin laeuft ins Leere',
    q1('SELECT id FROM users WHERE id = ?', [$lehrerId]) !== null);
 
@@ -11244,11 +11258,11 @@ ok('Eine neue Schule darf ohne Angabe 50 Lehrkräfte haben',
 $lkAdmin = http($base . '/admin/schools.php')['body'];
 ok('Das Anlegeformular fragt nach der Höchstzahl, voreingestellt 50',
    preg_match('~name="max_lehrkraefte"[^>]*value="50"~', $lkAdmin) === 1);
-adminPost('schools.php', ['update' => '1', 'id' => $lkSchule, 'name' => 'E2E Schule ' . $lkKz,
+adminPost('schule.php?id=' . $lkSchule, ['save_school' => '1', 'name' => 'E2E Schule ' . $lkKz,
     'kuerzel' => $lkKz, 'cap' => '', 'active' => '1', 'max_lehrkraefte' => '3']);
 ok('Der Admin ändert die Höchstzahl', lehrkraefte_grenze($lkSchule) === 3);
 ok('Und sieht, wie viele es schon sind',
-   str_contains(http($base . '/admin/schools.php')['body'], 'von höchstens 3 Lehrkräften'));
+   str_contains(http($base . '/admin/schule.php?id=' . $lkSchule)['body'], '<small>/3</small></b>Lehrkräfte'));
 
 // Drei Lehrkräfte: Anna verwaltet, Bert wird gelöscht, Carla teilt einen Kurs mit ihm.
 $lkKonto = static function (string $name, string $anzeige) use ($lkSchule): array {

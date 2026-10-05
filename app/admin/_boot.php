@@ -442,7 +442,7 @@ function admin_zu_tun(): array
         if ($grenze !== null && (float) $grenze > 0 && (float) $s['cost_usd'] >= (float) $grenze) {
             $liste[] = ['art' => 'rot', 'symbol' => '&#127979;', 'titel' => $s['name'] . ': Kostenlimit erreicht',
                         'text' => 'Die Schule kann bis zum 1. nichts mehr einlesen.',
-                        'ziel' => 'schools.php#schule' . (int) $s['id']];
+                        'ziel' => 'schule.php?id=' . (int) $s['id'] . '&r=kosten'];
         }
     }
 
@@ -504,7 +504,9 @@ function admin_zu_tun_html(array $liste): string
  */
 function admin_menuepunkt(string $ziel, string $symbol, string $text, string $aktiv, int $zahl = 0): string
 {
-    $an = strtok($ziel, '?#') === $aktiv;
+    // Genau diese Seite, oder dieselbe Datei ohne Zusatz - die Schulen
+    // unterscheiden sich nur in ?id=.
+    $an = $ziel === $aktiv || strtok($ziel, '?#') === $aktiv;
     return sprintf(
         '<a class="mitem%s" href="%s"%s><span class="micon" aria-hidden="true">%s</span><span>%s</span>%s</a>',
         $an ? ' on' : '',
@@ -553,9 +555,9 @@ function admin_nav(string $aktiv): void
 
             <p class="mueber">Schulen</p>
             <?php foreach ($schulen as $s): ?>
-                <?= admin_menuepunkt('schools.php#schule' . (int) $s['id'],
+                <?= admin_menuepunkt('schule.php?id=' . (int) $s['id'],
                                      $s['active'] ? '&#127979;' : '&#128164;',
-                                     (string) $s['name'], '', $je[(int) $s['id']] ?? 0) ?>
+                                     (string) $s['name'], $aktiv, $je[(int) $s['id']] ?? 0) ?>
             <?php endforeach; ?>
             <?= admin_menuepunkt('schools.php', '&#10133;', 'Neue Schule', $aktiv) ?>
 
@@ -566,7 +568,6 @@ function admin_nav(string $aktiv): void
 
             <p class="mueber">Betrieb</p>
             <?= admin_menuepunkt('kosten.php', '&#128182;', 'Kosten', $aktiv) ?>
-            <?= admin_menuepunkt('users.php', '&#128101;', 'Konten', $aktiv) ?>
             <?= admin_menuepunkt('vocab.php', '&#128218;', 'Unterlagen', $aktiv) ?>
             <?= admin_menuepunkt('settings.php', '&#9881;&#65039;', 'Einstellungen', $aktiv) ?>
             <?= admin_menuepunkt('selfcheck.php', '&#129658;', 'Selbsttest und Updates', $aktiv) ?>

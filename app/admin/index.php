@@ -107,7 +107,7 @@ flash_render();
 <div class="schulkarten">
     <?php foreach ($schulen as $s): ?>
         <?php $n = $meldungen[(int) $s['id']] ?? 0; ?>
-        <a class="card schulkarte<?= $s['active'] ? '' : ' aus' ?>" href="<?= h(admin_url('schools.php') . '#schule' . (int) $s['id']) ?>">
+        <a class="card schulkarte<?= $s['active'] ? '' : ' aus' ?>" href="<?= h(admin_url('schule.php') . '?id=' . (int) $s['id']) ?>">
             <span class="kopf">
                 <span class="wappen" style="--c:<?= h(schule_farbe((int) $s['id'])) ?>" aria-hidden="true"><?=
                     h(mb_strtoupper(mb_substr((string) $s['name'], 0, 1))) ?></span>

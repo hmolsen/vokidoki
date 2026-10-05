@@ -2579,3 +2579,130 @@ a.aufgabe:hover { border-color: var(--text-soft); }
 }
 .pill.code { font-family: ui-monospace, Consolas, monospace; font-weight: 600; color: var(--accent); }
 .pill.rot { background: var(--bad-bg); color: var(--bad); }
+
+/* ---------------------------------------------------------------- Eine Schule
+ *
+ * admin/schule.php: Kopf mit Kennzahlen, eine Reihe Knöpfe für die
+ * Bereiche, darunter Listen statt Tabellen - am Telefon wird eine Tabelle
+ * zu einem Stapel Karten, eine Liste bleibt eine Liste.
+ */
+.schulkopf { display: flex; align-items: center; gap: 12px; margin: -6px 0 14px; }
+.wappen.gross { width: 48px; height: 48px; border-radius: 14px; font-size: 1.3rem; }
+.schulkopf .pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.pill.gruen { background: var(--good-bg); color: var(--good); }
+
+.kennzahlen { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }
+.kennzahlen > span {
+    display: grid;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+    font-size: .76rem;
+    color: var(--text-soft);
+}
+.kennzahlen b { font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; font-size: 1.15rem; color: var(--text); }
+.kennzahlen small { font-size: .72rem; color: var(--text-soft); }
+
+/* Die Bereiche als Reihe von Knöpfen - am Telefon seitlich wischbar. */
+.segment { display: flex; gap: 6px; overflow-x: auto; margin: 0 0 16px; padding-bottom: 2px; scrollbar-width: none; }
+.segment a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    padding: 8px 15px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text);
+    font-weight: 700;
+    font-size: .92rem;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.segment a:hover { background: var(--surface-2); }
+.segment a.on { background: var(--text); border-color: var(--text); color: var(--bg); }
+.segment.klein a { padding: 6px 12px; font-size: .85rem; font-weight: 600; }
+.segment.klein a.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Eine Liste in einer Karte: Zeilen mit Strich dazwischen. */
+.card.liste { padding: 4px 0; }
+.liste > .zeile, .liste > .kontozeile > summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 16px;
+    color: var(--text);
+    text-decoration: none;
+}
+.liste > .zeile + .zeile, .liste > .kontozeile + .kontozeile { border-top: 1px solid var(--border); }
+a.zeile:hover, .kontozeile > summary:hover { background: var(--bg); }
+.liste .wer { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.liste .wer .tiny { overflow-wrap: anywhere; }
+.liste .betrag { font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; }
+.liste .flagge { flex: none; width: 34px; display: grid; place-items: center; }
+
+.kontozeile > summary { cursor: pointer; list-style: none; }
+.kontozeile > summary::-webkit-details-marker { display: none; }
+.kontozeile[open] > summary .pfeil { transform: rotate(90deg); }
+.kontozeile.aus .wer strong { color: var(--text-soft); text-decoration: line-through; }
+.avatar {
+    --c: var(--accent);
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--c);
+    color: #fff;
+    font-family: 'Fredoka', 'Nunito', sans-serif;
+    font-weight: 600;
+}
+.kontoinhalt { display: grid; gap: 14px; padding: 4px 16px 16px 64px; }
+.knopfreihe { display: flex; gap: 8px; flex-wrap: wrap; margin: 0; }
+.knopfreihe .btn { width: auto; }
+.btn.secondary.danger { background: var(--surface); color: var(--bad); border-color: var(--border); }
+
+/* Felder in einem Raster, das am Telefon zu einer Spalte wird. */
+.kontofelder { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px 12px; align-items: end; margin: 0; }
+.kontofelder > label { display: grid; gap: 4px; margin: 0; font-size: .82rem; font-weight: 700; color: var(--text-soft); }
+.kontofelder input[type=text], .kontofelder input[type=number], .kontofelder select { margin: 0; width: 100%; }
+.kontofelder .btn { width: auto; justify-self: start; }
+.kontohaken { display: grid; gap: 4px; grid-column: 1 / -1; }
+.kontohaken label { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 600; font-size: .9rem; }
+.kontohaken input { width: auto; min-height: 0; margin: 0; }
+.schulfelder { max-width: 720px; }
+
+.card.anlegen { margin-top: 14px; }
+.card.anlegen > summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    list-style: none;
+    font-family: 'Fredoka', 'Nunito', sans-serif;
+    font-weight: 600;
+}
+.card.anlegen > summary::-webkit-details-marker { display: none; }
+.card.anlegen > summary .ic {
+    width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+    background: var(--surface-2); color: var(--text-soft);
+}
+.card.anlegen[open] > summary { margin-bottom: 14px; }
+.card.anlegen .tiny { margin: 12px 0 0; }
+
+.card.gefahr { display: flex; align-items: center; gap: 14px; margin-top: 22px; }
+.card.gefahr > div { flex: 1; display: grid; gap: 2px; }
+.card.gefahr .btn { width: auto; }
+
+.listensuche { max-width: 340px; margin: 0 0 10px; }
+
+@media (max-width: 600px) {
+    .kennzahlen { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .kontoinhalt { padding-left: 16px; }
+    .card.gefahr { flex-direction: column; align-items: stretch; }
+}
+.kontohaken .farbe { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: .9rem; }
+.schulkopf { margin-top: -10px; }
