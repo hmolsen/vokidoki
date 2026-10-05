@@ -26,6 +26,7 @@ import { pruefe as anmeldung }  from './anmeldung.mjs';
 import { pruefe as navigation } from './navigation.mjs';
 import { pruefe as seitenleiste } from './seitenleiste.mjs';
 import { pruefe as freigabe } from './freigabe.mjs';
+import { pruefe as freigabedazu } from './freigabedazu.mjs';
 import { pruefe as einlesen } from './einlesen.mjs';
 import { pruefe as vokabeln } from './vokabeln.mjs';
 import { pruefe as fahnen }   from './fahnen.mjs';
@@ -80,6 +81,7 @@ try {
     await navigation(f, aus);
     await seitenleiste(f, aus);
     await freigabe(f, aus);
+    await freigabedazu(f, aus, wurzel);
     await einlesen(f, aus);
     await vokabeln(f, aus);
     await fahnen(f, aus);

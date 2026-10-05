@@ -917,6 +917,8 @@ function initVocabAdd() {
                 </button>
             </td>`;
         zeile.parentNode.insertBefore(tr, zeile);
+        // Der Freigabebalken und "Alles freigeben" zählen sie mit (initReleaseBar()).
+        tr.closest('table')?.dispatchEvent(new CustomEvent('vokabel-dazu'));
 
         // Je Vokabel ein eigenes Formular - genau wie es die Seite selbst
         // baut; die Felder oben gehören über form= dazu.
@@ -1822,8 +1824,14 @@ function initReleaseBar() {
     const form    = document.getElementById('releaseform');
     if (!tabelle || !form) return;
 
-    const zeilen = Array.from(tabelle.querySelectorAll('tr[data-pos]'));
-    if (zeilen.length === 0) return;
+    /*
+     * Die Zeilen werden neu gelesen, wenn von Hand eine Vokabel dazukommt
+     * (initVocabAdd(), Ereignis "vokabel-dazu"). Vorher standen sie einmal
+     * beim Laden fest: Eine neue Zeile lag ausserhalb dessen, was der
+     * Balken kannte - er liess sich nicht bis zu ihr ziehen, und "Alles
+     * freigeben" blieb grau, wenn vorher alles frei war.
+     */
+    let zeilen = Array.from(tabelle.querySelectorAll('tr[data-pos]'));
 
     // Die Knoepfe je Zeile sind jetzt der Rueckfallweg und verschwinden.
     tabelle.querySelectorAll('.js-hide').forEach((b) => b.remove());
@@ -1886,6 +1894,7 @@ function initReleaseBar() {
     let grenzen = [];
     const messen = () => {
         const h = huelle.getBoundingClientRect();
+        if (zeilen.length === 0) { grenzen = [0]; return; }
         grenzen = zeilen.map((tr) => tr.getBoundingClientRect().top - h.top);
         grenzen.push(zeilen[zeilen.length - 1].getBoundingClientRect().bottom - h.top);
     };
@@ -2039,22 +2048,44 @@ function initReleaseBar() {
     });
 
     // Ein Klick auf eine Zeile setzt den Balken dorthin - der kurze Weg,
-    // wenn man schon weiss, wohin.
-    zeilen.forEach((tr, i) => {
-        tr.addEventListener('click', (e) => {
-            if (zieht) return;
-            /*
-             * In den Zeilen stehen jetzt auch Knoepfe und Felder - Aendern,
-             * Loeschen, die Eingabefelder beim Bearbeiten. Ein Klick darauf
-             * ist kein Klick auf die Zeile, sonst verschiebt "Loeschen"
-             * nebenbei die Freigabe. Dieselbe Wache wie bei tr[data-href].
-             */
-            if (e.target.closest('a, button, input, select, textarea, label')) return;
-            if ((window.getSelection()?.toString() ?? '') !== '') return;
+    // wenn man schon weiss, wohin. Am Tabellenkörper statt an jeder Zeile,
+    // damit es auch für Zeilen gilt, die später dazukommen.
+    tabelle.addEventListener('click', (e) => {
+        const tr = e.target.closest('tr[data-pos]');
+        const i = tr ? zeilen.indexOf(tr) : -1;
+        if (i < 0 || zieht) return;
+        /*
+         * In den Zeilen stehen jetzt auch Knoepfe und Felder - Aendern,
+         * Loeschen, die Eingabefelder beim Bearbeiten. Ein Klick darauf
+         * ist kein Klick auf die Zeile, sonst verschiebt "Loeschen"
+         * nebenbei die Freigabe. Dieselbe Wache wie bei tr[data-href].
+         */
+        if (e.target.closest('a, button, input, select, textarea, label')) return;
+        if ((window.getSelection()?.toString() ?? '') !== '') return;
 
-            setzen(i + 1, true);
-            speichern();
-        });
+        setzen(i + 1, true);
+        speichern();
+    });
+
+    /*
+     * Eine Vokabel von Hand dazu: Zeilen neu lesen, den Balken wieder
+     * zeigen (in einer leeren Lerneinheit stand keiner), und "Alles
+     * freigeben" auf die neue Zahl stellen - und freischalten, denn jetzt
+     * ist nicht mehr alles frei.
+     */
+    tabelle.addEventListener('vokabel-dazu', () => {
+        zeilen = Array.from(tabelle.querySelectorAll('tr[data-pos]'));
+        balken.hidden = zeilen.length === 0;
+        tabelle.querySelectorAll('tr.mengen[hidden]').forEach((tr) => { tr.hidden = false; });
+        const alles = tabelle.querySelector('.mengenknopf.auf');
+        if (alles) {
+            alles.value = String(zeilen.length);
+            alles.disabled = start >= zeilen.length;
+            alles.removeAttribute('title');
+            alles.dataset.confirm = `Alle ${zeilen.length} Vokabeln freigeben? Die Klasse sieht dann die ganze Lerneinheit.`;
+        }
+        messen();
+        setzen(stand, false);
     });
 
     // Aendert sich das Layout - Fenstergroesse, nachgeladene Schrift -,
@@ -2067,6 +2098,7 @@ function initReleaseBar() {
     window.addEventListener('resize', nachfuehren);
     if (window.ResizeObserver) new ResizeObserver(nachfuehren).observe(tabelle);
 
+    balken.hidden = zeilen.length === 0;
     messen();
     setzen(start, false);
 }

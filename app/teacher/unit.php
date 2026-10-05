@@ -765,8 +765,14 @@ $zuPruefen = count(array_filter($vokabeln, static fn (array $v): bool =>
          * gehen die Knoepfe je Zeile schon.
          */
         ?>
-        <?php if ($gesamt > 0): ?>
-        <tr class="mengen">
+        <?php
+        /*
+         * Auch ohne Vokabeln da, nur verborgen: Wer in einer leeren Lerneinheit
+         * von Hand anlegt, bekommt die Zeilen ohne Neuladen (teacher.js,
+         * "vokabel-dazu") - und dann braucht es die beiden Endstellungen.
+         */
+        ?>
+        <tr class="mengen"<?= $gesamt > 0 ? '' : ' hidden' ?>>
             <td colspan="3">
                 <button class="mengenknopf zu" name="release" value="0" form="releaseform"
                         <?= $frei === 0 ? 'disabled title="Es ist nichts freigegeben."' : '' ?>
@@ -775,7 +781,6 @@ $zuPruefen = count(array_filter($vokabeln, static fn (array $v): bool =>
                 </button>
             </td>
         </tr>
-        <?php endif; ?>
         <?php
         /*
          * Im Kopf steht die Sprache, nicht das Wort "Fremdsprache".
@@ -940,9 +945,8 @@ $zuPruefen = count(array_filter($vokabeln, static fn (array $v): bool =>
      * Stilblatt an der richtigen Stelle.
      */
     ?>
-    <?php if ($gesamt > 0): ?>
     <tfoot>
-        <tr class="mengen">
+        <tr class="mengen"<?= $gesamt > 0 ? '' : ' hidden' ?>>
             <td colspan="3">
                 <button class="mengenknopf auf" name="release" value="<?= $gesamt ?>"
                         form="releaseform"
@@ -953,7 +957,6 @@ $zuPruefen = count(array_filter($vokabeln, static fn (array $v): bool =>
             </td>
         </tr>
     </tfoot>
-    <?php endif; ?>
 </table>
 
 <form method="post" id="neueVokabel"
