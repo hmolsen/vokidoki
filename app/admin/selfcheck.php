@@ -468,14 +468,14 @@ $failed = count(array_filter($checks, static fn ($c) => !$c['ok']));
 
 // Der zweite Parameter markiert den aktiven Punkt in der Navigation - hier
 // stand faelschlich 'index.php', wodurch "Kosten" hervorgehoben wurde.
-admin_head('Selbsttest', 'selfcheck.php');
+admin_head('Selbsttest und Updates', 'selfcheck.php');
 flash_render();
 
 $offen = schema_pending();
 ?>
 
 <?php if ($offen !== []): ?>
-<div class="card" style="border-left:4px solid var(--bad)">
+<div class="card" id="schema" style="border-left:4px solid var(--bad)">
     <strong><?= count($offen) ?> ausstehende Schemaänderung<?= count($offen) === 1 ? '' : 'en' ?></strong>
     <p class="tiny muted" style="margin:6px 0 10px">
         Die Anwendung wurde aktualisiert, die Datenbank noch nicht. Bis das

@@ -153,7 +153,7 @@ function page_link(array $filter, int $seite): string
 }
 
 // Unter "Unterlagen" eingehaengt - von dort kommt man her.
-admin_head('Lückensätze', 'vocab.php');
+admin_head('Lückensätze', 'sentences.php');
 flash_render();
 ?>
 

@@ -598,6 +598,7 @@ function teacher_nav(array $user, ?int $kursId = null): void
             </a>
         </nav>
     </details>
+    <?= seitenleiste_skript() ?>
 
     <span class="barname"><?= h($user['display_name']) ?></span>
 

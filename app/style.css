@@ -640,7 +640,7 @@ label {
     margin-bottom: 6px;
 }
 
-input[type=text], input[type=password], select {
+input[type=text], input[type=password], input[type=number], select {
     width: 100%;
     min-height: 52px;
     padding: 12px 14px;

@@ -15,6 +15,10 @@ require_once __DIR__ . '/_boot.php';
 
 admin_require();
 
+// Auf eine Schule beschränkt, wenn man von deren Seite kommt (schule.php).
+$schule = (int) ($_REQUEST['schule'] ?? 0) ?: null;
+$mit    = $schule === null ? '' : 'schule=' . $schule;
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     csrf_check();
 
@@ -28,20 +32,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $text .= ' Neu gesprochen - noch einmal anhören.';
         }
         flash($text, $ok ? 'good' : 'bad');
-        redirect('meldungen.php?v=' . (int) ($_POST['meldung'] ?? 0));
+        redirect('meldungen.php?v=' . (int) ($_POST['meldung'] ?? 0) . ($mit === '' ? '' : '&' . $mit));
     }
 
     [$ok, $text] = meldung_bearbeiten(null, $_POST);
     flash($text, $ok ? 'good' : 'bad');
-    redirect('meldungen.php' . ($ok ? '' : '?v=' . (int) ($_POST['meldung'] ?? 0)));
+    redirect('meldungen.php?' . ltrim(($ok ? '' : 'v=' . (int) ($_POST['meldung'] ?? 0)) . '&' . $mit, '&'));
 }
 
-$offen   = meldungen_offen(null);
+$offen   = meldungen_offen(null, $schule);
 $vorn    = meldung_vorn($offen, (int) ($_GET['v'] ?? 0));
 $meldung = $vorn > 0 ? meldung_laden($vorn, null) : null;
 
-admin_head('Meldungen', 'meldungen.php');
+$schulName = $schule === null ? null : qv('SELECT name FROM schools WHERE id = ?', [$schule]);
+admin_head($schulName === null ? 'Meldungen' : 'Meldungen: ' . $schulName, 'meldungen.php');
 flash_render();
+if ($schulName !== null) {
+    echo '<p class="tiny"><a href="', h(admin_url('meldungen.php')), '">Meldungen aller Schulen</a></p>';
+}
 
 if ($meldung === null) {
     echo '<p class="muted">Keine offenen Meldungen.</p>';

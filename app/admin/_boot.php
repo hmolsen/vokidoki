@@ -22,6 +22,10 @@ require_once __DIR__ . '/../lib/lehrkraefte.php';
 require_once __DIR__ . '/../lib/passwords.php';
 require_once __DIR__ . '/../lib/tts.php';
 require_once __DIR__ . '/../lib/schulkuerzel.php';
+require_once __DIR__ . '/../lib/access.php';
+require_once __DIR__ . '/../lib/thema.php';
+require_once __DIR__ . '/../lib/markdown.php';
+require_once __DIR__ . '/../lib/version.php';
 
 boot_error_handling();
 
@@ -354,28 +358,270 @@ function admin_scope_chips(array $scope, array $extra = [], bool $alle = false):
     return $html;
 }
 
+// ---------------------------------------------------------------- Was zu tun ist
+
+/**
+ * Die Farbe einer Schule - immer dieselbe, damit man sie im Vorbeigehen
+ * wiedererkennt (Übersicht, Menü). Aus der Kennung, nicht gespeichert:
+ * Sie bedeutet nichts, sie unterscheidet nur.
+ */
+function schule_farbe(int $schuleId): string
+{
+    $farben = ['#4f7cff', '#1c9d5c', '#e0559a', '#f08c2e', '#8a5cf6', '#159fb5', '#d8402f'];
+    return $farben[$schuleId % count($farben)];
+}
+
+/** Ein Betrag in Euro, wie ihn ein Mensch liest: "8,30 €". */
+function admin_euro(float $usd): string
+{
+    return number_format(usd_to_eur($usd), 2, ',', '.') . ' €';
+}
+
+/**
+ * Was der Betreiber gerade erledigen sollte - für die Übersicht.
+ *
+ * Vorher stand das an drei Orten: ein Band über jeder Seite für das
+ * Datenbank-Update und die Kürzel, eine Zahl hinter "Meldungen" und das
+ * aufgebrauchte Budget nur auf der Kostenseite. Wer nicht zufällig dort
+ * vorbeikam, erfuhr vom leeren Freikontingent erst, als keine Aufnahmen
+ * mehr kamen. Jetzt steht es oben auf der ersten Seite, mit dem Weg dorthin.
+ *
+ * @return list<array{art: string, symbol: string, titel: string, text: string, ziel: string, knopf?: string}>
+ *         art: rot (blockiert etwas), gelb (bald), blau (zur Kenntnis)
+ */
+function admin_zu_tun(): array
+{
+    $liste = [];
+
+    $offen = schema_pending();
+    if ($offen !== []) {
+        $liste[] = ['art' => 'rot', 'symbol' => '&#128736;&#65039;', 'titel' => 'Update einspielen',
+                    'text' => count($offen) === 1 ? '1 Datenbankänderung wartet'
+                                                  : count($offen) . ' Datenbankänderungen warten',
+                    'ziel' => 'selfcheck.php#schema', 'knopf' => 'run_migrations'];
+        // Ohne das Update fehlen womöglich Spalten, die alles Weitere abfragt.
+        return $liste;
+    }
+
+    $ohne = schulen_ohne_kuerzel();
+    if ($ohne !== []) {
+        $liste[] = ['art' => 'rot', 'symbol' => '&#128273;',
+                    'titel' => count($ohne) === 1 ? '1 Schule ohne Kürzel' : count($ohne) . ' Schulen ohne Kürzel',
+                    'text' => 'Dort kann sich niemand anmelden.', 'ziel' => 'selfcheck.php#kuerzel'];
+    }
+
+    $je = meldungen_je_schule();
+    if ($je !== []) {
+        $namen = array_column(qa('SELECT id, name FROM schools'), 'name', 'id');
+        arsort($je);
+        $teile = [];
+        foreach ($je as $schule => $n) {
+            $teile[] = $n . ' an ' . ($namen[$schule] ?? 'einer gelöschten Schule');
+        }
+        $summe = array_sum($je);
+        $liste[] = ['art' => 'rot', 'symbol' => '&#128681;',
+                    'titel' => $summe === 1 ? '1 Meldung offen' : $summe . ' Meldungen offen',
+                    'text' => count($je) === 1 ? 'An ' . ($namen[array_key_first($je)] ?? '') : implode(', ', $teile),
+                    'ziel' => 'meldungen.php'];
+    }
+
+    $budget = (float) setting('monthly_cost_cap_usd', '10.00');
+    $monat  = cost_this_month();
+    if ($budget > 0 && $monat >= $budget) {
+        $liste[] = ['art' => 'rot', 'symbol' => '&#128182;', 'titel' => 'Monatsbudget aufgebraucht',
+                    'text' => 'Einlesen und neue Sätze sind gesperrt, bis zum 1. oder bis das Budget steigt.',
+                    'ziel' => 'settings.php'];
+    } elseif ($budget > 0 && $monat >= $budget * 0.8) {
+        $liste[] = ['art' => 'gelb', 'symbol' => '&#128182;',
+                    'titel' => sprintf('Monatsbudget zu %d %% verbraucht', (int) floor($monat / $budget * 100)),
+                    'text' => admin_euro($monat) . ' von ' . admin_euro($budget), 'ziel' => 'kosten.php'];
+    }
+
+    foreach (cost_this_month_by_school() as $s) {
+        $grenze = $s['monthly_cost_cap_usd'];
+        if ($grenze !== null && (float) $grenze > 0 && (float) $s['cost_usd'] >= (float) $grenze) {
+            $liste[] = ['art' => 'rot', 'symbol' => '&#127979;', 'titel' => $s['name'] . ': Kostenlimit erreicht',
+                        'text' => 'Die Schule kann bis zum 1. nichts mehr einlesen.',
+                        'ziel' => 'schule.php?id=' . (int) $s['id'] . '&r=kosten'];
+        }
+    }
+
+    /*
+     * Das Freikontingent der Aufnahmen - mit einer Schätzung, wann es
+     * reicht. Bei diesem Tempo heisst: so viele Zeichen je Tag wie bisher in
+     * diesem Monat. Ab 70 % steht es hier; vorher wäre es Lärm.
+     */
+    $frei = tts_tarif_frei() ? tts_freikontingent() : 0;
+    if ($frei > 0) {
+        $zeichen = tts_zeichen_monat();
+        $anteil  = $zeichen / $frei;
+        if ($anteil >= TTS_KONTINGENT_RAND) {
+            $liste[] = ['art' => 'rot', 'symbol' => '&#127911;', 'titel' => 'Freikontingent der Aufnahmen aufgebraucht',
+                        'text' => 'Neue Aufnahmen entstehen erst ab dem 1. wieder.', 'ziel' => 'kosten.php#aufnahmen'];
+        } elseif ($anteil >= 0.7) {
+            $jeTag = $zeichen / max(1, (int) date('j'));
+            $tage  = $jeTag > 0 ? (int) floor(($frei * TTS_KONTINGENT_RAND - $zeichen) / $jeTag) : 99;
+            $bis   = (int) date('j') + $tage;
+            $liste[] = ['art' => 'gelb', 'symbol' => '&#127911;',
+                        'titel' => sprintf('Aufnahmen: %d %% des Freikontingents', (int) floor($anteil * 100)),
+                        'text' => $bis >= (int) date('t') ? 'Reicht bei diesem Tempo bis zum Monatsende.'
+                                                           : 'Reicht bei diesem Tempo bis etwa zum ' . $bis . '.',
+                        'ziel' => 'kosten.php#aufnahmen'];
+        }
+    }
+
+    return $liste;
+}
+
+/** Die Liste als Karten - Symbol, Titel, eine Zeile dazu, und der Weg dorthin. */
+function admin_zu_tun_html(array $liste): string
+{
+    $html = '<div class="aufgaben">';
+    foreach ($liste as $a) {
+        $inhalt = '<span class="ic ' . $a['art'] . '" aria-hidden="true">' . $a['symbol'] . '</span>'
+                . '<span class="t"><strong>' . h($a['titel']) . '</strong><span class="tiny muted">'
+                . h($a['text']) . '</span></span>';
+        if (isset($a['knopf'])) {
+            // Der Knopf tut es gleich - dieselbe Anfrage wie im Selbsttest.
+            $html .= '<form method="post" action="' . h(admin_url(strtok($a['ziel'], '#'))) . '" class="aufgabe">'
+                   . csrf_field() . $inhalt
+                   . '<button class="btn small" name="' . h($a['knopf']) . '" value="1">Jetzt ausführen</button></form>';
+        } else {
+            $html .= '<a class="aufgabe" href="' . h(admin_url($a['ziel'])) . '">' . $inhalt
+                   . '<span class="pfeil" aria-hidden="true">&#8250;</span></a>';
+        }
+    }
+    return $html . '</div>';
+}
+
 // ---------------------------------------------------------------- Layout
+
+/**
+ * Ein Eintrag im Menü - dieselbe Gestalt wie im Lehrkraft-Bereich.
+ *
+ * @param string $ziel   Datei samt Anfrage, etwa 'schools.php#schule3'
+ * @param string $aktiv  die Datei der Seite, auf der man steht
+ */
+function admin_menuepunkt(string $ziel, string $symbol, string $text, string $aktiv, int $zahl = 0): string
+{
+    // Genau diese Seite - mit Anfrage, denn die Schulen unterscheiden sich
+    // nur in ?id= und die Einstellungen in ?s=. Ein #Anker zählt nicht.
+    $an = strtok($ziel, '#') === $aktiv;
+    return sprintf(
+        '<a class="mitem%s" href="%s"%s><span class="micon" aria-hidden="true">%s</span><span>%s</span>%s</a>',
+        $an ? ' on' : '',
+        h(admin_url($ziel)),
+        $an ? ' aria-current="page"' : '',
+        $symbol,
+        h($text),
+        $zahl > 0 ? '<span class="zaehler" aria-label="' . $zahl . ' offen">' . $zahl . '</span>' : '',
+    );
+}
+
+/**
+ * Die Leiste und ihre beiden Schubladen.
+ *
+ * Hier standen acht gleichrangige Reiter in einer Zeile. Am Telefon brachen
+ * sie über drei Zeilen und füllten den Bildschirm, bevor eine Zahl zu sehen
+ * war. Jetzt dieselbe Hülle wie im Lehrkraft-Bereich: links die Navigation,
+ * am Rechner fest stehend (seitenleiste_skript()), rechts Farben und
+ * Abmelden. Wer zwischen beiden Bereichen wechselt, bedient beide gleich.
+ *
+ * Gegliedert, wie der Betreiber arbeitet: die Schulen einzeln - fast alles
+ * betrifft genau eine -, dann was quer über alle geht (Qualität), dann der
+ * Betrieb.
+ */
+function admin_nav(string $aktiv): void
+{
+    $schulen  = qa('SELECT id, name, active FROM schools ORDER BY active DESC, name');
+    $je       = meldungen_je_schule();
+    $gemeldet = array_sum($je);
+    ?>
+<div class="adminbar" data-menue="<?= h(url('/menue.js') . '?v=' . app_version()) ?>">
+    <details class="menue" id="menuLinks">
+        <summary class="burger" aria-label="Menü" title="Menü">
+            <span aria-hidden="true">&#9776;</span>
+            <?php if ($gemeldet > 0): ?><span class="zaehler" aria-hidden="true"><?= $gemeldet ?></span><?php endif; ?>
+        </summary>
+        <span class="schleier" data-zu></span>
+        <nav class="schublade" aria-label="Navigation">
+            <div class="mkopf">
+                <a href="<?= h(admin_url('index.php')) ?>" class="mlogo" aria-label="Vokidoki Admin - zur Übersicht">
+                    <img src="<?= h(url('/assets/vokidoki_logo.svg')) ?>" alt="Vokidoki" width="768" height="256">
+                </a>
+                <span class="mschule">Admin</span>
+            </div>
+            <?= admin_menuepunkt('index.php', '&#127968;', 'Übersicht', $aktiv) ?>
+
+            <p class="mueber">Schulen</p>
+            <?php foreach ($schulen as $s): ?>
+                <?= admin_menuepunkt('schule.php?id=' . (int) $s['id'],
+                                     $s['active'] ? '&#127979;' : '&#128164;',
+                                     (string) $s['name'], $aktiv, $je[(int) $s['id']] ?? 0) ?>
+            <?php endforeach; ?>
+            <?= admin_menuepunkt('schools.php', '&#10133;', 'Neue Schule', $aktiv) ?>
+
+            <p class="mueber">Qualität</p>
+            <?= admin_menuepunkt('meldungen.php', '&#128681;', 'Meldungen', $aktiv, $gemeldet) ?>
+            <?= admin_menuepunkt('aussprache.php', '&#128483;&#65039;', 'Aussprache', $aktiv) ?>
+            <?= admin_menuepunkt('sentences.php', '&#128269;', 'Lückensätze durchsuchen', $aktiv) ?>
+            <?= admin_menuepunkt('vocab.php', '&#128218;', 'Unterlagen aller Schulen', $aktiv) ?>
+
+            <p class="mueber">Betrieb</p>
+            <?= admin_menuepunkt('kosten.php', '&#128182;', 'Kosten', $aktiv) ?>
+            <?= admin_menuepunkt('settings.php', '&#10024;', 'KI und Aufnahmen', $aktiv) ?>
+            <?= admin_menuepunkt('settings.php?s=zettel', '&#9993;&#65039;', 'Zettel und Vorlagen', $aktiv) ?>
+            <?= admin_menuepunkt('selfcheck.php', '&#129658;', 'Selbsttest und Updates', $aktiv) ?>
+            <?= admin_menuepunkt('settings.php?s=passwort', '&#128273;', 'Admin-Passwort', $aktiv) ?>
+        </nav>
+    </details>
+    <?= seitenleiste_skript() ?>
+
+    <?php
+    /*
+     * Die Suche steht in der Leiste, auf jeder Seite: Der häufigste Weg zu
+     * einem Konto beginnt mit seinem Namen (suche.php). Am Telefon nur das
+     * Zeichen - das Feld hätte dort keinen Platz.
+     */
+    ?>
+    <form method="get" action="<?= h(admin_url('suche.php')) ?>" class="barsuche" role="search">
+        <input type="search" name="q" placeholder="Schule, Lehrkraft oder Kind suchen" aria-label="Suchen"
+               value="<?= h($aktiv === 'suche.php' ? (string) ($_GET['q'] ?? '') : '') ?>" autocomplete="off">
+    </form>
+    <a class="barsuchknopf" href="<?= h(admin_url('suche.php')) ?>" aria-label="Suchen" title="Suchen">&#128269;</a>
+
+    <span class="barname">Admin</span>
+
+    <details class="menue rechts" id="menuRechts">
+        <summary class="burger" aria-label="Einstellungen" title="Einstellungen">
+            <span aria-hidden="true">&#9881;</span>
+        </summary>
+        <span class="schleier" data-zu></span>
+        <nav class="schublade" aria-label="Einstellungen">
+            <?= thema_wahl_html() ?>
+            <hr class="mtrenner">
+            <?php foreach (legal_documents() as $k => $d): ?>
+                <a class="mitem" href="<?= h(url('/rechtliches.php') . '?d=' . $k) ?>">
+                    <span class="micon" aria-hidden="true">&#167;</span>
+                    <span><?= h($d['kurz']) ?></span>
+                </a>
+            <?php endforeach; ?>
+            <hr class="mtrenner">
+            <form method="post" action="<?= h(admin_url('index.php')) ?>">
+                <?= csrf_field() ?>
+                <button class="mitem" name="admin_logout" value="1">
+                    <span class="micon" aria-hidden="true">&#9099;</span>
+                    <span>Abmelden</span>
+                </button>
+            </form>
+        </nav>
+    </details>
+</div>
+    <?php
+}
 
 function admin_head(string $title, string $active): void
 {
-    $nav = [
-        'index.php'     => 'Kosten',
-        'schools.php'   => 'Schulen',
-        'users.php'     => 'Accounts',
-        /*
-         * Ein Eintrag fuer Vokabeln und Saetze. Die Saetze einer Lerneinheit
-         * stehen jetzt unter ihren Vokabeln; die Liste ueber alle Kurse ist
-         * von dort aus verlinkt und markiert diesen Eintrag mit.
-         */
-        'vocab.php'     => 'Unterlagen',
-        'meldungen.php' => 'Meldungen',
-        'aussprache.php' => 'Aussprache',
-        'settings.php'  => 'Einstellungen',
-        'selfcheck.php' => 'Selbsttest',
-    ];
-    // Rot hinter "Meldungen", solange etwas wartet - dieselbe Zahl, die die
-    // Lehrkraft an ihrem Zahnrad sieht, nur ueber alle Schulen.
-    $gemeldet = meldungen_zahl(null);
     ?>
     <!doctype html>
     <html lang="de">
@@ -386,22 +632,10 @@ function admin_head(string $title, string $active): void
         <title><?= h($title) ?> - Vokidoki Admin</title>
         <?= favicon_html() ?>
         <?= verwaltung_stile_html() ?>
+        <?= thema_kopf_skript() ?>
     </head>
     <body class="admin">
-    <header class="adminbar">
-        <strong>Vokidoki</strong>
-        <nav>
-            <?php foreach ($nav as $file => $label): ?>
-                <a href="<?= h(admin_url($file)) ?>"<?= $file === $active ? ' class="on"' : '' ?>><?= h($label) ?><?=
-                    $file === 'meldungen.php' && $gemeldet > 0
-                        ? '<span class="zaehler">' . $gemeldet . '</span>' : '' ?></a>
-            <?php endforeach; ?>
-        </nav>
-        <form method="post" action="<?= h(admin_url('index.php')) ?>" class="logout">
-            <?= csrf_field() ?>
-            <button name="admin_logout" value="1" class="linkbtn">Abmelden</button>
-        </form>
-    </header>
+    <?php admin_nav($active); ?>
     <main class="adminmain">
         <h1><?= h($title) ?></h1>
     <?php
@@ -414,7 +648,8 @@ function admin_head(string $title, string $active): void
      * einem Upload auf einem Schema, das nicht zum Code passt, und niemand
      * wuesste warum.
      */
-    if ($active !== 'selfcheck.php') {
+    // Auf der Übersicht steht dasselbe in "Zu tun" (admin_zu_tun()) - zweimal wäre Lärm.
+    if ($active !== 'selfcheck.php' && $active !== 'index.php') {
         $offen = schema_pending();
         if ($offen !== []) {
             printf(
@@ -448,6 +683,10 @@ function admin_foot(): void
 {
     // Das Band "Es gibt eine neue Fassung" - wie in der App.
     echo fassung_skript_html(), "\n";
+    // Die Schubladen - dasselbe Verhalten wie im Lehrkraft-Bereich (menue.js).
+    printf('<script type="module">import { menueAktivieren, themaWahlAktivieren } from %s;'
+           . ' menueAktivieren(); themaWahlAktivieren();</script>' . "\n",
+           json_encode(url('/menue.js') . '?v=' . app_version(), JSON_UNESCAPED_SLASHES));
     // Kleine Zugabe: Nach der Wahl klappt das Farbfeld zu und der Knopf zeigt
     // die neue Farbe. Ohne dieses Skript funktioniert die Wahl trotzdem - dann
     // bleibt das Feld eben offen stehen, bis gespeichert wird.
@@ -472,6 +711,13 @@ function admin_foot(): void
         const knopf = event.target.closest('[data-confirm]');
         if (knopf && !confirm(knopf.dataset.confirm)) event.preventDefault();
     });
+
+    // Aus der Suche: das gesuchte Konto aufgeklappt und im Blick (suche.php).
+    const ziel = location.hash.startsWith('#konto') ? document.querySelector(location.hash) : null;
+    if (ziel && ziel.tagName === 'DETAILS') {
+        ziel.open = true;
+        ziel.scrollIntoView({ block: 'center' });
+    }
 
     // Klick daneben schliesst ein offenes Farbfeld.
     document.addEventListener('click', (event) => {

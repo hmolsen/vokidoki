@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { bilanz } from './browser.mjs';
 import { pruefe as anmeldung }  from './anmeldung.mjs';
 import { pruefe as navigation } from './navigation.mjs';
+import { pruefe as seitenleiste } from './seitenleiste.mjs';
 import { pruefe as freigabe } from './freigabe.mjs';
 import { pruefe as einlesen } from './einlesen.mjs';
 import { pruefe as vokabeln } from './vokabeln.mjs';
@@ -77,6 +78,7 @@ console.log(`Browser-Pruefungen gegen ${f.basis}`);
 try {
     await anmeldung(f, aus);
     await navigation(f, aus);
+    await seitenleiste(f, aus);
     await freigabe(f, aus);
     await einlesen(f, aus);
     await vokabeln(f, aus);

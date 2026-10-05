@@ -22,28 +22,38 @@ body.admin { background: var(--bg); }
     flex-wrap: wrap;
 }
 
-/*
- * Dieselbe Leiste benutzt auch der Betreiber-Admin - dort mit festen
- * Reitern, weil es dort wirklich Bereiche gibt (Konten, Schulen, Kosten,
- * Saetze) und keinen Ort, an dem man steht.
- *
- * Als DIREKTES Kind, und das ist kein Schoenheitsfehler: Die Schubladen
- * der Lehrkraft sind ebenfalls <nav> und liegen in derselben Leiste. Ohne
- * das > wurden sie zu Flex-Reihen mit Reiter-Innenabstand - die Eintraege
- * standen weit auseinander und nicht mehr oben.
- */
-.adminbar > nav { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
-.adminbar > nav a {
-    padding: 8px 13px;
-    border-radius: 9px;
-    color: var(--text-soft);
-    text-decoration: none;
-    font-weight: 600;
-    font-size: .95rem;
-}
-.adminbar > nav a:hover { background: var(--surface-2); color: var(--text); }
-.adminbar > nav a.on    { background: var(--accent); color: #fff; }
 .adminbar > .logout { margin: 0; }
+
+/*
+ * Am Rechner steht die linke Schublade fest da - dasselbe Menü wie am
+ * Telefon, nur offen (seitenleiste_skript() in lib/html.php setzt .fest).
+ * Ohne Knopf, ohne Schleier, ohne Hereinfliegen; die Seite rückt um die
+ * Breite der Leiste nach rechts. Die Grenze (1100 px) steht dort als
+ * SEITENLEISTE_AB.
+ */
+:root { --seitenleiste: 272px; }
+.menue.fest > .burger,
+.menue.fest > .schleier { display: none; }
+.menue.fest > .schublade {
+    width: var(--seitenleiste);
+    z-index: 6;
+    box-shadow: none;
+    animation: none;
+    background: var(--surface);
+}
+html.seitenleiste body.admin { padding-left: var(--seitenleiste); }
+
+/* Eine Gruppe im Menü des Admins: Schulen, Qualität, Betrieb. Ohne Strich -
+   die kleine Überschrift trennt schon, ein Strich dazu war doppelt. */
+.mueber {
+    margin: 16px 10px 4px;
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+}
+.mitem .zaehler { margin-left: auto; }
 .barname {
     margin-left: auto;
     color: var(--text-soft);
@@ -528,7 +538,6 @@ img.chipflag { width: 18px; height: 13px; object-fit: contain; vertical-align: -
 }
 .mitem.meldungen { color: var(--bad); font-weight: 700; }
 .mitem.meldungen .zaehler { margin-left: auto; }
-.adminbar nav .zaehler { margin-left: 5px; }
 
 /*
  * Eine Meldung nach der anderen.
@@ -2436,3 +2445,328 @@ td.erzzelle.eben .erz.fertig { animation: erzFertig .45s cubic-bezier(.3, 1.6, .
 /* Zwei Felder in der Anlegezeile der Lehrkräfte: Name und Kürzel. */
 .lehrkraftfelder { display: flex; flex-wrap: wrap; gap: 8px; }
 .lehrkraftfelder input { flex: 1 1 180px; min-width: 0; margin: 0; }
+
+/* ---------------------------------------------------------------- Übersicht
+ *
+ * Die erste Seite des Admins (admin/index.php): was zu tun ist, der Monat,
+ * die Schulen. Karten statt Tabellen - hier wird geschaut, nicht verglichen.
+ */
+.unterzeile { margin: -10px 0 0; color: var(--text-soft); }
+
+.aufgaben { display: grid; gap: 8px; }
+.aufgabe {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    text-decoration: none;
+}
+a.aufgabe:hover { border-color: var(--text-soft); }
+.aufgabe .ic {
+    flex: none;
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+    display: grid;
+    place-items: center;
+    font-size: 1.15rem;
+}
+.aufgabe .ic.rot  { background: var(--bad-bg); }
+.aufgabe .ic.gelb { background: var(--warn-bg); }
+.aufgabe .ic.blau { background: var(--surface-2); }
+.aufgabe .t { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.aufgabe .t strong { font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; }
+.aufgabe .btn { width: auto; flex: none; }
+.pfeil { flex: none; color: var(--text-soft); font-size: 1.4rem; line-height: 1; }
+
+.allesgut { display: flex; align-items: center; gap: 14px; }
+.allesgut > div { display: grid; gap: 2px; }
+
+.monatkarten { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.card.monat {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 0;
+    color: var(--text);
+    text-decoration: none;
+}
+.card.monat > span:last-child { display: grid; gap: 1px; }
+.card.monat .zahl { font-family: 'Fredoka', 'Nunito', sans-serif; font-size: 1.5rem; font-weight: 600; line-height: 1.15; }
+
+/* Ein Anteil als Ring: 0 bis 100 in --p. */
+.anteil {
+    --farbe: var(--accent);
+    flex: none;
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: conic-gradient(var(--farbe) calc(var(--p) * 1%), var(--surface-2) 0);
+}
+.anteil.gelb { --farbe: #e0a21a; }
+.anteil > span {
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--surface);
+    font-family: 'Fredoka', 'Nunito', sans-serif;
+    font-weight: 600;
+    font-size: .9rem;
+}
+
+.schulkarten { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); }
+.schulkarte {
+    display: grid;
+    gap: 12px;
+    align-content: start;
+    margin: 0;
+    color: var(--text);
+    text-decoration: none;
+}
+.schulkarte:hover { border-color: var(--text-soft); }
+.schulkarte.aus { opacity: .65; }
+.schulkarte .kopf { display: flex; align-items: center; gap: 12px; }
+.schulkarte .name { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.schulkarte .name strong { font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; font-size: 1.05rem; line-height: 1.2; }
+.wappen {
+    --c: var(--accent);
+    flex: none;
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    display: grid;
+    place-items: center;
+    background: var(--c);
+    color: #fff;
+    font-family: 'Fredoka', 'Nunito', sans-serif;
+    font-weight: 700;
+    font-size: 1.15rem;
+}
+.schulkarte .zahlen { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.schulkarte .zahlen > span {
+    display: grid;
+    padding: 6px 9px;
+    border-radius: 10px;
+    background: var(--bg);
+    font-size: .74rem;
+    color: var(--text-soft);
+}
+.schulkarte .zahlen b { font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; font-size: 1.05rem; color: var(--text); }
+.schulkarte .zahlen small { font-size: .7rem; color: var(--text-soft); }
+.schulkarte.neu { display: flex; align-items: center; gap: 12px; border-style: dashed; box-shadow: none; }
+.schulkarte.neu .wappen { background: var(--surface-2); color: var(--text-soft); }
+.schulkarte.neu > span:last-child { display: grid; gap: 2px; }
+
+.pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-soft);
+    font-size: .76rem;
+    font-weight: 700;
+}
+.pill.code { font-family: ui-monospace, Consolas, monospace; font-weight: 600; color: var(--accent); }
+.pill.rot { background: var(--bad-bg); color: var(--bad); }
+
+/* ---------------------------------------------------------------- Eine Schule
+ *
+ * admin/schule.php: Kopf mit Kennzahlen, eine Reihe Knöpfe für die
+ * Bereiche, darunter Listen statt Tabellen - am Telefon wird eine Tabelle
+ * zu einem Stapel Karten, eine Liste bleibt eine Liste.
+ */
+.schulkopf { display: flex; align-items: center; gap: 12px; margin: -6px 0 14px; }
+.wappen.gross { width: 48px; height: 48px; border-radius: 14px; font-size: 1.3rem; }
+.schulkopf .pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.pill.gruen { background: var(--good-bg); color: var(--good); }
+
+.kennzahlen { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }
+.kennzahlen > span {
+    display: grid;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+    font-size: .76rem;
+    color: var(--text-soft);
+}
+.kennzahlen b { font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; font-size: 1.15rem; color: var(--text); }
+.kennzahlen small { font-size: .72rem; color: var(--text-soft); }
+
+/* Die Bereiche als Reihe von Knöpfen - am Telefon seitlich wischbar. */
+.segment { display: flex; gap: 6px; overflow-x: auto; margin: 0 0 16px; padding-bottom: 2px; scrollbar-width: none; }
+.segment a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    padding: 8px 15px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text);
+    font-weight: 700;
+    font-size: .92rem;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.segment a:hover { background: var(--surface-2); }
+.segment a.on { background: var(--text); border-color: var(--text); color: var(--bg); }
+.segment.klein a { padding: 6px 12px; font-size: .85rem; font-weight: 600; }
+.segment.klein a.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Eine Liste in einer Karte: Zeilen mit Strich dazwischen. */
+.card.liste { padding: 4px 0; }
+.liste > .zeile, .liste > .kontozeile > summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 16px;
+    color: var(--text);
+    text-decoration: none;
+}
+.liste > .zeile + .zeile, .liste > .kontozeile + .kontozeile { border-top: 1px solid var(--border); }
+a.zeile:hover, .kontozeile > summary:hover { background: var(--bg); }
+.liste .wer { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.liste .wer .tiny { overflow-wrap: anywhere; }
+.liste .betrag { font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; }
+.liste .flagge { flex: none; width: 34px; display: grid; place-items: center; }
+
+.kontozeile > summary { cursor: pointer; list-style: none; }
+.kontozeile > summary::-webkit-details-marker { display: none; }
+.kontozeile[open] > summary .pfeil { transform: rotate(90deg); }
+.kontozeile.aus .wer strong { color: var(--text-soft); text-decoration: line-through; }
+.avatar {
+    --c: var(--accent);
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--c);
+    color: #fff;
+    font-family: 'Fredoka', 'Nunito', sans-serif;
+    font-weight: 600;
+}
+.kontoinhalt { display: grid; gap: 14px; padding: 4px 16px 16px 64px; }
+.knopfreihe { display: flex; gap: 8px; flex-wrap: wrap; margin: 0; }
+.knopfreihe .btn { width: auto; }
+.btn.secondary.danger { background: var(--surface); color: var(--bad); border-color: var(--border); }
+
+/* Felder in einem Raster, das am Telefon zu einer Spalte wird. */
+.kontofelder { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px 12px; align-items: end; margin: 0; }
+.kontofelder > label { display: grid; gap: 4px; margin: 0; font-size: .82rem; font-weight: 700; color: var(--text-soft); }
+.kontofelder input[type=text], .kontofelder input[type=number], .kontofelder select { margin: 0; width: 100%; }
+.kontofelder .btn { width: auto; justify-self: start; }
+.kontohaken { display: grid; gap: 4px; grid-column: 1 / -1; }
+.kontohaken label { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 600; font-size: .9rem; }
+.kontohaken input { width: auto; min-height: 0; margin: 0; }
+.schulfelder { max-width: 720px; }
+
+.card.anlegen { margin-top: 14px; }
+.card.anlegen > summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    list-style: none;
+    font-family: 'Fredoka', 'Nunito', sans-serif;
+    font-weight: 600;
+}
+.card.anlegen > summary::-webkit-details-marker { display: none; }
+.card.anlegen > summary .ic {
+    width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+    background: var(--surface-2); color: var(--text-soft);
+}
+.card.anlegen[open] > summary { margin-bottom: 14px; }
+.card.anlegen .tiny { margin: 12px 0 0; }
+
+.card.gefahr { display: flex; align-items: center; gap: 14px; margin-top: 22px; }
+.card.gefahr > div { flex: 1; display: grid; gap: 2px; }
+.card.gefahr .btn { width: auto; }
+
+.listensuche { max-width: 340px; margin: 0 0 10px; }
+
+@media (max-width: 600px) {
+    .kennzahlen { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .kontoinhalt { padding-left: 16px; }
+    .card.gefahr { flex-direction: column; align-items: stretch; }
+}
+.kontohaken .farbe { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: .9rem; }
+.schulkopf { margin-top: -10px; }
+
+/* ---------------------------------------------------------------- Suche
+ *
+ * In der Leiste ein Feld, am Telefon nur das Zeichen (suche.php). */
+.barsuche { flex: 1; max-width: 420px; margin: 0 0 0 auto; }
+.barsuche input {
+    width: 100%;
+    min-height: 40px;
+    margin: 0;
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    font-size: .95rem;
+}
+.barsuche + .barsuchknopf { display: none; text-decoration: none; }
+.barsuche ~ .barname { margin-left: 0; }
+@media (max-width: 700px) {
+    .barsuche { display: none; }
+    .barsuche + .barsuchknopf { display: grid; margin-left: auto; }
+}
+.suchfeld { display: flex; gap: 8px; max-width: 560px; margin: 0 0 18px; }
+.suchfeld input {
+    flex: 1;
+    min-width: 0;
+    min-height: 50px;
+    margin: 0;
+    padding: 10px 18px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 17px;
+}
+.suchfeld .btn { width: auto; border-radius: 999px; }
+.liste .zeile .wappen { width: 36px; height: 36px; border-radius: 11px; font-size: 1rem; }
+.barsuchknopf {
+    width: 40px;
+    height: 40px;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    background: var(--surface);
+    font-size: 1.05rem;
+}
+
+/* Die Einzelheiten der Kosten - zugeklappt, bis eine Zahl nicht stimmt. */
+.card.einzeln { margin-top: 22px; }
+.card.einzeln > summary { cursor: pointer; font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; }
+.card.einzeln[open] > summary { margin-bottom: 8px; }
+.card.einzeln h3 { margin: 18px 0 8px; }
+.card.einzeln table.data { display: block; overflow-x: auto; }
+.monatsreihe { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; margin: 12px 0; }
+.monatsreihe > span { display: grid; padding: 6px 10px; border-radius: 10px; background: var(--bg); }
+.monatsreihe b { font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; }
+.monatsreihe small { font-size: .72rem; color: var(--text-soft); }
+/* Am Telefon passen vierzehn Daten nicht nebeneinander - jedes zweite reicht. */
+@media (max-width: 600px) {
+    .chart { gap: 3px; padding: 10px 8px; }
+    .chart .col:nth-child(even) span { visibility: hidden; }
+}

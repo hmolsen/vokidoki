@@ -95,6 +95,36 @@ function verwaltung_stile_html(): string
     );
 }
 
+/*
+ * Ab dieser Breite steht die Navigation fest links, statt hereinzuklappen -
+ * im Lehrkraft-Bereich und im Admin. Am Rechner ist Platz dafür, und wer
+ * dort zwischen Kursen oder Schulen wechselt, soll nicht jedesmal erst das
+ * Menü öffnen. Die Breite steht auch in admin.css (--seitenleiste).
+ */
+const SEITENLEISTE_AB = 1100;
+
+/**
+ * Hält die linke Schublade auf breiten Bildschirmen offen.
+ *
+ * Gleich hinter dem <details> ausgegeben und nicht in einer Skriptdatei:
+ * Es muss vor dem ersten Bild laufen. Aus teacher.js kam es zu spät - die
+ * Seite stand erst ohne Leiste da und rückte dann zur Seite, auf jedem
+ * Seitenwechsel.
+ *
+ * Es bleibt dasselbe Menü wie am Telefon, nur offen und markiert (.fest);
+ * die Gestalt macht admin.css, und menue.js lässt ein festes Menü offen.
+ * Ohne JavaScript bleibt es eine Schublade, die sich öffnen lässt.
+ */
+function seitenleiste_skript(string $menueId = 'menuLinks'): string
+{
+    return '<script>(function(){var m=document.getElementById(' . json_encode($menueId)
+        . '),q=matchMedia("(min-width: ' . SEITENLEISTE_AB . 'px)"),w=document.documentElement;'
+        . 'function s(){if(q.matches){m.open=true;m.classList.add("fest");w.classList.add("seitenleiste");}'
+        . 'else if(m.classList.contains("fest")){m.classList.remove("fest");m.open=false;'
+        . 'w.classList.remove("seitenleiste");}}'
+        . 'if(m){s();q.addEventListener("change",s);}})();</script>';
+}
+
 /**
  * Das Band "Es gibt eine neue Fassung" für Seiten ausserhalb der App.
  *

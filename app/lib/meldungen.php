@@ -68,7 +68,7 @@ function meldung_aufnehmen(int $userId, int $vocabId, int $satzId, string $getip
  *
  * @return array{0: string, 1: array} SQL ab FROM und die Parameter dazu
  */
-function meldungen_von(?int $lehrerId): array
+function meldungen_von(?int $lehrerId, ?int $schuleId = null): array
 {
     $sql = ' FROM vocab_flags f
              JOIN vocab v ON v.id = f.vocab_id
@@ -76,7 +76,11 @@ function meldungen_von(?int $lehrerId): array
              LEFT JOIN sentences s ON s.id = f.sentence_id
             WHERE (f.sentence_id = 0 OR s.id IS NOT NULL)';
     if ($lehrerId === null) {
-        return [$sql, []];
+        // Der Admin: alle Schulen, oder eine (die Seite einer Schule).
+        return $schuleId === null
+            ? [$sql, []]
+            : [$sql . ' AND EXISTS (SELECT 1 FROM courses co WHERE co.id = t.course_id AND co.school_id = ?)',
+               [$schuleId]];
     }
     /*
      * "Eigener Kurs" heisst: als Lehrkraft Mitglied. Nicht courses.created_by
@@ -97,6 +101,22 @@ function meldungen_zahl(?int $lehrerId): int
 }
 
 /**
+ * Gemeldete Vokabeln je Schule - die Zahlen im Menü des Admins.
+ *
+ * @return array<int, int> Schule => Anzahl, nur Schulen mit Meldungen
+ */
+function meldungen_je_schule(): array
+{
+    [$von, $p] = meldungen_von(null);
+    $zahlen = [];
+    foreach (qa('SELECT (SELECT co.school_id FROM courses co WHERE co.id = t.course_id) AS school_id,'
+                . ' COUNT(DISTINCT f.vocab_id) AS n' . $von . ' GROUP BY school_id', $p) as $r) {
+        $zahlen[(int) $r['school_id']] = (int) $r['n'];
+    }
+    return $zahlen;
+}
+
+/**
  * Die offenen Meldungen, die dringendste zuerst.
  *
  * Dringend heisst: von den meisten Kindern gemeldet. Bei gleich vielen kommt
@@ -104,9 +124,9 @@ function meldungen_zahl(?int $lehrerId): int
  *
  * @return list<array{vocab_id: int, kinder: int}>
  */
-function meldungen_offen(?int $lehrerId): array
+function meldungen_offen(?int $lehrerId, ?int $schuleId = null): array
 {
-    [$von, $p] = meldungen_von($lehrerId);
+    [$von, $p] = meldungen_von($lehrerId, $schuleId);
     return array_map(
         static fn (array $r): array => ['vocab_id' => (int) $r['vocab_id'],
                                         'kinder'   => (int) $r['kinder']],
