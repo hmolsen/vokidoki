@@ -2328,6 +2328,19 @@ ok('Die Rueckfrage beim Loeschen verspricht nicht "alle Vokabeln"',
    !str_contains($res['body'], 'mit allen Sprachen und Vokabeln')
    && str_contains($res['body'], 'die Unterlagen der Kurse bleiben'));
 
+// Die Suche über alle Schulen führt zum Konto auf der Seite seiner Schule.
+$res = http($base . '/admin/suche.php?q=' . urlencode($username));
+ok('Die Suche findet ein Kind über seinen Benutzernamen',
+   str_contains($res['body'], '>Testkind<')
+   && str_contains($res['body'], 'schule.php?id=' . $testSchule . '&amp;r=konten&amp;g=' . $tkGruppe . '#konto' . $userId));
+ok('Und die Schule über ihr Kürzel',
+   str_contains(http($base . '/admin/suche.php?q=' . urlencode(e2eKuerzel($username)))['body'],
+                'schule.php?id=' . $testSchule . '"'));
+ok('Ein einzelnes Zeichen sucht noch nicht',
+   str_contains(http($base . '/admin/suche.php?q=e')['body'], 'mindestens zwei Zeichen'));
+ok('Das Suchfeld steht in der Leiste jeder Seite',
+   str_contains(http($base . '/admin/kosten.php')['body'], 'class="barsuche"'));
+
 $res = http($base . '/admin/users.php?school=' . $testSchule, null, [], true);
 ok('Alte Lesezeichen auf die Kontenliste führen zur Schule',
    str_contains($res['body'], 'aria-label="Bereiche der Schule"'));

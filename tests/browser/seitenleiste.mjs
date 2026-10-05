@@ -71,6 +71,17 @@ export async function pruefe(f, aus) {
            await b.js(`[...document.querySelectorAll('#menuLinks a.mitem')].some((a) => a.textContent.includes('BROWSERTEST-Schule'))`));
         await b.bild('seitenleiste-admin');
 
+        // Die Suche in der Leiste: ein Treffer führt zum Konto, aufgeklappt.
+        await b.js(`(() => { const f = document.querySelector('.barsuche');
+            f.querySelector('input').value = ${JSON.stringify(f.lehrer)}; f.submit(); })()`);
+        await schlafe(1300);
+        await b.js(`document.querySelector('.liste a.zeile[href*="#konto"]').click()`);
+        await schlafe(1500);
+        const treffer = await b.js(`(() => { const d = document.querySelector(location.hash);
+            return { offen: !!d && d.open, sicht: !!d && d.getBoundingClientRect().top < innerHeight }; })()`);
+        ok('Ein Treffer der Suche öffnet das Konto auf der Seite seiner Schule', treffer.offen && treffer.sicht,
+           JSON.stringify(treffer));
+
         // Am Telefon: eine Schublade, die den Inhalt frei lässt.
         await b.groesse(390, 844);
         await schlafe(400);

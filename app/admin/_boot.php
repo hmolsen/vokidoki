@@ -575,6 +575,19 @@ function admin_nav(string $aktiv): void
     </details>
     <?= seitenleiste_skript() ?>
 
+    <?php
+    /*
+     * Die Suche steht in der Leiste, auf jeder Seite: Der häufigste Weg zu
+     * einem Konto beginnt mit seinem Namen (suche.php). Am Telefon nur das
+     * Zeichen - das Feld hätte dort keinen Platz.
+     */
+    ?>
+    <form method="get" action="<?= h(admin_url('suche.php')) ?>" class="barsuche" role="search">
+        <input type="search" name="q" placeholder="Schule, Lehrkraft oder Kind suchen" aria-label="Suchen"
+               value="<?= h($aktiv === 'suche.php' ? (string) ($_GET['q'] ?? '') : '') ?>" autocomplete="off">
+    </form>
+    <a class="barsuchknopf" href="<?= h(admin_url('suche.php')) ?>" aria-label="Suchen" title="Suchen">&#128269;</a>
+
     <span class="barname">Admin</span>
 
     <details class="menue rechts" id="menuRechts">
@@ -696,6 +709,13 @@ function admin_foot(): void
         const knopf = event.target.closest('[data-confirm]');
         if (knopf && !confirm(knopf.dataset.confirm)) event.preventDefault();
     });
+
+    // Aus der Suche: das gesuchte Konto aufgeklappt und im Blick (suche.php).
+    const ziel = location.hash.startsWith('#konto') ? document.querySelector(location.hash) : null;
+    if (ziel && ziel.tagName === 'DETAILS') {
+        ziel.open = true;
+        ziel.scrollIntoView({ block: 'center' });
+    }
 
     // Klick daneben schliesst ein offenes Farbfeld.
     document.addEventListener('click', (event) => {
