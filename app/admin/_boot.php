@@ -504,9 +504,9 @@ function admin_zu_tun_html(array $liste): string
  */
 function admin_menuepunkt(string $ziel, string $symbol, string $text, string $aktiv, int $zahl = 0): string
 {
-    // Genau diese Seite, oder dieselbe Datei ohne Zusatz - die Schulen
-    // unterscheiden sich nur in ?id=.
-    $an = $ziel === $aktiv || strtok($ziel, '?#') === $aktiv;
+    // Genau diese Seite - mit Anfrage, denn die Schulen unterscheiden sich
+    // nur in ?id= und die Einstellungen in ?s=. Ein #Anker zählt nicht.
+    $an = strtok($ziel, '#') === $aktiv;
     return sprintf(
         '<a class="mitem%s" href="%s"%s><span class="micon" aria-hidden="true">%s</span><span>%s</span>%s</a>',
         $an ? ' on' : '',
@@ -565,12 +565,14 @@ function admin_nav(string $aktiv): void
             <?= admin_menuepunkt('meldungen.php', '&#128681;', 'Meldungen', $aktiv, $gemeldet) ?>
             <?= admin_menuepunkt('aussprache.php', '&#128483;&#65039;', 'Aussprache', $aktiv) ?>
             <?= admin_menuepunkt('sentences.php', '&#128269;', 'Lückensätze durchsuchen', $aktiv) ?>
+            <?= admin_menuepunkt('vocab.php', '&#128218;', 'Unterlagen aller Schulen', $aktiv) ?>
 
             <p class="mueber">Betrieb</p>
             <?= admin_menuepunkt('kosten.php', '&#128182;', 'Kosten', $aktiv) ?>
-            <?= admin_menuepunkt('vocab.php', '&#128218;', 'Unterlagen', $aktiv) ?>
-            <?= admin_menuepunkt('settings.php', '&#9881;&#65039;', 'Einstellungen', $aktiv) ?>
+            <?= admin_menuepunkt('settings.php', '&#10024;', 'KI und Aufnahmen', $aktiv) ?>
+            <?= admin_menuepunkt('settings.php?s=zettel', '&#9993;&#65039;', 'Zettel und Vorlagen', $aktiv) ?>
             <?= admin_menuepunkt('selfcheck.php', '&#129658;', 'Selbsttest und Updates', $aktiv) ?>
+            <?= admin_menuepunkt('settings.php?s=passwort', '&#128273;', 'Admin-Passwort', $aktiv) ?>
         </nav>
     </details>
     <?= seitenleiste_skript() ?>

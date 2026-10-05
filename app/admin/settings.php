@@ -36,7 +36,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         if (trim($text) === '') {
             setting_set('letter_template', '');
             flash('Anschreiben auf die Standardfassung zurückgesetzt.');
-            redirect('settings.php');
+            redirect('settings.php?s=zettel');
         }
 
         $fehlend = [];
@@ -53,7 +53,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             ? 'Anschreiben gespeichert.'
             : 'Anschreiben gespeichert - ohne ' . implode(' und ', $fehlend)
               . '. Das ist erlaubt, aber bitte einmal Probe drucken.');
-        redirect('settings.php');
+        redirect('settings.php?s=zettel');
     }
 
     /*
@@ -66,7 +66,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         if (trim($text) === '' || trim($text) === trim(letter_lehrkraft_default())) {
             setting_set('teacher_letter_template', '');
             flash('Zettel für Lehrkräfte: es gilt die Standardfassung.');
-            redirect('settings.php#lehrkraftzettel');
+            redirect('settings.php?s=zettel#lehrkraftzettel');
         }
         setting_set('teacher_letter_template', $text);
         $fehlend = array_values(array_diff(letter_missing_placeholders($text), ['{name}']));
@@ -74,14 +74,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             ? 'Zettel für Lehrkräfte gespeichert.'
             : 'Zettel für Lehrkräfte gespeichert - ohne ' . implode(' und ', $fehlend)
               . '. Das ist erlaubt, aber bitte einmal Probe drucken.');
-        redirect('settings.php#lehrkraftzettel');
+        redirect('settings.php?s=zettel#lehrkraftzettel');
     }
 
     if (isset($_POST['save_words'])) {
         $art = (string) ($_POST['word_kind'] ?? '');
         if (!in_array($art, [PW_ADJECTIVE, PW_ANIMAL], true)) {
             flash('Unbekannte Wortart.', 'bad');
-            redirect('settings.php');
+            redirect('settings.php?s=zettel');
         }
 
         [$anzahl, $meldung] = password_words_replace($art, (string) ($_POST['words'] ?? ''));
@@ -92,7 +92,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             flash(sprintf('%d %s gespeichert.', $anzahl,
                 $art === PW_ADJECTIVE ? 'Adjektive' : 'Tiere'));
         }
-        redirect('settings.php');
+        redirect('settings.php?s=zettel');
     }
 
     if (isset($_POST['save_sentences'])) {
@@ -169,7 +169,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             setting_set('admin_password_hash', password_hash($new, PASSWORD_DEFAULT));
             flash('Admin-Passwort geändert.');
         }
-        redirect('settings.php');
+        redirect('settings.php?s=passwort');
     }
 }
 
@@ -177,9 +177,24 @@ $prices  = price_table();
 $current = setting_model('vision_model');
 $effort  = setting('vision_effort', 'medium');
 
-admin_head('Einstellungen', 'settings.php');
+/*
+ * Drei Bereiche statt einer langen Seite: Die KI-Schritte samt Budget und
+ * Preisen, die Zettel und Passwortwörter, das Passwort des Admins. Im Menü
+ * stehen sie einzeln unter "Betrieb" - vorher scrollte man an der
+ * Preistabelle vorbei, um eine Vorlage zu ändern.
+ */
+const EINSTELLUNG_BEREICHE = [
+    'ki'       => 'KI und Aufnahmen',
+    'zettel'   => 'Zettel und Vorlagen',
+    'passwort' => 'Admin-Passwort',
+];
+$bereich = array_key_exists($_GET['s'] ?? '', EINSTELLUNG_BEREICHE) ? (string) $_GET['s'] : 'ki';
+
+admin_head(EINSTELLUNG_BEREICHE[$bereich], $bereich === 'ki' ? 'settings.php' : 'settings.php?s=' . $bereich);
 flash_render();
 ?>
+
+<?php if ($bereich === 'ki'): ?>
 
 <?php
 /*
@@ -386,6 +401,7 @@ flash_render();
     <button class="btn small" name="save_prices" value="1">Speichern</button>
 </form>
 
+<?php elseif ($bereich === 'zettel'): ?>
 <h2>Anschreiben für die Kinder (Voreinstellung)</h2>
 <form method="post" class="card">
     <?= csrf_field() ?>
@@ -475,13 +491,14 @@ flash_render();
     gelöscht - versehentlich Entferntes kommt durch erneutes Eintragen zurück.
 </p>
 
-<h2>Admin-Passwort</h2>
-<form method="post" class="card">
+<?php else: ?>
+<form method="post" class="card" style="max-width:480px">
     <?= csrf_field() ?>
     <label for="new_password">Neues Passwort</label>
     <input type="password" id="new_password" name="new_password"
            autocomplete="new-password" minlength="8">
     <button class="btn small" name="save_password" value="1">Passwort ändern</button>
 </form>
+<?php endif; ?>
 
 <?php admin_foot(); ?>

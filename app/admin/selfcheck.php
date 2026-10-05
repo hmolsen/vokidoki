@@ -468,7 +468,7 @@ $failed = count(array_filter($checks, static fn ($c) => !$c['ok']));
 
 // Der zweite Parameter markiert den aktiven Punkt in der Navigation - hier
 // stand faelschlich 'index.php', wodurch "Kosten" hervorgehoben wurde.
-admin_head('Selbsttest', 'selfcheck.php');
+admin_head('Selbsttest und Updates', 'selfcheck.php');
 flash_render();
 
 $offen = schema_pending();

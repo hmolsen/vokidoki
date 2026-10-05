@@ -11378,7 +11378,11 @@ ok('Er führt in den Lehrkraft-Bereich, nicht in die App',
    str_contains($lkDr, '/teacher/') && !str_contains($lkDr, 'Text anpassen'));
 
 // Den Text pflegt der Betreiber, nicht die Lehrkraft.
-$lkSet = http($base . '/admin/settings.php')['body'];
+$lkSet = http($base . '/admin/settings.php?s=zettel')['body'];
+ok('Die Zettel haben einen eigenen Bereich, im Menü als einziger markiert',
+   substr_count($lkSet, 'class="mitem on"') === 1
+   && preg_match('~class="mitem on" href="[^"]*settings\.php\?s=zettel"~', $lkSet) === 1
+   && !str_contains($lkSet, 'name="save_prices"'));
 ok('In den Einstellungen steht der Zettel für Lehrkräfte',
    str_contains($lkSet, 'name="teacher_letter_template"') && str_contains($lkSet, 'keine E-Mail-Adressen'));
 adminPost('settings.php', ['save_teacher_letter' => '1',
