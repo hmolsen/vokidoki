@@ -114,6 +114,20 @@ Mitgeliefert wird je Familie eine einzige Datei mit allen Strichstärken
 (*variable font*), beschnitten auf die lateinischen Zeichen. Zusammen rund
 90 KB.
 
+Für die Zettel als PDF liegen dieselben Schriften ein zweites Mal bei, in
+festen Strichstärken (Nunito Regular und Bold, Fredoka SemiBold) und
+zugeschnitten auf die Zeichen von Windows-1252, unter `lib/fpdf/font/`. Sie
+werden in jedes PDF eingebettet; es gilt dieselbe Lizenz.
+
+---
+
+## PDF-Erzeugung
+
+* **FPDF** 1.9 — Olivier Plathey. Erzeugt die Zettel mit den Zugangsdaten als
+  PDF (`lib/fpdf/fpdf.php`). Die Lizenz erlaubt Verwendung, Veränderung und
+  Weitergabe ohne Bedingungen; ihr Text liegt unter `lib/fpdf/license.txt`.
+  <http://www.fpdf.org>
+
 ---
 
 ## Sinnbilder und Fahnen

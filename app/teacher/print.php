@@ -8,10 +8,12 @@ require_once __DIR__ . '/../lib/qr.php';
 /*
  * Die Zettel zum Ausschneiden - eine Seite je Kind.
  *
- * Kein PDF, sondern eine Druckseite. Ein PDF hiesse entweder eine Bibliothek
- * (die per FTP nicht auf den Server kommt) oder ein selbstgebauter Erzeuger
- * (viel Arbeit fuer ein schlechteres Ergebnis). Der Druckdialog des Browsers
- * kann "als PDF sichern", und damit hat die Lehrkraft beides.
+ * Mit ?pdf=1 als PDF (lib/zettel_pdf.php) - so drucken die Knöpfe in der
+ * Verwaltung. Hier stand einmal "kein PDF, der Druckdialog kann als PDF
+ * sichern". Das galt, bis die Verwaltung als App auf dem Home-Bildschirm
+ * lag: Dort gibt es keinen Druckdialog, und der des Browsers setzte einen
+ * Zettel je nach Gerät auf eine oder auf zwei Seiten. Ohne ?pdf=1 bleibt
+ * die Seite zum Anschauen.
  */
 
 $user     = teacher_require();
@@ -87,12 +89,54 @@ $adresse  = public_url($fuerLehrkraefte ? '/teacher/' : '/');
  * Der QR-Code bringt Schulkürzel und Benutzernamen mit (views/login.js
  * liest ?schule= und ?name=): Wer ihn abfotografiert, tippt nur noch das
  * Passwort. Das Passwort selbst steht nicht darin - ein abfotografierter
- * Zettel soll kein Schlüssel sein.
+ * Zettel soll kein Schlüssel sein. Er steht unten in 'qr'.
+ *
+ * Die Blätter, fertig eingesetzt - einmal für beide Fassungen.
  */
-$qrFuer = static fn (array $k): ?string => qr_svg(
-    public_url(($fuerLehrkraefte ? '/teacher/' : '/') . '?'
-        . http_build_query(['schule' => $kuerzel, 'name' => (string) $k['username']])),
-    4, 'Anmeldung in der App');
+$blaetter = array_map(static fn (array $k): array => [
+    'ueber'        => $fuerLehrkraefte ? 'Ihr Zugang zu Vokidoki' : 'Dein Zugang zu Vokidoki',
+    'name'         => (string) $k['display_name'],
+    'unter'        => ($fuerLehrkraefte ? 'Lehrkraft' : 'Klasse ' . (string) ($klasse['name'] ?? ''))
+                    . (($schule['name'] ?? '') !== '' ? ' · ' . $schule['name'] : ''),
+    'adresse'      => $adresse,
+    'kuerzel'      => $kuerzel,
+    'benutzername' => (string) $k['username'],
+    'passwort'     => (string) $k['initial_password'],
+    'qr'           => public_url(($fuerLehrkraefte ? '/teacher/' : '/') . '?'
+                        . http_build_query(['schule' => $kuerzel, 'name' => (string) $k['username']])),
+    'brief'        => letter_render($vorlage, [
+        'name'         => (string) $k['display_name'],
+        'kuerzel'      => $kuerzel,
+        'benutzername' => (string) $k['username'],
+        'passwort'     => (string) $k['initial_password'],
+        'klasse'       => (string) ($klasse['name'] ?? ''),
+        'schule'       => (string) ($schule['name'] ?? ''),
+        'url'          => $adresse,
+        'datenschutz'  => public_url('/rechtliches.php?d=datenschutz'),
+        'impressum'    => public_url('/rechtliches.php?d=impressum'),
+    ]),
+], $kinder);
+
+if (isset($_GET['pdf'])) {
+    if ($blaetter === []) {
+        // Kein leeres PDF: Wer hier landet, soll lesen, warum es nichts gibt.
+        header('Location: ' . teacher_url('print.php') . '?'
+               . http_build_query(array_diff_key($_GET, ['pdf' => 1])), true, 303);
+        exit;
+    }
+    require_once __DIR__ . '/../lib/zettel_pdf.php';
+    $titel = 'Zugangsdaten ' . ($fuerLehrkraefte ? 'Lehrkräfte' : (string) $klasse['name']);
+    $datei = preg_replace('/[^A-Za-z0-9_-]+/', '-', 'Zugangsdaten-' . ($fuerLehrkraefte ? 'Lehrkraefte'
+             : (count($blaetter) === 1 ? $blaetter[0]['benutzername'] : (string) $klasse['name']))) . '.pdf';
+    $inhalt = zettel_pdf($blaetter, $titel);
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: inline; filename="' . $datei . '"');
+    // Darauf stehen Passwörter - nicht in einem Zwischenspeicher liegen lassen.
+    header('Cache-Control: no-store, private');
+    header('Content-Length: ' . strlen($inhalt));
+    echo $inhalt;
+    exit;
+}
 
 /**
  * Der Brief als Absätze.
@@ -105,18 +149,11 @@ $qrFuer = static fn (array $k): ?string => qr_svg(
  */
 function brief_html(string $text): string
 {
+    // Was Überschrift ist und was Absatz, entscheidet letter_absaetze() -
+    // dieselbe Regel wie im PDF (lib/zettel_pdf.php).
     $html = '';
-    foreach (preg_split('/\n\s*\n/', trim(str_replace("\r\n", "\n", $text))) ?: [] as $absatz) {
-        $absatz = trim($absatz);
-        if ($absatz === '') {
-            continue;
-        }
-        $eineZeile = !str_contains($absatz, "\n");
-        if ($eineZeile && mb_strlen($absatz) <= 70 && preg_match('/[.,:;!?)]$/u', $absatz) !== 1) {
-            $html .= '<h2>' . h($absatz) . '</h2>';
-            continue;
-        }
-        $html .= '<p>' . nl2br(h($absatz), false) . '</p>';
+    foreach (letter_absaetze($text) as [$art, $absatz]) {
+        $html .= $art === 'h' ? '<h2>' . h($absatz) . '</h2>' : '<p>' . nl2br(h($absatz), false) . '</p>';
     }
     return $html;
 }
@@ -269,7 +306,8 @@ body {
 <body>
 
 <div class="bar">
-    <button onclick="window.print()">Drucken</button>
+    <a href="<?= h(teacher_url('print.php') . '?' . http_build_query(['pdf' => 1] + $_GET)) ?>"
+       data-zettel>Als PDF drucken</a>
     <?php if ($fuerLehrkraefte): ?>
         <?php // Den Text für Lehrkräfte pflegt der Betreiber, nicht die Lehrkraft (lib/letter.php). ?>
         <a href="<?= h(teacher_url('lehrkraefte.php')) ?>">zurück zu den Lehrkräften</a>
@@ -279,7 +317,7 @@ body {
     <?php endif; ?>
     <span class="grow">
         <?= count($kinder) ?> Zettel, <?= $fuerLehrkraefte ? 'einer je Lehrkraft' : 'einer je Kind' ?>.
-        Im Druckdialog lässt sich das auch als PDF sichern.
+        Als PDF passt jeder Zettel genau auf eine Seite.
     </span>
 </div>
 
@@ -292,21 +330,7 @@ body {
         Zettel in der Klasse beim Kind &bdquo;Neues Passwort&ldquo; wählen.
     </p>
 <?php else: ?>
-<?php foreach ($kinder as $k): ?>
-    <?php
-    $passwort = (string) $k['initial_password'];
-    $brief    = letter_render($vorlage, [
-        'name'         => (string) $k['display_name'],
-        'kuerzel'      => $kuerzel,
-        'benutzername' => (string) $k['username'],
-        'passwort'     => $passwort,
-        'klasse'       => (string) ($klasse['name'] ?? ''),
-        'schule'       => (string) ($schule['name'] ?? ''),
-        'url'          => $adresse,
-        'datenschutz'  => public_url('/rechtliches.php?d=datenschutz'),
-        'impressum'    => public_url('/rechtliches.php?d=impressum'),
-    ]);
-    ?>
+<?php foreach ($blaetter as $bl): ?>
     <section class="blatt">
         <div class="kopf">
             <img class="logo" src="<?= h(url('/assets/vokidoki_logo.svg')) ?>" alt="Vokidoki">
@@ -314,18 +338,13 @@ body {
         </div>
 
         <h1 class="fuer">
-            <small><?= $fuerLehrkraefte ? 'Ihr Zugang zu Vokidoki' : 'Dein Zugang zu Vokidoki' ?></small>
-            <strong><?= h($k['display_name']) ?></strong>
-            <?php if ($fuerLehrkraefte): ?>
-                <span>Lehrkraft<?= ($schule['name'] ?? '') !== '' ? ' &middot; ' . h($schule['name']) : '' ?></span>
-            <?php else: ?>
-                <span>Klasse <?= h($klasse['name']) ?><?= ($schule['name'] ?? '') !== ''
-                    ? ' &middot; ' . h($schule['name']) : '' ?></span>
-            <?php endif; ?>
+            <small><?= h($bl['ueber']) ?></small>
+            <strong><?= h($bl['name']) ?></strong>
+            <span><?= h($bl['unter']) ?></span>
         </h1>
 
         <div class="zugang">
-            <?php $qrSvg = $qrFuer($k); ?>
+            <?php $qrSvg = qr_svg($bl['qr'], 4, 'Anmeldung in der App'); ?>
             <?php if ($qrSvg !== null): ?>
             <div class="qr">
                 <?= $qrSvg ?>
@@ -333,14 +352,14 @@ body {
             </div>
             <?php endif; ?>
             <dl>
-                <dt>Adresse</dt><dd><?= h($adresse) ?></dd>
-                <dt>Schulkürzel</dt><dd><?= h($kuerzel) ?></dd>
-                <dt>Benutzername</dt><dd><?= h($k['username']) ?></dd>
-                <dt>Passwort</dt><dd class="pw"><?= h($passwort) ?></dd>
+                <dt>Adresse</dt><dd><?= h($bl['adresse']) ?></dd>
+                <dt>Schulkürzel</dt><dd><?= h($bl['kuerzel']) ?></dd>
+                <dt>Benutzername</dt><dd><?= h($bl['benutzername']) ?></dd>
+                <dt>Passwort</dt><dd class="pw"><?= h($bl['passwort']) ?></dd>
             </dl>
         </div>
 
-        <div class="brief"><?= brief_html($brief) ?></div>
+        <div class="brief"><?= brief_html($bl['brief']) ?></div>
 
         <p class="fuss">
             <span>Dieser Zettel enthält ein Passwort &ndash; bitte gut aufheben und nicht offen liegen lassen.</span>

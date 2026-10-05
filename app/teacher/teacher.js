@@ -694,7 +694,7 @@ function initStudentAdd() {
                 </button>
             </form>
             <a class="iconaction quiet" title="Zettel für dieses Kind drucken"
-               href="${escapeHtml(zettelJe)}${kind.id}" target="_blank" rel="noopener">
+               href="${escapeHtml(zettelJe)}${kind.id}" target="_blank" rel="noopener" data-zettel>
                 <span aria-hidden="true">&#128424;</span> Zettel
             </a>
             <button class="iconaction danger" type="button"
@@ -1569,6 +1569,79 @@ function initAktualisierenStattAbmelden() {
 }
 
 initAktualisierenStattAbmelden();
+
+/**
+ * Die Zettel als PDF - in der App auf dem Home-Bildschirm über das
+ * Teilen-Menü.
+ *
+ * Im Browser öffnet der Link das PDF in einem neuen Tab, und der druckt es
+ * Seite für Seite. Als App auf dem Home-Bildschirm geht das nicht: Ein
+ * neuer Tab öffnet sich dort in der App selbst, ohne Zurück-Knopf und ohne
+ * Teilen-Knopf, und window.print() tut nichts. Gemeldet: Der Zettel liess
+ * sich aus der Verwaltung als App überhaupt nicht drucken.
+ *
+ * Also holt das Skript das PDF und reicht es an das Teilen-Menü des
+ * Geräts weiter - dort stehen "Drucken" und "In Dateien sichern". Zwei
+ * Schritte, weil iOS das Teilen-Menü nur als unmittelbare Folge eines
+ * Tipps öffnet: Erst entsteht das PDF, dann tippt man auf "Drucken oder
+ * sichern".
+ */
+function initZettelTeilen() {
+    const alsApp = window.navigator.standalone === true
+        || window.matchMedia('(display-mode: standalone)').matches;
+    if (!alsApp || typeof navigator.share !== 'function') return;
+
+    document.addEventListener('click', async (e) => {
+        const link = e.target.closest('a[data-zettel]');
+        if (!link || link.getAttribute('aria-disabled') === 'true') return;
+        e.preventDefault();
+
+        const fenster = document.createElement('dialog');
+        fenster.className = 'zettelteilen';
+        fenster.innerHTML = `
+            <p class="zt-text"><span class="spinner inline"></span> Zettel wird erstellt …</p>
+            <div class="zt-knoepfe">
+                <button class="btn" type="button" data-teilen disabled>Drucken oder sichern</button>
+                <button class="btn ghost" type="button" data-zu>Abbrechen</button>
+            </div>`;
+        document.body.appendChild(fenster);
+        fenster.showModal();
+        const zu = () => { fenster.close(); fenster.remove(); };
+        fenster.querySelector('[data-zu]').addEventListener('click', zu);
+
+        try {
+            const res = await fetch(link.href, { credentials: 'same-origin' });
+            if (!res.ok || !(res.headers.get('Content-Type') || '').includes('pdf')) {
+                throw new Error('Hier gibt es gerade keine Zettel zu drucken.');
+            }
+            const name = (/filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '') || [])[1]
+                || 'Zugangsdaten.pdf';
+            const datei = new File([await res.blob()], name, { type: 'application/pdf' });
+            if (navigator.canShare && !navigator.canShare({ files: [datei] })) {
+                throw new Error('Dieses Gerät kann das PDF nicht weitergeben - bitte im Browser öffnen.');
+            }
+            fenster.querySelector('.zt-text').textContent =
+                'Der Zettel ist fertig. Im nächsten Schritt „Drucken“ oder „In Dateien sichern“ wählen.';
+            const knopf = fenster.querySelector('[data-teilen]');
+            knopf.disabled = false;
+            knopf.addEventListener('click', async () => {
+                try {
+                    await navigator.share({ files: [datei], title: name });
+                    zu();
+                } catch (fehler) {
+                    // Abgebrochen ist kein Fehler - das Fenster bleibt für einen zweiten Versuch.
+                    if (fehler?.name !== 'AbortError') {
+                        fenster.querySelector('.zt-text').textContent = 'Das Teilen ging nicht.';
+                    }
+                }
+            });
+        } catch (fehler) {
+            fenster.querySelector('.zt-text').textContent = fehler.message || 'Das ging nicht.';
+        }
+    });
+}
+
+initZettelTeilen();
 
 /**
  * Als Symbol "Verwaltung" gestartet: das Gerät unter "Deine Geräte"

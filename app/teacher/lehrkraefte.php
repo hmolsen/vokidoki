@@ -177,7 +177,7 @@ $zuDrucken   = count(array_filter($lehrkraefte, static fn (array $l): bool =>
                 <?php endif; ?>
                 <?php if (isset($druckbar[$id]) && (string) ($l['initial_password'] ?? '') !== ''): ?>
                 <a class="iconaction quiet" title="Zettel drucken" target="_blank" rel="noopener"
-                   href="<?= h(teacher_url('print.php') . '?lehrkraefte=1&user=' . $id) ?>">
+                   href="<?= h(teacher_url('print.php') . '?pdf=1&lehrkraefte=1&user=' . $id) ?>" data-zettel>
                     <span aria-hidden="true">&#128424;</span> Zettel
                 </a>
                 <?php endif; ?>
@@ -245,7 +245,7 @@ $zuDrucken   = count(array_filter($lehrkraefte, static fn (array $l): bool =>
 <?php if ($zuDrucken > 0): ?>
 <p>
     <a class="btn small secondary" target="_blank" rel="noopener"
-       href="<?= h(teacher_url('print.php') . '?lehrkraefte=1') ?>">
+       href="<?= h(teacher_url('print.php') . '?pdf=1&lehrkraefte=1') ?>" data-zettel>
         &#128424; <?= $zuDrucken ?> Zettel drucken
     </a>
 </p>

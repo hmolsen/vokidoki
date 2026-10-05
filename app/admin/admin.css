@@ -2810,3 +2810,18 @@ a.zeile:hover, .kontozeile > summary:hover { background: var(--bg); }
 @media (max-width: 600px) {
     .aufgabe .t { flex: 1 1 calc(100% - 50px); }
 }
+
+/* ---------------------------------------------------------------- Zettel teilen
+ * Das Fenster, das in der App das PDF an das Teilen-Menü gibt (teacher.js). */
+dialog.zettelteilen {
+    width: min(420px, calc(100vw - 32px));
+    border: 0;
+    border-radius: var(--radius);
+    padding: 20px;
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .25);
+}
+dialog.zettelteilen::backdrop { background: rgba(12, 16, 28, .45); }
+.zettelteilen .zt-text { margin: 0 0 16px; line-height: 1.45; }
+.zettelteilen .zt-knoepfe { display: grid; gap: 8px; }

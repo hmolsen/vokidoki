@@ -494,8 +494,8 @@ teacher_flash_render();
                 </form>
                 <?php if (isset($druckbar[(int) $k['id']])): ?>
                 <a class="iconaction quiet" title="Zettel für dieses Kind drucken"
-                   href="<?= h(teacher_url('print.php') . '?class=' . $classId . '&user=' . (int) $k['id']) ?>"
-                   target="_blank" rel="noopener">
+                   href="<?= h(teacher_url('print.php') . '?pdf=1&class=' . $classId . '&user=' . (int) $k['id']) ?>"
+                   target="_blank" rel="noopener" data-zettel>
                     <span aria-hidden="true">&#128424;</span> Zettel
                 </a>
                 <?php endif; ?>
@@ -565,7 +565,7 @@ teacher_flash_render();
 
 <form method="post" id="newstudent" data-addstudent
       action="<?= h(teacher_url('class.php') . '?id=' . $classId) ?>"
-      data-print-user="<?= h(teacher_url('print.php') . '?class=' . $classId . '&user=') ?>"
+      data-print-user="<?= h(teacher_url('print.php') . '?pdf=1&class=' . $classId . '&user=') ?>"
       hidden>
     <?= teacher_csrf_field() ?>
     <input type="hidden" name="class_id" value="<?= $classId ?>"><?= $kursFeld ?>
@@ -585,8 +585,8 @@ teacher_flash_render();
 <p class="buttonrow" id="klassenzettel">
     <a class="btn small secondary<?= $zuDrucken === 0 ? ' aus' : '' ?>"
        id="zettelAlle"
-       href="<?= h(teacher_url('print.php') . '?class=' . $classId) ?>"
-       target="_blank" rel="noopener"
+       href="<?= h(teacher_url('print.php') . '?pdf=1&class=' . $classId) ?>"
+       target="_blank" rel="noopener" data-zettel
        <?= $zuDrucken === 0 ? 'aria-disabled="true" tabindex="-1" title="Erst Konten anlegen oder Passwörter vergeben"' : '' ?>>
         <span aria-hidden="true">&#128424;</span> Zettel für die neuen Passwörter
     </a>

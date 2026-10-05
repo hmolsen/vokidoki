@@ -227,3 +227,30 @@ function letter_render(string $template, array $werte): string
 
     return strtr($template, $ersatz);
 }
+
+/**
+ * Der fertige Brief als Absätze - und welche davon Zwischenüberschriften sind.
+ *
+ * Die Vorlage ist reiner Text und soll es bleiben. Damit der Zettel trotzdem
+ * gegliedert aussieht, wird aus einem Absatz, der nur aus einer kurzen Zeile
+ * ohne Satzzeichen am Ende besteht, eine Überschrift - so wie "Information
+ * für die Erziehungsberechtigten". Wer die Vorlage umschreibt, bekommt das
+ * von selbst, ohne Markup zu lernen. Der HTML-Zettel (teacher/print.php) und
+ * das PDF (lib/zettel_pdf.php) gliedern damit gleich.
+ *
+ * @return list<array{0: 'h'|'p', 1: string}>
+ */
+function letter_absaetze(string $text): array
+{
+    $teile = [];
+    foreach (preg_split('/\n\s*\n/', trim(str_replace("\r\n", "\n", $text))) ?: [] as $absatz) {
+        $absatz = trim($absatz);
+        if ($absatz === '') {
+            continue;
+        }
+        $ueberschrift = !str_contains($absatz, "\n") && mb_strlen($absatz) <= 70
+            && preg_match('/[.,:;!?)]$/u', $absatz) !== 1;
+        $teile[] = [$ueberschrift ? 'h' : 'p', $absatz];
+    }
+    return $teile;
+}

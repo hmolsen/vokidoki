@@ -27,6 +27,7 @@ import { pruefe as navigation } from './navigation.mjs';
 import { pruefe as seitenleiste } from './seitenleiste.mjs';
 import { pruefe as freigabe } from './freigabe.mjs';
 import { pruefe as freigabedazu } from './freigabedazu.mjs';
+import { pruefe as zettelpdf } from './zettelpdf.mjs';
 import { pruefe as einlesen } from './einlesen.mjs';
 import { pruefe as vokabeln } from './vokabeln.mjs';
 import { pruefe as fahnen }   from './fahnen.mjs';
@@ -117,6 +118,8 @@ try {
     await weiter(f, aus, wurzel);
     // Zuletzt: legt einen Kurs an, und die Navigation zaehlt vorher Karten.
     await kursanlegen(f, aus);
+    // Ganz zuletzt: gibt einem Kind der Klasse ein neues Passwort.
+    await zettelpdf(f, aus);
 } finally {
     if (selbstAngelegt) {
         execFileSync('php', [resolve(hier, 'fixture.php'), 'weg'],

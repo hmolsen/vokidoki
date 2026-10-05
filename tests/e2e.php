@@ -7058,6 +7058,40 @@ ok('Ein einzelnes Blatt lässt sich nachdrucken',
    substr_count($res['body'], 'class="blatt"') . ' Blätter');
 
 /*
+ * Als PDF (lib/zettel_pdf.php): genau eine A4-Seite je Kind, auf jedem Gerät
+ * gleich. Der Druckdialog des Browsers setzte einen Zettel je nach Gerät auf
+ * eine oder zwei Seiten, und in der App auf dem Home-Bildschirm gab es ihn
+ * gar nicht.
+ */
+$pdfSeiten = static fn (string $pdf): int => (int) preg_match_all('~/Type /Page\b(?!s)~', $pdf);
+$res = teacherGet('print.php?pdf=1&class=' . $klasseId);
+ok('Die Zettel gibt es als PDF', str_starts_with($res['body'], '%PDF-'), substr($res['body'], 0, 40));
+ok('Mit genau einer Seite je Kind', $pdfSeiten($res['body']) === $erwarteteBlaetter,
+   $pdfSeiten($res['body']) . ' Seiten statt ' . $erwarteteBlaetter);
+ok('In den Schriften der App, eingebettet',
+   str_contains($res['body'], '/FontName /') && str_contains($res['body'], 'Nunito')
+   && str_contains($res['body'], 'Fredoka'));
+
+$res = teacherGet('print.php?pdf=1&class=' . $klasseId . '&user=' . (int) $lilli['id']);
+ok('Ein einzelnes Blatt als PDF ist eine Seite', $pdfSeiten($res['body']) === 1);
+
+// Wer seine Vorlage verlängert, bekommt kleinere Schrift - kein zweites Blatt je Kind.
+$zVorher = qv('SELECT letter_template FROM users WHERE id = ?', [$lehrerId]);
+q('UPDATE users SET letter_template = ? WHERE id = ?', [str_repeat(letter_default() . "\n\n", 3), $lehrerId]);
+$res = teacherGet('print.php?pdf=1&class=' . $klasseId . '&user=' . (int) $lilli['id']);
+ok('Auch eine dreimal so lange Vorlage bleibt auf einer Seite',
+   str_starts_with($res['body'], '%PDF-') && $pdfSeiten($res['body']) === 1, (string) $pdfSeiten($res['body']));
+q('UPDATE users SET letter_template = ? WHERE id = ?', [$zVorher, $lehrerId]);
+
+$res = teacherGet('print.php?pdf=1&class=' . $klasseId . '&user=' . $userId);
+ok('Ohne druckbares Blatt kein leeres PDF, sondern die Erklärung',
+   !str_starts_with($res['body'], '%PDF-') && str_contains($res['body'], 'nichts zu drucken'));
+
+$res = teacherGet('class.php?id=' . $klasseId);
+ok('Die Knöpfe "Zettel" in der Klasse führen zum PDF',
+   str_contains($res['body'], 'print.php?pdf=1&amp;class=' . $klasseId) && str_contains($res['body'], 'data-zettel'));
+
+/*
  * Und die Grenze: Ein Kind aus einer anderen Klasse darf auch dann nicht auf
  * dem Zettel landen, wenn seine Nummer im Aufruf steht.
  */
@@ -11355,7 +11389,7 @@ ok('Eine Lehrkraft legt eine Kollegin an', $lkCarla !== null && $lkCarla['role']
    && (int) $lkCarla['can_import'] === 1);
 ok('Mit Anfangspasswort, das gleich zu sehen ist',
    (string) ($lkCarla['initial_password'] ?? '') !== '' && str_contains($lk, (string) $lkCarla['initial_password']));
-ok('Und einem Zettel zum Drucken', str_contains($lk, 'print.php?lehrkraefte=1&amp;user=' . (int) $lkCarla['id']));
+ok('Und einem Zettel zum Drucken', str_contains($lk, 'print.php?pdf=1&amp;lehrkraefte=1&amp;user=' . (int) $lkCarla['id']));
 
 [$lk] = $lkHole('lehrkraefte.php', ['add_teacher' => '1', 'display_name' => 'Noch eine Anna',
     'username' => 'ann', 'csrf' => csrfFrom($lk)]);
@@ -11368,6 +11402,9 @@ $lkHole('lehrkraefte.php', ['add_teacher' => '1', 'display_name' => 'Frau Vier',
 ok('Auch direkt geschickt nicht über die Grenze', lehrkraefte_anzahl($lkSchule) === 3);
 
 // ---- Der Zettel für Lehrkräfte.
+[$lkPdf] = $lkHole('print.php?pdf=1&lehrkraefte=1&user=' . (int) $lkCarla['id']);
+ok('Den Zettel für Lehrkräfte gibt es als PDF, eine Seite',
+   str_starts_with($lkPdf, '%PDF-') && preg_match_all('~/Type /Page\b(?!s)~', $lkPdf) === 1);
 [$lkDr] = $lkHole('print.php?lehrkraefte=1&user=' . (int) $lkCarla['id']);
 ok('Der Zettel für Lehrkräfte trägt Kürzel, Benutzername und Passwort',
    substr_count($lkDr, 'class="blatt"') === 1 && str_contains($lkDr, 'Ihr Zugang zu Vokidoki')
