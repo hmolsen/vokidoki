@@ -524,22 +524,50 @@ $offen = schema_pending();
 </div>
 <?php endif; ?>
 
-<?php if ($failed === 0): ?>
-    <div class="notice good">Alle Prüfungen bestanden.</div>
+<?php
+/*
+ * Was nicht stimmt, steht oben und offen; was bestanden ist, zugeklappt
+ * darunter. Vorher waren es dreissig gleich aussehende Zeilen, und die eine
+ * mit dem Warnzeichen stand irgendwo dazwischen - am Telefon als Karte
+ * Nummer siebzehn.
+ */
+$schlecht = array_values(array_filter($checks, static fn (array $c): bool => !$c['ok']));
+$gut      = array_values(array_filter($checks, static fn (array $c): bool => $c['ok']));
+?>
+<?php if ($schlecht === []): ?>
+    <div class="card allesgut">
+        <img src="<?= h(url('/assets/voki-mini.svg')) ?>" alt="" width="56" height="56">
+        <div><strong>Alle <?= count($gut) ?> Prüfungen bestanden.</strong>
+            <span class="tiny muted">Server, Datenbank, Dateien und Zugriffssperren sind in Ordnung.</span></div>
+    </div>
 <?php else: ?>
-    <div class="notice"><?= $failed ?> Punkt(e) brauchen Aufmerksamkeit.</div>
+    <h2><?= count($schlecht) === 1 ? 'Ein Punkt braucht' : count($schlecht) . ' Punkte brauchen' ?> Aufmerksamkeit</h2>
+    <div class="card liste pruefungen">
+        <?php foreach ($schlecht as $c): ?>
+            <div class="zeile schlecht"><span class="ic" aria-hidden="true">&#9888;&#65039;</span>
+                <span class="wer"><strong><?= h($c['name']) ?></strong>
+                    <span class="tiny muted"><?= h($c['detail']) ?></span></span></div>
+        <?php endforeach; ?>
+    </div>
 <?php endif; ?>
 
-<table class="data">
-    <tr><th style="width:34px"></th><th>Prüfung</th><th>Ergebnis</th></tr>
-    <?php foreach ($checks as $c): ?>
-        <tr class="<?= $c['ok'] ? '' : 'dim' ?>">
-            <td style="font-size:1.1rem"><?= $c['ok'] ? '&#9989;' : '&#9888;&#65039;' ?></td>
-            <td><strong><?= h($c['name']) ?></strong></td>
-            <td class="muted"><?= h($c['detail']) ?></td>
-        </tr>
-    <?php endforeach; ?>
-</table>
+<?php if ($gut !== [] && $schlecht !== []): ?>
+<details class="card einzeln">
+    <summary><?= count($gut) ?> Prüfungen bestanden</summary>
+<?php elseif ($gut !== []): ?>
+<details class="card einzeln">
+    <summary>Die Prüfungen im Einzelnen</summary>
+<?php endif; ?>
+<?php if ($gut !== []): ?>
+    <div class="liste pruefungen">
+        <?php foreach ($gut as $c): ?>
+            <div class="zeile"><span class="ic" aria-hidden="true">&#9989;</span>
+                <span class="wer"><strong><?= h($c['name']) ?></strong>
+                    <span class="tiny muted"><?= h($c['detail']) ?></span></span></div>
+        <?php endforeach; ?>
+    </div>
+</details>
+<?php endif; ?>
 
 <p class="tiny muted">
     Die Zugriffssperren werden aktiv gemessen: Der Selbsttest ruft

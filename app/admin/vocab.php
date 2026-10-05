@@ -499,49 +499,43 @@ admin_head('Unterlagen', 'vocab.php');
 flash_render();
 ?>
 
-<?php if ($badSpacing['vocab'] > 0 || $badSpacing['sentences'] > 0): ?>
-<div class="card">
-    <strong>
-        Abstände vor Satzzeichen:
-        <?= $badSpacing['vocab'] ?> Vokabel(n),
-        <?= $badSpacing['sentences'] ?> Satz/Sätze
-    </strong>
-    <p class="tiny muted" style="margin:6px 0 12px">
-        Vor <code>!</code> <code>?</code> <code>:</code> <code>;</code>
-        <code>.</code> <code>,</code> steht kein Leerzeichen, in keiner Sprache
-        &ndash; auch nicht mehr im Französischen: &bdquo;Salut!&ldquo; statt
-        &bdquo;Salut !&ldquo;. Der Knopf rückt den Bestand zurecht und räumt
-        doppelte Abstände mit weg - in allen Schulen. Kostet nichts und fragt
-        kein Modell.
-    </p>
-    <form method="post">
-        <?= csrf_field() ?>
-        <?= admin_scope_fields($scope) ?>
-        <button class="btn small" name="fix_punctuation" value="1">Abstände zurechtrücken</button>
-    </form>
-</div>
-<?php endif; ?>
-
-<?php if ($missingTypes > 0): ?>
-<div class="card">
-    <strong><?= $missingTypes ?> Vokabel(n) ohne Kategorie</strong>
-    <p class="tiny muted" style="margin:6px 0 12px">
-        Vokabeln, die vor dieser Funktion eingelesen wurden, haben noch keine
-        Kategorie. Der Knopf lässt sie vom Modell bestimmen - in Blöcken zu 100,
-        höchstens 500 je Klick, über alle Schulen. Das läuft mit dem Modell der
-        Fehlerkorrektur und zählt aufs Monatsbudget.
-    </p>
-    <form method="post">
-        <?= csrf_field() ?>
-        <?= admin_scope_fields($scope) ?>
-        <button class="btn small" name="fill_word_types" value="1">Kategorien nachtragen</button>
-    </form>
-</div>
-<?php endif; ?>
-
 <div class="card filters">
     <?= admin_scope_chips($scope) ?>
 </div>
+
+<?php
+/*
+ * Was am Bestand zu tun ist - als Zeilen wie unter "Zu tun" auf der
+ * Übersicht, jede mit ihrem Knopf. Vorher stand jede als eigene Karte mit
+ * einem Absatz Erklärung da, und die Auswahl der Schule kam erst danach.
+ */
+?>
+<div class="aufgaben pflege">
+<?php if ($badSpacing['vocab'] > 0 || $badSpacing['sentences'] > 0): ?>
+    <form method="post" class="aufgabe">
+        <?= csrf_field() ?>
+        <?= admin_scope_fields($scope) ?>
+        <span class="ic gelb" aria-hidden="true">&#9999;&#65039;</span>
+        <span class="t"><strong>Abstände vor Satzzeichen: <?= $badSpacing['vocab'] ?> Vokabel(n),
+            <?= $badSpacing['sentences'] ?> Satz/Sätze</strong>
+            <span class="tiny muted">Vor <code>!</code> <code>?</code> <code>:</code> <code>;</code>
+                <code>.</code> <code>,</code> steht kein Leerzeichen, auch im Französischen:
+                &bdquo;Salut!&ldquo; statt &bdquo;Salut !&ldquo;. In allen Schulen, ohne Modell und ohne Kosten.</span></span>
+        <button class="btn small" name="fix_punctuation" value="1">Zurechtrücken</button>
+    </form>
+<?php endif; ?>
+
+<?php if ($missingTypes > 0): ?>
+    <form method="post" class="aufgabe">
+        <?= csrf_field() ?>
+        <?= admin_scope_fields($scope) ?>
+        <span class="ic gelb" aria-hidden="true">&#127991;&#65039;</span>
+        <span class="t"><strong><?= $missingTypes ?> Vokabel(n) ohne Kategorie</strong>
+            <span class="tiny muted">Das Modell der Fehlerkorrektur bestimmt sie, höchstens 500 je Klick,
+                über alle Schulen - zählt aufs Monatsbudget.</span></span>
+        <button class="btn small" name="fill_word_types" value="1">Kategorien nachtragen</button>
+    </form>
+<?php endif; ?>
 
 <?php if ($unit === null): ?>
 <?php
@@ -553,34 +547,30 @@ flash_render();
 $fehlend = erzeugung_offen($schoolId, $courseId);
 $wo = $course !== null ? 'in diesem Kurs' : ($schoolId > 0 ? 'an dieser Schule' : 'in allen Schulen');
 ?>
-<div class="card fehlend">
-    <strong>Sätze und Aufnahmen <?= h($wo) ?></strong>
-    <p class="tiny muted" style="margin:6px 0 12px">
-        <?php if ($fehlend['einheiten'] === []): ?>
-            Es fehlt nichts: Jede freigegebene Vokabel hat ihre Sätze, und alles hat seine Aufnahme.
-        <?php else: ?>
-            <?= count($fehlend['einheiten']) ?> Lerneinheit(en):
-            <?= $fehlend['saetze'] ?> freigegebene Vokabel(n) ohne Satz,
-            <?= $fehlend['ton'] ?> Aufnahme(n) fehlen.
-            Erzeugt wird im Hintergrund, auf Rechnung des jeweiligen Kurses;
-            fehlen Sätze, entstehen ihre Aufnahmen gleich mit.
-        <?php endif; ?>
-    </p>
-    <form method="post">
+    <form method="post" class="aufgabe">
         <?= csrf_field() ?>
         <?= admin_scope_fields($scope) ?>
-        <button class="btn small" name="make_missing" value="1"<?= $fehlend['einheiten'] === [] ? ' disabled' : '' ?>>
-            <?= $fehlend['einheiten'] === [] ? 'Nichts zu erzeugen' : 'Fehlendes erzeugen' ?>
-        </button>
+        <?php if ($fehlend['einheiten'] === []): ?>
+            <span class="ic gruen" aria-hidden="true">&#9989;</span>
+            <span class="t"><strong>Sätze und Aufnahmen <?= h($wo) ?> vollständig</strong>
+                <span class="tiny muted">Jede freigegebene Vokabel hat ihre Sätze, und alles hat seine Aufnahme.</span></span>
+            <button class="btn small secondary" name="make_missing" value="1" disabled>Nichts zu erzeugen</button>
+        <?php else: ?>
+            <span class="ic blau" aria-hidden="true">&#10024;</span>
+            <span class="t"><strong>Sätze und Aufnahmen <?= h($wo) ?>: <?= count($fehlend['einheiten']) ?> Lerneinheit(en)</strong>
+                <span class="tiny muted"><?= $fehlend['saetze'] ?> freigegebene Vokabel(n) ohne Satz,
+                    <?= $fehlend['ton'] ?> Aufnahme(n) fehlen. Entsteht im Hintergrund, auf Rechnung des jeweiligen Kurses.</span></span>
+            <button class="btn small" name="make_missing" value="1">Fehlendes erzeugen</button>
+        <?php endif; ?>
     </form>
-</div>
 <?php endif; ?>
+</div>
 
-<p class="tiny muted">
-    <a href="<?= h(admin_url('sentences.php') . (admin_scope_query($scope) === [] ? ''
-        : '?' . http_build_query(admin_scope_query($scope)))) ?>">Alle Lückensätze
+<p>
+    <a class="btn small secondary inlinebtn" href="<?= h(admin_url('sentences.php') . (admin_scope_query($scope) === [] ? ''
+        : '?' . http_build_query(admin_scope_query($scope)))) ?>">&#128269; Alle Lückensätze
         <?= $unit !== null ? 'dieser Lerneinheit' : ($course !== null ? 'dieses Kurses'
-            : ($schoolId > 0 ? 'dieser Schule' : '')) ?> durchsuchen &rsaquo;</a>
+            : ($schoolId > 0 ? 'dieser Schule' : '')) ?> durchsuchen</a>
 </p>
 
 <?php if ($schoolId === 0): ?>
@@ -594,93 +584,78 @@ $wo = $course !== null ? 'in diesem Kurs' : ($schoolId > 0 ? 'an dieser Schule' 
     <?php if ($kurse === []): ?>
         <p class="muted">An dieser Schule gibt es noch keinen Kurs. Kurse legen die Lehrkräfte an.</p>
     <?php else: ?>
-    <table class="data">
-        <tr><th>Kurs</th><th>Klasse</th><th class="num">Kinder</th><th class="num">Lehrkräfte</th>
-            <th class="num">Lerneinheiten</th><th class="num">Vokabeln</th><th class="num">freigegeben</th></tr>
+    <div class="card liste">
         <?php foreach ($kurse as $k): ?>
-            <tr<?= $k['active'] ? '' : ' class="dim"' ?>>
-                <td>
-                    <?= flag_html((string) $k['flag_emoji'], 'chipflag') ?>
-                    <a href="<?= h(admin_url('vocab.php') . '?' . http_build_query(
-                        ['school' => $schoolId, 'course' => (int) $k['id']])) ?>"><?= h($k['name']) ?></a>
-                </td>
-                <td><?= $k['class_name'] === null ? '<span class="muted">&ndash;</span>' : h($k['class_name']) ?></td>
-                <td class="num"><?= (int) $k['students'] ?></td>
-                <td class="num"><?= (int) $k['teachers'] ?></td>
-                <td class="num"><?= (int) $k['units'] ?></td>
-                <td class="num"><?= (int) $k['vocab'] ?></td>
-                <td class="num"><?= (int) $k['released'] ?></td>
-            </tr>
+            <a class="zeile<?= $k['active'] ? '' : ' aus' ?>" href="<?= h(admin_url('vocab.php') . '?' . http_build_query(
+                ['school' => $schoolId, 'course' => (int) $k['id']])) ?>">
+                <span class="flagge" aria-hidden="true"><?= flag_html((string) $k['flag_emoji'] ?: FLAG_FALLBACK, 'mflagge') ?></span>
+                <span class="wer"><strong><?= h($k['name']) ?></strong>
+                    <span class="tiny muted"><?= $k['class_name'] === null ? 'ohne Klasse' : 'Klasse ' . h($k['class_name']) ?>
+                        &middot; <?= (int) $k['students'] ?> Kinder &middot; <?= (int) $k['teachers'] ?> Lehrkräfte
+                        &middot; <?= (int) $k['units'] ?> Lerneinheiten
+                        &middot; <?= (int) $k['released'] ?> von <?= (int) $k['vocab'] ?> Vokabeln frei</span></span>
+                <span class="pfeil" aria-hidden="true">&#8250;</span>
+            </a>
         <?php endforeach; ?>
-    </table>
+    </div>
     <?php endif; ?>
 
 <?php elseif ($unit === null): ?>
 
     <?php $weg = course_delete_preview($courseId); ?>
-    <div class="card">
-        <strong><?= flag_html((string) $course['flag_emoji']) ?> <?= h($course['name']) ?></strong>
-        <span class="tiny muted">
-            &middot; <?= h($course['language_name']) ?>
-            <?= $course['class_name'] !== null ? '&middot; Klasse ' . h($course['class_name']) : '' ?>
-            &middot; <?= $weg['students'] ?> Kind(er), <?= $weg['teachers'] ?> Lehrkraft/-kräfte
-            <?= $course['active'] ? '' : '&middot; inaktiv' ?>
+    <div class="card kurskopf">
+        <span class="flagge" aria-hidden="true"><?= flag_html((string) $course['flag_emoji'] ?: FLAG_FALLBACK, 'mflagge') ?></span>
+        <span class="wer">
+            <strong><?= h($course['name']) ?></strong>
+            <span class="tiny muted"><?= h($course['language_name']) ?>
+                <?= $course['class_name'] !== null ? '&middot; Klasse ' . h($course['class_name']) : '' ?>
+                &middot; <?= $weg['students'] ?> Kind(er), <?= $weg['teachers'] ?> Lehrkraft/-kräfte
+                <?= $course['active'] ? '' : '&middot; inaktiv' ?></span>
         </span>
-
-        <p class="tiny muted" style="margin:8px 0 12px">
-            Das K&uuml;rzel steuert im L&uuml;ckentext den Tastaturhinweis am
-            Eingabefeld und die Reihe der Sonderzeichen dar&uuml;ber
-            (fr, en, la, da &hellip;). Beim Anlegen des Kurses wird es aus dem
-            Namen der Sprache abgeleitet; steht hier nichts, entf&auml;llt beides.
-            Leeren schaltet es wieder ab.
-        </p>
-
-        <form method="post" class="inline" style="margin-bottom:10px">
+        <form method="post" class="kuerzelform">
             <?= csrf_field() ?>
             <?= admin_scope_fields($scope) ?>
-            <span class="lbl">K&uuml;rzel</span>
-            <input type="text" name="lang_code" value="<?= h((string) ($course['code'] ?? '')) ?>"
-                   maxlength="8" placeholder="z. B. fr" style="margin:0;width:90px">
+            <label title="Steuert im Lückentext den Tastaturhinweis und die Sonderzeichen (fr, en, la, da …). Leer schaltet beides ab.">
+                Sprachkürzel
+                <input type="text" name="lang_code" value="<?= h((string) ($course['code'] ?? '')) ?>"
+                       maxlength="8" placeholder="z. B. fr"></label>
             <button class="btn small secondary" name="save_language" value="1">Speichern</button>
-        </form>
-
-        <form method="post">
-            <?= csrf_field() ?>
-            <?= admin_scope_fields($scope) ?>
-            <button class="linkbtn" name="delete_course" value="<?= $courseId ?>"
-                    formnovalidate style="color:var(--bad)"
-                    data-confirm="<?= h(sprintf(
-                        'Den Kurs "%s" wirklich löschen? Damit verschwinden %d Lerneinheit(en), '
-                        . '%d Vokabel(n), %d Satz/Sätze und %d Lernstände von %d Kind(ern).',
-                        $course['name'], $weg['units'], $weg['vocab'], $weg['sentences'],
-                        $weg['progress'], $weg['students'],
-                    )) ?>">Diesen Kurs l&ouml;schen</button>
         </form>
     </div>
 
+    <h2>Lerneinheiten</h2>
     <?php if ($einheiten === []): ?>
         <p class="muted">In diesem Kurs gibt es noch keine Lerneinheit.</p>
     <?php else: ?>
-    <table class="data">
-        <tr><th>Lerneinheit</th><th class="num">Vokabeln</th><th class="num">freigegeben</th>
-            <th>Lückensätze</th></tr>
+    <div class="card liste">
         <?php foreach ($einheiten as $t): ?>
-            <tr>
-                <td><a href="<?= h(admin_url('vocab.php') . '?' . http_build_query(
-                    ['school' => $schoolId, 'course' => $courseId, 'unit' => (int) $t['id']])) ?>"><?= h($t['title']) ?></a></td>
-                <td class="num"><?= (int) $t['vocab_count'] ?></td>
-                <td class="num"><?= (int) $t['released_count'] ?></td>
-                <td class="tiny muted"><?= h((string) ($t['sentences_status'] ?? '')) ?:
-                    '&ndash;' ?><?= $t['sentences_error'] !== null
-                    ? ' &middot; ' . h((string) $t['sentences_error']) : '' ?></td>
-            </tr>
+            <a class="zeile" href="<?= h(admin_url('vocab.php') . '?' . http_build_query(
+                ['school' => $schoolId, 'course' => $courseId, 'unit' => (int) $t['id']])) ?>">
+                <span class="wer"><strong><?= h($t['title']) ?></strong>
+                    <span class="tiny muted"><?= (int) $t['released_count'] ?> von <?= (int) $t['vocab_count'] ?> Vokabeln frei
+                        <?= $t['sentences_error'] !== null ? '&middot; <span class="rot">' . h((string) $t['sentences_error']) . '</span>' : '' ?></span></span>
+                <span class="pfeil" aria-hidden="true">&#8250;</span>
+            </a>
         <?php endforeach; ?>
-    </table>
+    </div>
     <?php endif; ?>
 
-    <p class="tiny muted">
-        Freigeben, Mitglieder und Einlesen erledigt die Lehrkraft in ihrem Bereich.
-    </p>
+    <p class="tiny muted">Freigeben, Mitglieder und Einlesen erledigt die Lehrkraft in ihrem Bereich.</p>
+
+    <form method="post" class="card gefahr">
+        <?= csrf_field() ?>
+        <?= admin_scope_fields($scope) ?>
+        <div><strong>Kurs löschen</strong>
+            <span class="tiny muted"><?= $weg['units'] ?> Lerneinheit(en), <?= $weg['vocab'] ?> Vokabel(n) und der
+                Lernstand von <?= $weg['students'] ?> Kind(ern) gehen mit.</span></div>
+        <button class="btn small secondary danger" name="delete_course" value="<?= $courseId ?>" formnovalidate
+                data-confirm="<?= h(sprintf(
+                    'Den Kurs "%s" wirklich löschen? Damit verschwinden %d Lerneinheit(en), '
+                    . '%d Vokabel(n), %d Satz/Sätze und %d Lernstände von %d Kind(ern).',
+                    $course['name'], $weg['units'], $weg['vocab'], $weg['sentences'],
+                    $weg['progress'], $weg['students'],
+                )) ?>">Löschen</button>
+    </form>
 
 <?php else: ?>
 
