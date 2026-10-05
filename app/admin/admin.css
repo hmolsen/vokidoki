@@ -2770,3 +2770,43 @@ a.zeile:hover, .kontozeile > summary:hover { background: var(--bg); }
     .chart { gap: 3px; padding: 10px 8px; }
     .chart .col:nth-child(even) span { visibility: hidden; }
 }
+
+/* ---------------------------------------------------------------- Selbsttest
+ * Eine Zeile je Prüfung; lange Pfade dürfen umbrechen, statt die Seite
+ * breiter zu machen als das Telefon. */
+.pruefungen .zeile { align-items: flex-start; }
+.pruefungen .ic { flex: none; width: 26px; font-size: 1.05rem; line-height: 1.4; }
+.pruefungen .wer .tiny { overflow-wrap: anywhere; }
+.pruefungen .zeile.schlecht strong { color: var(--bad); }
+.card.einzeln > .liste { margin: 0 -18px -16px; }
+
+/* ---------------------------------------------------------------- Unterlagen */
+.aufgaben.pflege { margin: 0 0 14px; }
+.aufgaben.pflege:empty { display: none; }
+.aufgabe .ic.gruen { background: var(--good-bg); }
+.aufgabe .t code { font-size: .8rem; }
+.btn.inlinebtn { display: inline-flex; width: auto; }
+.liste .zeile.aus { opacity: .6; }
+.liste .rot { color: var(--bad); }
+.card.kurskopf { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.card.kurskopf .wer { flex: 1; min-width: 200px; display: grid; gap: 2px; }
+.card.kurskopf .wer strong { font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; font-size: 1.15rem; }
+.kuerzelform { display: flex; align-items: flex-end; gap: 8px; margin: 0; }
+.kuerzelform label { display: grid; gap: 4px; margin: 0; font-size: .8rem; font-weight: 700; color: var(--text-soft); }
+.kuerzelform input { width: 110px; margin: 0; min-height: 40px; padding: 8px 12px; }
+.kuerzelform .btn { width: auto; }
+@media (max-width: 600px) {
+    .aufgabe { flex-wrap: wrap; }
+    .aufgabe .btn { margin-left: 50px; }
+}
+
+/* ---------------------------------------------------------------- Aussprache */
+.card.hoerprobe h3 { margin: 0 0 4px; font-family: 'Fredoka', 'Nunito', sans-serif; font-weight: 600; }
+.card.hoerprobe .tiny { margin: 0 0 10px; }
+.card.hoerprobe form { margin: 0; }
+.card.hoerprobe .btn { width: auto; }
+/* Am Telefon steht der Knopf einer Aufgabe unter ihrem Text, nicht daneben -
+   sonst blieb dem Text eine Spalte von drei Wörtern. */
+@media (max-width: 600px) {
+    .aufgabe .t { flex: 1 1 calc(100% - 50px); }
+}

@@ -127,20 +127,20 @@ admin_head('Aussprache', 'aussprache.php');
 flash_render();
 ?>
 
-<h1>Aussprache</h1>
-<p class="muted">
-    Wörter, die die Stimme bei den Aufnahmen zum Hören falsch liest &ndash; und wie sie
-    klingen sollen. Eine Liste für alle Schulen. Lehrkräfte setzen Wörter darauf, wenn sie
-    in einer Meldung hören, dass etwas nicht stimmt. Nach jeder Änderung werden die Sätze
-    mit dem Wort neu gesprochen.
+<?php
+// Die Überschrift setzt admin_head() - hier stand sie ein zweites Mal.
+?>
+<p class="unterzeile">
+    Wörter, die die Stimme falsch liest, und wie sie klingen sollen &ndash; eine Liste für alle
+    Schulen. Nach jeder Änderung werden die Sätze mit dem Wort neu gesprochen.
 </p>
 <p class="tiny muted">
-    Ein Punkt am Satzende wird nie mitgesprochen: Sonst liest die Stimme das letzte Wort als
-    Abkürzung (dänisch „kat." = katalog, „mia." = milliard). Dafür braucht es keinen Eintrag.
+    Ein Punkt am Satzende wird nie mitgesprochen (sonst wäre dänisch &bdquo;kat.&ldquo; ein
+    &bdquo;katalog&ldquo;) &ndash; dafür braucht es keinen Eintrag.
 </p>
 
-<div class="card">
-    <h2>Hörprobe</h2>
+<div class="card hoerprobe">
+    <h3>&#127911; Hörprobe</h3>
     <p class="tiny muted">So klingt ein Satz mit allen Regeln und dieser Liste &ndash; wie für die Kinder.
         Kostet die Zeichen des Satzes.</p>
     <form id="hoerprobe" class="inline">
